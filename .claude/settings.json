@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pytest*)",
+      "Bash(ruff*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Read",
+      "Grep",
+      "Glob"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Bash(git push --force*)",
+      "Bash(rm -rf*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"[Console]::OutputEncoding=[Text.Encoding]::UTF8; $r=(Get-Location).Path; Write-Output ('Репозиторий: '+$r); $b=''; try { $b=(& git rev-parse --abbrev-ref HEAD 2>$null) } catch { }; if (-not $b) { $b='не определена (git недоступен)' }; Write-Output ('Ветка: '+$b); $s=Join-Path $r '.planning/STATE.md'; if (Test-Path $s) { Write-Output '--- .planning/STATE.md ---'; Get-Content $s -TotalCount 14 -Encoding UTF8 } else { Write-Output '.planning/STATE.md не найден: состояние не заведено' }; Write-Output 'Прочитай docs/team/CONVENTIONS.md целиком перед работой. Порядок чтения: CLAUDE.md, CONVENTIONS.md, STATE.md, раздел SPEC.md по этапу, PLAN.md.'\""
+          }
+        ]
+      }
+    ]
+  }
+}
