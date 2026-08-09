@@ -5,10 +5,10 @@
 """
 
 from app.llm.base import LLMError, LLMProvider, LLMResult, Message, Usage, parse_json_payload
-from app.llm.router import CostLimitExceeded, CostTracker, LLMRouter
+from app.llm.router import CostLimitExceededError, CostTracker, LLMRouter
 
 __all__ = [
-    "CostLimitExceeded",
+    "CostLimitExceededError",
     "CostTracker",
     "LLMError",
     "LLMProvider",

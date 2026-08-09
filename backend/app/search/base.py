@@ -50,7 +50,7 @@ class SearchAdapter(abc.ABC):
                 rationale="health probe",
             )
             found = await self.search(probe, limit=1)
-        except Exception as exc:  # noqa: BLE001 — доктор не должен падать
+        except Exception as exc:
             return False, f"{type(exc).__name__}: {exc}"
         return True, f"ок, кандидатов в пробе: {len(found)}"
 

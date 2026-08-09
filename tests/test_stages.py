@@ -18,9 +18,7 @@ def test_deduplicate_prefers_showcase_over_open_source():
     open_source = Candidate(
         source_type=SourceType.PUBLICATION, url="https://example.org/a", provider="crossref", **common
     )
-    partner = Candidate(
-        source_type=SourceType.SHOWCASE, url="https://example.org/b", provider="showcase", **common
-    )
+    partner = Candidate(source_type=SourceType.SHOWCASE, url="https://example.org/b", provider="showcase", **common)
 
     unique = deduplicate([open_source, partner])
 

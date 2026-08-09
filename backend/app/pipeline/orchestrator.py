@@ -119,7 +119,7 @@ class ScoutPipeline:
             return await adapter.search(query, limit=self._settings.max_candidates_per_query)
         except NotImplementedError:
             return None
-        except Exception as exc:  # noqa: BLE001 — устойчивость важнее строгости
+        except Exception as exc:
             log.warning("источник %s не смог выполнить поиск «%s»: %s", adapter.name, query.text, exc)
             return None
 
@@ -178,12 +178,12 @@ class ScoutPipeline:
             async with semaphore:
                 try:
                     card = await stages.author_card(self._router, brief, group)
-                except Exception as exc:  # noqa: BLE001 — одна плохая карточка не рушит отчёт
+                except Exception as exc:
                     log.warning("карточка не собралась: %s", exc)
                     return None
                 try:
                     return await stages.verify_card(self._router, card)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     # Собранную карточку из-за сбоя проверки не выбрасываем:
                     # честно понижаем уверенность и отдаём решение эксперту.
                     log.warning("проверка карточки не удалась (%s), понижаю уверенность", exc)

@@ -34,7 +34,7 @@ PROVIDER_CLASSES = {
 }
 
 
-class CostLimitExceeded(RuntimeError):
+class CostLimitExceededError(RuntimeError):
     """Стоп-кран: запрос уже стоит дороже разрешённого."""
 
 
@@ -52,7 +52,7 @@ class CostTracker:
         self.by_provider[usage.provider] = self.by_provider.get(usage.provider, 0.0) + usage.cost_rub
         self.calls += 1
         if self.spent_rub > self.limit_rub:
-            raise CostLimitExceeded(
+            raise CostLimitExceededError(
                 f"запрос израсходовал {self.spent_rub:.2f} ₽ при лимите {self.limit_rub:.2f} ₽"
             )
 
@@ -176,9 +176,7 @@ class LLMRouter:
     async def health(self) -> dict[str, tuple[bool, str]]:
         """Опрос всех провайдеров для команды `scout doctor`."""
         names = list(self._providers)
-        results = await asyncio.gather(
-            *(self._providers[name].health() for name in names), return_exceptions=True
-        )
+        results = await asyncio.gather(*(self._providers[name].health() for name in names), return_exceptions=True)
         report: dict[str, tuple[bool, str]] = {}
         for name, outcome in zip(names, results, strict=True):
             if isinstance(outcome, BaseException):

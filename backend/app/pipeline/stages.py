@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -22,7 +21,6 @@ from app.schemas import (
     Brief,
     Candidate,
     Confidence,
-    Evidence,
     IntakeResult,
     ReportSummary,
     ScoredCandidate,
@@ -151,9 +149,10 @@ def deduplicate(candidates: list[Candidate]) -> list[Candidate]:
         if current is None:
             best[key] = candidate
             continue
-        if candidate.source_type is SourceType.SHOWCASE and current.source_type is not SourceType.SHOWCASE:
-            best[key] = candidate
-        elif len(candidate.snippet) > len(current.snippet):
+        from_showcase = candidate.source_type is SourceType.SHOWCASE
+        current_from_showcase = current.source_type is SourceType.SHOWCASE
+        richer_snippet = len(candidate.snippet) > len(current.snippet)
+        if (from_showcase and not current_from_showcase) or richer_snippet:
             best[key] = candidate
     removed = len(candidates) - len(best)
     if removed:
@@ -190,14 +189,15 @@ async def score_candidates(
                             f"Задача бизнеса:\n{brief.task_summary}\n"
                             f"Отрасль: {brief.industry}\nОграничения: {'; '.join(brief.constraints) or 'не заданы'}\n\n"
                             f"Кандидаты ({len(chunk)} шт.):\n{listing}\n\n"
-                            f"Верни ровно {len(chunk)} оценок, ссылаясь на кандидатов номерами от 0 до {len(chunk) - 1}."
+                            f"Верни ровно {len(chunk)} оценок, ссылаясь на кандидатов "
+                            f"номерами от 0 до {len(chunk) - 1}."
                         ),
                     ),
                 ],
                 ScoreBatch,
                 max_tokens=4000,
             )
-        except Exception as exc:  # noqa: BLE001 — без оценок батч не теряем
+        except Exception as exc:
             log.warning("скоринг батча не удался (%s), беру нейтральные оценки", exc)
             scored.extend(_neutral_scores(chunk))
             continue
@@ -287,12 +287,15 @@ async def author_card(router: LLMRouter, brief: Brief, group: list[ScoredCandida
         f"Авторы: {', '.join(i.candidate.authors) or 'не указаны'}\nФрагмент: {i.candidate.snippet[:1500]}"
         for i in group
     )
-    return await router.complete_json(
+    card = await router.complete_json(
         "card_author",
         [
             # Системный промпт и справочник — в начале сообщения: так DeepSeek
             # кэширует префикс и вход дешевеет в десятки раз.
-            Message(role="system", content=load_prompt("card_author") + "\n\n# Справочник господдержки\n" + load_gov_support()),
+            Message(
+                role="system",
+                content=load_prompt("card_author") + "\n\n# Справочник господдержки\n" + load_gov_support(),
+            ),
             Message(
                 role="user",
                 content=f"Бриф:\n{brief.model_dump_json(indent=2)}\n\nИсточники:\n{sources}",
@@ -303,6 +306,11 @@ async def author_card(router: LLMRouter, brief: Brief, group: list[ScoredCandida
         # reasoning_content и лишь потом пишет сам JSON карточки.
         max_tokens=7000,
     )
+    # Ссылки на исходных кандидатов заполняем кодом, а не моделью: она их
+    # переписывает с опечатками, а проверяющая стадия потом справедливо
+    # жалуется, что кандидаты не переданы.
+    card.candidate_urls = [item.candidate.url for item in group]
+    return card
 
 
 async def verify_card(router: LLMRouter, card: SolutionCard) -> SolutionCard:
@@ -319,9 +327,7 @@ async def verify_card(router: LLMRouter, card: SolutionCard) -> SolutionCard:
     card.confidence_note = verdict.confidence_note
     if verdict.unsourced_claims:
         # Не выбрасываем карточку: помечаем и оставляем решение эксперту.
-        card.risks.append(
-            "Проверка нашла утверждения без источника: " + "; ".join(verdict.unsourced_claims[:3])
-        )
+        card.risks.append("Проверка нашла утверждения без источника: " + "; ".join(verdict.unsourced_claims[:3]))
         card.confidence = Confidence.LOW
     if card.has_unsourced_claims():
         card.confidence = Confidence.LOW

@@ -26,12 +26,15 @@ from app.llm.base import LLMError, LLMProvider, LLMResult, Message, Usage
 
 log = logging.getLogger(__name__)
 
-#: Актуальный адрес (июль 2026). Старый gigachat.devices.sberbank.ru объявлен устаревшим.
-DEFAULT_BASE_URL = "https://api.giga.chat/api/v1"
+#: Рабочий адрес, проверен живым вызовом 9 августа 2026: отдаёт список моделей
+#: (GigaChat, GigaChat-2, GigaChat-2-Pro, GigaChat-2-Max) и обслуживает чат.
+DEFAULT_BASE_URL = "https://gigachat.devices.sberbank.ru/api/v1"
 DEFAULT_OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
-#: Резервная пара адресов — пробуем, если основная не отвечает.
-LEGACY_BASE_URL = "https://gigachat.devices.sberbank.ru/api/v1"
-LEGACY_OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+#: Адрес api.giga.chat встречается в публикациях как «новый», но на нашем
+#: тарифе отвечает 403 от nginx. Оставлен как резерв: если Сбер всё-таки
+#: переведёт трафик туда, провайдер переключится сам, увидев 403/404.
+ALT_BASE_URL = "https://api.giga.chat/api/v1"
+ALT_OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 
 
 class GigaChatProvider(LLMProvider):
@@ -40,20 +43,34 @@ class GigaChatProvider(LLMProvider):
     price_in_rub_per_mtok = 65.0
     price_out_rub_per_mtok = 65.0
 
-    def __init__(self, settings: Settings, base_url: str = DEFAULT_BASE_URL, oauth_url: str = DEFAULT_OAUTH_URL) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        base_url: str = DEFAULT_BASE_URL,
+        oauth_url: str = DEFAULT_OAUTH_URL,
+    ) -> None:
         self._settings = settings
         self._base_url = base_url.rstrip("/")
         self._oauth_url = oauth_url
         self._token: str | None = None
         self._token_expires_at: float = 0.0
-        self._tried_legacy = False
+        self._tried_alt = False
 
     # ── TLS ─────────────────────────────────────────────────────────────────
     def _verify(self) -> bool | str:
         if not self._settings.gigachat_verify_ssl:
             log.warning("проверка TLS для GigaChat отключена — так можно только локально")
             return False
-        return self._settings.gigachat_ca_bundle or True
+        bundle = self._settings.gigachat_ca_bundle_path
+        if bundle:
+            return bundle
+        if self._settings.gigachat_ca_bundle:
+            log.warning(
+                "бандл сертификатов %s не найден — беру стандартный. "
+                "Ожидается ошибка проверки TLS: домены Сбера подписаны НУЦ Минцифры",
+                self._settings.gigachat_ca_bundle,
+            )
+        return True
 
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
@@ -100,6 +117,16 @@ class GigaChatProvider(LLMProvider):
         self._token_expires_at = float(expires_at) / 1000 if expires_at else time.time() + 1800
         return self._token
 
+    async def _switch_to_alt(self, reason: str) -> bool:
+        """Переключиться на альтернативный адрес. True — стоит повторить вызов."""
+        if self._tried_alt or self._base_url == ALT_BASE_URL:
+            return False
+        log.warning("GigaChat: адрес %s не работает (%s), пробую %s", self._base_url, reason, ALT_BASE_URL)
+        self._tried_alt = True
+        self._base_url, self._oauth_url = ALT_BASE_URL, ALT_OAUTH_URL
+        self._token = None
+        return True
+
     # ── Основной вызов ──────────────────────────────────────────────────────
     async def complete(
         self,
@@ -129,20 +156,22 @@ class GigaChatProvider(LLMProvider):
                 )
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
-                if exc.response.status_code == 401:
+                status = exc.response.status_code
+                if status == 401:
                     self._token = None  # токен протух — следующий вызов возьмёт новый
+                # 403/404 обычно означают, что Сбер перевёл трафик на другой
+                # адрес: один раз пробуем альтернативный, потом сдаёмся.
+                if status in (403, 404) and await self._switch_to_alt(f"HTTP {status}"):
+                    return await self.complete(
+                        messages, model=model, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode
+                    )
                 raise LLMError(
                     self.name,
-                    f"HTTP {exc.response.status_code}: {exc.response.text[:200]}",
-                    retryable=exc.response.status_code in (401, 429) or exc.response.status_code >= 500,
+                    f"HTTP {status}: {exc.response.text[:200]}",
+                    retryable=status in (401, 429) or status >= 500,
                 ) from exc
             except httpx.HTTPError as exc:
-                if not self._tried_legacy and self._base_url != LEGACY_BASE_URL:
-                    # Основной адрес мог измениться — один раз пробуем устаревший.
-                    log.warning("GigaChat: основной адрес недоступен (%s), пробую %s", exc, LEGACY_BASE_URL)
-                    self._tried_legacy = True
-                    self._base_url, self._oauth_url = LEGACY_BASE_URL, LEGACY_OAUTH_URL
-                    self._token = None
+                if await self._switch_to_alt(str(exc)):
                     return await self.complete(
                         messages, model=model, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode
                     )
@@ -169,7 +198,7 @@ class GigaChatProvider(LLMProvider):
         if not self._settings.has_secret("gigachat_auth_key"):
             return False, "нет GIGACHAT_AUTH_KEY"
         try:
-            result = await self.complete([Message(role="user", content="Ответь одним словом: работает")], max_tokens=16)
+            result = await self.complete([Message(role="user", content="Ответь одним словом: работает")], max_tokens=64)
         except LLMError as exc:
             return False, str(exc)
         return True, f"ок, модель {result.usage.model}, потрачено {result.usage.cost_rub:.4f} ₽"

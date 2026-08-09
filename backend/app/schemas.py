@@ -8,12 +8,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
-class MaturityStage(str, Enum):
+class MaturityStage(StrEnum):
     """Стадия зрелости разработки на языке, понятном промышленному заказчику."""
 
     LAB = "lab"  # работает в лаборатории
@@ -22,7 +22,7 @@ class MaturityStage(str, Enum):
     SERIES = "series"  # серийно применяется
 
 
-class SourceType(str, Enum):
+class SourceType(StrEnum):
     PUBLICATION = "publication"
     PATENT = "patent"
     GRANT = "grant"
@@ -31,13 +31,13 @@ class SourceType(str, Enum):
     WEB = "web"
 
 
-class Confidence(str, Enum):
+class Confidence(StrEnum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
 
 
-class Verdict(str, Enum):
+class Verdict(StrEnum):
     APPROVE = "approve"
     REJECT = "reject"
     REWORK = "rework"

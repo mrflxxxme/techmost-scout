@@ -36,11 +36,8 @@ def _templates(request: Request):
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request, session: AsyncSession = Depends(get_session)):
     """Главная: постановка новой задачи и последние запросы."""
-    from app.main import require_auth  # локально, чтобы не тянуть цикл импорта
 
-    recent = (
-        await session.execute(select(RequestRow).order_by(desc(RequestRow.created_at)).limit(5))
-    ).scalars().all()
+    recent = (await session.execute(select(RequestRow).order_by(desc(RequestRow.created_at)).limit(5))).scalars().all()
     return _templates(request).TemplateResponse(
         request=request,
         name="index.html",
@@ -81,9 +78,7 @@ async def create_request(
 @router.get("/requests", response_class=HTMLResponse)
 async def list_requests(request: Request, session: AsyncSession = Depends(get_session)):
     """История запросов со статусами."""
-    rows = (
-        await session.execute(select(RequestRow).order_by(desc(RequestRow.created_at)).limit(100))
-    ).scalars().all()
+    rows = (await session.execute(select(RequestRow).order_by(desc(RequestRow.created_at)).limit(100))).scalars().all()
     return _templates(request).TemplateResponse(
         request=request,
         name="history.html",
@@ -95,8 +90,8 @@ async def list_requests(request: Request, session: AsyncSession = Depends(get_se
 async def showcase(request: Request, session: AsyncSession = Depends(get_session)):
     """Витрина разработок партнёров — приоритетный слой выдачи."""
     items = (
-        await session.execute(select(ShowcaseItem).order_by(desc(ShowcaseItem.created_at)).limit(200))
-    ).scalars().all()
+        (await session.execute(select(ShowcaseItem).order_by(desc(ShowcaseItem.created_at)).limit(200))).scalars().all()
+    )
     return _templates(request).TemplateResponse(
         request=request,
         name="showcase.html",

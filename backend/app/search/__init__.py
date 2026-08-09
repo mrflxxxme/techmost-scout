@@ -97,15 +97,13 @@ def build_adapters(
         if not include_stubs and not getattr(cls, "implemented", True):
             log.debug("источник %s — заготовка, пропущен", name)
             continue
-        missing = [
-            key for key in REQUIRED_SETTINGS.get(name, ()) if not _setting(settings, key)
-        ]
+        missing = [key for key in REQUIRED_SETTINGS.get(name, ()) if not _setting(settings, key)]
         if cls.requires_key and missing:
             log.info("источник %s выключен: нет настроек %s", name, ", ".join(missing))
             continue
         try:
             adapters.append(_instantiate(name, cls, client, settings))
-        except Exception as exc:  # noqa: BLE001 — один источник не ломает сборку
+        except Exception as exc:
             log.warning("источник %s не собрался: %s", name, exc)
     log.info("активные источники: %s", ", ".join(a.name for a in adapters) or "нет")
     return adapters
@@ -113,11 +111,7 @@ def build_adapters(
 
 def free_adapters() -> dict[str, type[SearchAdapter]]:
     """Реализованные источники, которым не нужен ключ — на них строятся тесты."""
-    return {
-        name: cls
-        for name, cls in ADAPTERS.items()
-        if getattr(cls, "implemented", True) and not cls.requires_key
-    }
+    return {name: cls for name, cls in ADAPTERS.items() if getattr(cls, "implemented", True) and not cls.requires_key}
 
 
 def _instantiate(

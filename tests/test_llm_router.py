@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 from app.llm.base import LLMError, Message
-from app.llm.router import CostLimitExceeded, LLMRouter
+from app.llm.router import CostLimitExceededError, LLMRouter
 
 
 class Payload(BaseModel):
@@ -95,7 +95,7 @@ async def test_cost_limit_stops_runaway_request(settings, fake_provider_factory)
     router = _router(settings, {"gigachat": giga})
 
     await router.complete("intake", [Message(role="user", content="1")])
-    with pytest.raises(CostLimitExceeded):
+    with pytest.raises(CostLimitExceededError):
         await router.complete("intake", [Message(role="user", content="2")])
 
 

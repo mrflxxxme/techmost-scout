@@ -34,8 +34,7 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
     lines.append("# Подбор научно-технических решений")
     lines.append("")
     if validated and reviewer:
-        lines.append(f"*Подготовлено системой «ТехМост Скаут», проверено: {reviewer}, "
-                     f"{report.generated_at:%d.%m.%Y}*")
+        lines.append(f"*Подготовлено системой «ТехМост Скаут», проверено: {reviewer}, {report.generated_at:%d.%m.%Y}*")
     else:
         lines.append("> **ЧЕРНОВИК — не проверено экспертом.** Не отправлять клиенту до научной валидации.")
     lines.append("")
@@ -129,8 +128,9 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
         lines.append("## Ограничения этого поиска")
         lines.append("")
         lines.append(
-            "Не ответили источники: " + ", ".join(report.sources_unavailable) +
-            ". Выдача могла быть полнее — стоит повторить запрос позже."
+            "Не ответили источники: "
+            + ", ".join(report.sources_unavailable)
+            + ". Выдача могла быть полнее — стоит повторить запрос позже."
         )
         lines.append("")
     if report.summary.caveats:

@@ -121,6 +121,23 @@ class Settings(BaseSettings):
         return bool(raw) and not raw.startswith("TBD_")
 
     @property
+    def gigachat_ca_bundle_path(self) -> str | None:
+        """Абсолютный путь к бандлу сертификатов для GigaChat.
+
+        В .env путь пишут относительным (data/ru_bundle.pem), чтобы файл
+        оставался переносимым, но httpx считает относительный путь от текущего
+        каталога — а команды запускают откуда угодно. Поэтому разворачиваем от
+        корня репозитория. Отсутствующий файл возвращаем как None: пусть лучше
+        сработает обычная проверка и понятная ошибка, чем загадочный сбой.
+        """
+        if not self.gigachat_ca_bundle:
+            return None
+        path = Path(self.gigachat_ca_bundle)
+        if not path.is_absolute():
+            path = REPO_ROOT / path
+        return str(path) if path.exists() else None
+
+    @property
     def prompts_dir(self) -> Path:
         return REPO_ROOT / "prompts"
 

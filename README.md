@@ -20,12 +20,19 @@ py -3.12 -m venv .venv
 # 2. Ключи: перенос из проекта TEAMLY_RU (значения не выводятся на экран)
 .\.venv\Scripts\python.exe scripts\import_keys.py
 
-# 3. Проверка: ключи, модели, источники
+# 3. Сертификаты для GigaChat (домены Сбера подписаны НУЦ Минцифры)
+.\.venv\Scripts\python.exe scripts\build_ca_bundle.py
+
+# 4. Проверка: ключи, модели, источники
 .\.venv\Scripts\scout.exe doctor
 
-# 4. Первый запрос
+# 5. Первый запрос
 .\.venv\Scripts\scout.exe run "описание технологической задачи" --no-interactive
 ```
+
+Ожидаемый результат `doctor` на настроенной машине: `gigachat` и `deepseek` —
+«ок», источники `crossref`, `cyberleninka`, `arxiv`, `semanticscholar`,
+`showcase` — «ок».
 
 Отчёт появится в `out/`. Веб-интерфейс: `scout serve` → http://127.0.0.1:8000
 (логин и пароль — `WEB_AUTH_USER` / `WEB_AUTH_PASSWORD` из `.env`).

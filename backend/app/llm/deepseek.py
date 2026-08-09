@@ -130,7 +130,11 @@ class DeepSeekProvider(LLMProvider):
         if not self._settings.has_secret("deepseek_api_key"):
             return False, "нет DEEPSEEK_API_KEY"
         try:
-            result = await self.complete([Message(role="user", content="Ответь одним словом: работает")], max_tokens=16)
+            # Щедрый лимит намеренно: V4-Flash сначала тратит токены на
+            # рассуждения и лишь потом пишет ответ — на 16 токенах content
+            # приходит пустым, и проверка ложно падает.
+            probe = [Message(role="user", content="Ответь одним словом: работает")]
+            result = await self.complete(probe, max_tokens=512)
         except LLMError as exc:
             return False, str(exc)
         return True, f"ок, модель {result.usage.model}, потрачено {result.usage.cost_rub:.4f} ₽"

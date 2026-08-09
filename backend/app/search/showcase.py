@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 from pydantic import ValidationError
@@ -40,8 +41,26 @@ _WS = re.compile(r"\s+")
 _STEM_LEN = 6
 _STOPWORDS = frozenset(
     {
-        "для", "при", "что", "как", "или", "это", "его", "уже", "без", "над", "под",
-        "the", "and", "for", "with", "from", "that", "this", "are", "was",
+        "для",
+        "при",
+        "что",
+        "как",
+        "или",
+        "это",
+        "его",
+        "уже",
+        "без",
+        "над",
+        "под",
+        "the",
+        "and",
+        "for",
+        "with",
+        "from",
+        "that",
+        "this",
+        "are",
+        "was",
     }
 )
 
@@ -128,7 +147,7 @@ class ShowcaseAdapter(SearchAdapter):
                     return list(result.scalars().all())
             with context as session:
                 return list(session.execute(statement).scalars().all())
-        except Exception as exc:  # noqa: BLE001 — источник не роняет пайплайн
+        except Exception as exc:
             log.warning("витрина: запрос к БД не удался: %s", exc)
             return None
 
@@ -178,7 +197,8 @@ def _discover_session_factory() -> Callable[[], Any] | None:
         return None
     # SessionFactory — каноническое имя в app/db.py; остальные оставлены на
     # случай переименования слоя БД, чтобы витрина не отваливалась молча.
-    for attribute in ("SessionFactory", "async_session_factory", "session_factory", "AsyncSessionLocal", "SessionLocal"):
+    known_names = ("SessionFactory", "async_session_factory", "session_factory", "AsyncSessionLocal", "SessionLocal")
+    for attribute in known_names:
         factory = getattr(db, attribute, None)
         if factory is not None:
             return factory

@@ -99,11 +99,7 @@ class SemanticScholarAdapter(SearchAdapter):
         doi = _clean(external.get("DOI"))
         open_pdf = item.get("openAccessPdf") if isinstance(item.get("openAccessPdf"), dict) else {}
         # Приоритет ссылки: DOI (стабильна) → страница S2 → открытый PDF
-        url = (
-            f"https://doi.org/{doi}"
-            if doi
-            else _clean(item.get("url")) or _clean(open_pdf.get("url"))
-        )
+        url = f"https://doi.org/{doi}" if doi else _clean(item.get("url")) or _clean(open_pdf.get("url"))
         if not url:
             return None
 

@@ -53,11 +53,11 @@ import json
 import logging
 import re
 import time
-import xml.etree.ElementTree as ET
 from datetime import date
 from pathlib import Path
 
 import httpx
+from defusedxml import ElementTree as ET  # noqa: N817 — ET общепринятое сокращение; defusedxml защищает от XML-атак
 from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
@@ -89,8 +89,26 @@ _WS = re.compile(r"\s+")
 _STEM_LEN = 6
 _STOPWORDS = frozenset(
     {
-        "для", "при", "что", "как", "или", "это", "его", "уже", "без", "над", "под",
-        "the", "and", "for", "with", "from", "that", "this", "are", "was",
+        "для",
+        "при",
+        "что",
+        "как",
+        "или",
+        "это",
+        "его",
+        "уже",
+        "без",
+        "над",
+        "под",
+        "the",
+        "and",
+        "for",
+        "with",
+        "from",
+        "that",
+        "this",
+        "are",
+        "was",
     }
 )
 
@@ -218,9 +236,7 @@ class CyberLeninkaAdapter(SearchAdapter):
         return response.text
 
     def _cache_path(self, params: dict[str, str]) -> Path:
-        digest = hashlib.sha256(
-            json.dumps(params, sort_keys=True, ensure_ascii=False).encode("utf-8")
-        ).hexdigest()[:32]
+        digest = hashlib.sha256(json.dumps(params, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:32]
         return self._cache_dir / f"{digest}.json"
 
     def _read_cache(self, params: dict[str, str]) -> str | None:
@@ -247,9 +263,7 @@ class CyberLeninkaAdapter(SearchAdapter):
 
     # --- разбор ---------------------------------------------------------
 
-    def _to_scored(
-        self, record: ET.Element, keywords: list[str], needed: int
-    ) -> tuple[int, Candidate] | None:
+    def _to_scored(self, record: ET.Element, keywords: list[str], needed: int) -> tuple[int, Candidate] | None:
         header = record.find("oai:header", NS)
         if header is not None and header.get("status") == "deleted":
             return None

@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import logging
 import re
-import xml.etree.ElementTree as ET
 
 import httpx
+from defusedxml import ElementTree as ET  # noqa: N817 — ET общепринятое сокращение; defusedxml защищает от XML-атак
 from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
@@ -36,7 +36,9 @@ PHRASE_WORD_LIMIT = 6
 _WORD = re.compile(r"[A-Za-z0-9\-]+")
 _WS = re.compile(r"\s+")
 _ARXIV_ID = re.compile(r"arxiv\.org/abs/(.+)$", re.IGNORECASE)
-_STOPWORDS = frozenset({"the", "and", "for", "with", "from", "that", "this", "are", "was", "of", "in", "on", "to", "a", "an"})
+_STOPWORDS = frozenset(
+    {"the", "and", "for", "with", "from", "that", "this", "are", "was", "of", "in", "on", "to", "a", "an"}
+)
 
 
 class ArxivAdapter(SearchAdapter):
@@ -101,11 +103,9 @@ class ArxivAdapter(SearchAdapter):
         url = url.replace("http://arxiv.org/", "https://arxiv.org/", 1)
 
         summary = _text(entry, "atom:summary")
-        authors = [
-            name
-            for author in entry.iterfind("atom:author", NS)
-            if (name := _text(author, "atom:name"))
-        ][:MAX_AUTHORS]
+        authors = [name for author in entry.iterfind("atom:author", NS) if (name := _text(author, "atom:name"))][
+            :MAX_AUTHORS
+        ]
 
         try:
             return Candidate(

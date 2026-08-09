@@ -44,6 +44,12 @@ def doctor(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
 async def _doctor() -> None:
     settings = get_settings()
 
+    # Таблицы создаём до проверок: иначе витрина честно, но бесполезно
+    # сообщает «нет таблицы» на чистой машине.
+    from app.db import init_db
+
+    await init_db()
+
     secrets_table = Table(title="Ключи", show_lines=False)
     secrets_table.add_column("Переменная")
     secrets_table.add_column("Статус")

@@ -80,10 +80,7 @@ class LLMProvider(abc.ABC):
         """Проверка доступности для команды `scout doctor`: (ок, пояснение)."""
 
     def estimate_cost(self, tokens_in: int, tokens_out: int) -> float:
-        return (
-            tokens_in / 1_000_000 * self.price_in_rub_per_mtok
-            + tokens_out / 1_000_000 * self.price_out_rub_per_mtok
-        )
+        return tokens_in / 1_000_000 * self.price_in_rub_per_mtok + tokens_out / 1_000_000 * self.price_out_rub_per_mtok
 
 
 _JSON_BLOCK = re.compile(r"```(?:json)?\s*(.+?)\s*```", re.DOTALL)
