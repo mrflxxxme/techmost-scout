@@ -34,18 +34,27 @@ FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 MD_LINK = re.compile(r"\[[^\]]+\]\((?!https?://|#)([^)\s]+)\)")
 
 
-def _frontmatter(path: Path) -> dict[str, str]:
-    """Разобрать шапку markdown-файла в словарь. Вложенности здесь не бывает."""
+def _frontmatter(path: Path) -> dict[str, object]:
+    """Разобрать шапку markdown-файла настоящим YAML-парсером.
+
+    Именно настоящим, а не разбором по двоеточию: наивный разбор пропускает
+    невалидный YAML вида `description: Шаг 0: вызывать...` — двоеточие внутри
+    незакавыченного значения ломает шапку, но при разборе по первому двоеточию
+    выглядит нормально. Эта грабля в проекте уже случалась дважды: в справочнике
+    господдержки и в шапках команд.
+    """
+    import yaml
+
     match = FRONTMATTER.match(path.read_text(encoding="utf-8"))
     if match is None:
-        return {}
-    fields: dict[str, str] = {}
-    for line in match.group(1).splitlines():
-        if ":" not in line or line.startswith((" ", "-", "#")):
-            continue
-        key, _, value = line.partition(":")
-        fields[key.strip()] = value.strip()
-    return fields
+        raise AssertionError(f"{path.name}: нет шапки между --- ---")
+    try:
+        data = yaml.safe_load(match.group(1))
+    except yaml.YAMLError as exc:
+        raise AssertionError(f"{path.name}: шапка не разбирается как YAML: {exc}") from exc
+    if not isinstance(data, dict):
+        raise AssertionError(f"{path.name}: шапка не является набором полей")
+    return data
 
 
 # ── Роли ────────────────────────────────────────────────────────────────────
@@ -66,7 +75,7 @@ def test_role_frontmatter(role: str):
         assert fields.get(key), f"роль {role}: не заполнено поле {key}"
     assert fields["name"] == role, f"роль {role}: имя в шапке не совпадает с именем файла"
     assert fields["model"] in {"opus", "sonnet", "haiku"}, f"роль {role}: неизвестная модель"
-    assert len(fields["description"]) > 40, f"роль {role}: описание слишком общее, оркестратор не выберет"
+    assert len(str(fields["description"])) > 40, f"роль {role}: описание слишком общее, оркестратор не выберет"
 
 
 @pytest.mark.parametrize("role", sorted(CHECKING_ROLES))
@@ -76,7 +85,7 @@ def test_checking_roles_cannot_write(role: str):
     Половина ценности системы держится на одной строке в шапке роли: если
     ревьюер способен сам починить дефект, независимость проверки исчезает.
     """
-    tools = _frontmatter(AGENTS_DIR / f"{role}.md")["tools"]
+    tools = str(_frontmatter(AGENTS_DIR / f"{role}.md")["tools"])
     granted = {tool.strip() for tool in tools.split(",")}
     assert "Write" not in granted, f"роль {role}: Write должен быть запрещён (§3 конвенций)"
     assert "Edit" not in granted, f"роль {role}: Edit должен быть запрещён (§3 конвенций)"
@@ -97,9 +106,12 @@ def test_all_commands_present():
 
 
 @pytest.mark.parametrize("command", sorted(EXPECTED_COMMANDS))
-def test_command_has_description(command: str):
+def test_command_frontmatter(command: str):
+    """У команды есть описание и подсказка аргумента, шапка — валидный YAML."""
     fields = _frontmatter(COMMANDS_DIR / f"{command}.md")
     assert fields.get("description"), f"команда {command}: нет описания"
+    if command != "team-status":  # единственная команда без аргумента
+        assert fields.get("argument-hint"), f"команда {command}: нет подсказки аргумента"
 
 
 # ── Ссылки и состояние ──────────────────────────────────────────────────────
@@ -153,6 +165,25 @@ def test_invariants_have_verification_column():
         cells = [cell.strip() for cell in row.strip("|").split("|")]
         assert len(cells) >= 4, f"строка инварианта без всех колонок: {row[:60]}"
         assert len(cells[-1]) > 15, f"инвариант без способа проверки: {cells[1][:60]}"
+
+
+def test_no_byte_order_mark():
+    """Ни в одном текстовом файле нет метки порядка байтов.
+
+    PowerShell 5.1 при записи в utf8 добавляет BOM, а три байта перед первым
+    символом делают шапку `---` невидимой для разбора: файл выглядит правильным,
+    а парсер сообщает «нет шапки». Ровно так один раз и сломались пять ролей.
+    Убрать разом: `python scripts/strip_bom.py --write`.
+    """
+    skip_dirs = {".git", ".venv", "node_modules", "out", "__pycache__", ".ruff_cache", ".pytest_cache"}
+    offenders: list[str] = []
+    for pattern in ("*.md", "*.json", "*.yaml", "*.yml", "*.py"):
+        for path in REPO_ROOT.rglob(pattern):
+            if any(part in skip_dirs for part in path.parts):
+                continue
+            if path.read_bytes().startswith(b"\xef\xbb\xbf"):
+                offenders.append(path.relative_to(REPO_ROOT).as_posix())
+    assert not offenders, f"файлы с BOM: {sorted(offenders)}"
 
 
 def test_settings_json_is_valid():

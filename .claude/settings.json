@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"[Console]::OutputEncoding=[Text.Encoding]::UTF8; $r=(Get-Location).Path; Write-Output ('Репозиторий: '+$r); $b=''; try { $b=(& git rev-parse --abbrev-ref HEAD 2>$null) } catch { }; if (-not $b) { $b='не определена (git недоступен)' }; Write-Output ('Ветка: '+$b); $s=Join-Path $r '.planning/STATE.md'; if (Test-Path $s) { Write-Output '--- .planning/STATE.md ---'; Get-Content $s -TotalCount 14 -Encoding UTF8 } else { Write-Output '.planning/STATE.md не найден: состояние не заведено' }; Write-Output 'Прочитай docs/team/CONVENTIONS.md целиком перед работой. Порядок чтения: CLAUDE.md, CONVENTIONS.md, STATE.md, раздел SPEC.md по этапу, PLAN.md.'\""
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"[Console]::OutputEncoding=[Text.Encoding]::UTF8; Write-Output ('Репозиторий: ' + (Get-Location).Path); if (-not (Test-Path '.git')) { Write-Output 'Ветка: не определена (каталог не репозиторий)' } elseif (Get-Command git -ErrorAction Ignore) { Write-Output ('Ветка: ' + (git rev-parse --abbrev-ref HEAD)) } else { Write-Output ('Ветка: ' + ((Get-Content '.git/HEAD' -TotalCount 1) -replace '^ref: refs/heads/','')) }; if (Test-Path '.planning/STATE.md') { Write-Output '--- .planning/STATE.md ---'; Get-Content '.planning/STATE.md' -TotalCount 14 -Encoding UTF8 } else { Write-Output '.planning/STATE.md не найден: состояние не заведено' }; Write-Output 'Прочитай docs/team/CONVENTIONS.md целиком перед работой. Порядок чтения: CLAUDE.md, CONVENTIONS.md, STATE.md, раздел SPEC.md по этапу, PLAN.md.'; exit 0\""
           }
         ]
       }
