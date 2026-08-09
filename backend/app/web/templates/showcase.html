@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Витрина разработок — ТехМост Скаут{% endblock %}
+
+{% block content %}
+<p class="kicker">Витрина партнёров</p>
+<h1>Разработки институтов-партнёров</h1>
+<p class="lead">
+  Приоритетный слой выдачи: эти разработки проверены человеком, у них есть контакт
+  разработчика, и при совпадении с задачей они поднимаются в шорт-листе выше находок
+  из открытых источников.
+</p>
+
+<div class="notice" style="margin-bottom:28px">
+  Загрузка из файла: <code>scout showcase путь/к/витрине.csv</code> —
+  колонки <code>title, org, contact, maturity_stage, description, tags, url, source_note</code>
+  (теги через точку с запятой).
+</div>
+
+<div class="grid three">
+  {% for item in items %}
+  <div class="bezel hoverable appear">
+    <div class="core">
+      <div class="maturity" title="Стадия зрелости: {{ item.maturity_stage }}">
+        {% set stages = ["lab", "prototype", "pilot", "series"] %}
+        {% set current = stages.index(item.maturity_stage) if item.maturity_stage in stages else 0 %}
+        {% for i in range(4) %}<i class="{% if i <= current %}on{% endif %}"></i>{% endfor %}
+      </div>
+      <h3 style="margin:14px 0 8px; font-size:17px; color:var(--navy)">{{ item.title }}</h3>
+      <p class="muted" style="margin:0 0 10px">{{ item.org }}</p>
+      <p style="font-size:14px">{{ item.description[:220] }}{% if item.description|length > 220 %}…{% endif %}</p>
+      {% if item.tags %}
+      <p style="margin-top:12px">
+        {% for tag in item.tags %}<span class="badge" style="margin-right:6px">{{ tag }}</span>{% endfor %}
+      </p>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="bezel"><div class="core"><p class="muted">Витрина пуста. Загрузите разработки партнёров.</p></div></div>
+  {% endfor %}
+</div>
+{% endblock %}

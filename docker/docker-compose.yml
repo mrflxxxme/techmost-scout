@@ -1,0 +1,32 @@
+# Боевая связка: приложение + Caddy (HTTPS и вход по паролю).
+# Дособирается на этапе Э5-1; секреты приходят из .env рядом с этим файлом.
+
+services:
+  scout:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - scout-data:/srv/scout/data
+      - scout-out:/srv/scout/out
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - scout
+
+volumes:
+  scout-data:
+  scout-out:
+  caddy-data:

@@ -1,0 +1,317 @@
+/* Дизайн-система «ТехМост» — та же, что в питч-деке.
+   Токены менять только здесь: страницы не содержат своих цветов и размеров. */
+
+:root {
+  /* Поверхности */
+  --ink: #10163a;          /* чернильный фон тёмных экранов */
+  --ink-soft: #171f4a;     /* внешняя оболочка тёмной карточки */
+  --ink-core: #1c2452;     /* ядро тёмной карточки */
+  --hair-dark: #2c3670;    /* волосяная линия на тёмном */
+
+  /* Основные */
+  --navy: #1e2761;         /* акцентный синий, заголовки */
+  --text: #1b2140;         /* текст на светлом */
+  --muted: #6b7699;        /* подписи, второстепенное */
+  --gold: #c9a24b;         /* золото — только акценты, никогда фон блока */
+  --ice: #cddcf9;          /* светло-голубой текст на тёмном */
+
+  /* Светлые карточки */
+  --shell: #f2f5fc;        /* внешняя оболочка */
+  --core: #ffffff;         /* ядро */
+  --hair: #e3eaf8;         /* внешняя волосяная линия */
+  --hair-inner: #edf2fb;   /* внутренняя волосяная линия */
+
+  /* Ритм */
+  --radius: 14px;
+  --radius-inner: 10px;
+  --gap: 24px;
+  --page: 1180px;
+
+  /* Движение: одна кривая на весь интерфейс — так он ощущается цельным */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --fast: 180ms;
+  --slow: 520ms;
+
+  --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--core);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+body { -webkit-font-smoothing: antialiased; }
+
+.page {
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 40px 32px 72px;
+}
+
+/* ── Шапка ───────────────────────────────────────────────────────────────── */
+.masthead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding-bottom: 28px;
+}
+
+.brand {
+  font-weight: 600;
+  font-size: 19px;
+  color: var(--navy);
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.brand span { color: var(--gold); }
+
+.nav { display: flex; gap: 22px; }
+
+.nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+  transition: color var(--fast) var(--ease);
+}
+
+.nav a:hover { color: var(--navy); }
+
+/* ── Типографика ─────────────────────────────────────────────────────────── */
+.kicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 0 0 10px;
+}
+
+h1 {
+  font-size: 34px;
+  font-weight: 600;
+  color: var(--navy);
+  letter-spacing: -0.02em;
+  margin: 0 0 14px;
+  line-height: 1.18;
+}
+
+h2 {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--navy);
+  margin: 40px 0 16px;
+}
+
+.lead {
+  font-size: 17px;
+  color: var(--text);
+  max-width: 68ch;
+  margin: 0 0 28px;
+}
+
+.muted { color: var(--muted); font-size: 14px; }
+
+/* ── Карточка с двойной окантовкой — главный приём системы ───────────────── */
+.bezel {
+  background: var(--shell);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  padding: 6px;
+  transition: transform var(--slow) var(--ease), box-shadow var(--slow) var(--ease);
+}
+
+.bezel > .core {
+  background: var(--core);
+  border: 1px solid var(--hair-inner);
+  border-radius: var(--radius-inner);
+  padding: 24px 26px;
+}
+
+.bezel.dark { background: var(--ink-soft); border-color: var(--hair-dark); }
+.bezel.dark > .core {
+  background: var(--ink-core);
+  border-color: var(--hair-dark);
+  color: var(--ice);
+}
+.bezel.dark h3, .bezel.dark strong { color: #fff; }
+
+.bezel.hoverable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 40px -28px rgba(30, 39, 97, 0.5);
+}
+
+.grid { display: grid; gap: var(--gap); }
+.grid.two { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.grid.three { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+
+/* ── Форма ───────────────────────────────────────────────────────────────── */
+textarea, input[type="text"], input[type="password"] {
+  width: 100%;
+  font-family: var(--font);
+  font-size: 16px;
+  color: var(--text);
+  background: var(--core);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-inner);
+  padding: 16px 18px;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+  resize: vertical;
+}
+
+textarea:focus, input:focus {
+  outline: none;
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px rgba(30, 39, 97, 0.08);
+}
+
+textarea { min-height: 190px; line-height: 1.55; }
+
+label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--navy);
+  margin-bottom: 8px;
+}
+
+.hint { font-size: 13px; color: var(--muted); margin-top: 8px; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font);
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--navy);
+  border: none;
+  border-radius: 999px;
+  padding: 13px 26px;
+  cursor: pointer;
+  transition: transform var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+
+.btn:hover { background: #26307a; }
+.btn:active { transform: scale(0.985); }
+
+.btn .dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  transition: transform var(--fast) var(--ease);
+}
+
+.btn:hover .dot { transform: translateX(2px); }
+
+.btn.ghost { background: transparent; color: var(--navy); border: 1px solid var(--hair); }
+.btn.ghost:hover { background: var(--shell); }
+
+/* ── Значки состояний ────────────────────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: var(--shell);
+  color: var(--navy);
+  border: 1px solid var(--hair);
+}
+
+.badge.gold { background: rgba(201, 162, 75, 0.12); color: #8a6c25; border-color: rgba(201, 162, 75, 0.3); }
+.badge.low { background: #fdf1f1; color: #a3413f; border-color: #f4d4d4; }
+.badge.ok { background: #eef8f1; color: #2c6b41; border-color: #d3ecdb; }
+
+/* Шкала зрелости: четыре засечки, активная — золотом */
+.maturity { display: flex; gap: 5px; align-items: center; }
+.maturity i {
+  width: 26px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hair);
+  display: block;
+}
+.maturity i.on { background: var(--gold); }
+
+/* ── Прогресс поиска: витринный экран демо ───────────────────────────────── */
+.progress-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--hair-inner);
+  animation: rise var(--slow) var(--ease) both;
+}
+
+.progress-line .tick { color: var(--gold); font-weight: 600; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Появление карточек: лёгкий каскад, без цирка */
+.appear { animation: rise var(--slow) var(--ease) both; }
+.appear:nth-child(2) { animation-delay: 60ms; }
+.appear:nth-child(3) { animation-delay: 120ms; }
+.appear:nth-child(4) { animation-delay: 180ms; }
+.appear:nth-child(5) { animation-delay: 240ms; }
+.appear:nth-child(6) { animation-delay: 300ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ── Таблица ─────────────────────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th {
+  text-align: left;
+  font-weight: 600;
+  color: #fff;
+  background: var(--navy);
+  padding: 12px 14px;
+}
+th:first-child { border-radius: var(--radius-inner) 0 0 0; }
+th:last-child { border-radius: 0 var(--radius-inner) 0 0; }
+td { padding: 12px 14px; border-bottom: 1px solid var(--hair); vertical-align: top; }
+tr:hover td { background: var(--shell); }
+
+/* ── Подвал ──────────────────────────────────────────────────────────────── */
+.footer {
+  margin-top: 64px;
+  padding-top: 20px;
+  border-top: 1px solid var(--hair);
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gap);
+}
+
+.notice {
+  border-left: 3px solid var(--gold);
+  padding: 14px 18px;
+  background: rgba(201, 162, 75, 0.06);
+  border-radius: 0 var(--radius-inner) var(--radius-inner) 0;
+  font-size: 14px;
+}
+
+@media (max-width: 720px) {
+  .page { padding: 28px 18px 56px; }
+  h1 { font-size: 27px; }
+  .masthead { flex-direction: column; align-items: flex-start; gap: 12px; }
+}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Новый запрос — ТехМост Скаут{% endblock %}
+
+{% block content %}
+<p class="kicker">Подбор решений</p>
+<h1>Опишите технологическую задачу — найдём научные решения</h1>
+<p class="lead">
+  Система пройдёт по публикациям, патентам, грантам и разработкам институтов-партнёров
+  и соберёт варианты решений разной зрелости — от лабораторной стадии до готовых к внедрению.
+  Каждое утверждение в карточке подтверждается ссылкой на первоисточник.
+</p>
+
+<div class="bezel">
+  <div class="core">
+    <form method="post" action="/requests" hx-post="/requests" hx-target="#stage" hx-swap="innerHTML">
+      <label for="raw_text">Задача бизнеса</label>
+      <textarea id="raw_text" name="raw_text" required
+        placeholder="Например: на установке гидроочистки катализатор теряет активность за 8 месяцев вместо 24, замена стоит около 40 млн рублей и трёх суток простоя. Импортный аналог недоступен."></textarea>
+      <p class="hint">
+        Пишите обезличенно: без названия компании и данных под соглашением о конфиденциальности —
+        только техническая суть. Текст задачи уходит во внешнюю языковую модель.
+      </p>
+      <div style="margin-top:20px">
+        <button class="btn" type="submit">
+          Начать подбор <span class="dot">→</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="stage"></div>
+
+{% if recent %}
+<h2>Последние запросы</h2>
+<div class="bezel">
+  <div class="core" style="padding:0">
+    <table>
+      <thead>
+        <tr><th>№</th><th>Задача</th><th>Статус</th><th>Стоимость</th></tr>
+      </thead>
+      <tbody>
+        {% for row in recent %}
+        <tr>
+          <td>{{ row.id }}</td>
+          <td>{{ row.raw_text[:110] }}{% if row.raw_text|length > 110 %}…{% endif %}</td>
+          <td><span class="badge{% if row.status == 'validated' %} ok{% elif row.status == 'failed' %} low{% endif %}">{{ row.status }}</span></td>
+          <td class="muted">{{ "%.2f"|format(row.cost_rub) }} ₽</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

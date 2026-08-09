@@ -1,0 +1,21 @@
+# Обратный прокси. Домен подставить при деплое (этап Э5-1).
+#
+# basic_auth дублирует вход самого приложения намеренно: пароль приложения
+# защищает данные, пароль прокси прячет сам факт существования сервиса.
+# Хэш пароля: docker run --rm caddy:2-alpine caddy hash-password --plaintext 'пароль'
+
+scout.example.ru {
+    encode gzip
+
+    basic_auth {
+        scout JDJhJDE0JHpaaMENIT_THIS_IS_PLACEHOLDER_HASH
+    }
+
+    reverse_proxy scout:8000
+
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+    }
+}

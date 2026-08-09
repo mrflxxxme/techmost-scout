@@ -1,0 +1,34 @@
+# Секреты — никогда в репозиторий
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Данные и результаты работы
+data/*.db
+data/*.db-journal
+data/*.sqlite*
+out/
+!out/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Редакторы и ОС
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Локальные заметки агентов
+.claude/settings.local.json
