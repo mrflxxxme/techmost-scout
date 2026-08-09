@@ -13,6 +13,7 @@ YandexGPT держим третьим на случай, если первые �
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -20,7 +21,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from app.config import Settings, get_settings
-from app.llm.base import LLMError, LLMProvider, LLMResult, Message, Usage, parse_json_payload
+from app.llm.base import LLMError, LLMProvider, LLMResult, Message, Usage, iter_json_candidates
 from app.llm.deepseek import DeepSeekProvider
 from app.llm.gigachat import GigaChatProvider
 from app.llm.yandex import YandexGPTProvider
@@ -36,6 +37,46 @@ PROVIDER_CLASSES = {
 
 class CostLimitExceededError(RuntimeError):
     """Стоп-кран: запрос уже стоит дороже разрешённого."""
+
+
+def _validate_first_fitting[T: BaseModel](text: str, schema: type[T]) -> T:
+    """Разобрать ответ модели, выбирая блок JSON по схеме, а не по виду.
+
+    Рассуждающая модель может пересказать в ответе входные данные и только потом
+    написать вердикт. Проверка по схеме отличает одно от другого: берём первый
+    блок, который в схему укладывается.
+    """
+    candidates = iter_json_candidates(text)
+    last_error: Exception | None = None
+    for chunk in candidates:
+        try:
+            payload: Any = json.loads(chunk)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            continue
+        try:
+            return schema.model_validate(payload)
+        except ValidationError as exc:
+            last_error = exc
+    if isinstance(last_error, ValidationError):
+        raise last_error
+    raise LLMError("parser", f"ответ не содержит валидный JSON: {text[:200]}…", retryable=True)
+
+
+def _looks_truncated(text: str) -> bool:
+    """Похоже ли, что ответ модели обрезали на середине.
+
+    Признак — незакрытые скобки: JSON начался, но не кончился. Проверка грубая
+    (кавычки и вложенность не считаем), но для решения «переспросить с большим
+    лимитом или просить исправить» этого достаточно.
+    """
+    stripped = text.strip()
+    if not stripped or stripped[0] not in "{[":
+        # Ответ мог быть в markdown-заборе — тогда смотрим на его содержимое.
+        stripped = stripped.lstrip("`").removeprefix("json").strip()
+    if not stripped or stripped[0] not in "{[":
+        return False
+    return stripped.count("{") > stripped.count("}") or stripped.count("[") > stripped.count("]")
 
 
 @dataclass(slots=True)
@@ -131,19 +172,23 @@ class LLMRouter:
         max_tokens: int = 4096,
         repair_attempts: int = 1,
     ) -> T:
-        """Вызов с разбором ответа вpydantic-модель.
+        """Вызов с разбором ответа в pydantic-модель.
 
         Дешёвые модели регулярно ломают JSON: обрамляют пояснениями, теряют
         кавычки, путают имена полей. Поэтому один раз просим модель починить
         собственный ответ, показав ей текст ошибки, и только потом падаем.
+
+        Отдельно обрабатываем обрыв по лимиту токенов: у него те же симптомы
+        (невалидный JSON), но просить «исправь» бессмысленно — повторный ответ
+        обрежется там же. В этом случае удваиваем лимит и переспрашиваем заново.
         """
         result = await self.complete(stage, messages, temperature=temperature, max_tokens=max_tokens, json_mode=True)
         payload_text = result.text
+        budget = max_tokens
 
         for attempt in range(repair_attempts + 1):
             try:
-                payload: Any = parse_json_payload(payload_text)
-                return schema.model_validate(payload)
+                return _validate_first_fitting(payload_text, schema)
             except (LLMError, ValidationError) as exc:
                 if attempt >= repair_attempts:
                     raise LLMError(
@@ -151,6 +196,16 @@ class LLMRouter:
                         f"стадия {stage}: ответ не сходится со схемой {schema.__name__}: {exc}",
                         retryable=False,
                     ) from exc
+
+                if _looks_truncated(payload_text):
+                    budget *= 2
+                    log.warning("стадия %s: ответ обрезан по лимиту токенов, переспрашиваю с лимитом %s", stage, budget)
+                    retry = await self.complete(
+                        stage, messages, temperature=temperature, max_tokens=budget, json_mode=True
+                    )
+                    payload_text = retry.text
+                    continue
+
                 log.info("стадия %s: прошу модель починить JSON (%s)", stage, type(exc).__name__)
                 repair = await self.complete(
                     stage,
@@ -167,7 +222,7 @@ class LLMRouter:
                         ),
                     ],
                     temperature=0.0,
-                    max_tokens=max_tokens,
+                    max_tokens=budget,
                     json_mode=True,
                 )
                 payload_text = repair.text

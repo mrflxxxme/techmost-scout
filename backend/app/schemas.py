@@ -80,7 +80,14 @@ class SearchQuery(BaseModel):
 
 
 class SearchPlan(BaseModel):
-    queries: list[SearchQuery] = Field(min_length=1, max_length=24)
+    """План поиска.
+
+    Верхняя граница — не вкусовая: каждая формулировка уходит во все подходящие
+    источники, поэтому двенадцать запросов — это уже до шестидесяти обращений к
+    внешним API на один запрос бизнеса.
+    """
+
+    queries: list[SearchQuery] = Field(min_length=1, max_length=12)
 
 
 class Candidate(BaseModel):

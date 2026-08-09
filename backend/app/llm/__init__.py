@@ -4,7 +4,15 @@
 провайдер отвечает на конкретной стадии.
 """
 
-from app.llm.base import LLMError, LLMProvider, LLMResult, Message, Usage, parse_json_payload
+from app.llm.base import (
+    LLMError,
+    LLMProvider,
+    LLMResult,
+    Message,
+    Usage,
+    extract_json_block,
+    parse_json_payload,
+)
 from app.llm.router import CostLimitExceededError, CostTracker, LLMRouter
 
 __all__ = [
@@ -16,5 +24,6 @@ __all__ = [
     "LLMRouter",
     "Message",
     "Usage",
+    "extract_json_block",
     "parse_json_payload",
 ]

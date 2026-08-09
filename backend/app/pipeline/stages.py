@@ -10,7 +10,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from collections import defaultdict
 
 from pydantic import BaseModel, Field, field_validator
@@ -87,33 +89,90 @@ def load_gov_support() -> str:
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
+_PLACEHOLDER = re.compile(r"\{\{([A-Z_]+)\}\}")
+
+
+def render_prompt(name: str, **values: str) -> str:
+    """Подставить данные в промпт.
+
+    Промпты содержат метки вида {{BRIEF_JSON}} — это часть их контракта. Если
+    метку не заполнить, модель получит её текстом и начнёт рассуждать о самой
+    метке вместо данных: именно так пайплайн какое-то время выдавал карточки с
+    низкой уверенностью и жалобами «кандидаты не переданы».
+
+    Поэтому незаполненная метка — ошибка, а не мелочь: падаем сразу и громко.
+    """
+    text = load_prompt(name)
+    for key, value in values.items():
+        text = text.replace(f"{{{{{key}}}}}", value)
+    leftover = sorted(set(_PLACEHOLDER.findall(text)))
+    if leftover:
+        raise ValueError(f"промпт {name}: не заполнены метки {leftover}. Передайте их в render_prompt")
+    return text
+
+
+def candidates_to_json(group: list[ScoredCandidate]) -> str:
+    """Кандидаты для модели: только поля, по которым можно сверять утверждения."""
+    return json.dumps(
+        [
+            {
+                "url": str(item.candidate.url),
+                "title": item.candidate.title,
+                "org": item.candidate.org,
+                "authors": item.candidate.authors,
+                "year": item.candidate.year,
+                "source_type": item.candidate.source_type.value,
+                "provider": item.candidate.provider,
+                # Обрезаем: длинные аннотации раздувают вход, а для сверки
+                # утверждений хватает первых полутора тысяч знаков.
+                "snippet": item.candidate.snippet[:1500],
+            }
+            for item in group
+        ],
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
+#: Короткая команда в роли пользователя: всё содержательное уже в системном
+#: промпте вместе с данными, здесь только сигнал «работай».
+_GO = "Выполни инструкцию выше. Верни только JSON без пояснений."
+
+
 # ── 1. Интейк ───────────────────────────────────────────────────────────────
-async def run_intake(router: LLMRouter, raw_text: str) -> IntakeResult:
+async def run_intake(router: LLMRouter, raw_text: str, *, industry_hint: str = "не указана") -> IntakeResult:
     """Из свободного текста — уточняющие вопросы и черновик брифа."""
     return await router.complete_json(
         "intake",
         [
-            Message(role="system", content=load_prompt("intake")),
-            Message(role="user", content=f"Текст задачи от бизнеса:\n\n{raw_text}"),
+            Message(
+                role="system",
+                content=render_prompt("intake", RAW_TASK_TEXT=raw_text, INDUSTRY_HINT=industry_hint),
+            ),
+            Message(role="user", content=_GO),
         ],
         IntakeResult,
     )
 
 
-async def refine_brief(router: LLMRouter, raw_text: str, answers: dict[str, str]) -> Brief:
+async def refine_brief(
+    router: LLMRouter, raw_text: str, answers: dict[str, str], *, industry_hint: str = "не указана"
+) -> Brief:
     """Собрать финальный бриф с учётом ответов на уточняющие вопросы."""
     answers_text = "\n".join(f"— {q}\n  Ответ: {a or 'не знаю'}" for q, a in answers.items())
+    enriched = f"{raw_text}\n\nОтветы на уточняющие вопросы:\n{answers_text}"
     result = await router.complete_json(
         "intake",
         [
-            Message(role="system", content=load_prompt("intake")),
+            Message(
+                role="system",
+                content=render_prompt("intake", RAW_TASK_TEXT=enriched, INDUSTRY_HINT=industry_hint),
+            ),
             Message(
                 role="user",
                 content=(
-                    f"Текст задачи:\n\n{raw_text}\n\n"
-                    f"Ответы на уточняющие вопросы:\n{answers_text}\n\n"
-                    "Вопросы больше не задавай: верни questions пустым списком "
-                    "и заполненный draft_brief."
+                    "Уточнения уже получены — вопросов больше не задавай: верни questions "
+                    "пустым списком и полностью заполненный draft_brief. Только JSON."
                 ),
             ),
         ],
@@ -128,10 +187,13 @@ async def plan_search(router: LLMRouter, brief: Brief) -> SearchPlan:
     return await router.complete_json(
         "planner",
         [
-            Message(role="system", content=load_prompt("planner")),
-            Message(role="user", content=f"Бриф:\n{brief.model_dump_json(indent=2)}"),
+            Message(role="system", content=render_prompt("planner", BRIEF_JSON=brief.model_dump_json(indent=2))),
+            Message(role="user", content=_GO),
         ],
         SearchPlan,
+        # План бывает из двух десятков формулировок, у каждой обоснование —
+        # стандартных 4096 токенов на это не хватает.
+        max_tokens=8000,
     )
 
 
@@ -281,25 +343,21 @@ def group_for_cards(selected: list[ScoredCandidate], *, target: int) -> list[lis
 # ── 5. Карточки и проверка ──────────────────────────────────────────────────
 async def author_card(router: LLMRouter, brief: Brief, group: list[ScoredCandidate]) -> SolutionCard:
     """Собрать карточку из группы кандидатов."""
-    sources = "\n\n".join(
-        f"URL: {i.candidate.url}\nНазвание: {i.candidate.title}\n"
-        f"Организация: {i.candidate.org or 'не указана'}\nГод: {i.candidate.year or 'не указан'}\n"
-        f"Авторы: {', '.join(i.candidate.authors) or 'не указаны'}\nФрагмент: {i.candidate.snippet[:1500]}"
-        for i in group
-    )
     card = await router.complete_json(
         "card_author",
         [
-            # Системный промпт и справочник — в начале сообщения: так DeepSeek
-            # кэширует префикс и вход дешевеет в десятки раз.
+            # Всё содержательное — в системном сообщении: так DeepSeek кэширует
+            # префикс и вход дешевеет в десятки раз.
             Message(
                 role="system",
-                content=load_prompt("card_author") + "\n\n# Справочник господдержки\n" + load_gov_support(),
+                content=render_prompt(
+                    "card_author",
+                    BRIEF_JSON=brief.model_dump_json(indent=2),
+                    GROUP_CANDIDATES_JSON=candidates_to_json(group),
+                    GOV_SUPPORT_JSON=load_gov_support(),
+                ),
             ),
-            Message(
-                role="user",
-                content=f"Бриф:\n{brief.model_dump_json(indent=2)}\n\nИсточники:\n{sources}",
-            ),
+            Message(role="user", content=_GO),
         ],
         SolutionCard,
         # Запас на рассуждающую модель: она сначала тратит токены на
@@ -313,15 +371,32 @@ async def author_card(router: LLMRouter, brief: Brief, group: list[ScoredCandida
     return card
 
 
-async def verify_card(router: LLMRouter, card: SolutionCard) -> SolutionCard:
-    """Проверить карточку на утверждения без источника и уточнить уверенность."""
+async def verify_card(
+    router: LLMRouter, card: SolutionCard, group: list[ScoredCandidate] | None = None
+) -> SolutionCard:
+    """Проверить карточку на утверждения без источника и уточнить уверенность.
+
+    Кандидаты передавать обязательно: без текстов источников проверяющей стадии
+    нечем сверять утверждения, и она справедливо занижает уверенность всем
+    карточкам подряд.
+    """
     verdict = await router.complete_json(
         "verifier",
         [
-            Message(role="system", content=load_prompt("verifier")),
-            Message(role="user", content=card.model_dump_json(indent=2)),
+            Message(
+                role="system",
+                content=render_prompt(
+                    "verifier",
+                    CARD_JSON=card.model_dump_json(indent=2),
+                    GROUP_CANDIDATES_JSON=candidates_to_json(group or []),
+                ),
+            ),
+            Message(role="user", content=_GO),
         ],
         VerifyResult,
+        # Проверка разбирает карточку по утверждениям и сверяет их с источниками:
+        # рассуждающей модели на это нужен запас, иначе content приходит пустым.
+        max_tokens=6000,
     )
     card.confidence = verdict.confidence
     card.confidence_note = verdict.confidence_note
@@ -338,17 +413,38 @@ async def verify_card(router: LLMRouter, card: SolutionCard) -> SolutionCard:
 # ── 6. Сводка ───────────────────────────────────────────────────────────────
 async def summarize(router: LLMRouter, brief: Brief, cards: list[SolutionCard]) -> ReportSummary:
     """Сравнительная сводка и рекомендация по вариантам."""
-    cards_text = "\n\n".join(
-        f"[{i + 1}] {c.title}\nЗрелость: {c.maturity_stage.value}\nСуть: {c.essence}\n"
-        f"Применимость: {c.applicability}\nРиски: {'; '.join(c.risks) or 'не выявлены'}\n"
-        f"Уверенность: {c.confidence.value}"
-        for i, c in enumerate(cards)
+    # Отдаём модели только то, что нужно для сравнения вариантов: полные
+    # карточки с доказательствами раздули бы вход втрое без пользы для сводки.
+    cards_json = json.dumps(
+        [
+            {
+                "n": index,
+                "title": card.title,
+                "maturity_stage": card.maturity_stage.value,
+                "essence": card.essence,
+                "applicability": card.applicability,
+                "risks": card.risks,
+                "next_step": card.next_step,
+                "confidence": card.confidence.value,
+                "gov_support": [item.instrument for item in card.gov_support],
+            }
+            for index, card in enumerate(cards, start=1)
+        ],
+        ensure_ascii=False,
+        indent=2,
     )
     return await router.complete_json(
         "summary",
         [
-            Message(role="system", content=load_prompt("summary")),
-            Message(role="user", content=f"Бриф:\n{brief.model_dump_json(indent=2)}\n\nКарточки:\n{cards_text}"),
+            Message(
+                role="system",
+                content=render_prompt(
+                    "summary",
+                    BRIEF_JSON=brief.model_dump_json(indent=2),
+                    CARDS_JSON=cards_json,
+                ),
+            ),
+            Message(role="user", content=_GO),
         ],
         ReportSummary,
         max_tokens=6000,

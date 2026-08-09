@@ -19,7 +19,7 @@ import logging
 import httpx
 
 from app.config import Settings
-from app.llm.base import LLMError, LLMProvider, LLMResult, Message, Usage
+from app.llm.base import LLMError, LLMProvider, LLMResult, Message, Usage, extract_json_block
 
 log = logging.getLogger(__name__)
 
@@ -92,8 +92,14 @@ class DeepSeekProvider(LLMProvider):
         # приходит пустым. Спасаем ответ из рассуждений, иначе просим повтор.
         if not text:
             reasoning = (message.get("reasoning_content") or "").strip()
-            if reasoning and ("{" in reasoning or "[" in reasoning):
-                log.warning("DeepSeek: content пуст, беру JSON из reasoning_content")
+            # Внутри рассуждений может лежать готовый ответ — но только если это
+            # действительно сбалансированный JSON. Прозу рассуждений отдавать
+            # разборщику бессмысленно: он споткнётся на первом же слове.
+            if reasoning and extract_json_block(reasoning):
+                # Отдаём рассуждения целиком: какой из блоков — ответ, решит
+                # разбор по схеме на стороне роутера. Здесь мы схемы не знаем и
+                # можем ошибиться, приняв пересказ входных данных за ответ.
+                log.warning("DeepSeek: content пуст, беру ответ из reasoning_content")
                 text = reasoning
             else:
                 raise LLMError(

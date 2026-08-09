@@ -182,7 +182,7 @@ class ScoutPipeline:
                     log.warning("карточка не собралась: %s", exc)
                     return None
                 try:
-                    return await stages.verify_card(self._router, card)
+                    return await stages.verify_card(self._router, card, group)
                 except Exception as exc:
                     # Собранную карточку из-за сбоя проверки не выбрасываем:
                     # честно понижаем уверенность и отдаём решение эксперту.

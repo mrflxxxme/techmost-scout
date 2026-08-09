@@ -62,11 +62,17 @@ class Settings(BaseSettings):
     llm_provider_timeout_seconds: int = 120
     fx_rate_usd_to_rub: float = 100.0
 
-    # Маршрутизация по стадиям: дешёвая массовая работа — на бесплатный
-    # GigaChat, качественные стадии (карточки, проверка, сводка) — на DeepSeek.
+    # Маршрутизация по стадиям — распределение по факту, а не по надежде.
+    #
+    # Живые прогоны показали: GigaChat-2 Lite надёжен там, где ответ короткий
+    # (уточняющие вопросы, извлечение кандидатов), но на длинном
+    # структурированном JSON — план поиска, батч оценок, карточка — обрывает
+    # ответ на середине и стадия уходит на резерв. Поэтому бесплатный тариф
+    # используем там, где он работает, остальное считает DeepSeek: при
+    # измеренных 3–5 ₽ на запрос экономить на этом нечего.
     llm_stage_routes: str = Field(
         default=(
-            "intake:gigachat,planner:gigachat,extractor:gigachat,scorer:gigachat,"
+            "intake:gigachat,extractor:gigachat,planner:deepseek,scorer:deepseek,"
             "card_author:deepseek,verifier:deepseek,summary:deepseek"
         )
     )
