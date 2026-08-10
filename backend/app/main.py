@@ -32,8 +32,10 @@ def require_auth(credentials: HTTPBasicCredentials = Depends(security)) -> str:
     """Один общий вход. Личных кабинетов в MVP нет — роли разделены организационно."""
     expected_user = settings.web_auth_user
     expected_password = settings.web_auth_password.get_secret_value()
-    user_ok = secrets.compare_digest(credentials.username, expected_user)
-    password_ok = secrets.compare_digest(credentials.password, expected_password)
+    # Сравниваются байты: compare_digest на строках падает TypeError, если в
+    # пароле есть не-ASCII символы — вместо 401 получался бы 500.
+    user_ok = secrets.compare_digest(credentials.username.encode("utf-8"), expected_user.encode("utf-8"))
+    password_ok = secrets.compare_digest(credentials.password.encode("utf-8"), expected_password.encode("utf-8"))
     if not (user_ok and password_ok):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -78,4 +80,6 @@ async def health() -> dict[str, str]:
 # точкой сборки, а не свалкой обработчиков.
 from app.web.routes import router as web_router  # noqa: E402 — после создания app
 
-app.include_router(web_router)
+# Один общий вход на всех маршрутах, кроме /health (РЕШ-16): защита живёт в
+# приложении, пароль на Caddy при деплое — второй рубеж, а не единственный.
+app.include_router(web_router, dependencies=[Depends(require_auth)])

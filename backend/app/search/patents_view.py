@@ -22,7 +22,7 @@
     (g_patent, g_assignee_disambiguated, g_cpc_current). Имеет смысл, если
     проверка новизны станет постоянной операцией, а не разовой.
 
-ЧТО СДЕЛАТЬ (этап 3)
+ЧТО СДЕЛАТЬ (задача Э2-6)
     1. Конструктор: api_key; заголовок {"X-Api-Key": api_key}.
     2. Запрос: GET /api/v1/patent/ с параметрами
        q  = {"_and": [{"_text_any": {"patent_title": <слова>}},
@@ -70,7 +70,7 @@ class PatentsViewAdapter(SearchAdapter):
         self._api_key = api_key or None
 
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
-        raise NotImplementedError("patents_view: не реализовано, этап 3")
+        raise NotImplementedError("patents_view: не реализовано, задача Э2-6")
 
     async def health(self) -> tuple[bool, str]:
-        return False, "не реализовано, этап 3"
+        return False, "не реализовано, задача Э2-6"
