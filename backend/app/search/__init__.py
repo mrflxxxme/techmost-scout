@@ -30,6 +30,7 @@ from app.search.arxiv import ArxivAdapter
 from app.search.base import SearchAdapter, SearchError
 from app.search.crossref import CrossrefAdapter
 from app.search.cyberleninka import CyberLeninkaAdapter
+from app.search.google_search import GoogleSearchAdapter
 from app.search.openalex import OpenAlexAdapter
 from app.search.patents_view import PatentsViewAdapter
 from app.search.rospatent import RospatentAdapter
@@ -50,6 +51,7 @@ ADAPTERS: dict[str, type[SearchAdapter]] = {
     "openalex": OpenAlexAdapter,
     "patents_view": PatentsViewAdapter,
     "yandex_search": YandexSearchAdapter,
+    "google_search": GoogleSearchAdapter,
 }
 
 #: Настройки, без которых источник с requires_key = True не включается
@@ -58,6 +60,9 @@ REQUIRED_SETTINGS: dict[str, tuple[str, ...]] = {
     "patents_view": ("patentsview_api_key",),
     # Яндексу нужны оба значения: ключ сервисного аккаунта и folder id
     "yandex_search": ("yandex_search_api_key", "yandex_catalog_id"),
+    # Google: ключ API и идентификатор поисковой системы. Без второго ключ
+    # бесполезен — искать будет негде.
+    "google_search": ("google_api_key", "google_cse_id"),
 }
 
 #: Что подставлять в конструктор: имя аргумента → варианты имён настроек
@@ -76,6 +81,12 @@ CONSTRUCTOR_SETTINGS: dict[str, dict[str, tuple[str, ...]]] = {
     "yandex_search": {
         "api_key": ("yandex_search_api_key",),
         "folder_id": ("yandex_catalog_id", "yandex_folder_id"),
+    },
+    "google_search": {
+        "api_key": ("google_api_key",),
+        "cse_id": ("google_cse_id",),
+        "fx_rate": ("fx_rate_usd_to_rub",),
+        "lang_restrict": ("google_lang_restrict",),
     },
 }
 
@@ -156,6 +167,7 @@ __all__ = [
     "ArxivAdapter",
     "CrossrefAdapter",
     "CyberLeninkaAdapter",
+    "GoogleSearchAdapter",
     "OpenAlexAdapter",
     "PatentsViewAdapter",
     "RospatentAdapter",

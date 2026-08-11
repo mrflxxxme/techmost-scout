@@ -59,7 +59,9 @@ async def _doctor() -> None:
         ("DEEPSEEK_API_KEY", "deepseek_api_key", "качественные стадии: карточки, проверка"),
         ("YANDEX_API_KEY", "yandex_api_key", "аварийный резерв модели"),
         ("YANDEX_CATALOG_ID", "yandex_catalog_id", "нужен вместе с ключом Яндекса"),
-        ("YANDEX_SEARCH_API_KEY", "yandex_search_api_key", "поиск по открытому вебу (платно)"),
+        ("YANDEX_SEARCH_API_KEY", "yandex_search_api_key", "поиск по вебу РФ (платно)"),
+        ("GOOGLE_API_KEY", "google_api_key", "поиск по мировому вебу (100 запросов в сутки бесплатно)"),
+        ("GOOGLE_CSE_ID", "google_cse_id", "нужен вместе с ключом Google"),
         ("OPENALEX_API_KEY", "openalex_api_key", "обогащение по DOI (с 02.2026 ключ обязателен)"),
         ("SEMANTICSCHOLAR_API_KEY", "semanticscholar_api_key", "необязателен, повышает лимиты"),
     ]

@@ -88,6 +88,15 @@ class Settings(BaseSettings):
     patentsview_api_key: SecretStr = Field(default=SecretStr(""))
     yandex_search_api_key: SecretStr = Field(default=SecretStr(""), validation_alias="YANDEX_SEARCH_API_KEY")
     rospatent_api_key: SecretStr = Field(default=SecretStr(""))
+    # Google Programmable Search: мировой веб там, где Яндекс не достаёт.
+    # Нужны оба значения — ключ и идентификатор поисковой системы, причём сама
+    # система обязана быть настроена на режим «искать по всему вебу».
+    # Бесплатно 100 запросов в сутки, дальше $5 за 1000, потолок 10 000 в сутки.
+    google_api_key: SecretStr = Field(default=SecretStr(""), validation_alias="GOOGLE_API_KEY")
+    google_cse_id: str = Field(default="", validation_alias="GOOGLE_CSE_ID")
+    # Ограничение языка выдачи (например lang_en). Пусто = искать на всех
+    # языках: в этом и смысл источника.
+    google_lang_restrict: str = Field(default="", validation_alias="GOOGLE_LANG_RESTRICT")
 
     search_timeout_seconds: int = 30
     max_candidates_per_query: int = 20
