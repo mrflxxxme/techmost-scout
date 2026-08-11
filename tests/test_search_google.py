@@ -13,7 +13,8 @@ import respx
 
 from app.schemas import SearchQuery, SourceType
 from app.search import build_adapters
-from app.search.google_search import API_URL, GoogleSearchAdapter, _normalize_url
+from app.search.base import normalize_url
+from app.search.google_search import API_URL, GoogleSearchAdapter
 
 
 def _item(title: str, link: str, *, snippet: str = "фрагмент", display: str = "example.org", year: str | None = None):
@@ -145,6 +146,34 @@ async def test_исчерпанная_квота_не_роняет_пайпла�
 
 
 @respx.mock
+async def test_доктор_различает_отказ_доступа_и_пустую_выдачу(adapter_factory):
+    """Отказ и пустота — разные болезни, и доктор обязан их различать.
+
+    До этого health() на 403 сообщал «ключ принят, но выдача пуста» и отправлял
+    чинить настройку поисковой системы вместо доступа к API.
+    """
+    respx.get(API_URL).mock(
+        return_value=httpx.Response(
+            403, json={"error": {"code": 403, "message": "This project does not have the access"}}
+        )
+    )
+    async with httpx.AsyncClient() as client:
+        ok, detail = await adapter_factory(client).health()
+
+    assert ok is False
+    assert "403" in detail
+    assert "does not have the access" in detail
+    assert "выдача пуста" not in detail
+
+    respx.get(API_URL).mock(return_value=httpx.Response(200, json={"items": []}))
+    async with httpx.AsyncClient() as client:
+        ok, detail = await adapter_factory(client).health()
+
+    assert ok is False
+    assert "выдача пуста" in detail
+
+
+@respx.mock
 async def test_запись_без_ссылки_отбрасывается(adapter_factory):
     respx.get(API_URL).mock(
         return_value=httpx.Response(
@@ -200,4 +229,4 @@ async def test_источник_включается_только_с_обоим�
     ],
 )
 def test_нормализация_адреса(raw, expected):
-    assert _normalize_url(raw) == expected
+    assert normalize_url(raw) == expected

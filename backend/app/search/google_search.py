@@ -71,13 +71,12 @@ from __future__ import annotations
 import logging
 import re
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
-from app.search.base import SearchAdapter
+from app.search.base import SearchAdapter, normalize_url
 
 log = logging.getLogger(__name__)
 
@@ -131,6 +130,10 @@ class GoogleSearchAdapter(SearchAdapter):
         self._lang_restrict = lang_restrict or None
         #: Сколько платных запросов израсходовано за жизнь адаптера
         self.queries_used = 0
+        #: Почему источник промолчал в последний раз. Нужен доктору: пустая
+        #: выдача и отказ доступа — разные болезни с разным лечением, а
+        #: search() их обе превращает в пустой список.
+        self._last_error: str | None = None
 
     @property
     def estimated_cost_rub(self) -> float:
@@ -192,10 +195,13 @@ class GoogleSearchAdapter(SearchAdapter):
             lang="en",
             rationale="health probe",
         )
+        self._last_error = None
         try:
             found = await self.search(probe, limit=1)
         except Exception as exc:
             return False, f"{type(exc).__name__}: {exc}"
+        if self._last_error:
+            return False, self._last_error
         if not found:
             return False, "ключ принят, но выдача пуста — проверьте режим «искать по всему вебу»"
         return True, f"ок, ссылок в пробе: {len(found)}, израсходован 1 платный запрос"
@@ -217,15 +223,18 @@ class GoogleSearchAdapter(SearchAdapter):
             response = await self._client.get(API_URL, params=params)
             self.queries_used += 1
             if response.status_code in (403, 429):
+                reason = _reason(response)
+                self._last_error = f"отказ доступа {response.status_code}: {reason}"
                 log.warning(
                     "google_search: квота исчерпана или ключ не принят (%s) — источник пропущен: %s",
                     response.status_code,
-                    _reason(response),
+                    reason,
                 )
                 return None
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
+            self._last_error = f"{type(exc).__name__}: {exc}"
             log.warning("google_search не ответил: %s", exc)
             return None
         return payload if isinstance(payload, dict) else None
@@ -246,11 +255,10 @@ class GoogleSearchAdapter(SearchAdapter):
                 org=_clean(item.get("displayLink")) or None,
                 year=_year_from(item),
                 snippet=_clean(item.get("snippet"))[:MAX_SNIPPET],
-                # Ключ склейки — нормализованный адрес, а не название: у разных
-                # страниц заголовки совпадают сплошь и рядом («Технологии»,
-                # «Разработки»), и склейка по названию потеряла бы половину
-                # находок. Тот же приём нужен в yandex_search на этапе Э2.
-                raw_id=_normalize_url(url),
+                # Ключ склейки — нормализованный адрес, а не название. Общий с
+                # yandex_search: только так одна и та же страница из двух
+                # поисковиков не попадёт в отчёт дважды.
+                raw_id=normalize_url(url),
                 provider=self.name,
             )
         except ValidationError as exc:
@@ -262,21 +270,6 @@ def _clean(value: Any) -> str:
     if value is None:
         return ""
     return _WS.sub(" ", str(value)).strip()
-
-
-def _normalize_url(url: str) -> str:
-    """Свести адрес к виду, одинаковому для дублей.
-
-    Отбрасываем схему, www, метки кампаний в запросе и хвостовой слэш: одна и та
-    же страница приходит из Google и Яндекса в разном написании.
-    """
-    try:
-        parts = urlsplit(url.strip().lower())
-    except ValueError:
-        return url.strip().lower()
-    host = parts.netloc.removeprefix("www.")
-    path = parts.path.rstrip("/")
-    return urlunsplit(("", host, path, "", "")).lstrip("/")
 
 
 def _year_from(item: dict[str, Any]) -> int | None:

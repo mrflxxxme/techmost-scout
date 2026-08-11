@@ -14,12 +14,35 @@ from __future__ import annotations
 import abc
 import asyncio
 import logging
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
 from app.schemas import Candidate, SearchQuery, SourceType
 
 log = logging.getLogger(__name__)
+
+
+def normalize_url(url: str) -> str:
+    """Свести адрес к виду, одинаковому для дублей.
+
+    Ключ склейки веб-страниц: отбрасываем схему, www, параметры запроса и
+    хвостовой слэш. Одна и та же страница приходит из разных поисковиков в
+    разном написании, а склеивать веб по названию нельзя — у страниц заголовки
+    совпадают сплошь и рядом («Технологии», «Разработки»), и половина находок
+    исчезла бы как мнимые дубли.
+
+    Живёт здесь, а не в конкретном адаптере, потому что нужна всем источникам
+    типа WEB: только общий ключ склеивает страницу из Яндекса со страницей из
+    любого другого веб-источника.
+    """
+    try:
+        parts = urlsplit(url.strip().lower())
+    except ValueError:
+        return url.strip().lower()
+    host = parts.netloc.removeprefix("www.")
+    path = parts.path.rstrip("/")
+    return urlunsplit(("", host, path, "", "")).lstrip("/")
 
 
 class SearchAdapter(abc.ABC):
