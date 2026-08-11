@@ -32,3 +32,6 @@ desktop.ini
 
 # Локальные заметки агентов
 .claude/settings.local.json
+
+# Рабочие копии сессий и исполнителей (РЕШ-22): сами по себе они уже в git
+.claude/worktrees/
