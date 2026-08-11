@@ -6,9 +6,10 @@
 устной договорённостью в чате.
 
 Руководитель проекта и владелец решений: **Кирилл Уклонский** ·
-uklonskiy.k@gmail.com. Что строим — [SPEC.md](../SPEC.md), продуктовые
-требования — [prd-scout.md](../prd-scout.md), правила кода —
-[CLAUDE.md](../../CLAUDE.md), «никогда» — [INVARIANTS.md](INVARIANTS.md).
+uklonskiy.k@gmail.com. Что строим и продуктовые требования — [SPEC.md](../SPEC.md)
+(единственный источник требований, раздел 2а; прежний PRD — в архиве),
+правила кода — [CLAUDE.md](../../CLAUDE.md), «никогда» —
+[INVARIANTS.md](INVARIANTS.md).
 
 ---
 

@@ -1,0 +1,7 @@
+{
+  "tool_name": "PowerShell",
+  "tool_input_preview": "{\"command\":\"Set-Location C:\\\\Users\\\\KUklonskiy\\\\techmost-scout; git add .planning/DECISIONS.md .planning/STATE.md CLAUDE.md .gitignore; git commit -m @'\\nГрилл Э1-2: восемь решений, сессии переезжают ...",
+  "error": "Exit code 1\nwarning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of '.planning/DECISIONS.md', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of '.planning/STATE.md', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'CLAUDE.md', LF will be replaced by CRLF the next time Git touches it\n[main ebd3896] Грилл Э1-2: восемь решений, сессии переезж...",
+  "timestamp": "2026-08-11T13:08:46.123Z",
+  "retry_count": 1
+}

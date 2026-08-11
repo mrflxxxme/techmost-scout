@@ -32,7 +32,7 @@
     settings.openalex_api_key — обязателен, без него адаптер не включается
     (requires_key = True, см. build_adapters в app/search/__init__.py).
 
-ЧТО СДЕЛАТЬ (этап 3)
+ЧТО СДЕЛАТЬ (задача Э2-1)
     1. В конструкторе запомнить api_key; заголовок авторизации —
        {"Authorization": f"Bearer {api_key}"} (проверить актуальную схему в
        документации, OpenAlex обещал поддержать и параметр api_key=).
@@ -78,7 +78,7 @@ class OpenAlexAdapter(SearchAdapter):
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
         raise NotImplementedError(
             "openalex: полнотекстовый поиск платный ($1/1000) и дублирует Crossref — "
-            "источник используется только для обогащения по DOI, этап 3"
+            "источник используется только для обогащения по DOI, задача Э2-1"
         )
 
     async def enrich_by_doi(self, dois: list[str]) -> dict[str, dict[str, Any]]:
@@ -88,7 +88,7 @@ class OpenAlexAdapter(SearchAdapter):
         Lookup по DOI бесплатный и безлимитный — это единственный разрешённый
         режим работы с OpenAlex.
         """
-        raise NotImplementedError("openalex: обогащение по DOI не реализовано, этап 3")
+        raise NotImplementedError("openalex: обогащение по DOI не реализовано, задача Э2-1")
 
     async def health(self) -> tuple[bool, str]:
-        return False, "не реализовано, этап 3"
+        return False, "не реализовано, задача Э2-1"

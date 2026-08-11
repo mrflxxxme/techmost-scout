@@ -7,6 +7,7 @@
 
 # Данные и результаты работы
 data/*.db
+backend/data/
 data/*.db-journal
 data/*.sqlite*
 out/
@@ -33,5 +34,5 @@ desktop.ini
 # Локальные заметки агентов
 .claude/settings.local.json
 
-# Рабочие копии сессий и исполнителей (РЕШ-22): сами по себе они уже в git
+# Рабочие копии сессий и исполнителей (РЕШ-29): сами по себе они уже в git
 .claude/worktrees/
