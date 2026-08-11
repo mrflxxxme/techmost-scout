@@ -105,6 +105,18 @@ async def test_контур_выбирается_по_языку_формули�
     assert sent["query"]["searchType"] == expected_type
 
 
+@pytest.mark.parametrize(
+    ("lang", "expected_label"),
+    [("ru", "yandex-ru"), ("en", "yandex-com")],
+)
+async def test_метка_контура_совпадает_с_выбором_по_языку(make_adapter, lang, expected_label):
+    """Метка для hits_by_provider берётся тем же правилом, что и сам контур —
+    без живого вызова: contour_label не ходит в сеть."""
+    async with httpx.AsyncClient() as client:
+        adapter = make_adapter(client)
+        assert adapter.contour_label(_query(lang=lang)) == expected_label
+
+
 @respx.mock
 async def test_предел_платных_запросов_на_прогон(make_adapter):
     """Седьмая формулировка уже не уходит в сеть — запросы стоят денег."""

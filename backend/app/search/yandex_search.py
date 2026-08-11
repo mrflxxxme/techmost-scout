@@ -64,6 +64,11 @@ OPERATION_URL = "https://operation.api.cloud.yandex.net/operations"
 #: Язык формулировки → контур выдачи
 SEARCH_TYPE_BY_LANG = {"ru": "SEARCH_TYPE_RU", "en": "SEARCH_TYPE_COM"}
 
+#: Контур выдачи → метка для счётчика кандидатов в оркестраторе (РЕШ-31).
+#: Метка живёт рядом с правилом, которое выбирает сам контур, — так они не
+#: могут разъехаться, а оркестратору не нужен частный случай под этот источник.
+CONTOUR_LABEL_BY_SEARCH_TYPE = {"SEARCH_TYPE_RU": "yandex-ru", "SEARCH_TYPE_COM": "yandex-com"}
+
 #: Яндекс отдаёт не больше сотни на страницу; нам столько и не нужно
 MAX_PER_PAGE = 100
 MAX_SNIPPET = 700
@@ -118,13 +123,26 @@ class YandexSearchAdapter(SearchAdapter):
             )
             return []
 
-        search_type = SEARCH_TYPE_BY_LANG.get(query.lang, "SEARCH_TYPE_RU")
+        search_type = self._search_type(query)
         text = _with_site_filter(query, search_type)
 
         raw = await self._run_search(text, search_type=search_type, limit=limit)
         if raw is None:
             return []
         return self._parse(raw, limit=limit)
+
+    @staticmethod
+    def _search_type(query: SearchQuery) -> str:
+        """Контур выдачи по языку формулировки — единственное место правила."""
+        return SEARCH_TYPE_BY_LANG.get(query.lang, "SEARCH_TYPE_RU")
+
+    def contour_label(self, query: SearchQuery) -> str:
+        """Метка контура для оркестратора: `yandex-ru` или `yandex-com`.
+
+        Берёт тот же контур, что реально уйдёт в `search()` — метка и правило
+        выбора не могут разойтись, потому что вычисляются одной функцией.
+        """
+        return CONTOUR_LABEL_BY_SEARCH_TYPE[self._search_type(query)]
 
     async def health(self) -> tuple[bool, str]:
         """Пробный поиск в мировом контуре.

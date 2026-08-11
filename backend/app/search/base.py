@@ -63,6 +63,17 @@ class SearchAdapter(abc.ABC):
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
         """Найти кандидатов по одной формулировке."""
 
+    def contour_label(self, query: SearchQuery) -> str:
+        """Метка контура выдачи для формулировки — ключ `hits_by_provider` в
+        оркестраторе.
+
+        По умолчанию совпадает с именем адаптера: один источник — один контур.
+        Адаптер, что выбирает контур по самой формулировке (см.
+        `YandexSearchAdapter`), переопределяет метод — правило выбора и его
+        метка живут в одном месте, а оркестратор просто складывает по метке.
+        """
+        return self.name
+
     async def health(self) -> tuple[bool, str]:
         """Проверка для `scout doctor`. По умолчанию — пробный поиск."""
         try:

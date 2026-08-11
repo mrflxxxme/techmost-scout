@@ -83,9 +83,16 @@ class ScoutPipeline:
 
     # ── Поиск по всем источникам ────────────────────────────────────────────
     async def gather_candidates(self, plan: SearchPlan) -> SearchOutcome:
-        """Опросить источники параллельно, каждому — только подходящие запросы."""
+        """Опросить источники параллельно, каждому — только подходящие запросы.
+
+        Счётчик `hits_by_provider` ключуется меткой контура (`contour_label`),
+        а не именем адаптера: источник вроде Яндекса отдаёт разные метки для
+        разных формулировок (РЕШ-31). `sources_unavailable` при этом остаётся
+        по имени адаптера — этот список печатается в клиентском отчёте, и его
+        состав задачей учёта не меняется.
+        """
         adapters = await self._get_adapters()
-        tasks: list[tuple[str, asyncio.Task[list[Candidate]]]] = []
+        tasks: list[tuple[str, str, asyncio.Task[list[Candidate]]]] = []
 
         async with asyncio.TaskGroup() as group:
             for adapter in adapters:
@@ -96,22 +103,25 @@ class ScoutPipeline:
                         self._safe_search(adapter, query),
                         name=f"{adapter.name}:{query.source_type.value}",
                     )
-                    tasks.append((adapter.name, task))
+                    tasks.append((adapter.name, adapter.contour_label(query), task))
 
         candidates: list[Candidate] = []
-        hits: dict[str, int] = {}
+        hits_by_label: dict[str, int] = {}
+        hits_by_name: dict[str, int] = {}
         failed: dict[str, int] = {}
-        for name, task in tasks:
+        for name, label, task in tasks:
             found = task.result()
             if found is None:  # адаптер сообщил об отказе источника
                 failed[name] = failed.get(name, 0) + 1
                 continue
             candidates.extend(found)
-            hits[name] = hits.get(name, 0) + len(found)
+            hits_by_label[label] = hits_by_label.get(label, 0) + len(found)
+            hits_by_name[name] = hits_by_name.get(name, 0) + len(found)
 
-        # Источник считаем недоступным, если он не отдал вообще ничего и при этом падал.
-        unavailable = sorted(name for name in failed if hits.get(name, 0) == 0)
-        return SearchOutcome(candidates=candidates, unavailable=unavailable, hits_by_provider=hits)
+        # Источник считаем недоступным, если он не отдал вообще ничего и при этом
+        # падал — проверяем по имени адаптера, не по метке контура.
+        unavailable = sorted(name for name in failed if hits_by_name.get(name, 0) == 0)
+        return SearchOutcome(candidates=candidates, unavailable=unavailable, hits_by_provider=hits_by_label)
 
     async def _safe_search(self, adapter: SearchAdapter, query) -> list[Candidate] | None:
         """Обёртка: любая ошибка адаптера превращается в None, а не в падение запроса."""
