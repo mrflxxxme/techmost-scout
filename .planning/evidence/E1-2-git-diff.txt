@@ -1,0 +1,7 @@
+﻿ backend/app/pipeline/orchestrator.py |  28 ++--
+ backend/app/search/base.py           |  11 ++
+ backend/app/search/yandex_search.py  |  20 ++-
+ docs/first-run-notes.md              | 273 +++++++++++++++++++++++++++++++++++
+ tests/test_pipeline_counters.py      | 119 +++++++++++++++
+ tests/test_search_yandex.py          |  12 ++
+ 6 files changed, 453 insertions(+), 10 deletions(-)

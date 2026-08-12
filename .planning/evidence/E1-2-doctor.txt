@@ -1,0 +1,73 @@
+﻿                                     Ключи                                     
+┌─────────────────────────┬────────┬──────────────────────────────────────────┐
+│ Переменная              │ Статус │ Зачем                                    │
+├─────────────────────────┼────────┼──────────────────────────────────────────┤
+│ GIGACHAT_AUTH_KEY       │ есть   │ основная модель, бесплатный тариф        │
+│ DEEPSEEK_API_KEY        │ есть   │ качественные стадии: карточки, проверка  │
+│ YANDEX_API_KEY          │ есть   │ аварийный резерв модели                  │
+│ YANDEX_CATALOG_ID       │ есть   │ нужен вместе с ключом Яндекса            │
+│ YANDEX_SEARCH_API_KEY   │ есть   │ поиск по вебу РФ (платно)                │
+│ GOOGLE_API_KEY          │ нет    │ поиск по мировому вебу (100 запросов в   │
+│                         │        │ сутки бесплатно)                         │
+│ GOOGLE_CSE_ID           │ нет    │ нужен вместе с ключом Google             │
+│ OPENALEX_API_KEY        │ есть   │ обогащение по DOI (с 02.2026 ключ        │
+│                         │        │ обязателен)                              │
+│ SEMANTICSCHOLAR_API_KEY │ нет    │ необязателен, повышает лимиты            │
+└─────────────────────────┴────────┴──────────────────────────────────────────┘
+
+Проверяю модели…
+python.exe : 19:57:52 INFO    httpx | HTTP Request: POST https://ngw.devices.sberbank.ru:9443/api/v2/oauth "HTTP/1.1 20
+0 OK"
+At line:6 char:1
++ & "$main\.venv\Scripts\python.exe" -m app.cli doctor *>&1 | Out-File  ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (19:57:52 INFO  ...TTP/1.1 200 OK":String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+19:57:53 INFO    httpx | HTTP Request: POST https://llm.api.cloud.yandex.net/foundationModels/v1/completion "HTTP/1.1 2
+00 OK"
+19:57:53 INFO    httpx | HTTP Request: POST https://gigachat.devices.sberbank.ru/api/v1/chat/completions "HTTP/1.1 200 
+OK"
+19:57:53 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+┌───────────┬────────┬──────────────────────────────────────────────────┐
+│ Провайдер │ Статус │ Подробности                                      │
+├───────────┼────────┼──────────────────────────────────────────────────┤
+│ gigachat  │ ок     │ ок, модель GigaChat-2, потрачено 0.0012 ₽        │
+│ deepseek  │ ок     │ ок, модель deepseek-v4-flash, потрачено 0.0040 ₽ │
+│ yandex    │ ок     │ ок, модель latest, потрачено 0.0036 ₽            │
+└───────────┴────────┴──────────────────────────────────────────────────┘
+
+Маршруты стадий: {"intake": "gigachat", "extractor": "gigachat", "planner": 
+"deepseek", "scorer": "deepseek", "card_author": "deepseek", "verifier": 
+"deepseek", "summary": "deepseek"}
+Резервный порядок: gigachat, deepseek, yandex
+
+Проверяю источники…
+19:57:55 INFO    app.search | источник google_search выключен: нет настроек google_api_key, google_cse_id
+19:57:55 INFO    app.search | активные источники: showcase, crossref, cyberleninka, arxiv, semanticscholar, yandex_sear
+ch
+19:57:55 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+19:57:55 INFO    httpx | HTTP Request: GET https://cyberleninka.ru/oai?verb=Identify "HTTP/1.1 200 OK"
+19:57:56 INFO    httpx | HTTP Request: GET https://api.crossref.org/works?query.bibliographic=%D0%BA%D0%B0%D1%82%D0%B0%
+D0%BB%D0%B8%D0%B7%D0%B0%D1%82%D0%BE%D1%80&rows=1&filter=from-pub-date%3A2014-01-01&select=DOI%2Ctitle%2Ccontainer-title
+%2Cauthor%2Cissued%2Cabstract%2CURL&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 200 OK"
+19:57:56 INFO    httpx | HTTP Request: GET https://api.semanticscholar.org/graph/v1/paper/search?query=%D0%BA%D0%B0%D1%
+82%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%82%D0%BE%D1%80&limit=1&fields=title%2Cabstract%2Cyear%2Cauthors%2CexternalIds%2Curl
+%2CopenAccessPdf "HTTP/1.1 429 "
+19:57:56 WARNING app.search.semanticscholar | semanticscholar: лимит исчерпан (429), ключ не задан и пул общий — источн
+ик пропущен
+19:57:57 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/sprea3g6l5ms33d93aei "HTTP
+/1.1 200 OK"
+┌─────────────────┬────────┬──────────────────────────────────────────────────┐
+│ Источник        │ Статус │ Подробности                                      │
+├─────────────────┼────────┼──────────────────────────────────────────────────┤
+│ showcase        │ ок     │ ок, записей в витрине: 0                         │
+│ crossref        │ ок     │ ок, кандидатов в пробе: 1                        │
+│ cyberleninka    │ ок     │ ок, репозиторий: CyberLeninka OAI repository     │
+│ arxiv           │ ок     │ ок, кандидатов в пробе: 0                        │
+│ semanticscholar │ ок     │ ок, кандидатов в пробе: 0                        │
+│ yandex_search   │ ок     │ ок, мировой контур: ссылок 3, доменов 3, 1       │
+│                 │        │ платный запрос                                   │
+└─────────────────┴────────┴──────────────────────────────────────────────────┘
+
+Готово к работе. Рабочие модели: gigachat, deepseek, yandex
