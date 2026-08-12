@@ -35,7 +35,11 @@ ProgressHook = Callable[[str, str, float], Awaitable[None] | None]
 class SearchOutcome:
     candidates: list[Candidate]
     unavailable: list[str]
+    #: Метка контура (РЕШ-31) — на нём строится строка «Найдено кандидатов»
     hits_by_provider: dict[str, int]
+    #: Имя адаптера — тот же ключ, что и в `unavailable`; без него вклад
+    #: адаптера с несколькими контурами (Яндекс) было нечем восстановить
+    hits_by_name: dict[str, int]
 
 
 class ScoutPipeline:
@@ -121,7 +125,12 @@ class ScoutPipeline:
         # Источник считаем недоступным, если он не отдал вообще ничего и при этом
         # падал — проверяем по имени адаптера, не по метке контура.
         unavailable = sorted(name for name in failed if hits_by_name.get(name, 0) == 0)
-        return SearchOutcome(candidates=candidates, unavailable=unavailable, hits_by_provider=hits_by_label)
+        return SearchOutcome(
+            candidates=candidates,
+            unavailable=unavailable,
+            hits_by_provider=hits_by_label,
+            hits_by_name=hits_by_name,
+        )
 
     async def _safe_search(self, adapter: SearchAdapter, query) -> list[Candidate] | None:
         """Обёртка: любая ошибка адаптера превращается в None, а не в падение запроса."""

@@ -6,8 +6,10 @@
   секунду, и он периодически исчерпан кем-то другим) — тогда приходит HTTP 429;
 * с ключом (api.semanticscholar.org/api-key, выдают по заявке) лимит личный.
 
-Поэтому 429 здесь — ожидаемая ситуация, а не авария: пишем предупреждение и
-возвращаем пустой список, отчёт честно отметит, что источника не хватило.
+Поэтому 429 здесь — ожидаемая ситуация, а не авария в смысле кода, но источник
+в этот раз всё равно ничего не отдал: адаптер поднимает SearchError, отказ
+ловит `_safe_search` оркестратора, и отчёт честно отметит, что источника не
+хватило (инвариант №5), вместо того чтобы молча остаться с пустым списком.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ import httpx
 from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
-from app.search.base import SearchAdapter
+from app.search.base import SearchAdapter, SearchError
 
 log = logging.getLogger(__name__)
 
@@ -73,21 +75,25 @@ class SemanticScholarAdapter(SearchAdapter):
         return candidates[:limit]
 
     async def _request(self, params: dict[str, str], headers: dict[str, str]) -> dict[str, Any] | None:
-        """Свой GET вместо _get_json: нужно отдельно разобрать 429."""
+        """Свой GET вместо _get_json: нужно отдельно разобрать 429.
+
+        Транспортный отказ (HTTP-ошибка, 429, нечитаемый ответ) поднимается
+        как SearchError — _safe_search оркестратора поймает его и честно
+        отметит источник недоступным (инвариант №5). 429 здесь ожидаемая, но
+        всё равно недоступность: анонимный пул общий и периодически исчерпан
+        другими клиентами."""
         await self._throttle()
         try:
             response = await self._client.get(API_URL, params=params, headers=headers)
             if response.status_code == 429:
-                log.warning(
-                    "semanticscholar: лимит исчерпан (429)%s — источник пропущен",
-                    "" if self._api_key else ", ключ не задан и пул общий",
+                raise SearchError(
+                    "semanticscholar: лимит запросов исчерпан (429)"
+                    + ("" if self._api_key else ", ключ не задан и пул общий")
                 )
-                return None
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            log.warning("semanticscholar не ответил: %s", exc)
-            return None
+            raise SearchError(f"semanticscholar не ответил: {exc}") from exc
         return payload if isinstance(payload, dict) else None
 
     def _to_candidate(self, item: dict[str, Any]) -> Candidate | None:
@@ -116,6 +122,7 @@ class SemanticScholarAdapter(SearchAdapter):
                 year=_year(item.get("year")),
                 snippet=_clean(item.get("abstract"))[:MAX_SNIPPET],
                 raw_id=doi or _clean(external.get("CorpusId")) or None,
+                pdf_url=_clean(open_pdf.get("url")) or None,
                 provider=self.name,
             )
         except ValidationError as exc:

@@ -19,7 +19,7 @@ from defusedxml import ElementTree as ET  # noqa: N817 — ET общеприня
 from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
-from app.search.base import SearchAdapter
+from app.search.base import SearchAdapter, SearchError
 
 log = logging.getLogger(__name__)
 
@@ -65,8 +65,6 @@ class ArxivAdapter(SearchAdapter):
             "max_results": str(max(1, min(limit, MAX_RESULTS))),
         }
         body = await self._fetch(params)
-        if body is None:
-            return []
         try:
             root = ET.fromstring(body)
         except ET.ParseError as exc:
@@ -80,15 +78,17 @@ class ArxivAdapter(SearchAdapter):
                 candidates.append(candidate)
         return candidates[:limit]
 
-    async def _fetch(self, params: dict[str, str]) -> str | None:
+    async def _fetch(self, params: dict[str, str]) -> str:
+        """GET к arXiv. Транспортный отказ поднимается как SearchError —
+        _safe_search оркестратора поймает его и честно отметит источник
+        недоступным (инвариант №5), вместо того чтобы тихо вернуть []."""
         await self._throttle()
         try:
             response = await self._client.get(API_URL, params=params)
             response.raise_for_status()
             return response.text
         except httpx.HTTPError as exc:
-            log.warning("arxiv не ответил на %s: %s", params.get("search_query"), exc)
-            return None
+            raise SearchError(f"arxiv не ответил на «{params.get('search_query')}»: {exc}") from exc
 
     def _to_candidate(self, entry: ET.Element) -> Candidate | None:
         title = _text(entry, "atom:title")
@@ -116,6 +116,7 @@ class ArxivAdapter(SearchAdapter):
                 year=_year(_text(entry, "atom:published")),
                 snippet=summary[:MAX_SNIPPET],
                 raw_id=_raw_id(url),
+                pdf_url=_pdf_url(url),
                 provider=self.name,
             )
         except ValidationError as exc:
@@ -154,3 +155,10 @@ def _raw_id(url: str) -> str | None:
     """Из https://arxiv.org/abs/2401.01234v2 делаем arXiv:2401.01234v2."""
     match = _ARXIV_ID.search(url)
     return f"arXiv:{match.group(1)}" if match else None
+
+
+def _pdf_url(url: str) -> str | None:
+    """Адрес PDF выводится из id записи (…/abs/<id> → …/pdf/<id>), без
+    дополнительных запросов: arXiv отдаёт PDF по предсказуемому пути."""
+    match = _ARXIV_ID.search(url)
+    return f"https://arxiv.org/pdf/{match.group(1)}" if match else None
