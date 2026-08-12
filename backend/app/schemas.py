@@ -7,10 +7,15 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
+
+_DOI_PREFIXES = ("https://doi.org/", "http://doi.org/", "doi:")
+_DOI_VERSION_SUFFIX = re.compile(r"\.v\d+$")
 
 
 class MaturityStage(StrEnum):
@@ -20,6 +25,7 @@ class MaturityStage(StrEnum):
     PROTOTYPE = "prototype"  # есть опытный образец
     PILOT = "pilot"  # прошла пилот на реальном объекте
     SERIES = "series"  # серийно применяется
+    UNKNOWN = "unknown"  # ни один признак зрелости источниками не подтверждён
 
 
 class SourceType(StrEnum):
@@ -102,6 +108,9 @@ class Candidate(BaseModel):
     snippet: str = ""
     raw_id: str | None = Field(default=None, description="DOI, номер патента, id гранта")
     provider: str = Field(description="Имя адаптера: crossref, cyberleninka, showcase, …")
+    pdf_url: HttpUrl | None = Field(
+        default=None, description="Ссылка на открытый полный текст, если источник её отдаёт"
+    )
 
     @field_validator("year")
     @classmethod
@@ -111,9 +120,21 @@ class Candidate(BaseModel):
         return v
 
     def dedup_key(self) -> str:
-        """Ключ склейки дублей: DOI/номер, иначе нормализованное название."""
+        """Ключ склейки дублей: DOI/номер, иначе нормализованное название.
+
+        DOI нормализуется отдельно от прочих идентификаторов: регистр и
+        обрамляющие пробелы не должны создавать ложных различий, а препринт и
+        финальная публикация одной статьи (`…v1` против безверсийного DOI)
+        обязаны склеиваться в одну карточку.
+        """
         if self.raw_id:
-            return self.raw_id.strip().lower()
+            key = self.raw_id.strip().lower()
+            for prefix in _DOI_PREFIXES:
+                if key.startswith(prefix):
+                    key = key[len(prefix) :]
+                    break
+            key = _DOI_VERSION_SUFFIX.sub("", key)
+            return key
         normalized = "".join(ch for ch in self.title.lower() if ch.isalnum() or ch.isspace())
         return " ".join(normalized.split())
 
@@ -150,6 +171,19 @@ class Evidence(BaseModel):
     url: HttpUrl
 
 
+class RequirementCheck(BaseModel):
+    """Построчная сверка одного пункта `Brief.constraints` с содержимым карточки (РЕШ-38).
+
+    Домысливание запрещено промптом: нет прямого подтверждения источником —
+    статус `not_confirmed`, а не молчание.
+    """
+
+    requirement: str
+    status: Literal["confirmed", "not_confirmed"]
+    evidence_url: HttpUrl | None = None
+    note: str = ""
+
+
 class GovSupportMatch(BaseModel):
     instrument: str = Field(description="Название инструмента из data/gov_support.yaml")
     why: str = Field(description="Почему подходит этой разработке и задаче")
@@ -162,7 +196,10 @@ class SolutionCard(BaseModel):
 
     title: str
     essence: str = Field(description="Суть решения деловым языком, без академизма")
-    maturity_stage: MaturityStage
+    maturity_stage: MaturityStage = Field(
+        default=MaturityStage.UNKNOWN,
+        description="Стадия зрелости; unknown — если ни один признак не подтверждён источниками",
+    )
     trl_estimate: int | None = Field(default=None, ge=1, le=9)
     developer_org: str | None = None
     developer_team: str | None = None
@@ -175,6 +212,15 @@ class SolutionCard(BaseModel):
     confidence: Confidence = Confidence.MEDIUM
     confidence_note: str = ""
     candidate_urls: list[HttpUrl] = Field(default_factory=list)
+    requirement_checks: list[RequirementCheck] = Field(
+        default_factory=list, description="Построчная сверка карточки с constraints брифа (РЕШ-38)"
+    )
+    unsourced_claims: list[str] = Field(
+        default_factory=list, description="Утверждения, которые проверяющая стадия сочла неподтверждёнными"
+    )
+    pdf_urls: list[HttpUrl] = Field(
+        default_factory=list, description="Ссылки на открытый полный текст — заполняется кодом, а не моделью"
+    )
 
     def has_unsourced_claims(self) -> bool:
         """Грубая проверка: карточка обязана нести хотя бы одно подтверждение."""
