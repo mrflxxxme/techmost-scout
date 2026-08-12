@@ -122,7 +122,9 @@ async def _doctor() -> None:
 @app.command()
 def run(
     task: str = typer.Argument(..., help="Описание технологической задачи (обезличенное)"),
-    industry: str = typer.Option("промышленность", "--industry", "-i"),
+    industry: str = typer.Option(
+        None, "--industry", "-i", help="Отрасль заказчика; если не задана, определяется разбором текста"
+    ),
     maturity: str = typer.Option(None, "--maturity", "-m", help="lab|prototype|pilot|series"),
     out: Path = typer.Option(None, "--out", "-o", help="Куда положить отчёт (по умолчанию out/)"),
     interactive: bool = typer.Option(True, "--interactive/--no-interactive", help="Задавать уточняющие вопросы"),
@@ -133,28 +135,40 @@ def run(
     asyncio.run(_run(task, industry, maturity, out, interactive))
 
 
-async def _run(task: str, industry: str, maturity: str | None, out: Path | None, interactive: bool) -> None:
+async def _run(task: str, industry: str | None, maturity: str | None, out: Path | None, interactive: bool) -> None:
     from app.pipeline import ScoutPipeline
     from app.pipeline.stages import refine_brief, run_intake
 
     settings = get_settings()
     router = LLMRouter(settings)
 
-    brief: Brief
+    # Разбор текста нужен в обоих режимах: без него `constraints` брифа
+    # остаются пустыми, а именно они дают карточкам сверку с техтребованиями
+    # (РЕШ-38). Стадия дешёвая — маршрут `intake` идёт на бесплатный GigaChat.
+    industry_hint = industry or "не указана"
     if interactive:
         console.print("[bold]Уточняю задачу…[/bold]")
-        intake = await run_intake(router, task)
+    intake = await run_intake(router, task, industry_hint=industry_hint)
+
+    brief: Brief
+    if interactive:
         answers: dict[str, str] = {}
         for question in intake.questions:
             console.print(f"\n[dim]{question.why}[/dim]")
             answers[question.question] = typer.prompt(question.question, default="не знаю")
-        brief = await refine_brief(router, task, answers) if answers else intake.draft_brief
-    else:
-        brief = Brief(
-            industry=industry,
-            task_summary=task,
-            target_maturity=MaturityStage(maturity) if maturity else None,
+        brief = (
+            await refine_brief(router, task, answers, industry_hint=industry_hint) if answers else intake.draft_brief
         )
+    else:
+        # Немой режим: вопросы не задаются и не печатаются, бриф берётся как
+        # есть из разбора текста.
+        brief = intake.draft_brief
+
+    # Явно заданный флаг перекрывает то, что определила модель при разборе.
+    if industry:
+        brief = brief.model_copy(update={"industry": industry})
+    if maturity:
+        brief = brief.model_copy(update={"target_maturity": MaturityStage(maturity)})
 
     console.print(f"\n[bold]Бриф:[/bold] {brief.task_summary} [dim]({brief.industry})[/dim]\n")
 

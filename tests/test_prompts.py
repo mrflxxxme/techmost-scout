@@ -96,7 +96,7 @@ _CHANGELOG_ENTRY_VERSION = re.compile(r"^##\s*([\d.]+)\s", re.MULTILINE)
 _FILE_VERSION_LABEL = re.compile(r"<!--\s*версия\s*([\d.]+)\s*-->")
 
 
-@pytest.mark.parametrize("name", ["card_author", "verifier"])
+@pytest.mark.parametrize("name", ["card_author", "verifier", "intake"])
 def test_prompt_version_matches_latest_changelog_entry(name: str):
     """Метка версии в конце файла обязана совпадать с версией самой свежей записи CHANGELOG.md,
     где этот файл упомянут: иначе история изменений расходится с фактическим состоянием промпта."""
@@ -116,6 +116,18 @@ def test_prompt_version_matches_latest_changelog_entry(name: str):
         f"{name}.md: версия в метке файла {file_version} не совпадает с версией последней записи "
         f"CHANGELOG.md {version_match.group(1)}"
     )
+
+
+def test_intake_empty_questions_requires_all_four_conditions():
+    """Правило 2 не должно поощрять пустой список вопросов без условия — прежняя формулировка
+    прямо называла его «нормальным и частым результатом», из-за чего на живых текстах НАТТ с
+    готовым списком требований модель ни разу не задала вопрос (причина нулевого диалога)."""
+    text = load_prompt("intake")
+    assert "не менее двух" in text, "intake.md: не описано минимальное число вопросов при неполной постановке"
+    assert "нормальный и частый результат" not in text, (
+        "intake.md: прежняя формулировка всё ещё поощряет пустой список вопросов без условия"
+    )
+    assert "для солидности" in text, "intake.md: запрет на добор лишних вопросов не должен пропасть"
 
 
 def test_candidates_to_json_keeps_url_and_trims_snippet(candidates):
