@@ -134,27 +134,37 @@ async def test_предел_платных_запросов_на_прогон(ma
 
 
 @respx.mock
-async def test_гранты_сужаются_до_реестров_только_в_российском_контуре(make_adapter):
+async def test_грантовый_маркер_в_web_формулировке_сужает_до_реестров_только_в_ru(make_adapter):
+    """Сужение `site:` больше не зависит от типа `grant` (планировщик его не выдаёт, РЕШ-39) —
+    оно включается по маркеру грантового намерения в тексте русской web-формулировки (РЕШ-41)."""
     route = respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
     respx.get(url__startswith=OPERATION_URL).mock(
         return_value=httpx.Response(200, json=_operation_done(_xml(_doc("https://rscf.ru/project/1"))))
     )
     async with httpx.AsyncClient() as client:
         adapter = make_adapter(client)
-        await adapter.search(_query(lang="ru", source_type=SourceType.GRANT), limit=5)
-        ru_text = json.loads(route.calls[0].request.content)["query"]["queryText"]
+        await adapter.search(
+            _query(text="поддержанные проекты РНФ катализатор гидроочистки", lang="ru", source_type=SourceType.WEB),
+            limit=5,
+        )
+        ru_grant_text = json.loads(route.calls[0].request.content)["query"]["queryText"]
 
-        await adapter.search(_query(lang="en", source_type=SourceType.GRANT), limit=5)
-        com_text = json.loads(route.calls[1].request.content)["query"]["queryText"]
+        await adapter.search(
+            _query(text="supported grant projects catalyst research", lang="en", source_type=SourceType.WEB),
+            limit=5,
+        )
+        en_text = json.loads(route.calls[1].request.content)["query"]["queryText"]
 
-        await adapter.search(_query(lang="ru", source_type=SourceType.WEB), limit=5)
-        web_text = json.loads(route.calls[2].request.content)["query"]["queryText"]
+        await adapter.search(
+            _query(text="лаборатория катализа сайт кафедры", lang="ru", source_type=SourceType.WEB), limit=5
+        )
+        ru_plain_text = json.loads(route.calls[2].request.content)["query"]["queryText"]
 
-    assert "site:rscf.ru" in ru_text and "site:fasie.ru" in ru_text
-    # В мировом контуре российские реестры бессмысленны
-    assert "site:" not in com_text
-    # Для обычного веба ограничение по сайтам убило бы весь смысл источника
-    assert "site:" not in web_text
+    assert "site:rscf.ru" in ru_grant_text and "site:fasie.ru" in ru_grant_text
+    # В мировом контуре российские реестры бессмысленны, даже если в тексте есть слово grant
+    assert "site:" not in en_text
+    # Обычная русская web-формулировка без грантового маркера — без сужения
+    assert "site:" not in ru_plain_text
 
 
 @respx.mock
