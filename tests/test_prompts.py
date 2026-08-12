@@ -76,6 +76,48 @@ def test_gov_support_reference_is_loadable():
     assert any("доращивание" in name.lower() for name in names)
 
 
+def test_card_author_does_not_default_to_lab_without_signs():
+    """Правило 8 не должно предписывать `lab`, если признаков зрелости в источниках нет —
+    это был найденный аудитом источник нарушения инварианта №1 (ложная зрелость без ссылки)."""
+    text = load_prompt("card_author")
+    assert not re.search(r"признаков нет.*lab", text), (
+        "card_author.md всё ещё предписывает ставить lab при отсутствии признаков"
+    )
+    assert "unknown" in text
+
+
+def test_card_author_response_format_has_requirement_checks():
+    """Формат ответа обязан содержать requirement_checks — построчную сверку с брифом (РЕШ-38)."""
+    text = load_prompt("card_author")
+    assert "requirement_checks" in text
+
+
+_CHANGELOG_ENTRY_VERSION = re.compile(r"^##\s*([\d.]+)\s", re.MULTILINE)
+_FILE_VERSION_LABEL = re.compile(r"<!--\s*версия\s*([\d.]+)\s*-->")
+
+
+@pytest.mark.parametrize("name", ["card_author", "verifier"])
+def test_prompt_version_matches_latest_changelog_entry(name: str):
+    """Метка версии в конце файла обязана совпадать с версией самой свежей записи CHANGELOG.md,
+    где этот файл упомянут: иначе история изменений расходится с фактическим состоянием промпта."""
+    text = load_prompt(name)
+    label_match = _FILE_VERSION_LABEL.search(text)
+    assert label_match, f"{name}.md: нет метки версии <!-- версия X.Y -->"
+    file_version = label_match.group(1)
+
+    changelog = (get_settings().prompts_dir / "CHANGELOG.md").read_text(encoding="utf-8")
+    entries = re.split(r"\n(?=## )", changelog)
+    mentioning = [entry for entry in entries if f"`{name}.md`" in entry]
+    assert mentioning, f"в CHANGELOG.md нет ни одной записи про {name}.md"
+    latest_entry = mentioning[0]  # записи идут от новых к старым, самая свежая — первая по счёту
+    version_match = _CHANGELOG_ENTRY_VERSION.search(latest_entry)
+    assert version_match, "запись CHANGELOG.md про промпт без номера версии в заголовке"
+    assert version_match.group(1) == file_version, (
+        f"{name}.md: версия в метке файла {file_version} не совпадает с версией последней записи "
+        f"CHANGELOG.md {version_match.group(1)}"
+    )
+
+
 def test_candidates_to_json_keeps_url_and_trims_snippet(candidates):
     """Кандидаты для модели: ссылка на месте, длинный текст обрезан."""
     long_snippet = candidates[0].model_copy(update={"snippet": "с" * 5000})
