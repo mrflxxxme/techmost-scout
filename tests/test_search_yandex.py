@@ -160,11 +160,21 @@ async def test_грантовый_маркер_в_web_формулировке_�
         )
         ru_plain_text = json.loads(route.calls[2].request.content)["query"]["queryText"]
 
+        # Совет ревью Ф-3: «конкурс» — тоже маркер грантового намерения (правило 9 planner.md
+        # предлагает его модели), а без других маркеров формулировка со словом «конкурс» не должна
+        # оставаться без сужения.
+        await adapter.search(
+            _query(text="конкурс поддержки разработок катализатор гидроочистки", lang="ru", source_type=SourceType.WEB),
+            limit=5,
+        )
+        ru_konkurs_text = json.loads(route.calls[3].request.content)["query"]["queryText"]
+
     assert "site:rscf.ru" in ru_grant_text and "site:fasie.ru" in ru_grant_text
     # В мировом контуре российские реестры бессмысленны, даже если в тексте есть слово grant
     assert "site:" not in en_text
     # Обычная русская web-формулировка без грантового маркера — без сужения
     assert "site:" not in ru_plain_text
+    assert "site:rscf.ru" in ru_konkurs_text and "site:fasie.ru" in ru_konkurs_text
 
 
 @respx.mock
