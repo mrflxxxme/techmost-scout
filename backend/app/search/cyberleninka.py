@@ -157,10 +157,27 @@ class CyberLeninkaAdapter(SearchAdapter):
 
         scored: list[tuple[int, Candidate]] = []
         for page in range(MAX_PAGES):
-            body = await self._fetch(params)
-            root = _parse(body)
-            if root is None:
-                break
+            try:
+                body = await self._fetch(params)
+                root = _parse(body)
+                if root is None:
+                    # Нечитаемое тело при коде 200 — тот же транспортный
+                    # отказ, что и HTTP-ошибка (инвариант №5): не «страница
+                    # молча последняя», а честный отказ источника.
+                    raise SearchError(f"cyberleninka: страница {page + 1} не разобрана как XML")
+            except SearchError as exc:
+                if scored:
+                    # Частичный успех — это результат, а не отказ: то, что
+                    # уже нашли на предыдущих страницах, не выбрасываем,
+                    # адаптер остаётся доступным (правило «недоступен = не
+                    # отдал ничего И падал»). Пропавший хвост — не авария.
+                    log.warning(
+                        "cyberleninka: %s — возвращаю %s уже найденных записей вместо оставшихся страниц",
+                        exc,
+                        len(scored),
+                    )
+                    break
+                raise
             if (error := root.find("oai:error", NS)) is not None:
                 # noRecordsMatch — нормальный ответ, а не авария
                 log.info("cyberleninka: OAI-ошибка %s", error.get("code"))

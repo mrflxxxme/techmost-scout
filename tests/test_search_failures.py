@@ -63,6 +63,17 @@ async def test_arxiv_500_поднимает_searcherror():
 
 
 @respx.mock
+async def test_arxiv_нечитаемое_тело_поднимает_searcherror():
+    """200, но тело не XML (прокси, WAF, обрезанный ответ) — тот же
+    транспортный отказ, что и HTTP-ошибка, а не тихое «ничего не нашли»."""
+    respx.get(ARXIV_API_URL).mock(return_value=httpx.Response(200, text="<not-xml this is broken"))
+    async with httpx.AsyncClient() as client:
+        adapter = ArxivAdapter(client)
+        with pytest.raises(SearchError):
+            await adapter.search(_query(), limit=5)
+
+
+@respx.mock
 async def test_arxiv_успешный_ответ_без_совпадений_даёт_пустой_список():
     respx.get(ARXIV_API_URL).mock(return_value=httpx.Response(200, text=_ARXIV_EMPTY_FEED))
     async with httpx.AsyncClient() as client:
@@ -182,13 +193,14 @@ def _oai_record(*, title: str = "Катализатор гидроочистки
     )
 
 
-def _oai_list_records(*records: str) -> str:
+def _oai_list_records(*records: str, resumption_token: str = "") -> str:
+    token = f"<resumptionToken>{resumption_token}</resumptionToken>" if resumption_token else ""
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/">'
         "<responseDate>2026-08-12T00:00:00Z</responseDate>"
         '<request verb="ListRecords">https://cyberleninka.ru/oai</request>'
-        f"<ListRecords>{''.join(records)}</ListRecords>"
+        f"<ListRecords>{''.join(records)}{token}</ListRecords>"
         "</OAI-PMH>"
     )
 
@@ -224,3 +236,33 @@ async def test_cyberleninka_набор_уходит_в_запрос_и_пред�
     assert route.calls[0].request.url.params["set"] == "cas"
     assert len(found) == 1
     assert not any("набор (set) не задан" in record.message for record in caplog.records)
+
+
+@respx.mock
+async def test_cyberleninka_нечитаемое_тело_на_первой_странице_поднимает_searcherror(tmp_path):
+    """200, но тело не XML — тот же транспортный отказ, что и HTTP-ошибка;
+    накопленного ещё ничего нет, поэтому исключение пробрасывается наружу."""
+    respx.get(CYBERLENINKA_BASE_URL).mock(return_value=httpx.Response(200, text="<not-xml this is broken"))
+    async with httpx.AsyncClient() as client:
+        adapter = CyberLeninkaAdapter(client, oai_set="cas", cache_dir=tmp_path)
+        with pytest.raises(SearchError):
+            await adapter.search(_query(text="катализатор гидроочистки", lang="ru"), limit=5)
+
+
+@respx.mock
+async def test_cyberleninka_отказ_на_второй_странице_сохраняет_кандидатов_первой(tmp_path):
+    """Регрессия пагинации: первая страница успешна и даёт resumptionToken,
+    вторая отвечает 500 — кандидат первой страницы не теряется, исключения
+    нет (частичный успех — результат, а не отказ, адаптер остаётся
+    доступным)."""
+    respx.get(CYBERLENINKA_BASE_URL).mock(
+        side_effect=[
+            httpx.Response(200, text=_oai_list_records(_oai_record(), resumption_token="tok1")),
+            httpx.Response(500, text="internal error"),
+        ]
+    )
+    async with httpx.AsyncClient() as client:
+        adapter = CyberLeninkaAdapter(client, oai_set="cas", cache_dir=tmp_path)
+        found = await adapter.search(_query(text="катализатор гидроочистки", lang="ru"), limit=20)
+
+    assert len(found) == 1

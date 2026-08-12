@@ -68,8 +68,11 @@ class ArxivAdapter(SearchAdapter):
         try:
             root = ET.fromstring(body)
         except ET.ParseError as exc:
-            log.warning("arxiv: Atom не разобран: %s", exc)
-            return []
+            # Нечитаемое тело при коде 200 (прокси, WAF, обрезанный ответ) —
+            # тот же транспортный отказ, что и HTTP-ошибка: инвариант №5
+            # требует, чтобы он дошёл до sources_unavailable, а не тихо
+            # превратился в «ничего не нашли».
+            raise SearchError(f"arxiv: тело ответа не разобрано как XML: {exc}") from exc
 
         candidates: list[Candidate] = []
         for entry in root.iterfind("atom:entry", NS):
@@ -106,6 +109,7 @@ class ArxivAdapter(SearchAdapter):
         authors = [name for author in entry.iterfind("atom:author", NS) if (name := _text(author, "atom:name"))][
             :MAX_AUTHORS
         ]
+        raw_id, pdf_url = _arxiv_ids(url)
 
         try:
             return Candidate(
@@ -115,8 +119,8 @@ class ArxivAdapter(SearchAdapter):
                 authors=authors,
                 year=_year(_text(entry, "atom:published")),
                 snippet=summary[:MAX_SNIPPET],
-                raw_id=_raw_id(url),
-                pdf_url=_pdf_url(url),
+                raw_id=raw_id,
+                pdf_url=pdf_url,
                 provider=self.name,
             )
         except ValidationError as exc:
@@ -151,14 +155,12 @@ def _year(published: str) -> int | None:
     return int(match.group(0)) if match else None
 
 
-def _raw_id(url: str) -> str | None:
-    """Из https://arxiv.org/abs/2401.01234v2 делаем arXiv:2401.01234v2."""
+def _arxiv_ids(url: str) -> tuple[str | None, str | None]:
+    """Ключ склейки дублей и адрес PDF — оба выводятся из одного совпадения в
+    URL записи (https://arxiv.org/abs/2401.01234v2 → arXiv:2401.01234v2 и
+    https://arxiv.org/pdf/2401.01234v2), без дополнительных запросов."""
     match = _ARXIV_ID.search(url)
-    return f"arXiv:{match.group(1)}" if match else None
-
-
-def _pdf_url(url: str) -> str | None:
-    """Адрес PDF выводится из id записи (…/abs/<id> → …/pdf/<id>), без
-    дополнительных запросов: arXiv отдаёт PDF по предсказуемому пути."""
-    match = _ARXIV_ID.search(url)
-    return f"https://arxiv.org/pdf/{match.group(1)}" if match else None
+    if not match:
+        return None, None
+    ident = match.group(1)
+    return f"arXiv:{ident}", f"https://arxiv.org/pdf/{ident}"
