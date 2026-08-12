@@ -99,6 +99,42 @@ def test_role_declares_boundaries(role: str):
         assert section in text, f"роль {role}: нет раздела «{section}»"
 
 
+def test_planner_checklist_covers_measurable_event_reachability():
+    """Чек-лист самопроверки планировщика содержит пункт о достижимости порога.
+
+    Урок Э1-2: порог «числа по контурам веб-поиска» был запланирован при
+    промпте, который вообще не производил веб-запросов, — событие, на которое
+    рассчитывал план, не могло произойти по контрактам кода. Пункт 9 чек-листа
+    закрывает именно это: планировщик обязан свериться, что тип запроса
+    обслуживается рабочим адаптером и поле доходит до печати, прежде чем ставить
+    порог, требующий живого замера. Ищем содержательные слова по корню
+    («достижим», «измеря», «событ»), а не точную фразу целиком: безобидная
+    правка формулировки (порядок слов, падеж, синоним рядом) не должна тихо
+    убить проверку, но пункт, который перестал говорить о достижимости
+    измеряемого события, обязан провалить тест.
+    """
+    text = (AGENTS_DIR / "planner.md").read_text(encoding="utf-8")
+    match = re.search(r"## Чек-лист самопроверки\n(.*)\Z", text, re.DOTALL)
+    assert match, "planner.md: нет раздела «Чек-лист самопроверки»"
+    checklist = match.group(1)
+    # Пункты чек-листа — многострочные абзацы, начинающиеся с "N. " в начале строки.
+    items = re.split(r"^\d+\.\s+", checklist, flags=re.MULTILINE)[1:]
+    assert items, "planner.md: чек-лист самопроверки пуст"
+
+    def has_stems(item: str) -> bool:
+        return bool(
+            re.search(r"достижим", item, re.IGNORECASE)
+            and re.search(r"измеря", item, re.IGNORECASE)
+            and re.search(r"событ", item, re.IGNORECASE)
+        )
+
+    assert any(has_stems(item) for item in items), (
+        "planner.md: чек-лист самопроверки не содержит пункта о достижимости "
+        "измеряемого события (см. урок Э1-2 — порог, чьё событие код не мог "
+        "произвести)"
+    )
+
+
 # ── Команды ─────────────────────────────────────────────────────────────────
 def test_all_commands_present():
     found = {path.stem for path in COMMANDS_DIR.glob("*.md")}
@@ -165,6 +201,37 @@ def test_invariants_have_verification_column():
         cells = [cell.strip() for cell in row.strip("|").split("|")]
         assert len(cells) >= 4, f"строка инварианта без всех колонок: {row[:60]}"
         assert len(cells[-1]) > 15, f"инвариант без способа проверки: {cells[1][:60]}"
+
+
+#: Ссылка на файл теста внутри колонки «как проверять», например tests/test_x.py
+TEST_FILE_REF = re.compile(r"tests/[\w./-]+\.py")
+
+
+@pytest.mark.parametrize("invariant_number", [1, 5])
+def test_invariant_verification_files_exist(invariant_number: int):
+    """Файл теста, названный как способ проверки инварианта, существует на диске.
+
+    Урок Э1-2: нарушение (факт без источника в карточке, скрытый отказ
+    источника) прошло все гейты именно потому, что способ проверки в таблице
+    был декларацией, а не работающей ссылкой — реального теста, который ловит
+    именно это нарушение, либо не было, либо он проверял не то поле. Пункты 1
+    и 5 таблицы INVARIANTS.md теперь называют конкретные файлы тестов; если
+    файл переименуют или удалят, а строку таблицы не поправят, инвариант снова
+    станет пожеланием на бумаге. Строка разбирается прицельно — по началу
+    "| N |" у конкретной строки, а не поиском по всему тексту документа, чтобы
+    не перепутать номер пункта со случайным числом в других местах файла.
+    """
+    lines = (TEAM_DIR / "INVARIANTS.md").read_text(encoding="utf-8").splitlines()
+    prefix = f"| {invariant_number} |"
+    rows = [line for line in lines if line.strip().startswith(prefix)]
+    assert len(rows) == 1, f"строка инварианта №{invariant_number} не найдена однозначно: {rows}"
+    cells = [cell.strip() for cell in rows[0].strip("|").split("|")]
+    verification_column = cells[-1]
+    refs = TEST_FILE_REF.findall(verification_column)
+    assert refs, f"инвариант №{invariant_number}: в колонке «как проверять» не назван ни один файл теста"
+    for ref in refs:
+        path = REPO_ROOT / ref
+        assert path.exists(), f"инвариант №{invariant_number}: ссылка на несуществующий файл теста {ref}"
 
 
 def test_no_byte_order_mark():
