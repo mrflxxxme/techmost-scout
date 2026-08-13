@@ -5,7 +5,9 @@
 недоступных источников.
 
 Главное правило устойчивости: отказ любого отдельного источника не роняет
-запрос — он попадает в список sources_unavailable и виден в отчёте.
+запрос — он попадает в список sources_unavailable и виден в отчёте. То же
+правило (Ф-7, инвариант №5) распространяется на запись прогона в БД (Ф-8,
+РЕШ-40): отказ записи не роняет прогон, markdown-отчёт первичен.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ import httpx
 from app.config import Settings, get_settings
 from app.llm import LLMRouter
 from app.pipeline import stages
+from app.pipeline.persistence import SessionFactory, StageRecord, persist_run
 from app.schemas import Brief, Candidate, Report, SearchPlan, SolutionCard
 from app.search import build_adapters
 from app.search.base import SearchAdapter
@@ -29,6 +32,25 @@ log = logging.getLogger(__name__)
 
 #: Обработчик прогресса: (стадия, человекочитаемое сообщение, доля 0..1)
 ProgressHook = Callable[[str, str, float], Awaitable[None] | None]
+
+
+def _cost_delta(before: dict[str, float], after: dict[str, float]) -> tuple[float, str | None]:
+    """Прирост стоимости и провайдер(ы), которые её потратили, между двумя
+    снимками `LLMRouter.cost.by_provider`.
+
+    Роутер считает расход по запросу целиком, не по стадиям, поэтому для
+    журнала стадий (Ф-8) берём разницу снимков вокруг вызова стадии —
+    точность до провайдера, не до токена.
+    """
+    changed: list[str] = []
+    total = 0.0
+    for name, value in after.items():
+        diff = value - before.get(name, 0.0)
+        if diff > 1e-9:
+            total += diff
+            changed.append(name)
+    provider = ",".join(sorted(changed)) if changed else None
+    return round(total, 6), provider
 
 
 @dataclass(slots=True)
@@ -52,11 +74,15 @@ class ScoutPipeline:
         router: LLMRouter | None = None,
         adapters: list[SearchAdapter] | None = None,
         progress: ProgressHook | None = None,
+        session_factory: SessionFactory | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         self._router = router or LLMRouter(self._settings)
         self._adapters = adapters
         self._progress = progress
+        #: Фабрика сессий БД (Ф-8, РЕШ-40) — не передана, значит запись в БД
+        #: не выполняется вовсе (тесты, веб до Э3): прогон не меняется ни на шаг.
+        self._session_factory = session_factory
         self._client: httpx.AsyncClient | None = None
 
     # ── Вспомогательное ─────────────────────────────────────────────────────
@@ -143,14 +169,69 @@ class ScoutPipeline:
             return None
 
     # ── Полный проход ───────────────────────────────────────────────────────
-    async def run(self, brief: Brief, *, request_id: int = 0) -> Report:
-        """Бриф → отчёт. Интейк выполняется отдельно, до этого вызова."""
+    async def run(self, brief: Brief, *, request_id: int = 0, raw_text: str = "") -> Report:
+        """Бриф → отчёт. Интейк выполняется отдельно, до этого вызова.
+
+        Запись прогона в БД (Ф-8, РЕШ-40) происходит здесь, после сборки
+        отчёта либо после отказа стадии: работа с базой держится в
+        оркестраторе, стадии остаются чистыми функциями (CLAUDE.md).
+        `raw_text` — исходный текст задачи, для строки `requests`; отчёту он
+        не нужен, поэтому передаётся отдельно от `brief`.
+        """
+        stage_log: list[StageRecord] = []
+        try:
+            report = await self._run_stages(brief, request_id, stage_log)
+        except Exception as exc:
+            await persist_run(
+                self._session_factory,
+                raw_text=raw_text,
+                status="failed",
+                cost_rub=round(self._router.cost.spent_rub, 4),
+                cards=[],
+                stages=stage_log,
+                error=str(exc),
+            )
+            raise
+        await persist_run(
+            self._session_factory,
+            raw_text=raw_text,
+            status="drafted",
+            cost_rub=report.cost_rub,
+            cards=report.cards,
+            stages=stage_log,
+            error=None,
+        )
+        return report
+
+    async def _run_stages(self, brief: Brief, request_id: int, stage_log: list[StageRecord]) -> Report:
+        """Прежнее тело `run` — прогон стадий, теперь ещё собирает `stage_log`."""
         await self._notify("planner", "Составляю план поиска", 0.05)
+        started = datetime.now(UTC)
+        cost_before = dict(self._router.cost.by_provider)
         plan = await stages.plan_search(self._router, brief)
+        cost_delta, provider = _cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_log.append(
+            StageRecord(
+                stage="planner",
+                started_at=started,
+                finished_at=datetime.now(UTC),
+                provider=provider,
+                cost_rub=cost_delta,
+            )
+        )
         await self._notify("planner", f"Формулировок в плане: {len(plan.queries)}", 0.1)
 
         await self._notify("search", "Опрашиваю источники", 0.15)
+        started = datetime.now(UTC)
         outcome = await self.gather_candidates(plan)
+        stage_log.append(
+            StageRecord(
+                stage="search",
+                started_at=started,
+                finished_at=datetime.now(UTC),
+                sources_hit=dict(outcome.hits_by_provider),
+            )
+        )
         found_summary = ", ".join(f"{name}: {count}" for name, count in sorted(outcome.hits_by_provider.items()))
         await self._notify("search", f"Найдено кандидатов — {found_summary or 'ничего'}", 0.4)
         if outcome.unavailable:
@@ -163,19 +244,42 @@ class ScoutPipeline:
             return self._empty_report(brief, request_id, outcome.unavailable)
 
         await self._notify("scorer", "Оцениваю кандидатов", 0.5)
+        started = datetime.now(UTC)
+        cost_before = dict(self._router.cost.by_provider)
         scored = await stages.score_candidates(self._router, brief, unique)
+        cost_delta, provider = _cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_log.append(
+            StageRecord(
+                stage="scorer",
+                started_at=started,
+                finished_at=datetime.now(UTC),
+                provider=provider,
+                cost_rub=cost_delta,
+            )
+        )
         target = self._settings.target_cards
         selected = stages.select_top(scored, limit=target * 2)
         groups = stages.group_for_cards(selected, target=target)
         await self._notify("scorer", f"Отобрано вариантов для карточек: {len(groups)}", 0.6)
 
         await self._notify("cards", "Собираю карточки решений", 0.65)
+        started = datetime.now(UTC)
+        cost_before = dict(self._router.cost.by_provider)
         cards = await self._author_cards(brief, groups)
+        cost_delta, provider = _cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_log.append(
+            StageRecord(
+                stage="cards", started_at=started, finished_at=datetime.now(UTC), provider=provider, cost_rub=cost_delta
+            )
+        )
         published = stages.select_publishable_cards(cards)
         dropped = len(cards) - len(published)
         await self._notify("cards", f"Готово карточек: {len(published)}, отброшено пустых: {dropped}", 0.85)
 
         await self._notify("summary", "Составляю сводку и рекомендацию", 0.9)
+        started = datetime.now(UTC)
+        cost_before = dict(self._router.cost.by_provider)
+        summary_error: str | None = None
         try:
             summary = await stages.summarize(self._router, brief, published)
         except Exception as exc:
@@ -184,6 +288,18 @@ class ScoutPipeline:
             # сводка собирается без вызова модели, факт отказа виден клиенту.
             log.warning("сводка не собралась (%s), собираю запасную без вызова модели", exc)
             summary = stages.fallback_summary(published)
+            summary_error = str(exc)
+        cost_delta, provider = _cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_log.append(
+            StageRecord(
+                stage="summary",
+                started_at=started,
+                finished_at=datetime.now(UTC),
+                provider=provider,
+                cost_rub=cost_delta,
+                error=summary_error,
+            )
+        )
 
         report = Report(
             request_id=request_id,

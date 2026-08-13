@@ -27,10 +27,10 @@ class _RecordingPipeline:
     """Пайплайн-заглушка: не ходит ни в источники, ни в модель — только
     запоминает бриф, с которым его вызвали, и отдаёт минимальный отчёт."""
 
-    def __init__(self, *, settings=None, router=None, adapters=None, progress=None) -> None:
-        del settings, router, adapters, progress
+    def __init__(self, *, settings=None, router=None, adapters=None, progress=None, session_factory=None) -> None:
+        del settings, router, adapters, progress, session_factory
 
-    async def run(self, brief: Brief, *, request_id: int = 0) -> Report:
+    async def run(self, brief: Brief, *, request_id: int = 0, raw_text: str = "") -> Report:
         _RecordingPipeline.captured.append(brief)
         return Report(
             request_id=request_id,

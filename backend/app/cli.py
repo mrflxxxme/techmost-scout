@@ -136,11 +136,16 @@ def run(
 
 
 async def _run(task: str, industry: str | None, maturity: str | None, out: Path | None, interactive: bool) -> None:
+    from app.db import init_db, session_scope
     from app.pipeline import ScoutPipeline
     from app.pipeline.stages import refine_brief, run_intake
 
     settings = get_settings()
     router = LLMRouter(settings)
+
+    # Таблицы для минимальной записи прогона (Ф-8, РЕШ-40); фабрика сессий —
+    # `session_scope`, тот же контракт, что и у `app.db.get_session`.
+    await init_db()
 
     # Разбор текста нужен в обоих режимах: без него `constraints` брифа
     # остаются пустыми, а именно они дают карточкам сверку с техтребованиями
@@ -175,9 +180,9 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
     def show(stage: str, message: str, fraction: float) -> None:
         console.print(f"[dim]{int(fraction * 100):3d}%[/dim] [cyan]{stage:8s}[/cyan] {message}")
 
-    pipeline = ScoutPipeline(settings=settings, router=router, progress=show)
+    pipeline = ScoutPipeline(settings=settings, router=router, progress=show, session_factory=session_scope)
     try:
-        report = await pipeline.run(brief)
+        report = await pipeline.run(brief, raw_text=task)
     finally:
         await pipeline.aclose()
 
