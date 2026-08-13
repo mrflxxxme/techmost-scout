@@ -171,15 +171,24 @@ class ScoutPipeline:
 
         await self._notify("cards", "Собираю карточки решений", 0.65)
         cards = await self._author_cards(brief, groups)
-        await self._notify("cards", f"Готово карточек: {len(cards)}", 0.85)
+        published = stages.select_publishable_cards(cards)
+        dropped = len(cards) - len(published)
+        await self._notify("cards", f"Готово карточек: {len(published)}, отброшено пустых: {dropped}", 0.85)
 
         await self._notify("summary", "Составляю сводку и рекомендацию", 0.9)
-        summary = await stages.summarize(self._router, brief, cards)
+        try:
+            summary = await stages.summarize(self._router, brief, published)
+        except Exception as exc:
+            # Отказ стадии summary не роняет прогон с уже готовыми карточками
+            # (Ф-7, инвариант №5 распространяется и на отказ модели): запасная
+            # сводка собирается без вызова модели, факт отказа виден клиенту.
+            log.warning("сводка не собралась (%s), собираю запасную без вызова модели", exc)
+            summary = stages.fallback_summary(published)
 
         report = Report(
             request_id=request_id,
             brief=brief,
-            cards=cards,
+            cards=published,
             summary=summary,
             sources_unavailable=outcome.unavailable,
             generated_at=datetime.now(UTC),
