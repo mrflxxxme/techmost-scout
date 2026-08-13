@@ -18,7 +18,7 @@ from collections import defaultdict
 from pydantic import BaseModel, Field, field_validator
 
 from app.config import get_settings
-from app.llm import LLMRouter, Message
+from app.llm import CostLimitExceededError, LLMRouter, Message
 from app.schemas import (
     Brief,
     Candidate,
@@ -260,6 +260,13 @@ async def score_candidates(
                 ScoreBatch,
                 max_tokens=4000,
             )
+        except CostLimitExceededError:
+            # Стоп-кран (РЕШ-45): исчерпанный лимит — не отказ модели, а
+            # команда «стоп тратить». Нейтральные оценки платили бы дальше на
+            # следующих батчах, тихо продолжая расходовать при исчерпанном
+            # лимите — это и есть скрытая деградация, которую стоп-кран
+            # обязан пресекать.
+            raise
         except Exception as exc:
             log.warning("скоринг батча не удался (%s), беру нейтральные оценки", exc)
             scored.extend(_neutral_scores(chunk))

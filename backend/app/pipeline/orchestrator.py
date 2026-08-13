@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 import httpx
 
 from app.config import Settings, get_settings
-from app.llm import LLMRouter
+from app.llm import CostLimitExceededError, LLMRouter
 from app.pipeline import stages
 from app.pipeline.persistence import SessionFactory, StageRecord, persist_run
 from app.schemas import Brief, Candidate, Report, SearchPlan, SolutionCard
@@ -282,6 +282,12 @@ class ScoutPipeline:
         summary_error: str | None = None
         try:
             summary = await stages.summarize(self._router, brief, published)
+        except CostLimitExceededError:
+            # Стоп-кран (РЕШ-45): исчерпанный лимит — не отказ модели, а
+            # команда «стоп тратить». Запасная сводка НЕ строится — она сама
+            # честный сценарий для отказа модели, а не для решения владельца
+            # остановить трату; прогон обязан упасть.
+            raise
         except Exception as exc:
             # Отказ стадии summary не роняет прогон с уже готовыми карточками
             # (Ф-7, инвариант №5 распространяется и на отказ модели): запасная
@@ -322,6 +328,13 @@ class ScoutPipeline:
             async with semaphore:
                 try:
                     card = await stages.author_card(self._router, brief, group)
+                except CostLimitExceededError:
+                    # Стоп-кран (РЕШ-45): исчерпанный лимит — не отказ модели,
+                    # а команда «стоп тратить». Молчаливая потеря карточки
+                    # позволила бы остальным группам продолжать платить дальше
+                    # (asyncio.gather не отменяет соседей на первый же None) —
+                    # прогон обязан упасть целиком, а не тихо обеднеть.
+                    raise
                 except Exception as exc:
                     log.warning("карточка не собралась: %s", exc)
                     return None

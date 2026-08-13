@@ -1,4 +1,4 @@
-"""Минимальная запись прогона в БД (Ф-8, РЕШ-40).
+"""Минимальная запись прогона в БД (Ф-8, РЕШ-40) и стоп-кран лимита (РЕШ-45).
 
 Проверяем: успешный прогон кладёт по строке в `requests` (статус `drafted`,
 стоимость совпадает с `report.cost_rub`), `solution_cards` (с сохранённым
@@ -6,6 +6,14 @@
 непустым `sources_hit`); без переданной фабрики сессий прогон отрабатывает
 как раньше и в БД не пишет; отказ самой записи (фабрика бросает исключение)
 не роняет прогон; падение стадии — статус `failed` и текст ошибки в `requests`.
+
+Отдельно (РЕШ-45, пост-аудит фазы): исчерпание лимита стоимости запроса
+(`CostLimitExceededError`) — не отказ модели, а команда «стоп тратить», и до
+правки она гасилась тремя широкими `except Exception` (батч скоринга, сборка
+карточки, сводка) — прогон тихо деградировал вместо остановки. Здесь
+проверяется, что во всех трёх местах исключение доходит до `pipeline.run()`
+нетронутым и в БД остаётся статус `failed` — тот же путь `persist_run` на
+необработанном исключении, что и в падении обычной стадии выше.
 
 База — временный файл SQLite (`tmp_path`), сеть не задействована: провайдер
 модели и поисковый адаптер — заглушки, как в tests/test_pipeline_resilience.py
@@ -24,7 +32,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.llm import LLMRouter
+from app.llm import CostLimitExceededError, LLMRouter
 from app.llm.base import LLMError, LLMProvider, LLMResult, Message
 from app.models import Base, PipelineLog
 from app.models import Request as RequestRow
@@ -236,3 +244,91 @@ async def test_pipeline_failure_persists_failed_status_and_error(settings, brief
         assert requests[0].status == "failed"
         assert requests[0].error
         assert requests[0].raw_text == "текст, который не соберётся"
+
+
+# ── РЕШ-45: стоп-кран лимита стоимости роняет прогон, а не деградирует ──────
+#
+# FakeProvider (conftest.py) отдаёт фиксированную Usage(cost_rub=0.01) на
+# каждый успешный вызов независимо от стадии. Подбирая
+# `cost_limit_rub_per_request` так, чтобы он укладывался в стоимость нужного
+# числа вызовов, но не следующего, лимит исчерпывается ровно на проверяемой
+# стадии — раньше стадии отказать нечем.
+
+
+async def test_cost_limit_exceeded_during_scoring_raises_and_persists_failed(
+    settings, brief, fake_provider_factory, db_session_factory
+):
+    """Лимит исчерпан на батче скоринга: план (0.01 ₽) укладывается в 0.015 ₽,
+    скоринг (ещё 0.01 ₽ → 0.02 ₽) — нет. Раньше стадия ловила исключение и
+    подставляла нейтральные оценки (stages.py, `except Exception` до правки);
+    теперь `CostLimitExceededError` доходит до `pipeline.run()` нетронутым, и
+    в БД остаётся статус `failed` — тем же путём, что и падение любой стадии
+    (persist_run на необработанном исключении)."""
+    low_limit = settings.model_copy(update={"cost_limit_rub_per_request": 0.015})
+    provider = fake_provider_factory("deepseek", [_PLAN_JSON, _SCORE_JSON, _CARD_JSON, _VERIFY_JSON, _SUMMARY_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(low_limit, provider, [_OneHitAdapter(client)], session_factory=db_session_factory)
+        with pytest.raises(CostLimitExceededError):
+            await pipeline.run(brief, request_id=1, raw_text="текст, который упрётся в лимит на скоринге")
+
+    # План + один батч скоринга — ни карточка, ни сводка не вызывались.
+    assert len(provider.calls) == 2
+
+    async with db_session_factory() as session:
+        requests = (await session.execute(select(RequestRow))).scalars().all()
+        assert len(requests) == 1
+        assert requests[0].status == "failed"
+        assert "лимит" in requests[0].error
+
+
+async def test_cost_limit_exceeded_during_card_authoring_raises_and_persists_failed(
+    settings, brief, fake_provider_factory, db_session_factory
+):
+    """Лимит исчерпан на сборке карточки: план + скоринг (0.02 ₽) укладываются
+    в 0.025 ₽, сборка карточки (ещё 0.01 ₽ → 0.03 ₽) — нет. Раньше
+    `orchestrator._author_cards.one()` ловил исключение и тихо терял карточку
+    (`return None`); теперь исключение пробрасывается и роняет весь прогон —
+    молчаливая потеря одной карточки позволила бы остальным группам (при их
+    наличии) продолжать платить дальше."""
+    low_limit = settings.model_copy(update={"cost_limit_rub_per_request": 0.025})
+    provider = fake_provider_factory("deepseek", [_PLAN_JSON, _SCORE_JSON, _CARD_JSON, _VERIFY_JSON, _SUMMARY_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(low_limit, provider, [_OneHitAdapter(client)], session_factory=db_session_factory)
+        with pytest.raises(CostLimitExceededError):
+            await pipeline.run(brief, request_id=1, raw_text="текст, который упрётся в лимит на карточке")
+
+    # План, скоринг, сборка карточки — проверка карточки и сводка не дошли.
+    assert len(provider.calls) == 3
+
+    async with db_session_factory() as session:
+        requests = (await session.execute(select(RequestRow))).scalars().all()
+        assert len(requests) == 1
+        assert requests[0].status == "failed"
+        assert "лимит" in requests[0].error
+
+
+async def test_cost_limit_exceeded_during_summary_raises_and_persists_failed(
+    settings, brief, fake_provider_factory, db_session_factory
+):
+    """Лимит исчерпан на сводке: план + скоринг + карточка + проверка
+    (0.04 ₽) укладываются в 0.045 ₽, сводка (ещё 0.01 ₽ → 0.05 ₽) — нет.
+    Раньше отказ стадии summary ловился как отказ модели и подменялся
+    запасной сводкой (`stages.fallback_summary`, без вызова модели) — прогон
+    с уже готовой карточкой не падал. Лимит — не отказ модели, а команда
+    «стоп тратить»: запасная сводка НЕ строится, прогон падает целиком."""
+    low_limit = settings.model_copy(update={"cost_limit_rub_per_request": 0.045})
+    provider = fake_provider_factory("deepseek", [_PLAN_JSON, _SCORE_JSON, _CARD_JSON, _VERIFY_JSON, _SUMMARY_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(low_limit, provider, [_OneHitAdapter(client)], session_factory=db_session_factory)
+        with pytest.raises(CostLimitExceededError):
+            await pipeline.run(brief, request_id=1, raw_text="текст, который упрётся в лимит на сводке")
+
+    # Все пять вызовов стадий состоялись — отказал ровно последний (summary),
+    # и после него новых вызовов не было (запасная сводка модель не зовёт).
+    assert len(provider.calls) == 5
+
+    async with db_session_factory() as session:
+        requests = (await session.execute(select(RequestRow))).scalars().all()
+        assert len(requests) == 1
+        assert requests[0].status == "failed"
+        assert "лимит" in requests[0].error

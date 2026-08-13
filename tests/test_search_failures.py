@@ -1,16 +1,21 @@
-"""Отказ трёх источников доходит до вызывающего кода, а не гасится в [] (Ф-5).
+"""Отказ источников доходит до вызывающего кода, а не гасится в [] (Ф-5, РЕШ-45).
 
-`arxiv`, `semanticscholar`, `cyberleninka` до этой правки ловили транспортный
+`arxiv`, `semanticscholar`, `cyberleninka` до правки Ф-5 ловили транспортный
 отказ (HTTP-ошибка, 429, нечитаемый ответ) внутри адаптера и превращали его в
 обычный пустой список — неотличимый от честного «источник ответил, но ничего
 не нашёл». Из-за этого ветка `unavailable` в оркестраторе была недостижима:
 `_safe_search` мог поймать только исключение, а адаптер его не поднимал.
 
+Пост-аудит фазы (РЕШ-45) нашёл тот же дефект в `crossref`: он гасил отказ
+через `base._get_json`, который возвращает `None`, а не поднимает исключение.
+Правка не трогает общий помощник (им пользуются другие адаптеры) — `crossref`
+получил собственный метод запроса, по образцу `semanticscholar._request`.
+
 Здесь проверяется обратное: транспортный отказ поднимается как `SearchError`,
-а пустая выдача при УСПЕШНОМ ответе (`noRecordsMatch`, ноль совпадений) как
-была результатом, так и осталась — без исключения. Заодно закрыты тестами
-`Candidate.pdf_url` (Semantic Scholar, arXiv) и передача `set` в запрос
-КиберЛенинки без предупреждения. Сети нет — все ответы подменены respx.
+а пустая выдача при УСПЕШНОМ ответе (`noRecordsMatch`, ноль совпадений, пустой
+`message.items`) как была результатом, так и осталась — без исключения. Заодно
+закрыты тестами `Candidate.pdf_url` (Semantic Scholar, arXiv) и передача `set`
+в запрос КиберЛенинки без предупреждения. Сети нет — все ответы подменены respx.
 """
 
 from __future__ import annotations
@@ -23,6 +28,8 @@ from app.schemas import SearchQuery, SourceType
 from app.search.arxiv import API_URL as ARXIV_API_URL
 from app.search.arxiv import ArxivAdapter
 from app.search.base import SearchError
+from app.search.crossref import API_URL as CROSSREF_API_URL
+from app.search.crossref import CrossrefAdapter
 from app.search.cyberleninka import BASE_URL as CYBERLENINKA_BASE_URL
 from app.search.cyberleninka import CyberLeninkaAdapter
 from app.search.semanticscholar import API_URL as S2_API_URL
@@ -266,3 +273,35 @@ async def test_cyberleninka_отказ_на_второй_странице_сох
         found = await adapter.search(_query(text="катализатор гидроочистки", lang="ru"), limit=20)
 
     assert len(found) == 1
+
+
+# ── Crossref (РЕШ-45) ───────────────────────────────────────────────────
+
+
+@respx.mock
+async def test_crossref_500_поднимает_searcherror():
+    respx.get(CROSSREF_API_URL).mock(return_value=httpx.Response(500, text="internal error"))
+    async with httpx.AsyncClient() as client:
+        adapter = CrossrefAdapter(client)
+        with pytest.raises(SearchError):
+            await adapter.search(_query(text="катализатор гидроочистки"), limit=5)
+
+
+@respx.mock
+async def test_crossref_нечитаемое_тело_поднимает_searcherror():
+    """200, но тело не JSON — тот же транспортный отказ, что и HTTP-ошибка,
+    а не тихое «ничего не нашли»."""
+    respx.get(CROSSREF_API_URL).mock(return_value=httpx.Response(200, text="<not-json this is broken"))
+    async with httpx.AsyncClient() as client:
+        adapter = CrossrefAdapter(client)
+        with pytest.raises(SearchError):
+            await adapter.search(_query(text="катализатор гидроочистки"), limit=5)
+
+
+@respx.mock
+async def test_crossref_успешный_ответ_без_совпадений_даёт_пустой_список():
+    respx.get(CROSSREF_API_URL).mock(return_value=httpx.Response(200, json={"message": {"items": []}}))
+    async with httpx.AsyncClient() as client:
+        adapter = CrossrefAdapter(client)
+        found = await adapter.search(_query(text="катализатор гидроочистки"), limit=5)
+    assert found == []

@@ -54,7 +54,7 @@ from defusedxml import ElementTree as ET  # noqa: N817 — ET общеприня
 from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
-from app.search.base import SearchAdapter, normalize_url
+from app.search.base import SearchAdapter, SearchError, normalize_url
 
 log = logging.getLogger(__name__)
 
@@ -195,8 +195,10 @@ class YandexSearchAdapter(SearchAdapter):
             response.raise_for_status()
             operation_id = response.json().get("id")
         except (httpx.HTTPError, ValueError) as exc:
-            log.warning("yandex_search: поиск не запустился (%s): %s", search_type, exc)
-            return None
+            # Транспортный отказ запуска платного поиска — не тихий пустой
+            # список, а SearchError (инвариант №5, РЕШ-45): _safe_search
+            # оркестратора поймает его и честно отметит источник недоступным.
+            raise SearchError(f"yandex_search: поиск не запустился ({search_type}): {exc}") from exc
         if not operation_id:
             log.warning("yandex_search: ответ без идентификатора операции")
             return None
@@ -204,7 +206,8 @@ class YandexSearchAdapter(SearchAdapter):
         return await self._await_operation(operation_id, headers)
 
     async def _await_operation(self, operation_id: str, headers: dict[str, str]) -> bytes | None:
-        """Опрашивать операцию, пока не завершится. Молча сдаться по времени."""
+        """Опрашивать операцию, пока не завершится. Транспортный отказ и
+        зависшая операция поднимают SearchError (РЕШ-45)."""
         deadline = asyncio.get_running_loop().time() + self._max_wait
         while asyncio.get_running_loop().time() < deadline:
             await asyncio.sleep(self._poll_interval)
@@ -213,8 +216,9 @@ class YandexSearchAdapter(SearchAdapter):
                 got.raise_for_status()
                 payload = got.json()
             except (httpx.HTTPError, ValueError) as exc:
-                log.warning("yandex_search: операция %s не опрашивается: %s", operation_id, exc)
-                return None
+                # Опрос операции недоступен — тот же транспортный отказ, что
+                # и при запуске поиска (инвариант №5, РЕШ-45).
+                raise SearchError(f"yandex_search: операция {operation_id} не опрашивается: {exc}") from exc
             if not payload.get("done"):
                 continue
             if (error := payload.get("error")) is not None:
@@ -230,8 +234,9 @@ class YandexSearchAdapter(SearchAdapter):
                 log.warning("yandex_search: результат не декодируется: %s", exc)
                 return None
 
-        log.warning("yandex_search: операция %s не завершилась за %s с", operation_id, self._max_wait)
-        return None
+        # Операция зависла и не завершилась за отведённое время — источник не
+        # отдал результат, это отказ, а не пустая выдача (инвариант №5, РЕШ-45).
+        raise SearchError(f"yandex_search: операция {operation_id} не завершилась за {self._max_wait} с")
 
     def _parse(self, raw: bytes, *, limit: int) -> list[Candidate]:
         try:
@@ -241,10 +246,12 @@ class YandexSearchAdapter(SearchAdapter):
             return []
 
         # Яндекс сообщает о своих отказах внутри XML, а не кодом HTTP:
-        # исчерпанный лимит, отсутствие прав, пустая выдача — всё сюда
+        # исчерпанный лимит, отсутствие прав. Раньше это тихо превращалось в
+        # пустой успех — «0» неотличимо от честного «источник ответил и
+        # ничего не нашёл», и порог квоты (шесть платных запросов) было
+        # нечем измерить. Теперь это SearchError (инвариант №5, РЕШ-45).
         for error in root.iter("error"):
-            log.warning("yandex_search: отказ поиска, код %s: %s", error.get("code"), (error.text or "")[:200])
-            return []
+            raise SearchError(f"yandex_search: отказ поиска, код {error.get('code')}: {(error.text or '')[:200]}")
 
         candidates: list[Candidate] = []
         seen: set[str] = set()

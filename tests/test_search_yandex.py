@@ -16,6 +16,7 @@ import respx
 
 from app.schemas import SearchQuery, SourceType
 from app.search import build_adapters
+from app.search.base import SearchError
 from app.search.yandex_search import OPERATION_URL, SEARCH_ASYNC_URL, YandexSearchAdapter
 
 
@@ -192,8 +193,11 @@ async def test_дубли_по_адресу_склеиваются(make_adapter)
 
 
 @respx.mock
-async def test_отказ_внутри_xml_не_роняет_пайплайн(make_adapter):
-    """Яндекс сообщает об отказе внутри XML, а не кодом HTTP."""
+async def test_отказ_внутри_xml_поднимает_searcherror(make_adapter):
+    """Яндекс сообщает об отказе (исчерпанный лимит, нет прав) внутри XML, а не
+    кодом HTTP — это транспортный отказ (инвариант №5, РЕШ-45), не тихий
+    пустой список: иначе «0» неотличимо от честного «источник ничего не
+    нашёл», и порог квоты (шесть платных запросов) нечем измерить."""
     xml = (
         '<?xml version="1.0" encoding="utf-8"?><yandexsearch><response>'
         '<error code="55">Превышен лимит запросов</error>'
@@ -201,19 +205,43 @@ async def test_отказ_внутри_xml_не_роняет_пайплайн(ma
     )
     _mock_ok(xml)
     async with httpx.AsyncClient() as client:
-        found = await make_adapter(client).search(_query(), limit=10)
-
-    assert found == []
+        adapter = make_adapter(client)
+        with pytest.raises(SearchError):
+            await adapter.search(_query(), limit=10)
 
 
 @respx.mock
-async def test_незавершившаяся_операция_возвращает_пусто(make_adapter):
+async def test_незавершившаяся_операция_поднимает_searcherror(make_adapter):
+    """Операция не завершилась за отведённое время — источник не отдал
+    результат, это отказ (инвариант №5, РЕШ-45), а не пустая выдача."""
     respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
     respx.get(url__startswith=OPERATION_URL).mock(return_value=httpx.Response(200, json={"done": False}))
     async with httpx.AsyncClient() as client:
-        found = await make_adapter(client, max_wait_seconds=0.2).search(_query(), limit=5)
+        adapter = make_adapter(client, max_wait_seconds=0.2)
+        with pytest.raises(SearchError):
+            await adapter.search(_query(), limit=5)
 
-    assert found == []
+
+@respx.mock
+async def test_поиск_не_запустился_поднимает_searcherror(make_adapter):
+    """HTTP-отказ запуска платного поиска — транспортный отказ (РЕШ-45)."""
+    respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(500, text="internal error"))
+    async with httpx.AsyncClient() as client:
+        adapter = make_adapter(client)
+        with pytest.raises(SearchError):
+            await adapter.search(_query(), limit=5)
+
+
+@respx.mock
+async def test_опрос_операции_не_отвечает_поднимает_searcherror(make_adapter):
+    """HTTP-отказ при опросе уже запущенной операции — тот же транспортный
+    отказ, что и при запуске (РЕШ-45)."""
+    respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
+    respx.get(url__startswith=OPERATION_URL).mock(return_value=httpx.Response(503, text="unavailable"))
+    async with httpx.AsyncClient() as client:
+        adapter = make_adapter(client)
+        with pytest.raises(SearchError):
+            await adapter.search(_query(), limit=5)
 
 
 @respx.mock
