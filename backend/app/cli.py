@@ -23,6 +23,7 @@ from app.schemas import Brief, MaturityStage
 
 app = typer.Typer(add_completion=False, help="ТехМост Скаут — подбор научных решений под задачу бизнеса")
 console = Console()
+log = logging.getLogger(__name__)
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -144,8 +145,17 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
     router = LLMRouter(settings)
 
     # Таблицы для минимальной записи прогона (Ф-8, РЕШ-40); фабрика сессий —
-    # `session_scope`, тот же контракт, что и у `app.db.get_session`.
-    await init_db()
+    # `session_scope`, тот же контракт, что и у `app.db.get_session`. Отказ
+    # подготовки схемы (файл базы залочен другим процессом и т. п.) не должен
+    # ронять прогон ДО построения отчёта: тот же принцип, что и в
+    # `persistence.persist_run` — markdown-отчёт первичен, запись в БД
+    # вторична. Без готовой схемы запись просто не делаем (session_factory=None).
+    db_session_factory = session_scope
+    try:
+        await init_db()
+    except Exception:
+        log.warning("не удалось подготовить БД, прогон продолжается без записи", exc_info=True)
+        db_session_factory = None
 
     # Разбор текста нужен в обоих режимах: без него `constraints` брифа
     # остаются пустыми, а именно они дают карточкам сверку с техтребованиями
@@ -180,7 +190,7 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
     def show(stage: str, message: str, fraction: float) -> None:
         console.print(f"[dim]{int(fraction * 100):3d}%[/dim] [cyan]{stage:8s}[/cyan] {message}")
 
-    pipeline = ScoutPipeline(settings=settings, router=router, progress=show, session_factory=session_scope)
+    pipeline = ScoutPipeline(settings=settings, router=router, progress=show, session_factory=db_session_factory)
     try:
         report = await pipeline.run(brief, raw_text=task)
     finally:

@@ -28,7 +28,8 @@ class _RecordingPipeline:
     запоминает бриф, с которым его вызвали, и отдаёт минимальный отчёт."""
 
     def __init__(self, *, settings=None, router=None, adapters=None, progress=None, session_factory=None) -> None:
-        del settings, router, adapters, progress, session_factory
+        del settings, router, adapters, progress
+        _RecordingPipeline.session_factories.append(session_factory)
 
     async def run(self, brief: Brief, *, request_id: int = 0, raw_text: str = "") -> Report:
         _RecordingPipeline.captured.append(brief)
@@ -48,6 +49,7 @@ class _RecordingPipeline:
 def _patch_pipeline(monkeypatch):
     """Подменяет тяжёлый пайплайн на запись брифа: тест проверяет только интейк."""
     _RecordingPipeline.captured = []
+    _RecordingPipeline.session_factories = []
     monkeypatch.setattr(pipeline_pkg, "ScoutPipeline", _RecordingPipeline)
     return _RecordingPipeline
 
@@ -56,6 +58,21 @@ def _patch_pipeline(monkeypatch):
 def _patch_settings(monkeypatch, settings):
     """`_run` берёт настройки через `get_settings()` — отдаём фикстуру без сети и без .env."""
     monkeypatch.setattr(cli, "get_settings", lambda: settings)
+
+
+@pytest.fixture(autouse=True)
+def _patch_init_db(monkeypatch):
+    """`_run` готовит схему БД (Ф-8) перед пайплайном — здесь пайплайн подменён
+    заглушкой, которая `session_factory` не использует, поэтому реальная схема
+    не нужна вовсе. Заглушка не даёт тестам CLI трогать боевой data/scout.db
+    рабочей копии (ревью, цикл 2: изоляция тестов)."""
+    calls: list[None] = []
+
+    async def fake_init_db() -> None:
+        calls.append(None)
+
+    monkeypatch.setattr("app.db.init_db", fake_init_db)
+    return calls
 
 
 def _router(settings, fake_provider_factory) -> LLMRouter:
@@ -162,3 +179,31 @@ async def test_interactive_skips_refine_brief_when_no_questions(monkeypatch, set
     await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", True)
 
     assert _RecordingPipeline.captured[0].industry == "нефтепереработка"
+
+
+# ── Ревью, цикл 2: отказ init_db не роняет прогон ────────────────────────────
+async def test_init_db_failure_does_not_crash_run_and_report_is_built(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """`init_db` бросает (типовой случай SQLite — база залочена другим
+    процессом) → прогон всё равно завершается, отчёт строится и сохраняется,
+    исключение наружу не летит; пайплайн получает `session_factory=None`
+    (без готовой схемы запись не делаем — тот же принцип, что в
+    `persistence.persist_run`: markdown-отчёт первичен)."""
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return IntakeResult(questions=[], draft_brief=_draft_brief(industry="нефтепереработка"))
+
+    async def broken_init_db() -> None:
+        raise RuntimeError("база залокирована другим процессом")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+    monkeypatch.setattr("app.db.init_db", broken_init_db)
+
+    report_path = tmp_path / "report.md"
+    await cli._run("сырой текст задачи", None, None, report_path, False)
+
+    assert len(_RecordingPipeline.captured) == 1
+    assert _RecordingPipeline.session_factories[-1] is None
+    assert report_path.exists()
