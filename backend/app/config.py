@@ -111,6 +111,12 @@ class Settings(BaseSettings):
     cost_limit_rub_per_request: float = Field(default=1000.0, description="Стоп-кран по стоимости одного запроса")
     demo_mode_default: bool = False
 
+    # Отсечка по предметному соответствию (РЕШ-48): кандидат с `relevance` ниже
+    # порога до карточек не доходит. По умолчанию 0 — отсечка выключена.
+    # Значение подбирается по журналу калибровки на живом прогоне, а не
+    # угадывается: сохранённых оценок прошлых прогонов не существует.
+    relevance_min: int = Field(default=0, ge=0, le=10, description="Порог relevance для отбора; 0 — отсечка выключена")
+
     @field_validator("gigachat_scope")
     @classmethod
     def _known_scope(cls, v: str) -> str:

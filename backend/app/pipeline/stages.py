@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import statistics
 from collections import defaultdict
 
 from pydantic import BaseModel, Field, field_validator
@@ -295,6 +296,16 @@ async def score_candidates(
     return scored
 
 
+#: Пометка оценки, которую поставил код, а не модель. Вынесена в константу,
+#: потому что по ней отсечка узнаёт кандидатов, чей батч скоринга отказал:
+#: отсечь их — значит выдать отказ стадии за «все кандидаты нерелевантны».
+NEUTRAL_SCORE_NOTE = "оценка не получена, значение нейтральное"
+
+#: Пороги, для которых журнал калибровки печатает «сколько отсеклось бы».
+#: Рабочее значение подбирается по этим числам на прогоне (Т-10).
+_CALIBRATION_THRESHOLDS = (4, 5, 6, 7)
+
+
 def _neutral_scores(candidates: list[Candidate]) -> list[ScoredCandidate]:
     """Средние оценки для кандидатов, которых модель не осилила оценить."""
     return [
@@ -305,15 +316,71 @@ def _neutral_scores(candidates: list[Candidate]) -> list[ScoredCandidate]:
             accessibility=5,
             freshness=5,
             completeness=5,
-            notes="оценка не получена, значение нейтральное",
+            notes=NEUTRAL_SCORE_NOTE,
         )
         for candidate in candidates
     ]
 
 
-def select_top(scored: list[ScoredCandidate], *, limit: int) -> list[ScoredCandidate]:
-    """Отобрать лучших, но не давать одному источнику занять всю выдачу."""
-    ordered = sorted(scored, key=lambda s: s.total, reverse=True)
+def _has_neutral_score(item: ScoredCandidate) -> bool:
+    """Оценки проставлены кодом после отказа скоринга, а не получены от модели."""
+    return item.notes.strip() == NEUTRAL_SCORE_NOTE
+
+
+def _cut_by_relevance(scored: list[ScoredCandidate], threshold: int) -> int:
+    """Сколько кандидатов отсечёт порог. Нейтральные оценки не в счёт: их
+    отсечка не трогает ни при каком пороге."""
+    return sum(1 for item in scored if not _has_neutral_score(item) and item.relevance < threshold)
+
+
+def log_relevance_calibration(scored: list[ScoredCandidate], *, relevance_min: int) -> None:
+    """Напечатать распределение `relevance` и прикидку отсечки по порогам.
+
+    Печатается **всегда**: и при пороге 0, и когда не отсечён ни один кандидат.
+    Это единственный источник данных для подбора порога (Т-10) — оценки нигде
+    не сохраняются, таблица `candidates` не пишется, в отчёты оценки не
+    попадают. Молчание при нулевой отсечке сделало бы ноль неотличимым от
+    «отсечка не сработала»: ровно этот неинтерпретируемый ноль стоил разбора
+    на этапе Э1-2.
+    """
+    values = [item.relevance for item in scored]
+    spread = f"{min(values)}/{statistics.median(values):g}/{max(values)}" if values else "нет оценок"
+    would_cut = ", ".join(f"при {t}: {_cut_by_relevance(scored, t)}" for t in _CALIBRATION_THRESHOLDS)
+    log.info(
+        "калибровка relevance: кандидатов %s, min/медиана/max %s, порог %s, отсечено %s; "
+        "отсеклось бы %s; нейтральных оценок %s (не отсекаются никогда)",
+        len(scored),
+        spread,
+        relevance_min,
+        _cut_by_relevance(scored, relevance_min),
+        would_cut,
+        sum(1 for item in scored if _has_neutral_score(item)),
+    )
+
+
+def select_top(scored: list[ScoredCandidate], *, limit: int, relevance_min: int | None = None) -> list[ScoredCandidate]:
+    """Отобрать лучших, но не давать одному источнику занять всю выдачу.
+
+    Перед отбором работает отсечка по предметному соответствию (РЕШ-48):
+    кандидат с `relevance` ниже порога до карточек не доходит. База сравнения
+    показала, почему это нужно: до половины карточек уходили «мимо задачи»,
+    потому что взвешенная сумма вытягивала кандидата с низкой релевантностью за
+    счёт свежести и доступности.
+
+    Порог берётся из настроек (`RELEVANCE_MIN`), по умолчанию 0 — отсечка
+    выключена, пока значение не подобрано на прогоне. Явный `relevance_min`
+    нужен тестам и разбору.
+
+    Кандидатов с нейтральной оценкой отсечка не трогает никогда: их оценки
+    проставил код после отказа батча скоринга, и один такой отказ иначе тихо
+    выкосил бы десяток кандидатов, а причина была бы неотличима от «все
+    нерелевантны».
+    """
+    if relevance_min is None:
+        relevance_min = get_settings().relevance_min
+    log_relevance_calibration(scored, relevance_min=relevance_min)
+    eligible = [item for item in scored if _has_neutral_score(item) or item.relevance >= relevance_min]
+    ordered = sorted(eligible, key=lambda s: s.total, reverse=True)
     per_provider: dict[str, int] = defaultdict(int)
     picked: list[ScoredCandidate] = []
     cap = max(2, limit // 2)

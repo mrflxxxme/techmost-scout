@@ -96,7 +96,7 @@ _CHANGELOG_ENTRY_VERSION = re.compile(r"^##\s*([\d.]+)\s", re.MULTILINE)
 _FILE_VERSION_LABEL = re.compile(r"<!--\s*версия\s*([\d.]+)\s*-->")
 
 
-@pytest.mark.parametrize("name", ["card_author", "verifier", "intake"])
+@pytest.mark.parametrize("name", ["card_author", "verifier", "intake", "scorer"])
 def test_prompt_version_matches_latest_changelog_entry(name: str):
     """Метка версии в конце файла обязана совпадать с версией самой свежей записи CHANGELOG.md,
     где этот файл упомянут: иначе история изменений расходится с фактическим состоянием промпта."""
