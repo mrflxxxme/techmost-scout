@@ -31,8 +31,11 @@ class _RecordingPipeline:
         del settings, router, adapters, progress
         _RecordingPipeline.session_factories.append(session_factory)
 
-    async def run(self, brief: Brief, *, request_id: int = 0, raw_text: str = "") -> Report:
+    async def run(
+        self, brief: Brief, *, request_id: int = 0, raw_text: str = "", initial_stage_log: list | None = None
+    ) -> Report:
         _RecordingPipeline.captured.append(brief)
+        _RecordingPipeline.initial_stage_logs.append(initial_stage_log)
         return Report(
             request_id=request_id,
             brief=brief,
@@ -50,6 +53,7 @@ def _patch_pipeline(monkeypatch):
     """Подменяет тяжёлый пайплайн на запись брифа: тест проверяет только интейк."""
     _RecordingPipeline.captured = []
     _RecordingPipeline.session_factories = []
+    _RecordingPipeline.initial_stage_logs = []
     monkeypatch.setattr(pipeline_pkg, "ScoutPipeline", _RecordingPipeline)
     return _RecordingPipeline
 
@@ -207,3 +211,40 @@ async def test_init_db_failure_does_not_crash_run_and_report_is_built(
     assert len(_RecordingPipeline.captured) == 1
     assert _RecordingPipeline.session_factories[-1] is None
     assert report_path.exists()
+
+
+# ── Т-2: отказ run_intake не роняет прогон ───────────────────────────────────
+async def test_run_intake_failure_falls_back_to_brief_from_raw_text_and_warns(
+    monkeypatch, settings, fake_provider_factory, tmp_path, capsys
+):
+    """`run_intake` бросает исключение → прогон всё равно доходит до отчёта,
+    бриф собирается кодом из сырого текста задачи (без вызова модели), а
+    оператор видит предупреждение в консоли. `refine_brief` в этом сценарии
+    вызываться не должен — черновика для диалога нет."""
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def broken_run_intake(router, task, *, industry_hint="не указана"):
+        raise RuntimeError("модель недоступна")
+
+    async def fail_refine_brief(*args, **kwargs):
+        raise AssertionError("refine_brief не должен вызываться, если run_intake отказал")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", broken_run_intake)
+    monkeypatch.setattr("app.pipeline.stages.refine_brief", fail_refine_brief)
+
+    report_path = tmp_path / "report.md"
+    await cli._run("сырой текст задачи про катализатор", None, None, report_path, False)
+
+    assert len(_RecordingPipeline.captured) == 1
+    brief = _RecordingPipeline.captured[0]
+    assert brief.task_summary == "сырой текст задачи про катализатор"
+    assert brief.industry == "не указана"
+    assert report_path.exists()
+
+    stage_log = _RecordingPipeline.initial_stage_logs[-1]
+    assert stage_log is not None and len(stage_log) == 1
+    assert stage_log[0].stage == "intake"
+    assert stage_log[0].error
+
+    console_output = capsys.readouterr().out
+    assert "интейк не удался" in console_output

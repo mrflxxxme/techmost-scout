@@ -141,6 +141,24 @@ def candidates_to_json(group: list[ScoredCandidate]) -> str:
 _GO = "Выполни инструкцию выше. Верни только JSON без пояснений."
 
 
+#: Предел длины `task_summary` запасного брифа — короткое описание, а не
+#: письмо целиком; отчёту хватает первых сотен знаков для сверки.
+_FALLBACK_SUMMARY_LIMIT = 500
+
+
+def brief_from_raw_text(raw_text: str, *, industry_hint: str = "не указана") -> Brief:
+    """Собрать бриф без вызова модели — запасной путь при отказе интейка.
+
+    Ничего не домысливает (инвариант №1): отрасль берётся из подсказки
+    оператора либо остаётся «не указана», `task_summary` — обрезанный сырой
+    текст задачи, остальные поля брифа пустые.
+    """
+    summary = raw_text.strip()
+    if len(summary) > _FALLBACK_SUMMARY_LIMIT:
+        summary = summary[:_FALLBACK_SUMMARY_LIMIT].rstrip() + "…"
+    return Brief(industry=industry_hint, task_summary=summary or "не указано")
+
+
 # ── 1. Интейк ───────────────────────────────────────────────────────────────
 async def run_intake(router: LLMRouter, raw_text: str, *, industry_hint: str = "не указана") -> IntakeResult:
     """Из свободного текста — уточняющие вопросы и черновик брифа."""

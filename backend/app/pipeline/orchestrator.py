@@ -169,7 +169,14 @@ class ScoutPipeline:
             return None
 
     # ── Полный проход ───────────────────────────────────────────────────────
-    async def run(self, brief: Brief, *, request_id: int = 0, raw_text: str = "") -> Report:
+    async def run(
+        self,
+        brief: Brief,
+        *,
+        request_id: int = 0,
+        raw_text: str = "",
+        initial_stage_log: list[StageRecord] | None = None,
+    ) -> Report:
         """Бриф → отчёт. Интейк выполняется отдельно, до этого вызова.
 
         Запись прогона в БД (Ф-8, РЕШ-40) происходит здесь, после сборки
@@ -177,8 +184,12 @@ class ScoutPipeline:
         оркестраторе, стадии остаются чистыми функциями (CLAUDE.md).
         `raw_text` — исходный текст задачи, для строки `requests`; отчёту он
         не нужен, поэтому передаётся отдельно от `brief`.
+
+        `initial_stage_log` — записи стадий, случившихся до вызова `run`
+        (интейк живёт в `cli._run`, до пайплайна): их отказ иначе не оставил
+        бы следа в `pipeline_logs`, хотя прогон честно продолжается (Т-2).
         """
-        stage_log: list[StageRecord] = []
+        stage_log: list[StageRecord] = list(initial_stage_log or [])
         try:
             report = await self._run_stages(brief, request_id, stage_log)
         except Exception as exc:

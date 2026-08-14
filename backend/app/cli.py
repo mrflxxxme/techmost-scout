@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -18,7 +19,7 @@ from rich.console import Console
 from rich.table import Table
 
 from app.config import get_settings
-from app.llm import LLMRouter
+from app.llm import CostLimitExceededError, LLMRouter
 from app.schemas import Brief, MaturityStage
 
 app = typer.Typer(add_completion=False, help="ТехМост Скаут — подбор научных решений под задачу бизнеса")
@@ -139,7 +140,8 @@ def run(
 async def _run(task: str, industry: str | None, maturity: str | None, out: Path | None, interactive: bool) -> None:
     from app.db import init_db, session_scope
     from app.pipeline import ScoutPipeline
-    from app.pipeline.stages import refine_brief, run_intake
+    from app.pipeline.persistence import StageRecord
+    from app.pipeline.stages import brief_from_raw_text, refine_brief, run_intake
 
     settings = get_settings()
     router = LLMRouter(settings)
@@ -160,20 +162,69 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
     # Разбор текста нужен в обоих режимах: без него `constraints` брифа
     # остаются пустыми, а именно они дают карточкам сверку с техтребованиями
     # (РЕШ-38). Стадия дешёвая — маршрут `intake` идёт на бесплатный GigaChat.
+    #
+    # Устойчивость интейка (Т-2): раньше отказ `run_intake`/`refine_brief`
+    # убивал прогон целиком ДО пайплайна и не оставлял в БД даже строки
+    # `failed` (аудит Ф-10, дважды воспроизведено на GigaChat). Теперь отказ —
+    # предупреждение оператору и честный след в `pipeline_logs`, а прогон
+    # продолжается до отчёта. Исчерпание лимита стоимости (РЕШ-45) —
+    # исключение: это команда «стоп тратить», не отказ модели, и она
+    # пробрасывается наружу как есть.
     industry_hint = industry or "не указана"
     if interactive:
         console.print("[bold]Уточняю задачу…[/bold]")
-    intake = await run_intake(router, task, industry_hint=industry_hint)
+
+    intake_stage_log: list[StageRecord] = []
+    intake_started = datetime.now(UTC)
+    try:
+        intake = await run_intake(router, task, industry_hint=industry_hint)
+    except CostLimitExceededError:
+        raise
+    except Exception as exc:
+        log.warning("интейк не удался, бриф собран из текста задачи без уточнений", exc_info=True)
+        console.print("[yellow]Предупреждение:[/yellow] интейк не удался, бриф собран из текста задачи без уточнений")
+        intake_stage_log.append(
+            StageRecord(stage="intake", started_at=intake_started, finished_at=datetime.now(UTC), error=str(exc))
+        )
+        intake = None
 
     brief: Brief
-    if interactive:
+    if intake is None:
+        # Черновика нет вовсе — уточняющий диалог провести не из чего,
+        # бриф собирается кодом из сырого текста задачи (инвариант №1).
+        brief = brief_from_raw_text(task, industry_hint=industry_hint)
+    elif interactive:
         answers: dict[str, str] = {}
         for question in intake.questions:
             console.print(f"\n[dim]{question.why}[/dim]")
             answers[question.question] = typer.prompt(question.question, default="не знаю")
-        brief = (
-            await refine_brief(router, task, answers, industry_hint=industry_hint) if answers else intake.draft_brief
-        )
+        if answers:
+            refine_started = datetime.now(UTC)
+            try:
+                brief = await refine_brief(router, task, answers, industry_hint=industry_hint)
+            except CostLimitExceededError:
+                raise
+            except Exception as exc:
+                log.warning(
+                    "уточнение брифа не удалось, использую черновик интейка с ответами владельца", exc_info=True
+                )
+                console.print(
+                    "[yellow]Предупреждение:[/yellow] уточнение брифа не удалось, "
+                    "использую черновик интейка с вашими ответами"
+                )
+                # Ответы владельца не теряются: дописываются в constraints
+                # черновика в виде «вопрос — ответ» (Т-2).
+                qa_notes = [f"{question} — {answer}" for question, answer in answers.items()]
+                brief = intake.draft_brief.model_copy(
+                    update={"constraints": [*intake.draft_brief.constraints, *qa_notes]}
+                )
+                intake_stage_log.append(
+                    StageRecord(
+                        stage="intake", started_at=refine_started, finished_at=datetime.now(UTC), error=str(exc)
+                    )
+                )
+        else:
+            brief = intake.draft_brief
     else:
         # Немой режим: вопросы не задаются и не печатаются, бриф берётся как
         # есть из разбора текста.
@@ -192,7 +243,7 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
 
     pipeline = ScoutPipeline(settings=settings, router=router, progress=show, session_factory=db_session_factory)
     try:
-        report = await pipeline.run(brief, raw_text=task)
+        report = await pipeline.run(brief, raw_text=task, initial_stage_log=intake_stage_log)
     finally:
         await pipeline.aclose()
 

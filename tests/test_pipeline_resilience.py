@@ -14,24 +14,44 @@ requirement_checks из ответа card_author доезжает до карт�
 (`asyncio.gather` в `_author_cards`), и порядок вызовов между группами не
 гарантирован. Сеть не задействована нигде — respx не нужен, поисковые
 адаптеры подменены синхронными заглушками, как в tests/test_pipeline_counters.py.
+
+Отдельно (Т-2, устойчивость интейка): отказ `refine_brief` в `cli._run` не
+теряет ответы владельца — они дописываются в `constraints` брифа; отказавшая
+стадия интейка, переданная оркестратору новым параметром `initial_stage_log`,
+доезжает до `pipeline_logs` строкой с непустым `error`, а статус запроса
+остаётся `drafted` — прогон дошёл до отчёта; `CostLimitExceededError` на
+интейке — стоп-кран (РЕШ-45), `cli._run` обязан её пробросить, а не подменить
+на запасной бриф.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 import httpx
+import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+import app.cli as cli
 from app.export.markdown import render_markdown
-from app.llm import LLMRouter
+from app.llm import CostLimitExceededError, LLMRouter
 from app.llm.base import LLMError, LLMProvider, LLMResult, Message, Usage
+from app.models import Base, PipelineLog
+from app.models import Request as RequestRow
 from app.pipeline import stages
 from app.pipeline.orchestrator import ScoutPipeline
+from app.pipeline.persistence import StageRecord
 from app.schemas import (
+    Brief,
     Candidate,
     Confidence,
     Evidence,
+    IntakeQuestion,
+    IntakeResult,
     MaturityStage,
     Report,
     ReportSummary,
@@ -134,9 +154,38 @@ class _TwoHitAdapter(SearchAdapter):
         ]
 
 
-def _pipeline(settings, provider: LLMProvider, adapters: list[SearchAdapter], *, progress=None) -> ScoutPipeline:
+def _pipeline(
+    settings, provider: LLMProvider, adapters: list[SearchAdapter], *, progress=None, session_factory=None
+) -> ScoutPipeline:
     router = LLMRouter(settings, providers={"deepseek": provider})
-    return ScoutPipeline(settings=settings, router=router, adapters=adapters, progress=progress)
+    return ScoutPipeline(
+        settings=settings, router=router, adapters=adapters, progress=progress, session_factory=session_factory
+    )
+
+
+@pytest.fixture
+async def db_session_factory(tmp_path):
+    """Фабрика сессий на временном файле SQLite — та же форма, что у
+    `app.db.session_scope` (как в tests/test_persistence.py, без общего
+    движка приложения: временная база через `tmp_path`, а не боевой
+    `data/scout.db`)."""
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'resilience-test.db'}", future=True)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+    @asynccontextmanager
+    async def factory() -> AsyncIterator[AsyncSession]:
+        async with session_maker() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    yield factory
+    await engine.dispose()
 
 
 _PLAN_JSON = json.dumps(
@@ -455,3 +504,129 @@ async def test_requirement_checks_from_card_author_reach_rendered_report(setting
     assert "**Сверка с требованиями задачи:**" in text
     assert "работа при 340 °C: подтверждено источником" in text
     assert "сырьё с повышенным содержанием серы: не подтверждено источником" in text
+
+
+# ── Т-2: устойчивость интейка ────────────────────────────────────────────────
+class _RecordingIntakePipeline:
+    """Пайплайн-заглушка для проверок `cli._run`: не ходит ни в источники, ни
+    в модель — только запоминает бриф и переданный `initial_stage_log`."""
+
+    def __init__(self, *, settings=None, router=None, adapters=None, progress=None, session_factory=None) -> None:
+        del settings, router, adapters, progress, session_factory
+
+    async def run(self, brief: Brief, *, request_id: int = 0, raw_text: str = "", initial_stage_log=None) -> Report:
+        _RecordingIntakePipeline.captured.append(brief)
+        _RecordingIntakePipeline.stage_logs.append(initial_stage_log)
+        return Report(
+            request_id=request_id,
+            brief=brief,
+            cards=[],
+            summary=ReportSummary(recommendation="тест: пайплайн подменён заглушкой"),
+            generated_at=datetime.now(UTC),
+        )
+
+    async def aclose(self) -> None:
+        pass
+
+
+def _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory) -> None:
+    """Общая подготовка для тестов `cli._run` в этом файле: подмена настроек,
+    роутера, схемы БД и тяжёлого пайплайна — сеть и боевой data/scout.db не
+    затрагиваются."""
+    import app.pipeline as pipeline_pkg
+
+    _RecordingIntakePipeline.captured = []
+    _RecordingIntakePipeline.stage_logs = []
+    monkeypatch.setattr(pipeline_pkg, "ScoutPipeline", _RecordingIntakePipeline)
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+    router = LLMRouter(settings=settings, providers={"gigachat": fake_provider_factory("gigachat")})
+    monkeypatch.setattr(cli, "LLMRouter", lambda _settings: router)
+
+    async def fake_init_db() -> None:
+        pass
+
+    monkeypatch.setattr("app.db.init_db", fake_init_db)
+
+
+async def test_refine_brief_failure_keeps_owner_answers_in_constraints(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """Отказ `refine_brief` не роняет прогон — ответы владельца дописываются
+    кодом в `constraints` брифа в виде «вопрос — ответ», а не теряются."""
+    _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
+    draft = Brief(industry="нефтепереработка", task_summary="Катализатор гидроочистки теряет активность раньше срока.")
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return IntakeResult(
+            questions=[IntakeQuestion(question="Какая температура процесса?", why="нужна для отбора решений")],
+            draft_brief=draft,
+        )
+
+    async def broken_refine_brief(router, task, answers, *, industry_hint="не указана"):
+        raise RuntimeError("модель недоступна")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+    monkeypatch.setattr("app.pipeline.stages.refine_brief", broken_refine_brief)
+    monkeypatch.setattr("typer.prompt", lambda *args, **kwargs: "380 °C")
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", True)
+
+    assert len(_RecordingIntakePipeline.captured) == 1
+    brief = _RecordingIntakePipeline.captured[0]
+    assert brief.constraints == ["Какая температура процесса? — 380 °C"]
+
+    stage_log = _RecordingIntakePipeline.stage_logs[-1]
+    assert stage_log is not None and len(stage_log) == 1
+    assert stage_log[0].stage == "intake"
+    assert stage_log[0].error
+
+
+async def test_intake_stage_error_reaches_pipeline_logs_with_drafted_status(
+    settings, brief, fake_provider_factory, db_session_factory
+):
+    """Отказавшая стадия интейка, переданная оркестратору через
+    `initial_stage_log`, попадает в `pipeline_logs` строкой `intake` с
+    непустым `error`; статус запроса остаётся `drafted` — прогон дошёл до
+    отчёта, а не свалился в `failed`."""
+    provider = fake_provider_factory("deepseek", [_PLAN_JSON, _SCORE_JSON, _CARD_JSON, _VERIFY_JSON, _SUMMARY_JSON])
+    intake_failure = StageRecord(
+        stage="intake",
+        started_at=datetime.now(UTC),
+        finished_at=datetime.now(UTC),
+        error="интейк недоступен: провайдер вернул 503",
+    )
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(settings, provider, [_OneHitAdapter(client)], session_factory=db_session_factory)
+        report = await pipeline.run(
+            brief, request_id=1, raw_text="текст с отказавшим интейком", initial_stage_log=[intake_failure]
+        )
+
+    assert len(report.cards) == 1
+
+    async with db_session_factory() as session:
+        requests = (await session.execute(select(RequestRow))).scalars().all()
+        assert len(requests) == 1
+        assert requests[0].status == "drafted"
+
+        intake_logs = (await session.execute(select(PipelineLog).where(PipelineLog.stage == "intake"))).scalars().all()
+        assert len(intake_logs) == 1
+        assert intake_logs[0].error
+
+
+async def test_cost_limit_exceeded_during_intake_propagates_and_run_fails(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """РЕШ-45: `CostLimitExceededError` на интейке — команда «стоп тратить»,
+    не отказ модели. `cli._run` обязан пробросить исключение, а не подменить
+    бриф запасным и продолжить прогон."""
+    _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
+
+    async def broken_run_intake(router, task, *, industry_hint="не указана"):
+        raise CostLimitExceededError("запрос израсходовал 10.00 ₽ при лимите 10.00 ₽")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", broken_run_intake)
+
+    with pytest.raises(CostLimitExceededError):
+        await cli._run("текст, который упрётся в лимит на интейке", None, None, tmp_path / "report.md", False)
+
+    assert _RecordingIntakePipeline.captured == []
