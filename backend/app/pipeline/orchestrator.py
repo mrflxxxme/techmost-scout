@@ -34,13 +34,17 @@ log = logging.getLogger(__name__)
 ProgressHook = Callable[[str, str, float], Awaitable[None] | None]
 
 
-def _cost_delta(before: dict[str, float], after: dict[str, float]) -> tuple[float, str | None]:
+def cost_delta(before: dict[str, float], after: dict[str, float]) -> tuple[float, str | None]:
     """Прирост стоимости и провайдер(ы), которые её потратили, между двумя
     снимками `LLMRouter.cost.by_provider`.
 
     Роутер считает расход по запросу целиком, не по стадиям, поэтому для
     журнала стадий (Ф-8) берём разницу снимков вокруг вызова стадии —
     точность до провайдера, не до токена.
+
+    Функция публичная, потому что тем же снимком пользуется `cli._run`: стадия
+    интейка живёт до пайплайна, а её строка в журнале обязана нести
+    фактическую стоимость, а не ноль (П-4 аудита Т-2).
     """
     changed: list[str] = []
     total = 0.0
@@ -220,14 +224,14 @@ class ScoutPipeline:
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
         plan = await stages.plan_search(self._router, brief)
-        cost_delta, provider = _cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
                 stage="planner",
                 started_at=started,
                 finished_at=datetime.now(UTC),
                 provider=provider,
-                cost_rub=cost_delta,
+                cost_rub=stage_cost,
             )
         )
         await self._notify("planner", f"Формулировок в плане: {len(plan.queries)}", 0.1)
@@ -258,14 +262,14 @@ class ScoutPipeline:
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
         scored = await stages.score_candidates(self._router, brief, unique)
-        cost_delta, provider = _cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
                 stage="scorer",
                 started_at=started,
                 finished_at=datetime.now(UTC),
                 provider=provider,
-                cost_rub=cost_delta,
+                cost_rub=stage_cost,
             )
         )
         target = self._settings.target_cards
@@ -277,10 +281,10 @@ class ScoutPipeline:
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
         cards = await self._author_cards(brief, groups)
-        cost_delta, provider = _cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
-                stage="cards", started_at=started, finished_at=datetime.now(UTC), provider=provider, cost_rub=cost_delta
+                stage="cards", started_at=started, finished_at=datetime.now(UTC), provider=provider, cost_rub=stage_cost
             )
         )
         published = stages.select_publishable_cards(cards)
@@ -306,14 +310,14 @@ class ScoutPipeline:
             log.warning("сводка не собралась (%s), собираю запасную без вызова модели", exc)
             summary = stages.fallback_summary(published)
             summary_error = str(exc)
-        cost_delta, provider = _cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
                 stage="summary",
                 started_at=started,
                 finished_at=datetime.now(UTC),
                 provider=provider,
-                cost_rub=cost_delta,
+                cost_rub=stage_cost,
                 error=summary_error,
             )
         )

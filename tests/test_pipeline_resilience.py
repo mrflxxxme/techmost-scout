@@ -625,6 +625,26 @@ async def test_intake_and_refine_failures_are_told_apart_in_stage_log(
     assert stages_logged == ["intake", "intake_refine"]
 
 
+async def test_failed_intake_stage_carries_actual_cost_not_zero(monkeypatch, settings, fake_provider_factory, tmp_path):
+    """П-4 аудита: строка `intake` в журнале обязана нести снимок счётчика, а
+    не ноль. Стадия платная, и отказавший интейк тратится до отказа:
+    `complete_json` делает оплаченный вызов, затем оплаченный ремонтный при
+    несходимости со схемой и только потом поднимает ошибку.
+
+    Здесь работает настоящий `run_intake` на провайдере-заглушке, который
+    отвечает не-JSON: два оплаченных вызова по 0,01 ₽ и отказ."""
+    _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False)
+
+    stage_log = _RecordingIntakePipeline.stage_logs[-1]
+    assert stage_log is not None and len(stage_log) == 1
+    record = stage_log[0]
+    assert record.error, "отказ интейка обязан оставлять причину"
+    assert record.cost_rub == pytest.approx(0.02), "две оплаченные попытки по 0,01 ₽ — журнал обязан их показать"
+    assert record.provider == "gigachat", "провайдер, который потратил деньги, обязан быть назван"
+
+
 @pytest.mark.parametrize("typed", ["не знаю", "  Не Знаю  "])
 async def test_unknown_answer_is_recorded_as_unspecified_requirement(
     monkeypatch, settings, fake_provider_factory, tmp_path, typed

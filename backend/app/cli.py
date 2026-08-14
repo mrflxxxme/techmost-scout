@@ -12,6 +12,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
 import typer
@@ -21,6 +22,9 @@ from rich.table import Table
 from app.config import get_settings
 from app.llm import CostLimitExceededError, LLMRouter
 from app.schemas import Brief, MaturityStage, OwnerAnswer
+
+if TYPE_CHECKING:  # только для аннотаций: тяжёлые модули грузятся лениво, внутри команд
+    from app.pipeline.persistence import StageRecord
 
 app = typer.Typer(add_completion=False, help="ТехМост Скаут — подбор научных решений под задачу бизнеса")
 console = Console()
@@ -42,6 +46,37 @@ UNSPECIFIED_REQUIREMENT = "требование не специализиров�
 #: имена в журнале.
 STAGE_INTAKE = "intake"
 STAGE_INTAKE_REFINE = "intake_refine"
+
+
+def _intake_stage_record(
+    stage: str, *, started_at: datetime, cost_before: dict[str, float], router: LLMRouter, error: BaseException
+) -> StageRecord:
+    """Строка журнала об отказавшей стадии интейка — со снимком счётчика.
+
+    Интейк выполняется в `cli._run`, до пайплайна, поэтому снимок счётчика
+    вокруг вызова снимается здесь — тем же способом и той же функцией, что и в
+    `orchestrator._run_stages` (П-4 аудита). Стадия платная (`intake:deepseek`
+    в других конфигурациях маршрутов, РЕШ-46), и отказавший интейк вполне мог
+    потратиться до отказа: `complete_json` делает оплаченный вызов, затем
+    оплаченный ремонтный при несходимости со схемой и только потом поднимает
+    ошибку. Нулевая стоимость в журнале приписывала эту трату никому.
+
+    `tokens_in`/`tokens_out` остаются нулями: `CostTracker` копит только рубли,
+    вызовы и разбивку по провайдерам — токенов в счётчике нет вовсе, поэтому
+    нулевые они и у всех остальных стадий журнала.
+    """
+    from app.pipeline.orchestrator import cost_delta
+    from app.pipeline.persistence import StageRecord
+
+    spent, provider = cost_delta(cost_before, dict(router.cost.by_provider))
+    return StageRecord(
+        stage=stage,
+        started_at=started_at,
+        finished_at=datetime.now(UTC),
+        provider=provider,
+        cost_rub=spent,
+        error=str(error),
+    )
 
 
 def _normalize_owner_answer(answer: str) -> str:
@@ -169,7 +204,6 @@ def run(
 async def _run(task: str, industry: str | None, maturity: str | None, out: Path | None, interactive: bool) -> None:
     from app.db import init_db, session_scope
     from app.pipeline import ScoutPipeline
-    from app.pipeline.persistence import StageRecord
     from app.pipeline.stages import brief_from_raw_text, refine_brief, run_intake
 
     settings = get_settings()
@@ -205,6 +239,7 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
 
     intake_stage_log: list[StageRecord] = []
     intake_started = datetime.now(UTC)
+    intake_cost_before = dict(router.cost.by_provider)
     try:
         intake = await run_intake(router, task, industry_hint=industry_hint)
     except CostLimitExceededError:
@@ -213,7 +248,13 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
         log.warning("интейк не удался, бриф собран из текста задачи без уточнений", exc_info=True)
         console.print("[yellow]Предупреждение:[/yellow] интейк не удался, бриф собран из текста задачи без уточнений")
         intake_stage_log.append(
-            StageRecord(stage=STAGE_INTAKE, started_at=intake_started, finished_at=datetime.now(UTC), error=str(exc))
+            _intake_stage_record(
+                STAGE_INTAKE,
+                started_at=intake_started,
+                cost_before=intake_cost_before,
+                router=router,
+                error=exc,
+            )
         )
         intake = None
 
@@ -231,6 +272,7 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
             )
         if answers:
             refine_started = datetime.now(UTC)
+            refine_cost_before = dict(router.cost.by_provider)
             try:
                 brief = await refine_brief(router, task, answers, industry_hint=industry_hint)
             except CostLimitExceededError:
@@ -259,11 +301,12 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
                     }
                 )
                 intake_stage_log.append(
-                    StageRecord(
-                        stage=STAGE_INTAKE_REFINE,
+                    _intake_stage_record(
+                        STAGE_INTAKE_REFINE,
                         started_at=refine_started,
-                        finished_at=datetime.now(UTC),
-                        error=str(exc),
+                        cost_before=refine_cost_before,
+                        router=router,
+                        error=exc,
                     )
                 )
         else:
