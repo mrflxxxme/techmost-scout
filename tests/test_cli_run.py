@@ -6,6 +6,11 @@
 сверку с техтребованиями, РЕШ-38), `--industry` в интерактивной ветке не
 использовался вовсе, а нулевой список вопросов диалог не запускал.
 
+Отдельно (Т-2, устойчивость интейка): отказ `run_intake` не роняет прогон —
+бриф собирается кодом из сырого текста; проверены обе границы этой сборки —
+обрезка текста длиннее 500 знаков с многоточием без висящего пробела и
+запасное «не указано» на пустом либо целиком пробельном тексте.
+
 Сеть не используется: `run_intake`/`refine_brief` подменены заглушками,
 `ScoutPipeline` — тоже, чтобы тест проверял только сборку брифа, а не весь
 пайплайн поиска.
@@ -248,3 +253,67 @@ async def test_run_intake_failure_falls_back_to_brief_from_raw_text_and_warns(
 
     console_output = capsys.readouterr().out
     assert "интейк не удался" in console_output
+
+
+# ── Т-2, цикл 2: границы запасного брифа ─────────────────────────────────────
+#: Фраза ровно в 50 знаков, последний из них — пробел. При повторении знак с
+#: индексом 499 (тот, на котором обрывается срез `[:500]`) всегда оказывается
+#: пробелом, а знак 498 — точкой. Такая геометрия и удерживает `rstrip()`:
+#: без него перед многоточием остался бы висящий пробел, а длина стала бы 501
+#: вместо 500.
+_PHRASE_50 = "Катализаторы гидроочистки рано теряют активность. "
+
+#: Заведомо длиннее предела `_FALLBACK_SUMMARY_LIMIT = 500`: 600 знаков.
+_LONG_TASK_TEXT = _PHRASE_50 * 12
+
+
+async def test_long_raw_text_is_truncated_at_limit_without_dangling_space(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """Отказ интейка на длинном тексте: запасной бриф обрезает сырой текст по
+    пределу в 500 знаков и ставит многоточие, не оставляя перед ним висящего
+    пробела.
+
+    Вход — 600 знаков, у которых знак 499 (граница среза) пробельный, а 498 —
+    точка. Ожидаемый `task_summary` — ровно 500 знаков: 499 знаков текста плюс
+    многоточие. Пропавший `rstrip()` дал бы 501 знак с пробелом перед
+    многоточием, сдвинутый срез — другую длину; обе регрессии тест ловит."""
+    assert len(_PHRASE_50) == 50, "геометрия теста сломана: фраза обязана быть ровно 50 знаков"
+    assert len(_LONG_TASK_TEXT) == 600
+    assert _LONG_TASK_TEXT[499] == " ", "на границе среза обязан стоять пробел — иначе rstrip не проверяется"
+    assert _LONG_TASK_TEXT[498] != " "
+
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def broken_run_intake(router, task, *, industry_hint="не указана"):
+        raise RuntimeError("модель недоступна")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", broken_run_intake)
+
+    await cli._run(_LONG_TASK_TEXT, None, None, tmp_path / "report.md", False)
+
+    summary = _RecordingPipeline.captured[0].task_summary
+    assert summary.endswith("…"), "обрезанный текст обязан оканчиваться многоточием"
+    assert len(summary) == 500, "499 знаков текста плюс многоточие"
+    assert summary[-2] != " ", "перед многоточием не должно быть висящего пробела (за это отвечает rstrip)"
+    assert summary[:-1] == _LONG_TASK_TEXT[:499], "обрезка обязана быть началом исходного текста"
+
+
+@pytest.mark.parametrize("raw_text", ["", "   \n\t  "])
+async def test_empty_raw_text_falls_back_to_placeholder_summary(
+    monkeypatch, settings, fake_provider_factory, tmp_path, raw_text
+):
+    """Отказ интейка на пустом либо целиком пробельном тексте: `task_summary`
+    получает запасное значение «не указано», а не пустую строку — пустая суть
+    задачи в отчёте выглядит как потерянные данные (инвариант №1: код ничего
+    не домысливает, но и не молчит)."""
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def broken_run_intake(router, task, *, industry_hint="не указана"):
+        raise RuntimeError("модель недоступна")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", broken_run_intake)
+
+    await cli._run(raw_text, None, None, tmp_path / "report.md", False)
+
+    assert _RecordingPipeline.captured[0].task_summary == "не указано"

@@ -19,9 +19,9 @@ requirement_checks из ответа card_author доезжает до карт�
 теряет ответы владельца — они дописываются в `constraints` брифа; отказавшая
 стадия интейка, переданная оркестратору новым параметром `initial_stage_log`,
 доезжает до `pipeline_logs` строкой с непустым `error`, а статус запроса
-остаётся `drafted` — прогон дошёл до отчёта; `CostLimitExceededError` на
-интейке — стоп-кран (РЕШ-45), `cli._run` обязан её пробросить, а не подменить
-на запасной бриф.
+остаётся `drafted` — прогон дошёл до отчёта; `CostLimitExceededError` —
+стоп-кран (РЕШ-45), `cli._run` обязан её пробросить, а не подменить на запасной
+бриф, причём в обоих местах вызова: и на `run_intake`, и на `refine_brief`.
 """
 
 from __future__ import annotations
@@ -628,5 +628,34 @@ async def test_cost_limit_exceeded_during_intake_propagates_and_run_fails(
 
     with pytest.raises(CostLimitExceededError):
         await cli._run("текст, который упрётся в лимит на интейке", None, None, tmp_path / "report.md", False)
+
+    assert _RecordingIntakePipeline.captured == []
+
+
+async def test_cost_limit_exceeded_during_refine_brief_propagates_and_run_fails(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """Зеркало предыдущего теста для второго места вызова: лимит стоимости
+    выбран уже на уточнении брифа. Ветка `refine_brief` обязана вести себя так
+    же, как `run_intake` (РЕШ-45): пробросить `CostLimitExceededError`, а не
+    подменить её на черновик интейка с ответами владельца и пойти дальше."""
+    _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
+    draft = Brief(industry="нефтепереработка", task_summary="Катализатор гидроочистки теряет активность раньше срока.")
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return IntakeResult(
+            questions=[IntakeQuestion(question="Какая температура процесса?", why="нужна для отбора решений")],
+            draft_brief=draft,
+        )
+
+    async def broken_refine_brief(router, task, answers, *, industry_hint="не указана"):
+        raise CostLimitExceededError("запрос израсходовал 10.00 ₽ при лимите 10.00 ₽")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+    monkeypatch.setattr("app.pipeline.stages.refine_brief", broken_refine_brief)
+    monkeypatch.setattr("typer.prompt", lambda *args, **kwargs: "380 °C")
+
+    with pytest.raises(CostLimitExceededError):
+        await cli._run("текст, который упрётся в лимит на уточнении", None, None, tmp_path / "report.md", True)
 
     assert _RecordingIntakePipeline.captured == []
