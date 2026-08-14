@@ -6,15 +6,23 @@ from __future__ import annotations
 import logging
 
 from app.config import Settings
+from app.llm import LLMRouter
 from app.pipeline import stages
 from app.pipeline.stages import (
     NEUTRAL_SCORE_NOTE,
+    candidates_listing,
     deduplicate,
     group_for_cards,
     select_publishable_cards,
     select_top,
 )
 from app.schemas import Candidate, Evidence, ScoredCandidate, SolutionCard, SourceType
+
+#: Ответ скоринга на одного кандидата — ровно по схеме `ScoreBatch`.
+_SCORE_JSON = (
+    '{"scores": [{"index": 0, "relevance": 8, "maturity": 6, '
+    '"accessibility": 6, "freshness": 6, "completeness": 6, "notes": ""}]}'
+)
 
 
 def _card(title: str, *, evidence: bool = True) -> SolutionCard:
@@ -354,6 +362,54 @@ def test_neutral_mark_survives_change_of_note_text(caplog):
 
     assert len(picked) == 1, "нейтральный кандидат отсечён из-за изменения текста пометки"
     assert "нейтральных оценок 1" in _calibration_line(caplog)
+
+
+async def test_цитируемость_доезжает_до_входа_скоринга(settings, fake_provider_factory, brief):
+    """РЕШ-50: цитируемость — единственный бесплатный внешний признак качества
+    публикации, и работает он только если доходит до модели, а не оседает в
+    оркестраторе."""
+    provider = fake_provider_factory("deepseek", [_SCORE_JSON])
+    router = LLMRouter(settings, providers={"deepseek": provider})
+    candidate = _candidate(1)
+
+    await stages.score_candidates(router, brief, [candidate], citations={candidate.dedup_key(): 137})
+
+    listing = provider.calls[0][1].content
+    assert "Цитирований: 137" in listing
+
+
+async def test_неизвестная_цитируемость_строки_не_создаёт(settings, fake_provider_factory, brief):
+    """Инвариант №1: чего в данных нет, того нет и в промпте. Строка
+    «Цитирований: неизвестно» была бы приглашением модели домыслить число."""
+    provider = fake_provider_factory("deepseek", [_SCORE_JSON])
+    router = LLMRouter(settings, providers={"deepseek": provider})
+
+    await stages.score_candidates(router, brief, [_candidate(1)])
+
+    listing = provider.calls[0][1].content
+    assert "Цитирований" not in listing
+
+
+def test_нулевая_цитируемость_это_известное_значение():
+    """Ноль — не «неизвестно»: работа в каталоге есть, её просто не цитировали.
+    Это сигнал для скоринга, а не повод молчать."""
+    candidate = _candidate(1)
+
+    listing = candidates_listing([candidate], {candidate.dedup_key(): 0})
+
+    assert "Цитирований: 0" in listing
+
+
+def test_цитируемость_достаётся_своему_кандидату():
+    """Ключ — тот же, по которому склеивались дубли: перепутанные местами
+    числа хуже отсутствующих."""
+    first, second = _candidate(1), _candidate(2)
+
+    listing = candidates_listing([first, second], {second.dedup_key(): 9})
+
+    head, tail = listing.split("\n\n")
+    assert "Цитирований" not in head
+    assert "Цитирований: 9" in tail
 
 
 def test_group_for_cards_merges_same_organisation():

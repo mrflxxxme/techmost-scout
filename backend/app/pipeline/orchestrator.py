@@ -19,13 +19,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import httpx
+from pydantic import ValidationError
 
 from app.config import Settings, get_settings
 from app.llm import CostLimitExceededError, LLMRouter
 from app.pipeline import stages
 from app.pipeline.persistence import SessionFactory, StageRecord, persist_run
 from app.schemas import Brief, Candidate, Report, SearchPlan, SolutionCard
-from app.search import build_adapters
+from app.search import build_adapters, normalize_doi
 from app.search.base import SearchAdapter
 
 log = logging.getLogger(__name__)
@@ -55,6 +56,32 @@ def cost_delta(before: dict[str, float], after: dict[str, float]) -> tuple[float
             changed.append(name)
     provider = ",".join(sorted(changed)) if changed else None
     return round(total, 6), provider
+
+
+#: Поля кандидата, которые обогащение имеет право заполнить. Только пустые:
+#: данные источника, нашедшего кандидата, точнее — он видел его в контексте
+#: своей выдачи, а обогащение работает вслепую по DOI.
+_PATCHABLE_FIELDS = ("org", "snippet", "pdf_url")
+
+
+def _apply_patch(candidate: Candidate, patch: dict) -> Candidate:
+    """Заполнить пустые поля кандидата патчем обогащения.
+
+    Непустое значение не перезаписывается никогда — это суть правки, а не
+    деталь: иначе аффилиация из Crossref молча заменялась бы на организацию
+    первого автора из OpenAlex, а фрагмент из витрины партнёров — на
+    академическую аннотацию.
+    """
+    updates = {field: patch[field] for field in _PATCHABLE_FIELDS if patch.get(field) and not getattr(candidate, field)}
+    if not updates:
+        return candidate
+    try:
+        # Через повторную валидацию, а не model_copy: в патче сырые строки, и
+        # кривой pdf_url обязан отвалиться здесь, а не в экспорте отчёта.
+        return Candidate.model_validate({**candidate.model_dump(mode="json"), **updates})
+    except ValidationError as exc:
+        log.debug("обогащение отброшено для %s: %s", candidate.url, exc)
+        return candidate
 
 
 @dataclass(slots=True)
@@ -130,6 +157,12 @@ class ScoutPipeline:
 
         async with asyncio.TaskGroup() as group:
             for adapter in adapters:
+                if getattr(adapter, "enrich_only", False):
+                    # Источник обогащения (OpenAlex): поиска у него нет вовсе.
+                    # Спросить его — значит получить NotImplementedError и
+                    # записать в отчёт «не ответил» источник, который никто не
+                    # спрашивал. Обогащение вызывается отдельно, после дедупа.
+                    continue
                 for query in plan.queries:
                     if adapter.source_types and query.source_type not in adapter.source_types:
                         continue
@@ -161,6 +194,52 @@ class ScoutPipeline:
             hits_by_provider=hits_by_label,
             hits_by_name=hits_by_name,
         )
+
+    # ── Обогащение по DOI ───────────────────────────────────────────────────
+    async def enrich_candidates(self, candidates: list[Candidate]) -> tuple[list[Candidate], dict[str, int]]:
+        """Добрать метаданные по DOI у источника обогащения (РЕШ-52.3).
+
+        Возвращает пару: кандидаты с заполненными ПУСТЫМИ полями и цитируемость
+        по ключу склейки кандидата. Цитируемость не поле `Candidate` — она
+        нужна ровно одной стадии, скорингу, и едет отдельным словарём, а не
+        правкой общего контракта данных.
+
+        Отказ обогащения прогон не роняет: адаптер честно поднимает
+        `SearchError` (инвариант №5 в редакции РЕШ-43), а здесь это становится
+        строкой в логе и продолжением работы — обогащение необязательно, без
+        него кандидаты просто беднее.
+        """
+        adapters = await self._get_adapters()
+        # Источник обогащения узнаётся по методу, а не по имени класса:
+        # оркестратору незачем знать, что это именно OpenAlex.
+        adapter = next((a for a in adapters if hasattr(a, "enrich_by_doi")), None)
+        if adapter is None:
+            return candidates, {}
+
+        by_doi: dict[str, list[int]] = {}
+        for index, candidate in enumerate(candidates):
+            doi = normalize_doi(candidate.raw_id)
+            if doi:
+                by_doi.setdefault(doi, []).append(index)
+        if not by_doi:
+            return candidates, {}
+
+        try:
+            patches = await adapter.enrich_by_doi(list(by_doi))
+        except Exception as exc:
+            log.warning("обогащение по DOI не удалось (%s), прогон продолжается без него", exc)
+            return candidates, {}
+
+        enriched = list(candidates)
+        citations: dict[str, int] = {}
+        for doi, patch in patches.items():
+            for index in by_doi.get(doi, ()):
+                candidate = enriched[index]
+                cited = patch.get("cited_by_count")
+                if isinstance(cited, int) and not isinstance(cited, bool):
+                    citations[candidate.dedup_key()] = cited
+                enriched[index] = _apply_patch(candidate, patch)
+        return enriched, citations
 
     async def _safe_search(self, adapter: SearchAdapter, query) -> list[Candidate] | None:
         """Обёртка: любая ошибка адаптера превращается в None, а не в падение запроса."""
@@ -270,10 +349,17 @@ class ScoutPipeline:
         if not unique:
             return self._empty_report(brief, request_id, outcome.unavailable)
 
+        # Между дедупликацией и скорингом (РЕШ-52.3): обогащать до склейки
+        # дублей — платить лишние запросы за кандидатов, которые всё равно
+        # схлопнутся, а после скоринга цитируемость уже никому не поможет.
+        unique, citations = await self.enrich_candidates(unique)
+        if citations:
+            await self._notify("enrich", f"Цитируемость известна у кандидатов: {len(citations)}", 0.47)
+
         await self._notify("scorer", "Оцениваю кандидатов", 0.5)
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
-        scored = await stages.score_candidates(self._router, brief, unique)
+        scored = await stages.score_candidates(self._router, brief, unique, citations=citations)
         stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(

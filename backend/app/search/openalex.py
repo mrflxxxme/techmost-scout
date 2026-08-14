@@ -1,4 +1,4 @@
-"""OpenAlex — ЗАГОТОВКА. Только обогащение по DOI, никогда не поиск.
+"""OpenAlex — только обогащение по DOI, никогда не поиск.
 
 ИСТОЧНИК
     OpenAlex, открытый каталог научных работ, авторов и организаций.
@@ -18,9 +18,25 @@
     OpenAlex в этой системе — слой обогащения, а не поиска. Список DOI мы
     получаем из Crossref (бесплатно и без лимита), а у OpenAlex добираем то,
     чего у Crossref нет: нормализованные организации (institutions с ROR),
-    цитируемость (cited_by_count), концепты/темы, open access статус.
+    цитируемость (cited_by_count), ссылку на открытый полный текст.
     Полнотекстовый поиск через OpenAlex не делать НИКОГДА — это платный вызов
-    search, который дублирует бесплатный Crossref.
+    search, который дублирует бесплатный Crossref (РЕШ-10).
+
+    Отсюда же `enrich_only = True`: адаптер попадает в реестр источников, но
+    оркестратор не зовёт его `search` ни на одной формулировке. Без этого флага
+    источник обогащения оказался бы в `sources_unavailable` каждого отчёта —
+    `search` бросает `NotImplementedError`, и клиенту сообщалось бы о «не
+    ответившем» источнике, который никто и не спрашивал.
+
+ЧТО ЗАБИРАЕТСЯ ИЗ ОТВЕТА (задача Т-3, РЕШ-50)
+    * аннотация (`abstract_inverted_index`) → `Candidate.snippet`;
+    * организация первого автора (`authorships[].institutions[].display_name`)
+      → `Candidate.org`;
+    * ссылка на открытый полный текст (`best_oa_location.pdf_url`)
+      → `Candidate.pdf_url`;
+    * цитируемость (`cited_by_count`) — отдельной строкой во вход скоринга.
+    Адаптер отдаёт ПАТЧ, а не кандидата: обогащение не создаёт новых находок, а
+    решение «чем можно заполнить пустое поле» принимает оркестратор.
 
 АЛЬТЕРНАТИВА БЕЗ ДЕНЕГ
     Полный снапшот выкладывается в S3 и качается бесплатно, без ключа:
@@ -29,36 +45,54 @@
     аналитика по организациям РФ, а не точечное обогащение.
 
 НАСТРОЙКИ
-    settings.openalex_api_key — обязателен, без него адаптер не включается
+    settings.openalex_api_key — обязателен, без него обогащение пропускается
     (requires_key = True, см. build_adapters в app/search/__init__.py).
-
-ЧТО СДЕЛАТЬ (задача Э2-1)
-    1. В конструкторе запомнить api_key; заголовок авторизации —
-       {"Authorization": f"Bearer {api_key}"} (проверить актуальную схему в
-       документации, OpenAlex обещал поддержать и параметр api_key=).
-    2. Реализовать enrich_by_doi(dois): чанками по 50 DOI собирать
-       filter=doi:doi1|doi2|... — это list-вызов, он дешёвый; либо, если нужен
-       гарантированно бесплатный путь, дёргать /works/doi:{doi} по одному.
-    3. Из ответа брать: authorships[].institutions[].display_name и .ror,
-       cited_by_count, publication_year, best_oa_location.pdf_url, topics[].
-    4. Возвращать не Candidate, а патч к уже найденному кандидату (org,
-       authors, year) — обогащение не создаёт новых кандидатов.
-    5. search() оставить запрещённым: явно бросать NotImplementedError с
-       пояснением, что полнотекстовый поиск здесь платный и не нужен.
-    6. Учёт денег: каждый list-вызов = $0.10/1000, писать в лог счётчик
-       вызовов, чтобы стоимость попадала в Report.cost_rub.
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Any
 
 import httpx
 
 from app.schemas import Candidate, SearchQuery, SourceType
-from app.search.base import SearchAdapter
+from app.search.base import SearchAdapter, SearchError
+
+log = logging.getLogger(__name__)
 
 API_URL = "https://api.openalex.org/works"
+#: Сколько DOI обрабатывается между паузами. Lookup идёт по одному запросу на
+#: DOI (это бесплатный путь), батч — единица ритма, а не один общий запрос.
+BATCH_SIZE = 50
+#: Пауза между батчами: источник бесплатный, но долбить его пачкой из сотен
+#: запросов подряд невежливо и быстро приводит к 429.
+BATCH_PAUSE_SECONDS = 0.2
+#: Аннотация в OpenAlex лежит инвертированным индексом; собранный текст режем
+#: по той же границе, что и Crossref, — вход скоринга не резиновый.
+MAX_SNIPPET = 700
+#: Работа для пробы в `scout doctor`: широко известная и заведомо в каталоге.
+HEALTH_DOI = "10.1038/s41586-021-03819-2"
+
+_DOI_PREFIXES = ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "doi:")
+
+
+def normalize_doi(value: Any) -> str:
+    """DOI в том виде, в каком он уходит в lookup: без схемы, в нижнем регистре.
+
+    Пустая строка означает «это не DOI»: у патента или веб-страницы в `raw_id`
+    лежит номер или адрес, и обогащать по нему нечего.
+    """
+    if not isinstance(value, str):
+        return ""
+    doi = value.strip().lower()
+    for prefix in _DOI_PREFIXES:
+        if doi.startswith(prefix):
+            doi = doi[len(prefix) :]
+            break
+    doi = doi.strip()
+    return doi if doi.startswith("10.") else ""
 
 
 class OpenAlexAdapter(SearchAdapter):
@@ -68,8 +102,9 @@ class OpenAlexAdapter(SearchAdapter):
     source_types = (SourceType.PUBLICATION,)
     #: С февраля 2026 ключ обязателен
     requires_key = True
-    #: Флаг для реестра: адаптер в build_adapters не попадает
-    implemented = False
+    implemented = True
+    #: Источник только для обогащения: оркестратор не зовёт его `search`
+    enrich_only = True
 
     def __init__(self, client: httpx.AsyncClient, *, api_key: str | None = None) -> None:
         super().__init__(client)
@@ -78,17 +113,161 @@ class OpenAlexAdapter(SearchAdapter):
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
         raise NotImplementedError(
             "openalex: полнотекстовый поиск платный ($1/1000) и дублирует Crossref — "
-            "источник используется только для обогащения по DOI, задача Э2-1"
+            "источник используется только для обогащения по DOI (РЕШ-10)"
         )
 
     async def enrich_by_doi(self, dois: list[str]) -> dict[str, dict[str, Any]]:
-        """Добрать по списку DOI организации, цитируемость и OA-ссылки.
+        """Добрать по списку DOI организацию, аннотацию, PDF и цитируемость.
 
-        Возвращает отображение DOI (в нижнем регистре) → патч метаданных.
-        Lookup по DOI бесплатный и безлимитный — это единственный разрешённый
-        режим работы с OpenAlex.
+        Возвращает отображение «нормализованный DOI → патч метаданных». DOI, по
+        которому в каталоге ничего нет, в ответе просто отсутствует.
+
+        Ключа нет — пустой словарь, запись в лог и ни одного обращения в сеть:
+        обогащение необязательно, ронять из-за него прогон нечестно.
+
+        Транспортный отказ (HTTP-ошибка, 429, нечитаемое тело) поднимается как
+        `SearchError` — инвариант №5 в редакции РЕШ-43: адаптер говорит «не
+        смог», а решение «прогон из-за этого не останавливать» принимает
+        оркестратор. Гасить отказ здесь в пустой успех запрещено.
         """
-        raise NotImplementedError("openalex: обогащение по DOI не реализовано, задача Э2-1")
+        if not self._api_key:
+            log.warning("openalex: обогащение пропущено: нет OPENALEX_API_KEY")
+            return {}
+
+        wanted: list[str] = []
+        seen: set[str] = set()
+        for raw in dois:
+            doi = normalize_doi(raw)
+            if doi and doi not in seen:
+                seen.add(doi)
+                wanted.append(doi)
+        if not wanted:
+            return {}
+
+        patches: dict[str, dict[str, Any]] = {}
+        requests = 0
+        for start in range(0, len(wanted), BATCH_SIZE):
+            if start:
+                await self._pause_between_batches()
+            for doi in wanted[start : start + BATCH_SIZE]:
+                payload = await self._lookup(doi)
+                requests += 1
+                if payload is None:
+                    continue
+                patch = _to_patch(payload)
+                if patch:
+                    patches[doi] = patch
+        # Lookup по DOI бесплатен и безлимитен, поэтому счётчик — не деньги, а
+        # только объём работы; в Report.cost_rub он ничего не добавляет.
+        log.info(
+            "openalex: обогащено %s DOI из %s за %s бесплатных lookup-запросов",
+            len(patches),
+            len(wanted),
+            requests,
+        )
+        return patches
 
     async def health(self) -> tuple[bool, str]:
-        return False, "не реализовано, задача Э2-1"
+        """Проба для `scout doctor` — один бесплатный lookup, поиск не трогаем."""
+        if not self._api_key:
+            return False, "нет ключа OPENALEX_API_KEY"
+        try:
+            payload = await self._lookup(HEALTH_DOI)
+        except SearchError as exc:
+            return False, str(exc)
+        if payload is None:
+            # Ключ принят и источник ответил — пробной работы в каталоге нет.
+            return True, "ок, lookup по DOI отвечает (пробная работа не найдена)"
+        return True, "ок, lookup по DOI отвечает"
+
+    async def _pause_between_batches(self) -> None:
+        """Пауза между батчами. Отдельным методом — чтобы ритм обхода можно было
+        проверить тестом, не засыпая в нём по-настоящему."""
+        await asyncio.sleep(BATCH_PAUSE_SECONDS)
+
+    async def _lookup(self, doi: str) -> dict[str, Any] | None:
+        """Один бесплатный lookup. None — работы нет в каталоге (404), это не отказ."""
+        await self._throttle()
+        try:
+            response = await self._client.get(
+                f"{API_URL}/doi:{doi}",
+                headers={"Authorization": f"Bearer {self._api_key}", "Accept": "application/json"},
+            )
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise SearchError(f"openalex не ответил на lookup DOI {doi}: {exc}") from exc
+        return payload if isinstance(payload, dict) else None
+
+
+def _to_patch(payload: dict[str, Any]) -> dict[str, Any]:
+    """Патч к найденному кандидату: только те поля, которые OpenAlex реально отдал.
+
+    Пустых значений в патче не бывает: «организация не указана» здесь означает
+    отсутствие ключа, а не строку «не указана» — иначе обогащение затирало бы
+    честное «неизвестно» выдуманным содержимым (инвариант №1).
+    """
+    patch: dict[str, Any] = {}
+
+    org = _first_institution(payload.get("authorships"))
+    if org:
+        patch["org"] = org
+
+    snippet = _abstract_from_inverted_index(payload.get("abstract_inverted_index"))
+    if snippet:
+        patch["snippet"] = snippet
+
+    location = payload.get("best_oa_location")
+    if isinstance(location, dict):
+        pdf_url = str(location.get("pdf_url") or "").strip()
+        if pdf_url:
+            patch["pdf_url"] = pdf_url
+
+    cited = payload.get("cited_by_count")
+    if isinstance(cited, int) and not isinstance(cited, bool) and cited >= 0:
+        patch["cited_by_count"] = cited
+
+    return patch
+
+
+def _first_institution(authorships: Any) -> str:
+    """Организация первого автора, у которого она вообще проставлена.
+
+    Аффилиации OpenAlex нормализованы (у каждой есть ROR), поэтому они точнее
+    сырых строк Crossref — но подставляются только в пустое поле кандидата.
+    """
+    if not isinstance(authorships, list):
+        return ""
+    for authorship in authorships:
+        if not isinstance(authorship, dict):
+            continue
+        for institution in authorship.get("institutions") or []:
+            if not isinstance(institution, dict):
+                continue
+            name = str(institution.get("display_name") or "").strip()
+            if name:
+                return name
+    return ""
+
+
+def _abstract_from_inverted_index(value: Any) -> str:
+    """Собрать аннотацию из инвертированного индекса OpenAlex.
+
+    В ответе лежит {"слово": [позиции]} — прямого текста аннотации у источника
+    нет вовсе, издатели запрещают его отдавать целиком.
+    """
+    if not isinstance(value, dict) or not value:
+        return ""
+    positions: list[tuple[int, str]] = []
+    for word, places in value.items():
+        if not isinstance(places, list):
+            continue
+        for place in places:
+            if isinstance(place, int) and not isinstance(place, bool):
+                positions.append((place, str(word)))
+    if not positions:
+        return ""
+    positions.sort()
+    return " ".join(word for _, word in positions).strip()[:MAX_SNIPPET]

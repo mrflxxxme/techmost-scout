@@ -286,23 +286,53 @@ def deduplicate(candidates: list[Candidate]) -> list[Candidate]:
 
 
 # ── 4. Скоринг ──────────────────────────────────────────────────────────────
+def candidates_listing(chunk: list[Candidate], citations: dict[str, int] | None = None) -> str:
+    """Перечисление кандидатов для сообщения скоринга.
+
+    `citations` — цитируемость по ключу склейки кандидата, её добирает
+    обогащение по DOI (РЕШ-50). Строка «Цитирований» появляется, только когда
+    число действительно известно: «неизвестно» в промпте — это приглашение
+    модели домыслить, а выдуманных значений во входе стадии быть не должно
+    (инвариант №1).
+    """
+    known = citations or {}
+    blocks: list[str] = []
+    for i, c in enumerate(chunk):
+        lines = [
+            f"[{i}] {c.title}",
+            f"URL: {c.url}",
+            f"Организация: {c.org or 'не указана'}",
+            f"Год: {c.year or 'не указан'}",
+            f"Тип: {c.source_type.value}",
+        ]
+        cited = known.get(c.dedup_key())
+        if cited is not None:
+            lines.append(f"Цитирований: {cited}")
+        lines.append(f"Фрагмент: {c.snippet[:600]}")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
 async def score_candidates(
-    router: LLMRouter, brief: Brief, candidates: list[Candidate], *, batch_size: int = 10
+    router: LLMRouter,
+    brief: Brief,
+    candidates: list[Candidate],
+    *,
+    batch_size: int = 10,
+    citations: dict[str, int] | None = None,
 ) -> list[ScoredCandidate]:
     """Оценить кандидатов по пяти критериям.
 
     Батчами, потому что дешёвая модель на длинном списке начинает ставить всем
     одинаковые оценки и терять кандидатов.
+
+    `citations` — цитируемость с обогащения по DOI; см. `candidates_listing`.
     """
 
     scored: list[ScoredCandidate] = []
     for start in range(0, len(candidates), batch_size):
         chunk = candidates[start : start + batch_size]
-        listing = "\n\n".join(
-            f"[{i}] {c.title}\nURL: {c.url}\nОрганизация: {c.org or 'не указана'}\n"
-            f"Год: {c.year or 'не указан'}\nТип: {c.source_type.value}\nФрагмент: {c.snippet[:600]}"
-            for i, c in enumerate(chunk)
-        )
+        listing = candidates_listing(chunk, citations)
         try:
             batch = await router.complete_json(
                 "scorer",
