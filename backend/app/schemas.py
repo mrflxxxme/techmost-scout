@@ -49,6 +49,20 @@ class Verdict(StrEnum):
     REWORK = "rework"
 
 
+class OwnerAnswer(BaseModel):
+    """Ответ владельца задачи на один уточняющий вопрос (Т-2, РЕШ-58).
+
+    Отдельное поле брифа, а не строка в `constraints`: ограничения печатаются
+    клиенту строкой «Ограничения:» и разворачиваются в построчную сверку
+    `requirement_checks` в каждой карточке (РЕШ-38). Ответ «требование не
+    специализировано» ни ограничением задачи, ни строкой сверки быть не может,
+    но модели он нужен как контекст постановки — поэтому у него своё поле.
+    """
+
+    question: str = Field(description="Уточняющий вопрос, заданный оператору")
+    answer: str = Field(description="Ответ оператора; «не знаю» приводится к «требование не специализировано»")
+
+
 class Brief(BaseModel):
     """Структурированная постановка задачи после уточняющих вопросов.
 
@@ -58,6 +72,10 @@ class Brief(BaseModel):
     industry: str = Field(description="Отрасль заказчика, например «нефтепереработка»")
     task_summary: str = Field(description="Суть технологической задачи, 1-3 предложения")
     constraints: list[str] = Field(default_factory=list, description="Ограничения: среда, ГОСТ, габариты, температура")
+    owner_answers: list[OwnerAnswer] = Field(
+        default_factory=list,
+        description="Ответы владельца на уточняющие вопросы — контекст постановки, не ограничения задачи",
+    )
     target_maturity: MaturityStage | None = Field(default=None, description="Желаемая готовность решения")
     geography: str = Field(default="РФ", description="Где предполагается внедрение")
     budget_hint: str | None = None
