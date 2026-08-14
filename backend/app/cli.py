@@ -246,7 +246,7 @@ def run(
 async def _run(task: str, industry: str | None, maturity: str | None, out: Path | None, interactive: bool) -> None:
     from app.db import init_db, session_scope
     from app.pipeline import ScoutPipeline
-    from app.pipeline.stages import brief_from_raw_text, refine_brief, run_intake
+    from app.pipeline.stages import brief_from_raw_text, neutralize_placeholders, refine_brief, run_intake
 
     settings = get_settings()
     router = LLMRouter(settings)
@@ -386,8 +386,11 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
         brief = intake.draft_brief
 
     # Явно заданный флаг перекрывает то, что определила модель при разборе.
+    # Значение флага — сырой ввод оператора и перекрывает в том числе уже
+    # обезвреженную отрасль запасного брифа, поэтому метки `{{...}}` снимаются
+    # и здесь: иначе `--industry "{{X}}"` ронял бы прогон на планировщике (П-6).
     if industry:
-        brief = brief.model_copy(update={"industry": industry})
+        brief = brief.model_copy(update={"industry": neutralize_placeholders(industry)})
     if maturity:
         brief = brief.model_copy(update={"target_maturity": MaturityStage(maturity)})
 

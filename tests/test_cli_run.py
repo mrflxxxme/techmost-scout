@@ -25,6 +25,7 @@ import pytest
 import app.cli as cli
 import app.pipeline as pipeline_pkg
 from app.llm.router import LLMRouter
+from app.pipeline.stages import render_prompt
 from app.schemas import Brief, IntakeQuestion, IntakeResult, Report, ReportSummary
 
 
@@ -325,6 +326,33 @@ async def test_long_raw_text_is_truncated_at_limit_without_dangling_space(
     assert len(summary) == 500, "499 знаков текста плюс многоточие"
     assert summary[-2] != " ", "перед многоточием не должно быть висящего пробела (за это отвечает rstrip)"
     assert summary[:-1] == _LONG_TASK_TEXT[:499], "обрезка обязана быть началом исходного текста"
+
+
+async def test_placeholder_in_raw_text_does_not_break_prompt_rendering(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """П-6 аудита: `render_prompt` ищет незаполненные метки в уже собранном
+    тексте, поэтому метка из данных роняет вызов так же, как забытая метка
+    шаблона, — а запасной бриф переносит текст оператора дословно.
+
+    Проба аудита воспроизводится целиком: текст задачи с `{{CLIENT_NAME}}` →
+    отказ интейка → запасной бриф → сборка промпта планировщика. До правки
+    здесь падало `ValueError: не заполнены метки ['CLIENT_NAME']`."""
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def broken_run_intake(router, task, *, industry_hint="не указана"):
+        raise RuntimeError("модель недоступна")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", broken_run_intake)
+
+    await cli._run("Задача завода {{CLIENT_NAME}}: катализатор", "{{INDUSTRY}}", None, tmp_path / "report.md", False)
+
+    brief = _RecordingPipeline.captured[0]
+    assert "{{" not in brief.task_summary and "}}" not in brief.task_summary
+    assert "{{" not in brief.industry
+    assert "CLIENT_NAME" in brief.task_summary, "текст оператора не должен пропадать — снимаются только скобки"
+    # Сквозная проверка: именно на этой сборке промпта прогон и падал.
+    render_prompt("planner", BRIEF_JSON=brief.model_dump_json(indent=2))
 
 
 @pytest.mark.parametrize("raw_text", ["", "   \n\t  "])
