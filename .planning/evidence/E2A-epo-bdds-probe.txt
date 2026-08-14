@@ -1,0 +1,82 @@
+Проверка EPO BDDS оркестратором — 14 августа 2026
+Повод: разведка инструментов заявила, что массовые наборы EPO отдаются без
+авторизации, но нашла конфликт источников по платности DOCDB и не смогла
+установить объёмы. Проверено собственными запросами, ни одного ключа не
+использовано, ни байта данных не скачано (только листинги).
+
+1. АДРЕС, КОТОРЫЙ НАЗЫВАЛА РАЗВЕДКА, — ТРЕБУЕТ АВТОРИЗАЦИИ
+
+  GET https://publication-bdds.apps.epo.org/bdds/bdds-bff-service/prod/api/products/
+  → HTTP 302 Found
+    Location: https://login.epo.org/oauth2/aus3up3nz0N133c0V417/v1/authorize?...
+
+  То есть путь /api/products/ уводит на OAuth-логин EPO. Утверждение разведки
+  «products can be listed without an account» по этому адресу НЕ подтвердилось.
+
+2. ПУБЛИЧНЫЙ АДРЕС РАБОТАЕТ БЕЗ АВТОРИЗАЦИИ
+
+  GET https://publication-bdds.apps.epo.org/bdds/bdds-bff-service/prod/api/public/products/
+  Заголовки: только Accept: application/json. Ни ключа, ни куки, ни токена.
+  → HTTP 200, Content-Type: application/json, 4128 байт, 12 продуктов
+
+  Вывод: вариант «без ключа» подтверждён фактически, но по другому пути —
+  /api/public/products/, а не /api/products/. Разница существенна для кода.
+
+3. СОСТАВ ПУБЛИЧНЫХ ПРОДУКТОВ (12 штук, поле productLastDeliveryPublishDate)
+
+  id=3   14.7 DOCDB — EPO worldwide bibliographic data, front file   2026-08-13
+         «extraction in XML format of our master documentation database with
+          worldwide coverage containing bibliographic data, abstracts and
+          citations (but no full text)»
+  id=14  14.7 DOCDB back file (ежегодно)                              2026-02-24
+  id=5   14.11 INPADOC worldwide legal event data, front file         2026-08-11
+         «records from over 60 international patent authorities»
+  id=11  14.11 INPADOC back file (ежегодно)                           2026-02-24
+  id=10  14.1 EP bibliographic data EBD (еженедельно, среда 14:00)    2026-08-12
+  id=32  14.12 EP full-text data (EP-A и EP-B с 1970-х, PDF/A + XML)  2026-08-12
+  id=16  14.1.1 European Patent Register back file (2 раза в год)     2026-03-05
+  id=21  14.6 Boards of Appeal decisions (март и сентябрь)            2026-03-11
+  id=24  14.15 Sequence listings (еженедельно, понедельник 12:00)     2026-08-10
+  id=19  DTD/Schema repository — схемы разбора от первоисточника      2026-06-03
+  id=31  Weekly updated coverage, codes and statistics                2026-08-13
+  id=20  Samples of bulk data sets                                    2026-04-02
+
+  Главное для задачи: DOCDB прямо заявляет worldwide coverage И abstracts.
+  Полных текстов в нём нет — под них отдельный продукт (id=32, только EP).
+
+4. ОБЪЁМЫ — ПОСЧИТАНЫ ПО ФАКТИЧЕСКИМ ЛИСТИНГАМ ПОСТАВОК
+
+  Листинг поставок отдаётся по GET .../api/public/products/{id}
+  (пути /delivery/ и /deliveries/ дают HTTP 500 — их не существует).
+
+  id=3  DOCDB front file:  68 поставок, 156 файлов, суммарно  126,3 ГБ
+        свежайшая: «2026/033 Cr-Del» от 2026-08-13, 2 файла, 170 МБ
+        пример имени: docdb_xml_202633_CreateDelete_001.zip  (167.5 MB)
+        → недельная поставка стоит ~170 МБ, то есть догоняющая загрузка дёшева
+
+  id=14 DOCDB back file:   2 поставки, 163 файла, суммарно   219,1 ГБ
+        свежайшая: «Back file February 2026» от 2026-02-24, 162 файла, 224 ГБ
+        пример имени: docdb_xml_bck_202607_031_D.zip  (1.4 GB)
+        → полный бэкфайл — 219 ГБ в zip; это цена варианта «локальный индекс»
+
+  id=32 EP full-text:    136 поставок, 2456 файлов, суммарно 4 613,8 ГБ
+        свежайшая: «2026/033» от 2026-08-12, 1 файл, 9,0 ГБ
+        → полные тексты в MVP не тянем, и они только по EP
+
+5. ЧТО ЭТО ЗНАЧИТ ДЛЯ РЕШЕНИЯ
+
+  — Бесключевой доступ к мировой патентной библиографии с рефератами
+    существует и проверен фактически, а не по пересказу.
+  — Цена полного бэкфайла DOCDB — 219 ГБ загрузки (в zip), плюс распаковка и
+    разбор. Это НЕ «десятки гигабайт», как оценивала разведка: расхождение
+    в разы, и решение о дисковом пространстве владелец должен принимать по
+    этому числу, а не по оценке.
+  — Поддержание свежести стоит ~170 МБ в неделю — это уже пустяк.
+  — Схемы разбора (XSD) публикует сам EPO отдельным продуктом (id=19), то есть
+    формат документирован первоисточником, даже если транспорт — нет.
+
+  НЕ проверено и требует отдельного шага до любого кода: язык рефератов у
+  непринадлежащих англоязычным ведомствам документов (в частности, RU) и
+  фактическая полнота RU в DOCDB. Проверяется скачиванием одной недельной
+  поставки в 170 МБ и подсчётом записей с country="RU" и наличием тега
+  abstract — бесплатно, но это уже загрузка данных, а не листинг.
