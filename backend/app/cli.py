@@ -35,6 +35,15 @@ UNKNOWN_ANSWER = "не знаю"
 UNSPECIFIED_REQUIREMENT = "требование не специализировано"
 
 
+#: Имена стадий интейка в журнале `pipeline_logs`. Разведены (совет С-2
+#: аудита): отказ разбора текста и отказ уточнения брифа — разные инциденты с
+#: разной починкой, а одинаковая строка `intake` их не различала. Маршрут
+#: модели у обеих стадий один и тот же — `intake` (РЕШ-46), меняются только
+#: имена в журнале.
+STAGE_INTAKE = "intake"
+STAGE_INTAKE_REFINE = "intake_refine"
+
+
 def _normalize_owner_answer(answer: str) -> str:
     """Ответ оператора в том виде, в каком он уходит в бриф и в модель.
 
@@ -204,7 +213,7 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
         log.warning("интейк не удался, бриф собран из текста задачи без уточнений", exc_info=True)
         console.print("[yellow]Предупреждение:[/yellow] интейк не удался, бриф собран из текста задачи без уточнений")
         intake_stage_log.append(
-            StageRecord(stage="intake", started_at=intake_started, finished_at=datetime.now(UTC), error=str(exc))
+            StageRecord(stage=STAGE_INTAKE, started_at=intake_started, finished_at=datetime.now(UTC), error=str(exc))
         )
         intake = None
 
@@ -251,7 +260,10 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
                 )
                 intake_stage_log.append(
                     StageRecord(
-                        stage="intake", started_at=refine_started, finished_at=datetime.now(UTC), error=str(exc)
+                        stage=STAGE_INTAKE_REFINE,
+                        started_at=refine_started,
+                        finished_at=datetime.now(UTC),
+                        error=str(exc),
                     )
                 )
         else:

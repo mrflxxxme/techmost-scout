@@ -597,6 +597,34 @@ async def test_refine_brief_failure_keeps_owner_answers_in_own_field(
     assert stage_log[0].error
 
 
+async def test_intake_and_refine_failures_are_told_apart_in_stage_log(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """Совет С-2 аудита: строка журнала обязана различать два разных отказа
+    интейка. Отказ разбора текста пишется стадией `intake`, отказ уточнения
+    брифа — `intake_refine`; одинаковая строка не давала разбору инцидента
+    понять, какая из двух стадий отказала."""
+    _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
+    draft = Brief(industry="нефтепереработка", task_summary="Катализатор гидроочистки теряет активность раньше срока.")
+
+    async def broken_run_intake(router, task, *, industry_hint="не указана"):
+        raise RuntimeError("модель недоступна")
+
+    async def broken_refine_brief(router, task, answers, *, industry_hint="не указана"):
+        raise RuntimeError("модель недоступна")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", broken_run_intake)
+    monkeypatch.setattr("typer.prompt", lambda *args, **kwargs: "380 °C")
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report-a.md", True)
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", _intake_with_one_question(draft))
+    monkeypatch.setattr("app.pipeline.stages.refine_brief", broken_refine_brief)
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report-b.md", True)
+
+    stages_logged = [log[0].stage for log in _RecordingIntakePipeline.stage_logs]
+    assert stages_logged == ["intake", "intake_refine"]
+
+
 @pytest.mark.parametrize("typed", ["не знаю", "  Не Знаю  "])
 async def test_unknown_answer_is_recorded_as_unspecified_requirement(
     monkeypatch, settings, fake_provider_factory, tmp_path, typed
