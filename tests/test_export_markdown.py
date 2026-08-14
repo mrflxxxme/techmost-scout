@@ -166,6 +166,50 @@ def test_sources_unavailable_line_not_broken(brief):
     assert "Не ответили источники: Роспатент, YandexGPT" in text
 
 
+_CAVEAT = "Уточнения по задаче не собраны: бриф составлен из текста задачи."
+
+
+@pytest.mark.parametrize(
+    ("sources_unavailable", "caveats"),
+    [
+        (["Роспатент"], []),
+        ([], [_CAVEAT]),
+        (["Роспатент"], [_CAVEAT]),
+    ],
+    ids=["только-источники", "только-оговорки", "и-то-и-другое"],
+)
+def test_limitations_heading_printed_whenever_section_has_content(brief, sources_unavailable, caveats):
+    """Заголовок «Ограничения этого поиска» нужен во всех трёх случаях. Раньше
+    он был привязан только к недоступным источникам, и на здоровом прогоне
+    (все источники ответили) оговорка выпадала в конец отчёта голым пунктом
+    списка — клиент видел висящую строку непонятно к чему."""
+    report = _make_report(
+        [_make_card()],
+        brief=brief,
+        sources_unavailable=sources_unavailable,
+        summary=ReportSummary(recommendation="Начать с варианта №1.", caveats=caveats),
+    )
+
+    text = render_markdown(report)
+    lines = text.split("\n")
+
+    assert "## Ограничения этого поиска" in lines
+    heading_at = lines.index("## Ограничения этого поиска")
+    for caveat in caveats:
+        # Оговорка обязана стоять ПОСЛЕ заголовка, а не болтаться отдельно.
+        assert lines.index(f"- {caveat}") > heading_at
+    if sources_unavailable:
+        assert any(line.startswith("Не ответили источники: ") for line in lines[heading_at:])
+
+
+def test_limitations_heading_absent_when_nothing_to_say(brief):
+    """Обратная сторона: без недоступных источников и без оговорок раздела нет
+    вовсе — пустой заголовок читался бы как недосказанность."""
+    report = _make_report([_make_card()], brief=brief)
+
+    assert "## Ограничения этого поиска" not in render_markdown(report)
+
+
 @pytest.mark.parametrize("stage", list(MaturityStage))
 def test_all_maturity_stages_have_russian_label(stage):
     """MATURITY_RU покрывает все значения перечисления, включая unknown."""

@@ -6,6 +6,11 @@
 сверку с техтребованиями, РЕШ-38), `--industry` в интерактивной ветке не
 использовался вовсе, а нулевой список вопросов диалог не запускал.
 
+Отдельно (Т-2, устойчивость интейка): отказ `run_intake` не роняет прогон —
+бриф собирается кодом из сырого текста; проверены обе границы этой сборки —
+обрезка текста длиннее 500 знаков с многоточием без висящего пробела и
+запасное «не указано» на пустом либо целиком пробельном тексте.
+
 Сеть не используется: `run_intake`/`refine_brief` подменены заглушками,
 `ScoutPipeline` — тоже, чтобы тест проверял только сборку брифа, а не весь
 пайплайн поиска.
@@ -20,6 +25,7 @@ import pytest
 import app.cli as cli
 import app.pipeline as pipeline_pkg
 from app.llm.router import LLMRouter
+from app.pipeline.stages import render_prompt
 from app.schemas import Brief, IntakeQuestion, IntakeResult, Report, ReportSummary
 
 
@@ -31,8 +37,18 @@ class _RecordingPipeline:
         del settings, router, adapters, progress
         _RecordingPipeline.session_factories.append(session_factory)
 
-    async def run(self, brief: Brief, *, request_id: int = 0, raw_text: str = "") -> Report:
+    async def run(
+        self,
+        brief: Brief,
+        *,
+        request_id: int = 0,
+        raw_text: str = "",
+        initial_stage_log: list | None = None,
+        initial_caveats: list | None = None,
+    ) -> Report:
         _RecordingPipeline.captured.append(brief)
+        _RecordingPipeline.initial_stage_logs.append(initial_stage_log)
+        _RecordingPipeline.initial_caveats.append(initial_caveats)
         return Report(
             request_id=request_id,
             brief=brief,
@@ -50,6 +66,8 @@ def _patch_pipeline(monkeypatch):
     """Подменяет тяжёлый пайплайн на запись брифа: тест проверяет только интейк."""
     _RecordingPipeline.captured = []
     _RecordingPipeline.session_factories = []
+    _RecordingPipeline.initial_stage_logs = []
+    _RecordingPipeline.initial_caveats = []
     monkeypatch.setattr(pipeline_pkg, "ScoutPipeline", _RecordingPipeline)
     return _RecordingPipeline
 
@@ -207,3 +225,151 @@ async def test_init_db_failure_does_not_crash_run_and_report_is_built(
     assert len(_RecordingPipeline.captured) == 1
     assert _RecordingPipeline.session_factories[-1] is None
     assert report_path.exists()
+
+
+# ── Т-2: отказ run_intake не роняет прогон ───────────────────────────────────
+async def test_run_intake_failure_falls_back_to_brief_from_raw_text_and_warns(
+    monkeypatch, settings, fake_provider_factory, tmp_path, capsys
+):
+    """`run_intake` бросает исключение → прогон всё равно доходит до отчёта,
+    бриф собирается кодом из сырого текста задачи (без вызова модели), а
+    оператор видит предупреждение в консоли. `refine_brief` в этом сценарии
+    вызываться не должен — черновика для диалога нет."""
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def broken_run_intake(router, task, *, industry_hint="не указана"):
+        raise RuntimeError("модель недоступна")
+
+    async def fail_refine_brief(*args, **kwargs):
+        raise AssertionError("refine_brief не должен вызываться, если run_intake отказал")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", broken_run_intake)
+    monkeypatch.setattr("app.pipeline.stages.refine_brief", fail_refine_brief)
+
+    report_path = tmp_path / "report.md"
+    await cli._run("сырой текст задачи про катализатор", None, None, report_path, False)
+
+    assert len(_RecordingPipeline.captured) == 1
+    brief = _RecordingPipeline.captured[0]
+    assert brief.task_summary == "сырой текст задачи про катализатор"
+    assert brief.industry == "не указана"
+    assert report_path.exists()
+
+    stage_log = _RecordingPipeline.initial_stage_logs[-1]
+    assert stage_log is not None and len(stage_log) == 1
+    assert stage_log[0].stage == "intake"
+    assert stage_log[0].error
+
+    console_output = capsys.readouterr().out
+    assert "интейк не удался" in console_output
+
+    # П-1: консоль, лог и pipeline_logs видит только оператор — до эксперта и
+    # клиента доживает отчёт, поэтому оговорка уходит и в него.
+    assert _RecordingPipeline.initial_caveats[-1] == [cli.INTAKE_FALLBACK_CAVEAT]
+
+
+async def test_successful_intake_adds_no_caveat_to_report(monkeypatch, settings, fake_provider_factory, tmp_path):
+    """Обратная сторона П-1: когда интейк отработал, оговорке в отчёте взяться
+    неоткуда — иначе клиент читал бы предупреждение о качестве выдачи на
+    каждом здоровом прогоне."""
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return IntakeResult(questions=[], draft_brief=_draft_brief(industry="нефтепереработка"))
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False)
+
+    assert _RecordingPipeline.initial_caveats[-1] == []
+
+
+# ── Т-2, цикл 2: границы запасного брифа ─────────────────────────────────────
+#: Фраза ровно в 50 знаков, последний из них — пробел. При повторении знак с
+#: индексом 499 (тот, на котором обрывается срез `[:500]`) всегда оказывается
+#: пробелом, а знак 498 — точкой. Такая геометрия и удерживает `rstrip()`:
+#: без него перед многоточием остался бы висящий пробел, а длина стала бы 501
+#: вместо 500.
+_PHRASE_50 = "Катализаторы гидроочистки рано теряют активность. "
+
+#: Заведомо длиннее предела `_FALLBACK_SUMMARY_LIMIT = 500`: 600 знаков.
+_LONG_TASK_TEXT = _PHRASE_50 * 12
+
+
+async def test_long_raw_text_is_truncated_at_limit_without_dangling_space(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """Отказ интейка на длинном тексте: запасной бриф обрезает сырой текст по
+    пределу в 500 знаков и ставит многоточие, не оставляя перед ним висящего
+    пробела.
+
+    Вход — 600 знаков, у которых знак 499 (граница среза) пробельный, а 498 —
+    точка. Ожидаемый `task_summary` — ровно 500 знаков: 499 знаков текста плюс
+    многоточие. Пропавший `rstrip()` дал бы 501 знак с пробелом перед
+    многоточием, сдвинутый срез — другую длину; обе регрессии тест ловит."""
+    assert len(_PHRASE_50) == 50, "геометрия теста сломана: фраза обязана быть ровно 50 знаков"
+    assert len(_LONG_TASK_TEXT) == 600
+    assert _LONG_TASK_TEXT[499] == " ", "на границе среза обязан стоять пробел — иначе rstrip не проверяется"
+    assert _LONG_TASK_TEXT[498] != " "
+
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def broken_run_intake(router, task, *, industry_hint="не указана"):
+        raise RuntimeError("модель недоступна")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", broken_run_intake)
+
+    await cli._run(_LONG_TASK_TEXT, None, None, tmp_path / "report.md", False)
+
+    summary = _RecordingPipeline.captured[0].task_summary
+    assert summary.endswith("…"), "обрезанный текст обязан оканчиваться многоточием"
+    assert len(summary) == 500, "499 знаков текста плюс многоточие"
+    assert summary[-2] != " ", "перед многоточием не должно быть висящего пробела (за это отвечает rstrip)"
+    assert summary[:-1] == _LONG_TASK_TEXT[:499], "обрезка обязана быть началом исходного текста"
+
+
+async def test_placeholder_in_raw_text_does_not_break_prompt_rendering(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """П-6 аудита: `render_prompt` ищет незаполненные метки в уже собранном
+    тексте, поэтому метка из данных роняет вызов так же, как забытая метка
+    шаблона, — а запасной бриф переносит текст оператора дословно.
+
+    Проба аудита воспроизводится целиком: текст задачи с `{{CLIENT_NAME}}` →
+    отказ интейка → запасной бриф → сборка промпта планировщика. До правки
+    здесь падало `ValueError: не заполнены метки ['CLIENT_NAME']`."""
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def broken_run_intake(router, task, *, industry_hint="не указана"):
+        raise RuntimeError("модель недоступна")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", broken_run_intake)
+
+    await cli._run("Задача завода {{CLIENT_NAME}}: катализатор", "{{INDUSTRY}}", None, tmp_path / "report.md", False)
+
+    brief = _RecordingPipeline.captured[0]
+    assert "{{" not in brief.task_summary and "}}" not in brief.task_summary
+    assert "{{" not in brief.industry
+    assert "CLIENT_NAME" in brief.task_summary, "текст оператора не должен пропадать — снимаются только скобки"
+    # Сквозная проверка: именно на этой сборке промпта прогон и падал.
+    render_prompt("planner", BRIEF_JSON=brief.model_dump_json(indent=2))
+
+
+@pytest.mark.parametrize("raw_text", ["", "   \n\t  "])
+async def test_empty_raw_text_falls_back_to_placeholder_summary(
+    monkeypatch, settings, fake_provider_factory, tmp_path, raw_text
+):
+    """Отказ интейка на пустом либо целиком пробельном тексте: `task_summary`
+    получает запасное значение «не указано», а не пустую строку — пустая суть
+    задачи в отчёте выглядит как потерянные данные (инвариант №1: код ничего
+    не домысливает, но и не молчит)."""
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def broken_run_intake(router, task, *, industry_hint="не указана"):
+        raise RuntimeError("модель недоступна")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", broken_run_intake)
+
+    await cli._run(raw_text, None, None, tmp_path / "report.md", False)
+
+    assert _RecordingPipeline.captured[0].task_summary == "не указано"

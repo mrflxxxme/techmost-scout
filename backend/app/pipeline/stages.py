@@ -141,6 +141,67 @@ def candidates_to_json(group: list[ScoredCandidate]) -> str:
 _GO = "Выполни инструкцию выше. Верни только JSON без пояснений."
 
 
+#: Предел длины `task_summary` запасного брифа — короткое описание, а не
+#: письмо целиком; отчёту хватает первых сотен знаков для сверки.
+_FALLBACK_SUMMARY_LIMIT = 500
+
+
+def owner_answers_block(brief: Brief) -> str:
+    """Ответы владельца на уточняющие вопросы — блоком для сообщения модели.
+
+    Нужен там, где бриф уходит в промпт не целиком: в стадиях `plan_search`,
+    `author_card` и `summarize` бриф подаётся как `BRIEF_JSON`, и поле
+    `owner_answers` попадает в модель само, а скоринг собирает сообщение из
+    отдельных полей руками — без этого блока ответы владельца до него не
+    доходили бы (РЕШ-58).
+
+    Пустая строка, когда ответов нет: пустой заголовок в промпте — это шум,
+    который дешёвая модель принимается толковать.
+    """
+    if not brief.owner_answers:
+        return ""
+    lines = "\n".join(f"— {item.question}\n  Ответ: {item.answer}" for item in brief.owner_answers)
+    return f"Уточнения владельца (контекст постановки, не ограничения задачи):\n{lines}\n\n"
+
+
+#: Сдвоенные фигурные скобки в тексте, пришедшем не из шаблона, а из данных.
+_DOUBLED_OPEN_BRACES = re.compile(r"\{{2,}")
+_DOUBLED_CLOSE_BRACES = re.compile(r"\}{2,}")
+
+
+def neutralize_placeholders(text: str) -> str:
+    """Обезвредить метки вида `{{ИМЯ}}`, пришедшие из сырого ввода оператора.
+
+    `render_prompt` ищет незаполненные метки в **уже собранном** тексте, а не в
+    шаблоне до подстановки, поэтому метка, попавшая в промпт из данных, роняет
+    вызов ничуть не хуже забытой метки шаблона: `brief_from_raw_text` переносит
+    текст оператора дословно, и задача с `{{CLIENT_NAME}}` детерминированно
+    убивала прогон на планировщике (П-6 аудита).
+
+    Лечим данные, а не проверку: общий контракт `render_prompt` — «незаполненная
+    метка это ошибка, падаем сразу и громко» — стоит дороже, чем этот случай,
+    и ослаблять его ради него нельзя. Сдвоенные скобки схлопываются в
+    одинарные: `{{CLIENT_NAME}}` → `{CLIENT_NAME}`. Текст остаётся читаемым
+    (его увидит клиент в отчёте), а под шаблон метки больше не подходит; длина
+    серии скобок значения не имеет — `{{{{X}}}}` схлопывается за один проход.
+    """
+    return _DOUBLED_CLOSE_BRACES.sub("}", _DOUBLED_OPEN_BRACES.sub("{", text))
+
+
+def brief_from_raw_text(raw_text: str, *, industry_hint: str = "не указана") -> Brief:
+    """Собрать бриф без вызова модели — запасной путь при отказе интейка.
+
+    Ничего не домысливает (инвариант №1): отрасль берётся из подсказки
+    оператора либо остаётся «не указана», `task_summary` — обрезанный сырой
+    текст задачи, остальные поля брифа пустые. Единственная правка текста —
+    обезвреживание меток `{{...}}`, см. `neutralize_placeholders`.
+    """
+    summary = neutralize_placeholders(raw_text.strip())
+    if len(summary) > _FALLBACK_SUMMARY_LIMIT:
+        summary = summary[:_FALLBACK_SUMMARY_LIMIT].rstrip() + "…"
+    return Brief(industry=neutralize_placeholders(industry_hint), task_summary=summary or "не указано")
+
+
 # ── 1. Интейк ───────────────────────────────────────────────────────────────
 async def run_intake(router: LLMRouter, raw_text: str, *, industry_hint: str = "не указана") -> IntakeResult:
     """Из свободного текста — уточняющие вопросы и черновик брифа."""
@@ -252,6 +313,7 @@ async def score_candidates(
                         content=(
                             f"Задача бизнеса:\n{brief.task_summary}\n"
                             f"Отрасль: {brief.industry}\nОграничения: {'; '.join(brief.constraints) or 'не заданы'}\n\n"
+                            f"{owner_answers_block(brief)}"
                             f"Кандидаты ({len(chunk)} шт.):\n{listing}\n\n"
                             f"Верни ровно {len(chunk)} оценок, ссылаясь на кандидатов "
                             f"номерами от 0 до {len(chunk) - 1}."

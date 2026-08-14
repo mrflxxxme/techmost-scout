@@ -10,7 +10,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
 import typer
@@ -18,12 +20,128 @@ from rich.console import Console
 from rich.table import Table
 
 from app.config import get_settings
-from app.llm import LLMRouter
-from app.schemas import Brief, MaturityStage
+from app.llm import CostLimitExceededError, LLMRouter
+from app.schemas import Brief, MaturityStage, OwnerAnswer
+
+if TYPE_CHECKING:  # только для аннотаций: тяжёлые модули грузятся лениво, внутри команд
+    from app.pipeline.persistence import SessionFactory, StageRecord
 
 app = typer.Typer(add_completion=False, help="ТехМост Скаут — подбор научных решений под задачу бизнеса")
 console = Console()
 log = logging.getLogger(__name__)
+
+#: Умолчание уточняющего диалога: оператор, нажавший Enter, отвечает именно так.
+UNKNOWN_ANSWER = "не знаю"
+
+#: Как «не знаю» записывается в бриф (распоряжение владельца, РЕШ-58). Дословное
+#: «не знаю» читается как потерянные данные, хотя по смыслу это отсутствие
+#: требования к решению; ответ уходит в модель именно в этой формулировке.
+UNSPECIFIED_REQUIREMENT = "требование не специализировано"
+
+
+#: Оговорка клиенту, когда уточняющий диалог не состоялся и бриф собран кодом
+#: из текста задачи (РЕШ-58, П-1 аудита). Отказ интейка виден оператору в
+#: консоли, в логе и в `pipeline_logs`, но до эксперта и клиента доживает
+#: только отчёт — и он об этом молчал, хотя обеднённый бриф объясняет и
+#: широкую выдачу, и пустую сверку с требованиями в карточках.
+INTAKE_FALLBACK_CAVEAT = (
+    "Уточнения по задаче не собраны: бриф составлен из текста задачи. "
+    "Выдача может быть шире и менее точной, чем при уточнённой постановке."
+)
+
+#: Оговорка клиенту, когда уточняющий диалог состоялся, а свести ответы в
+#: постановку не удалось (доводка П-1). Своя формулировка, а не
+#: `INTAKE_FALLBACK_CAVEAT`: тот говорит «бриф составлен из текста задачи», а
+#: здесь бриф взят из черновика интейка — было бы неправдой. О качестве выдачи
+#: не заявляется ничего: ответы владельца доезжают до модели через
+#: `owner_answers`, и утверждать, что выдача от этого хуже, нечем.
+REFINE_FALLBACK_CAVEAT = (
+    "Постановка задачи осталась черновой: ответы на уточняющие вопросы получены "
+    "и учтены при подборе, но в постановку не сведены."
+)
+
+#: Имена стадий интейка в журнале `pipeline_logs`. Разведены (совет С-2
+#: аудита): отказ разбора текста и отказ уточнения брифа — разные инциденты с
+#: разной починкой, а одинаковая строка `intake` их не различала. Маршрут
+#: модели у обеих стадий один и тот же — `intake` (РЕШ-46), меняются только
+#: имена в журнале.
+STAGE_INTAKE = "intake"
+STAGE_INTAKE_REFINE = "intake_refine"
+
+
+def _intake_stage_record(
+    stage: str, *, started_at: datetime, cost_before: dict[str, float], router: LLMRouter, error: BaseException
+) -> StageRecord:
+    """Строка журнала об отказавшей стадии интейка — со снимком счётчика.
+
+    Интейк выполняется в `cli._run`, до пайплайна, поэтому снимок счётчика
+    вокруг вызова снимается здесь — тем же способом и той же функцией, что и в
+    `orchestrator._run_stages` (П-4 аудита). Стадия платная (`intake:deepseek`
+    в других конфигурациях маршрутов, РЕШ-46), и отказавший интейк вполне мог
+    потратиться до отказа: `complete_json` делает оплаченный вызов, затем
+    оплаченный ремонтный при несходимости со схемой и только потом поднимает
+    ошибку. Нулевая стоимость в журнале приписывала эту трату никому.
+
+    `tokens_in`/`tokens_out` остаются нулями: `CostTracker` копит только рубли,
+    вызовы и разбивку по провайдерам — токенов в счётчике нет вовсе, поэтому
+    нулевые они и у всех остальных стадий журнала.
+    """
+    from app.pipeline.orchestrator import cost_delta
+    from app.pipeline.persistence import StageRecord
+
+    spent, provider = cost_delta(cost_before, dict(router.cost.by_provider))
+    return StageRecord(
+        stage=stage,
+        started_at=started_at,
+        finished_at=datetime.now(UTC),
+        provider=provider,
+        cost_rub=spent,
+        error=str(error),
+    )
+
+
+async def _persist_intake_stop(
+    session_factory: SessionFactory | None,
+    *,
+    raw_text: str,
+    router: LLMRouter,
+    stage_log: list[StageRecord],
+    record: StageRecord,
+    error: BaseException,
+) -> None:
+    """Записать прогон, оборванный стоп-краном (РЕШ-45) на стадии интейка.
+
+    Стоп-кран не смягчается: исключение уходит наружу, прогон обязан упасть.
+    Но след обязан остаться (П-5 аудита) — деньги на неудавшийся вызов уже
+    потрачены, а до пайплайна прогон не дошёл, значит `persist_run` иначе не
+    вызовет никто: `requests` не получал даже строки `failed`, и трата
+    исчезала. Тот же `CostLimitExceededError` внутри `pipeline.run` пишется со
+    статусом `failed` и фактической стоимостью — здесь ровно та же запись.
+    """
+    from app.pipeline.persistence import persist_run
+
+    stage_log.append(record)
+    await persist_run(
+        session_factory,
+        raw_text=raw_text,
+        status="failed",
+        cost_rub=round(router.cost.spent_rub, 4),
+        cards=[],
+        stages=stage_log,
+        error=str(error),
+    )
+
+
+def _normalize_owner_answer(answer: str) -> str:
+    """Ответ оператора в том виде, в каком он уходит в бриф и в модель.
+
+    Сравнение по очищенному значению и без учёта регистра: умолчание
+    `typer.prompt` оператор может и дописать руками — «Не знаю», «не знаю  ».
+    """
+    cleaned = answer.strip()
+    if cleaned.casefold() == UNKNOWN_ANSWER.casefold():
+        return UNSPECIFIED_REQUIREMENT
+    return cleaned
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -139,7 +257,7 @@ def run(
 async def _run(task: str, industry: str | None, maturity: str | None, out: Path | None, interactive: bool) -> None:
     from app.db import init_db, session_scope
     from app.pipeline import ScoutPipeline
-    from app.pipeline.stages import refine_brief, run_intake
+    from app.pipeline.stages import brief_from_raw_text, neutralize_placeholders, refine_brief, run_intake
 
     settings = get_settings()
     router = LLMRouter(settings)
@@ -160,28 +278,134 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
     # Разбор текста нужен в обоих режимах: без него `constraints` брифа
     # остаются пустыми, а именно они дают карточкам сверку с техтребованиями
     # (РЕШ-38). Стадия дешёвая — маршрут `intake` идёт на бесплатный GigaChat.
+    #
+    # Устойчивость интейка (Т-2): раньше отказ `run_intake`/`refine_brief`
+    # убивал прогон целиком ДО пайплайна и не оставлял в БД даже строки
+    # `failed` (аудит Ф-10, дважды воспроизведено на GigaChat). Теперь отказ —
+    # предупреждение оператору и честный след в `pipeline_logs`, а прогон
+    # продолжается до отчёта. Исчерпание лимита стоимости (РЕШ-45) —
+    # исключение: это команда «стоп тратить», не отказ модели, и она
+    # пробрасывается наружу как есть.
     industry_hint = industry or "не указана"
     if interactive:
         console.print("[bold]Уточняю задачу…[/bold]")
-    intake = await run_intake(router, task, industry_hint=industry_hint)
+
+    intake_stage_log: list[StageRecord] = []
+    intake_started = datetime.now(UTC)
+    intake_cost_before = dict(router.cost.by_provider)
+    try:
+        intake = await run_intake(router, task, industry_hint=industry_hint)
+    except CostLimitExceededError as exc:
+        await _persist_intake_stop(
+            db_session_factory,
+            raw_text=task,
+            router=router,
+            stage_log=intake_stage_log,
+            record=_intake_stage_record(
+                STAGE_INTAKE, started_at=intake_started, cost_before=intake_cost_before, router=router, error=exc
+            ),
+            error=exc,
+        )
+        raise
+    except Exception as exc:
+        log.warning("интейк не удался, бриф собран из текста задачи без уточнений", exc_info=True)
+        console.print("[yellow]Предупреждение:[/yellow] интейк не удался, бриф собран из текста задачи без уточнений")
+        intake_stage_log.append(
+            _intake_stage_record(
+                STAGE_INTAKE,
+                started_at=intake_started,
+                cost_before=intake_cost_before,
+                router=router,
+                error=exc,
+            )
+        )
+        intake = None
 
     brief: Brief
-    if interactive:
+    intake_caveats: list[str] = []
+    if intake is None:
+        # Черновика нет вовсе — уточняющий диалог провести не из чего,
+        # бриф собирается кодом из сырого текста задачи (инвариант №1).
+        # Клиент узнаёт об этом из отчёта, а не только оператор из консоли.
+        brief = brief_from_raw_text(task, industry_hint=industry_hint)
+        intake_caveats.append(INTAKE_FALLBACK_CAVEAT)
+    elif interactive:
         answers: dict[str, str] = {}
         for question in intake.questions:
             console.print(f"\n[dim]{question.why}[/dim]")
-            answers[question.question] = typer.prompt(question.question, default="не знаю")
-        brief = (
-            await refine_brief(router, task, answers, industry_hint=industry_hint) if answers else intake.draft_brief
-        )
+            answers[question.question] = _normalize_owner_answer(
+                typer.prompt(question.question, default=UNKNOWN_ANSWER)
+            )
+        if answers:
+            refine_started = datetime.now(UTC)
+            refine_cost_before = dict(router.cost.by_provider)
+            try:
+                brief = await refine_brief(router, task, answers, industry_hint=industry_hint)
+            except CostLimitExceededError as exc:
+                await _persist_intake_stop(
+                    db_session_factory,
+                    raw_text=task,
+                    router=router,
+                    stage_log=intake_stage_log,
+                    record=_intake_stage_record(
+                        STAGE_INTAKE_REFINE,
+                        started_at=refine_started,
+                        cost_before=refine_cost_before,
+                        router=router,
+                        error=exc,
+                    ),
+                    error=exc,
+                )
+                raise
+            except Exception as exc:
+                log.warning(
+                    "уточнение брифа не удалось, использую черновик интейка с ответами владельца", exc_info=True
+                )
+                console.print(
+                    "[yellow]Предупреждение:[/yellow] уточнение брифа не удалось, "
+                    "использую черновик интейка с вашими ответами"
+                )
+                # Ответы владельца не теряются, но и не выдаются клиенту за
+                # ограничения задачи: у них своё поле брифа (РЕШ-58, П-2
+                # аудита). `constraints` печатается строкой «Ограничения:» и
+                # разворачивается в `requirement_checks` каждой карточки —
+                # паре «вопрос — ответ» там не место. До модели ответы доходят
+                # через `owner_answers` в BRIEF_JSON и через блок уточнений в
+                # сообщении скоринга (`stages.owner_answers_block`).
+                brief = intake.draft_brief.model_copy(
+                    update={
+                        "owner_answers": [
+                            *intake.draft_brief.owner_answers,
+                            *(OwnerAnswer(question=question, answer=answer) for question, answer in answers.items()),
+                        ]
+                    }
+                )
+                intake_stage_log.append(
+                    _intake_stage_record(
+                        STAGE_INTAKE_REFINE,
+                        started_at=refine_started,
+                        cost_before=refine_cost_before,
+                        router=router,
+                        error=exc,
+                    )
+                )
+                # Отказ уточнения тоже доживает до отчёта, а не остаётся в
+                # консоли и журнале: черновая постановка объясняет эксперту и
+                # клиенту, почему бриф выглядит менее собранным, чем ожидалось.
+                intake_caveats.append(REFINE_FALLBACK_CAVEAT)
+        else:
+            brief = intake.draft_brief
     else:
         # Немой режим: вопросы не задаются и не печатаются, бриф берётся как
         # есть из разбора текста.
         brief = intake.draft_brief
 
     # Явно заданный флаг перекрывает то, что определила модель при разборе.
+    # Значение флага — сырой ввод оператора и перекрывает в том числе уже
+    # обезвреженную отрасль запасного брифа, поэтому метки `{{...}}` снимаются
+    # и здесь: иначе `--industry "{{X}}"` ронял бы прогон на планировщике (П-6).
     if industry:
-        brief = brief.model_copy(update={"industry": industry})
+        brief = brief.model_copy(update={"industry": neutralize_placeholders(industry)})
     if maturity:
         brief = brief.model_copy(update={"target_maturity": MaturityStage(maturity)})
 
@@ -192,7 +416,9 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
 
     pipeline = ScoutPipeline(settings=settings, router=router, progress=show, session_factory=db_session_factory)
     try:
-        report = await pipeline.run(brief, raw_text=task)
+        report = await pipeline.run(
+            brief, raw_text=task, initial_stage_log=intake_stage_log, initial_caveats=intake_caveats
+        )
     finally:
         await pipeline.aclose()
 

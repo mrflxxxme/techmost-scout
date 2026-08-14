@@ -34,13 +34,17 @@ log = logging.getLogger(__name__)
 ProgressHook = Callable[[str, str, float], Awaitable[None] | None]
 
 
-def _cost_delta(before: dict[str, float], after: dict[str, float]) -> tuple[float, str | None]:
+def cost_delta(before: dict[str, float], after: dict[str, float]) -> tuple[float, str | None]:
     """Прирост стоимости и провайдер(ы), которые её потратили, между двумя
     снимками `LLMRouter.cost.by_provider`.
 
     Роутер считает расход по запросу целиком, не по стадиям, поэтому для
     журнала стадий (Ф-8) берём разницу снимков вокруг вызова стадии —
     точность до провайдера, не до токена.
+
+    Функция публичная, потому что тем же снимком пользуется `cli._run`: стадия
+    интейка живёт до пайплайна, а её строка в журнале обязана нести
+    фактическую стоимость, а не ноль (П-4 аудита Т-2).
     """
     changed: list[str] = []
     total = 0.0
@@ -169,7 +173,15 @@ class ScoutPipeline:
             return None
 
     # ── Полный проход ───────────────────────────────────────────────────────
-    async def run(self, brief: Brief, *, request_id: int = 0, raw_text: str = "") -> Report:
+    async def run(
+        self,
+        brief: Brief,
+        *,
+        request_id: int = 0,
+        raw_text: str = "",
+        initial_stage_log: list[StageRecord] | None = None,
+        initial_caveats: list[str] | None = None,
+    ) -> Report:
         """Бриф → отчёт. Интейк выполняется отдельно, до этого вызова.
 
         Запись прогона в БД (Ф-8, РЕШ-40) происходит здесь, после сборки
@@ -177,8 +189,19 @@ class ScoutPipeline:
         оркестраторе, стадии остаются чистыми функциями (CLAUDE.md).
         `raw_text` — исходный текст задачи, для строки `requests`; отчёту он
         не нужен, поэтому передаётся отдельно от `brief`.
+
+        `initial_stage_log` — записи стадий, случившихся до вызова `run`
+        (интейк живёт в `cli._run`, до пайплайна): их отказ иначе не оставил
+        бы следа в `pipeline_logs`, хотя прогон честно продолжается (Т-2).
+
+        `initial_caveats` — оговорки о том, что случилось до вызова `run`, тем
+        же путём и по той же причине (РЕШ-58, П-1 аудита). Журнал стадий и
+        консоль читает оператор, а до эксперта и клиента доживает только
+        отчёт: оговорка встаёт в начало `ReportSummary.caveats` — туда же,
+        куда `fallback_summary` кладёт оговорку об отказе сводки, — и
+        печатается экспортом в блоке «Ограничения этого поиска».
         """
-        stage_log: list[StageRecord] = []
+        stage_log: list[StageRecord] = list(initial_stage_log or [])
         try:
             report = await self._run_stages(brief, request_id, stage_log)
         except Exception as exc:
@@ -192,6 +215,10 @@ class ScoutPipeline:
                 error=str(exc),
             )
             raise
+        if initial_caveats:
+            # В начало: оговорка о том, из чего собран бриф, объясняет качество
+            # всей выдачи, а оговорки стадий — только своей части.
+            report.summary.caveats = [*initial_caveats, *report.summary.caveats]
         await persist_run(
             self._session_factory,
             raw_text=raw_text,
@@ -209,14 +236,14 @@ class ScoutPipeline:
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
         plan = await stages.plan_search(self._router, brief)
-        cost_delta, provider = _cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
                 stage="planner",
                 started_at=started,
                 finished_at=datetime.now(UTC),
                 provider=provider,
-                cost_rub=cost_delta,
+                cost_rub=stage_cost,
             )
         )
         await self._notify("planner", f"Формулировок в плане: {len(plan.queries)}", 0.1)
@@ -247,14 +274,14 @@ class ScoutPipeline:
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
         scored = await stages.score_candidates(self._router, brief, unique)
-        cost_delta, provider = _cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
                 stage="scorer",
                 started_at=started,
                 finished_at=datetime.now(UTC),
                 provider=provider,
-                cost_rub=cost_delta,
+                cost_rub=stage_cost,
             )
         )
         target = self._settings.target_cards
@@ -266,10 +293,10 @@ class ScoutPipeline:
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
         cards = await self._author_cards(brief, groups)
-        cost_delta, provider = _cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
-                stage="cards", started_at=started, finished_at=datetime.now(UTC), provider=provider, cost_rub=cost_delta
+                stage="cards", started_at=started, finished_at=datetime.now(UTC), provider=provider, cost_rub=stage_cost
             )
         )
         published = stages.select_publishable_cards(cards)
@@ -295,14 +322,14 @@ class ScoutPipeline:
             log.warning("сводка не собралась (%s), собираю запасную без вызова модели", exc)
             summary = stages.fallback_summary(published)
             summary_error = str(exc)
-        cost_delta, provider = _cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
                 stage="summary",
                 started_at=started,
                 finished_at=datetime.now(UTC),
                 provider=provider,
-                cost_rub=cost_delta,
+                cost_rub=stage_cost,
                 error=summary_error,
             )
         )

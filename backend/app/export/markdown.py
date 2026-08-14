@@ -152,19 +152,25 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
             lines.append(f"Полный текст: [PDF]({pdf_url})")
             lines.append("")
 
-    if report.sources_unavailable:
+    # Заголовок раздела печатается, если есть хоть что-то из двух: недоступные
+    # источники или оговорки. Раньше он был привязан только к недоступным
+    # источникам, и на здоровом прогоне оговорка (отказ интейка, отказ сводки)
+    # выпадала в конец отчёта голым пунктом списка — клиент видел висящую
+    # строку непонятно к чему.
+    if report.sources_unavailable or report.summary.caveats:
         lines.append("## Ограничения этого поиска")
         lines.append("")
-        lines.append(
-            "Не ответили источники: "
-            + ", ".join(report.sources_unavailable)
-            + ". Выдача могла быть полнее — стоит повторить запрос позже."
-        )
-        lines.append("")
-    if report.summary.caveats:
-        for caveat in report.summary.caveats:
-            lines.append(f"- {caveat}")
-        lines.append("")
+        if report.sources_unavailable:
+            lines.append(
+                "Не ответили источники: "
+                + ", ".join(report.sources_unavailable)
+                + ". Выдача могла быть полнее — стоит повторить запрос позже."
+            )
+            lines.append("")
+        if report.summary.caveats:
+            for caveat in report.summary.caveats:
+                lines.append(f"- {caveat}")
+            lines.append("")
 
     lines.append("---")
     lines.append("")
