@@ -12,6 +12,9 @@
 базы нет, файл занят другим процессом) не должен ронять прогон — markdown-
 отчёт первичен. Поэтому `persist_run` сама гасит исключения записи и кладёт
 факт отказа в лог, а не пробрасывает его наружу.
+
+Миграций в MVP нет (`init_db` — это `create_all`): новые колонки появляются
+только на вновь созданном файле базы, существующий файл нужно пересоздать.
 """
 
 from __future__ import annotations
@@ -120,6 +123,9 @@ async def _write(
                 confidence=card.confidence.value,
                 confidence_note=card.confidence_note,
                 candidate_urls=[str(url) for url in card.candidate_urls],
+                requirement_checks=[check.model_dump(mode="json") for check in card.requirement_checks],
+                unsourced_claims=list(card.unsourced_claims),
+                pdf_urls=[str(url) for url in card.pdf_urls],
             )
         )
 
