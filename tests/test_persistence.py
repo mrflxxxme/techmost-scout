@@ -7,6 +7,12 @@
 как раньше и в БД не пишет; отказ самой записи (фабрика бросает исключение)
 не роняет прогон; падение стадии — статус `failed` и текст ошибки в `requests`.
 
+Отдельно (Т-5, правка П-А): три поля карточки, появившиеся в фазе Э1-2-Ф —
+`requirement_checks`, `unsourced_claims`, `pdf_urls` — до правки в БД не
+попадали, и карточка в базе выходила «увереннее» своей markdown-версии
+(инвариант №1). Здесь проверяется, что они доезжают до `solution_cards` без
+потерь и что карточка без них даёт пустые списки, а не NULL.
+
 Отдельно (РЕШ-45, пост-аудит фазы): исчерпание лимита стоимости запроса
 (`CostLimitExceededError`) — не отказ модели, а команда «стоп тратить», и до
 правки она гасилась тремя широкими `except Exception` (батч скоринга, сборка
@@ -38,7 +44,8 @@ from app.models import Base, PipelineLog
 from app.models import Request as RequestRow
 from app.models import SolutionCard as SolutionCardRow
 from app.pipeline.orchestrator import ScoutPipeline
-from app.schemas import Candidate, SourceType
+from app.pipeline.persistence import persist_run
+from app.schemas import Candidate, Confidence, Evidence, MaturityStage, RequirementCheck, SolutionCard, SourceType
 from app.search.base import SearchAdapter
 
 
@@ -200,6 +207,124 @@ async def test_successful_run_persists_request_card_and_search_log(
         search_logs = (await session.execute(select(PipelineLog).where(PipelineLog.stage == "search"))).scalars().all()
         assert len(search_logs) >= 1
         assert search_logs[0].sources_hit  # непустой словарь по источникам
+
+
+# ── Т-5: три поля фазы Э1-2-Ф доезжают до solution_cards ────────────────────
+#
+# Пишем через `persist_run` напрямую: поля заполняются на разных стадиях
+# (сверка — автором карточки, `unsourced_claims` — проверяющей стадией,
+# `pdf_urls` — кодом обогащения), и собирать их все через полный прогон значило
+# бы проверять оркестратор, а не запись в БД.
+
+
+def _card(**overrides) -> SolutionCard:
+    """Минимально валидная карточка; именованные аргументы перекрывают поля."""
+    fields = {
+        "title": "Катализатор с присадками для сероустойчивости",
+        "essence": "Присадка продлевает межрегенерационный цикл на сырье с серой.",
+        "applicability": "Закрывает задачу продления цикла.",
+        "next_step": "Запросить протокол испытаний.",
+        "evidence": [
+            Evidence(claim="Испытан на действующей установке", url="https://doi.org/10.1/test-persist"),
+        ],
+        "maturity_stage": MaturityStage.PILOT,
+        "confidence": Confidence.MEDIUM,
+    }
+    fields.update(overrides)
+    return SolutionCard(**fields)
+
+
+async def test_new_card_fields_persist_without_loss(db_session_factory):
+    """Сверка с требованиями, неподтверждённые утверждения и ссылки на PDF
+    читаются из базы ровно теми, что печатает markdown-отчёт (инвариант №1)."""
+    card = _card(
+        requirement_checks=[
+            RequirementCheck(
+                requirement="Стойкость к сере не ниже 2%",
+                status="confirmed",
+                evidence_url="https://doi.org/10.1/test-persist",
+                note="прямо указано в аннотации",
+            ),
+            RequirementCheck(requirement="Срок службы 5 лет", status="not_confirmed", note="в источниках не найдено"),
+        ],
+        unsourced_claims=["Снижение затрат на 30% источником не подтверждено"],
+        pdf_urls=["https://arxiv.org/pdf/2501.00001"],
+    )
+
+    await persist_run(
+        db_session_factory,
+        raw_text="текст задачи с новыми полями карточки",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[card],
+        stages=[],
+    )
+
+    async with db_session_factory() as session:
+        row = (await session.execute(select(SolutionCardRow))).scalars().one()
+
+    assert row.requirement_checks == [
+        {
+            "requirement": "Стойкость к сере не ниже 2%",
+            "status": "confirmed",
+            "evidence_url": "https://doi.org/10.1/test-persist",
+            "note": "прямо указано в аннотации",
+        },
+        {
+            "requirement": "Срок службы 5 лет",
+            "status": "not_confirmed",
+            "evidence_url": None,
+            "note": "в источниках не найдено",
+        },
+    ]
+    assert row.unsourced_claims == ["Снижение затрат на 30% источником не подтверждено"]
+    assert row.pdf_urls == ["https://arxiv.org/pdf/2501.00001"]
+
+
+async def test_card_without_new_fields_persists_empty_lists_not_null(db_session_factory):
+    """Карточка без новых полей даёт пустые списки, а не NULL: иначе чтение
+    обратно пришлось бы всюду страховать проверкой на None."""
+    await persist_run(
+        db_session_factory,
+        raw_text="текст задачи без новых полей карточки",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[_card()],
+        stages=[],
+    )
+
+    async with db_session_factory() as session:
+        row = (await session.execute(select(SolutionCardRow))).scalars().one()
+
+    assert row.requirement_checks == []
+    assert row.unsourced_claims == []
+    assert row.pdf_urls == []
+
+
+async def test_new_columns_default_to_empty_list_on_bare_insert(db_session_factory):
+    """Значение колонки по умолчанию — пустой список, как у соседних JSON-полей.
+    Строка, вставленная без этих колонок, не должна давать NULL."""
+    async with db_session_factory() as session:
+        request_row = RequestRow(raw_text="строка без новых колонок", status="drafted", cost_rub=0.0)
+        session.add(request_row)
+        await session.flush()
+        session.add(
+            SolutionCardRow(
+                request_id=request_row.id,
+                title="Карточка без новых колонок",
+                essence="суть",
+                maturity_stage="unknown",
+                applicability="применимость",
+                next_step="следующий шаг",
+            )
+        )
+
+    async with db_session_factory() as session:
+        row = (await session.execute(select(SolutionCardRow))).scalars().one()
+
+    assert row.requirement_checks == []
+    assert row.unsourced_claims == []
+    assert row.pdf_urls == []
 
 
 # ── Критерий 2: без фабрики прогон отрабатывает и в БД не пишет ─────────────

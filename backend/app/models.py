@@ -110,6 +110,12 @@ class SolutionCard(Base):
     confidence: Mapped[str] = mapped_column(String(16), default="medium")
     confidence_note: Mapped[str] = mapped_column(Text, default="")
     candidate_urls: Mapped[list] = mapped_column(JSON, default=list)
+    #: Три поля ниже печатаются в markdown-отчёте: без них карточка в базе
+    #: выходит «увереннее» отчёта — не видно ни сверки с требованиями, ни того,
+    #: что проверяющая стадия сочла неподтверждённым
+    requirement_checks: Mapped[list] = mapped_column(JSON, default=list)
+    unsourced_claims: Mapped[list] = mapped_column(JSON, default=list)
+    pdf_urls: Mapped[list] = mapped_column(JSON, default=list)
     #: Правки оператора поверх машинного текста — машинный текст сохраняем
     editor_overrides: Mapped[dict] = mapped_column(JSON, default=dict)
 
