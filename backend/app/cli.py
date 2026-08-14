@@ -24,7 +24,7 @@ from app.llm import CostLimitExceededError, LLMRouter
 from app.schemas import Brief, MaturityStage, OwnerAnswer
 
 if TYPE_CHECKING:  # только для аннотаций: тяжёлые модули грузятся лениво, внутри команд
-    from app.pipeline.persistence import StageRecord
+    from app.pipeline.persistence import SessionFactory, StageRecord
 
 app = typer.Typer(add_completion=False, help="ТехМост Скаут — подбор научных решений под задачу бизнеса")
 console = Console()
@@ -75,6 +75,38 @@ def _intake_stage_record(
         finished_at=datetime.now(UTC),
         provider=provider,
         cost_rub=spent,
+        error=str(error),
+    )
+
+
+async def _persist_intake_stop(
+    session_factory: SessionFactory | None,
+    *,
+    raw_text: str,
+    router: LLMRouter,
+    stage_log: list[StageRecord],
+    record: StageRecord,
+    error: BaseException,
+) -> None:
+    """Записать прогон, оборванный стоп-краном (РЕШ-45) на стадии интейка.
+
+    Стоп-кран не смягчается: исключение уходит наружу, прогон обязан упасть.
+    Но след обязан остаться (П-5 аудита) — деньги на неудавшийся вызов уже
+    потрачены, а до пайплайна прогон не дошёл, значит `persist_run` иначе не
+    вызовет никто: `requests` не получал даже строки `failed`, и трата
+    исчезала. Тот же `CostLimitExceededError` внутри `pipeline.run` пишется со
+    статусом `failed` и фактической стоимостью — здесь ровно та же запись.
+    """
+    from app.pipeline.persistence import persist_run
+
+    stage_log.append(record)
+    await persist_run(
+        session_factory,
+        raw_text=raw_text,
+        status="failed",
+        cost_rub=round(router.cost.spent_rub, 4),
+        cards=[],
+        stages=stage_log,
         error=str(error),
     )
 
@@ -242,7 +274,17 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
     intake_cost_before = dict(router.cost.by_provider)
     try:
         intake = await run_intake(router, task, industry_hint=industry_hint)
-    except CostLimitExceededError:
+    except CostLimitExceededError as exc:
+        await _persist_intake_stop(
+            db_session_factory,
+            raw_text=task,
+            router=router,
+            stage_log=intake_stage_log,
+            record=_intake_stage_record(
+                STAGE_INTAKE, started_at=intake_started, cost_before=intake_cost_before, router=router, error=exc
+            ),
+            error=exc,
+        )
         raise
     except Exception as exc:
         log.warning("интейк не удался, бриф собран из текста задачи без уточнений", exc_info=True)
@@ -275,7 +317,21 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
             refine_cost_before = dict(router.cost.by_provider)
             try:
                 brief = await refine_brief(router, task, answers, industry_hint=industry_hint)
-            except CostLimitExceededError:
+            except CostLimitExceededError as exc:
+                await _persist_intake_stop(
+                    db_session_factory,
+                    raw_text=task,
+                    router=router,
+                    stage_log=intake_stage_log,
+                    record=_intake_stage_record(
+                        STAGE_INTAKE_REFINE,
+                        started_at=refine_started,
+                        cost_before=refine_cost_before,
+                        router=router,
+                        error=exc,
+                    ),
+                    error=exc,
+                )
                 raise
             except Exception as exc:
                 log.warning(

@@ -729,6 +729,100 @@ async def test_intake_stage_error_reaches_pipeline_logs_with_drafted_status(
         assert intake_logs[0].error
 
 
+class _CostlyProvider(LLMProvider):
+    """Провайдер, у которого один вызов дороже всего лимита запроса.
+
+    Нужен, чтобы стоп-кран срабатывал на настоящем стеке (`CostTracker.add`
+    внутри `LLMRouter.complete`), а не подменой самой стадии: проверяется не
+    порядок `except` в `cli.py`, а то, что после уже состоявшейся траты
+    остаётся запись в БД."""
+
+    name = "gigachat"
+    price_in_rub_per_mtok = 10.0
+    price_out_rub_per_mtok = 20.0
+
+    async def complete(
+        self,
+        messages: list[Message],
+        *,
+        model: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 4096,
+        json_mode: bool = False,
+    ) -> LLMResult:
+        return LLMResult(
+            text="{}",
+            usage=Usage(tokens_in=10, tokens_out=10, cost_rub=99.0, provider=self.name, model="fake"),
+        )
+
+    async def health(self) -> tuple[bool, str]:
+        return True, "заглушка"
+
+
+def _patch_costly_router(monkeypatch, settings) -> None:
+    """Роутер, на котором первый же вызов модели выбирает лимит стоимости."""
+    router = LLMRouter(settings, providers={"gigachat": _CostlyProvider()})
+    monkeypatch.setattr(cli, "LLMRouter", lambda _settings: router)
+
+
+async def test_cost_limit_on_intake_leaves_failed_run_with_actual_cost(
+    monkeypatch, settings, fake_provider_factory, db_session_factory, tmp_path
+):
+    """П-5 аудита: стоп-кран на интейке обязан оставить след. Раньше
+    `CostLimitExceededError` уходила наружу до конструирования пайплайна —
+    `persist_run` не вызывался, `requests` не получал даже строки `failed`,
+    отчёта не было, а деньги были потрачены. Исключение по-прежнему уходит
+    наружу — стоп-кран не смягчается."""
+    _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
+    _patch_costly_router(monkeypatch, settings)
+    monkeypatch.setattr("app.db.session_scope", db_session_factory)
+
+    with pytest.raises(CostLimitExceededError):
+        await cli._run("текст, который упрётся в лимит на интейке", None, None, tmp_path / "report.md", False)
+
+    assert _RecordingIntakePipeline.captured == [], "прогон обязан упасть, а не пойти дальше на обеднённом брифе"
+
+    async with db_session_factory() as session:
+        requests = (await session.execute(select(RequestRow))).scalars().all()
+        assert len(requests) == 1, "оборванный стоп-краном прогон обязан оставить строку в requests"
+        assert requests[0].status == "failed"
+        assert requests[0].cost_rub == pytest.approx(99.0), "потраченные деньги обязаны попасть в запись"
+        assert requests[0].error
+
+        logs = (await session.execute(select(PipelineLog))).scalars().all()
+        assert [(row.stage, row.cost_rub) for row in logs] == [("intake", pytest.approx(99.0))]
+        assert logs[0].error
+
+
+async def test_cost_limit_on_refine_brief_leaves_failed_run_with_actual_cost(
+    monkeypatch, settings, fake_provider_factory, db_session_factory, tmp_path
+):
+    """Зеркало для второго места вызова — более достижимый случай: лимит
+    выбирается уже на уточнении брифа. Строка журнала при этом обязана
+    называться `intake_refine` (С-2), а не `intake`."""
+    _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
+    _patch_costly_router(monkeypatch, settings)
+    monkeypatch.setattr("app.db.session_scope", db_session_factory)
+    draft = Brief(industry="нефтепереработка", task_summary="Катализатор гидроочистки теряет активность раньше срока.")
+    monkeypatch.setattr("app.pipeline.stages.run_intake", _intake_with_one_question(draft))
+    monkeypatch.setattr("typer.prompt", lambda *args, **kwargs: "380 °C")
+
+    with pytest.raises(CostLimitExceededError):
+        await cli._run("текст, который упрётся в лимит на уточнении", None, None, tmp_path / "report.md", True)
+
+    assert _RecordingIntakePipeline.captured == []
+
+    async with db_session_factory() as session:
+        requests = (await session.execute(select(RequestRow))).scalars().all()
+        assert len(requests) == 1
+        assert requests[0].status == "failed"
+        assert requests[0].cost_rub == pytest.approx(99.0)
+
+        logs = (await session.execute(select(PipelineLog))).scalars().all()
+        assert [(row.stage, row.cost_rub) for row in logs] == [("intake_refine", pytest.approx(99.0))]
+        assert logs[0].error
+
+
 async def test_cost_limit_exceeded_during_intake_propagates_and_run_fails(
     monkeypatch, settings, fake_provider_factory, tmp_path
 ):
