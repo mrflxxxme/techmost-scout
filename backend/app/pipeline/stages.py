@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import statistics
 from collections import defaultdict
 
 from pydantic import BaseModel, Field, field_validator
@@ -295,25 +296,152 @@ async def score_candidates(
     return scored
 
 
-def _neutral_scores(candidates: list[Candidate]) -> list[ScoredCandidate]:
+#: Текст пометки в `notes` для оценки, которую поставил код, а не модель. Виден
+#: человеку в разборе; отсечка узнаёт таких кандидатов по типу
+#: `NeutralScoredCandidate`, а по этой строке — только запасным путём.
+NEUTRAL_SCORE_NOTE = "оценка не получена, значение нейтральное"
+
+#: Пороги, для которых журнал калибровки печатает «сколько отсеклось бы».
+#: Рабочее значение подбирается по этим числам на прогоне (Т-10).
+_CALIBRATION_THRESHOLDS = (4, 5, 6, 7)
+
+
+class NeutralScoredCandidate(ScoredCandidate):
+    """Кандидат с оценками, которые проставил код после отказа скоринга.
+
+    Пометка структурная, а не текстовая. Сравнение `notes` со строкой держалось
+    на том, что производитель пометки и её потребитель никогда не разойдутся:
+    допиши `_neutral_scores` к пометке номер батча — и отсечка перестала бы
+    узнавать нейтральных кандидатов, выкосила бы их молча, а журнал показал бы
+    «нейтральных оценок 0». Тип таким образом не ломается.
+
+    Подкласс живёт здесь, а не в `schemas.py`: это деталь стадии скоринга, а не
+    контракт между стадиями — снаружи он остаётся обычным `ScoredCandidate`.
+    """
+
+
+def _neutral_scores(candidates: list[Candidate]) -> list[NeutralScoredCandidate]:
     """Средние оценки для кандидатов, которых модель не осилила оценить."""
     return [
-        ScoredCandidate(
+        NeutralScoredCandidate(
             candidate=candidate,
             relevance=5,
             maturity=5,
             accessibility=5,
             freshness=5,
             completeness=5,
-            notes="оценка не получена, значение нейтральное",
+            notes=NEUTRAL_SCORE_NOTE,
         )
         for candidate in candidates
     ]
 
 
-def select_top(scored: list[ScoredCandidate], *, limit: int) -> list[ScoredCandidate]:
-    """Отобрать лучших, но не давать одному источнику занять всю выдачу."""
-    ordered = sorted(scored, key=lambda s: s.total, reverse=True)
+def _has_neutral_score(item: ScoredCandidate) -> bool:
+    """Оценки проставлены кодом после отказа скоринга, а не получены от модели.
+
+    Основной признак — тип. Сравнение с `NEUTRAL_SCORE_NOTE` оставлено запасным
+    путём: `ScoredCandidate` собирают не только в `_neutral_scores`, и кандидат,
+    восстановленный из обычной модели с той же пометкой (`model_validate`,
+    фикстура теста), обязан остаться защищённым от отсечки.
+    """
+    return isinstance(item, NeutralScoredCandidate) or item.notes.strip() == NEUTRAL_SCORE_NOTE
+
+
+def _cut_by_relevance(scored: list[ScoredCandidate], threshold: int) -> int:
+    """Сколько кандидатов отсечёт порог. Нейтральные оценки не в счёт: их
+    отсечка не трогает ни при каком пороге."""
+    return sum(1 for item in scored if not _has_neutral_score(item) and item.relevance < threshold)
+
+
+def _model_relevance(scored: list[ScoredCandidate]) -> list[int]:
+    """Оценки, которые действительно поставила модель, — без нейтральных."""
+    return [item.relevance for item in scored if not _has_neutral_score(item)]
+
+
+def log_relevance_calibration(
+    scored: list[ScoredCandidate], picked: list[ScoredCandidate], *, relevance_min: int, limit: int
+) -> None:
+    """Напечатать распределение `relevance` и прикидку отсечки по порогам.
+
+    Печатается **всегда**: и при пороге 0, и когда не отсечён ни один кандидат.
+    Это единственный источник данных для подбора порога (Т-10) — оценки нигде
+    не сохраняются, таблица `candidates` не пишется, в отчёты оценки не
+    попадают. Молчание при нулевой отсечке сделало бы ноль неотличимым от
+    «отсечка не сработала»: ровно этот неинтерпретируемый ноль стоил разбора
+    на этапе Э1-2.
+
+    Строка одна, но популяции в ней разделены — иначе по ней нельзя принять
+    решение:
+
+    * `min/медиана/max` считаются **только по оценкам модели**, как и колонка
+      «отсеклось бы». Нейтральные пятёрки — не измерение, а след отказа батча:
+      добавленный к десяти оценкам модели отказавший батч из десяти нейтральных
+      сдвигал медиану с 2 на 4.5 — ровно внутри диапазона 4–7, из которого Т-10
+      выбирает порог, и при неизменной колонке «отсеклось бы».
+    * `отсеклось бы по всему списку` — цена порога для всего скоринга.
+    * `среди отобранных ... ниже порога` — цена порога для тех, кто реально
+      доходит до карточек: до них добирается только top-`limit`. Без этой
+      колонки «отсечено 30 из 42» при нетронутом составе top-12 и «отсечено 3
+      из 15» при замене четверти выдачи выглядят одинаково.
+    """
+    values = _model_relevance(scored)
+    spread = f"{min(values)}/{statistics.median(values):g}/{max(values)}" if values else "нет оценок"
+    would_cut = ", ".join(f"при {t}: {_cut_by_relevance(scored, t)}" for t in _CALIBRATION_THRESHOLDS)
+    picked_below = ", ".join(f"{t}: {_cut_by_relevance(picked, t)}" for t in _CALIBRATION_THRESHOLDS)
+    log.info(
+        "калибровка relevance: кандидатов %s, оценок модели %s, min/медиана/max по оценкам модели %s, "
+        "порог %s, отсечено %s; отсеклось бы по всему списку %s; среди отобранных %s (лимит %s) ниже порога %s; "
+        "нейтральных оценок %s (не отсекаются никогда)",
+        len(scored),
+        len(values),
+        spread,
+        relevance_min,
+        _cut_by_relevance(scored, relevance_min),
+        would_cut,
+        len(picked),
+        limit,
+        picked_below,
+        sum(1 for item in scored if _has_neutral_score(item)),
+    )
+
+
+def select_top(scored: list[ScoredCandidate], *, limit: int, relevance_min: int | None = None) -> list[ScoredCandidate]:
+    """Отобрать лучших, но не давать одному источнику занять всю выдачу.
+
+    Перед отбором работает отсечка по предметному соответствию (РЕШ-48):
+    кандидат с `relevance` ниже порога до карточек не доходит. База сравнения
+    показала, почему это нужно: до половины карточек уходили «мимо задачи»,
+    потому что взвешенная сумма вытягивала кандидата с низкой релевантностью за
+    счёт свежести и доступности.
+
+    Порог берётся из настроек (`RELEVANCE_MIN`), по умолчанию 0 — отсечка
+    выключена, пока значение не подобрано на прогоне. Явный `relevance_min`
+    нужен тестам и разбору.
+
+    Кандидатов с нейтральной оценкой отсечка не трогает никогда: их оценки
+    проставил код после отказа батча скоринга, и один такой отказ иначе тихо
+    выкосил бы десяток кандидатов, а причина была бы неотличима от «все
+    нерелевантны».
+    """
+    if relevance_min is None:
+        relevance_min = get_settings().relevance_min
+    eligible = [item for item in scored if _has_neutral_score(item) or item.relevance >= relevance_min]
+    picked = _pick_top(eligible, limit=limit)
+    # Строка считается по готовому отбору — иначе её вторая половина (сколько
+    # отсеклось бы среди тех, кто доходит до карточек) неизвестна, — но уходит в
+    # журнал до того, как отбор увидит следующая стадия.
+    log_relevance_calibration(scored, picked, relevance_min=relevance_min, limit=limit)
+    return picked
+
+
+def _pick_top(eligible: list[ScoredCandidate], *, limit: int) -> list[ScoredCandidate]:
+    """Отбор по взвешенной сумме с потолком на один источник.
+
+    Вынесен отдельно, чтобы журнал калибровки считал колонку по тому же составу,
+    который стадия вернёт на самом деле: две копии этой логики разошлись бы, и
+    Т-10 подбирал бы порог по несуществующей выдаче.
+    """
+    ordered = sorted(eligible, key=lambda s: s.total, reverse=True)
     per_provider: dict[str, int] = defaultdict(int)
     picked: list[ScoredCandidate] = []
     cap = max(2, limit // 2)
