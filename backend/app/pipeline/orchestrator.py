@@ -180,6 +180,7 @@ class ScoutPipeline:
         request_id: int = 0,
         raw_text: str = "",
         initial_stage_log: list[StageRecord] | None = None,
+        initial_caveats: list[str] | None = None,
     ) -> Report:
         """Бриф → отчёт. Интейк выполняется отдельно, до этого вызова.
 
@@ -192,6 +193,13 @@ class ScoutPipeline:
         `initial_stage_log` — записи стадий, случившихся до вызова `run`
         (интейк живёт в `cli._run`, до пайплайна): их отказ иначе не оставил
         бы следа в `pipeline_logs`, хотя прогон честно продолжается (Т-2).
+
+        `initial_caveats` — оговорки о том, что случилось до вызова `run`, тем
+        же путём и по той же причине (РЕШ-58, П-1 аудита). Журнал стадий и
+        консоль читает оператор, а до эксперта и клиента доживает только
+        отчёт: оговорка встаёт в начало `ReportSummary.caveats` — туда же,
+        куда `fallback_summary` кладёт оговорку об отказе сводки, — и
+        печатается экспортом в блоке «Ограничения этого поиска».
         """
         stage_log: list[StageRecord] = list(initial_stage_log or [])
         try:
@@ -207,6 +215,10 @@ class ScoutPipeline:
                 error=str(exc),
             )
             raise
+        if initial_caveats:
+            # В начало: оговорка о том, из чего собран бриф, объясняет качество
+            # всей выдачи, а оговорки стадий — только своей части.
+            report.summary.caveats = [*initial_caveats, *report.summary.caveats]
         await persist_run(
             self._session_factory,
             raw_text=raw_text,

@@ -509,6 +509,30 @@ async def test_requirement_checks_from_card_author_reach_rendered_report(setting
     assert "сырьё с повышенным содержанием серы: не подтверждено источником" in text
 
 
+async def test_initial_caveat_reaches_report_and_rendered_markdown(settings, brief):
+    """П-1 аудита: оговорка о том, что случилось до пайплайна (отказ интейка),
+    доезжает до `ReportSummary.caveats` и печатается в отчёте — тем же
+    механизмом, каким `fallback_summary` доносит до клиента отказ сводки.
+    Оговорка встаёт первой: она объясняет качество всей выдачи."""
+    provider = _ScriptedProvider(
+        {
+            _PLANNER_KEY: [_PLAN_JSON],
+            _SCORER_KEY: [_SCORE_JSON],
+            _CARD_AUTHOR_KEY: [_CARD_JSON],
+            _VERIFIER_KEY: [_VERIFY_JSON],
+            _SUMMARY_KEY: [json.dumps({"comparison_rows": [], "recommendation": "Рассмотреть №1.", "caveats": ["и"]})],
+        }
+    )
+    async with httpx.AsyncClient() as client:
+        report = await _pipeline(settings, provider, [_OneHitAdapter(client)]).run(
+            brief, request_id=1, initial_caveats=[cli.INTAKE_FALLBACK_CAVEAT]
+        )
+
+    assert report.summary.caveats[0] == cli.INTAKE_FALLBACK_CAVEAT
+    assert report.summary.caveats[1] == "и", "оговорки самой сводки не должны потеряться"
+    assert cli.INTAKE_FALLBACK_CAVEAT in render_markdown(report)
+
+
 # ── Т-2: устойчивость интейка ────────────────────────────────────────────────
 class _RecordingIntakePipeline:
     """Пайплайн-заглушка для проверок `cli._run`: не ходит ни в источники, ни
@@ -517,7 +541,15 @@ class _RecordingIntakePipeline:
     def __init__(self, *, settings=None, router=None, adapters=None, progress=None, session_factory=None) -> None:
         del settings, router, adapters, progress, session_factory
 
-    async def run(self, brief: Brief, *, request_id: int = 0, raw_text: str = "", initial_stage_log=None) -> Report:
+    async def run(
+        self,
+        brief: Brief,
+        *,
+        request_id: int = 0,
+        raw_text: str = "",
+        initial_stage_log=None,
+        initial_caveats=None,
+    ) -> Report:
         _RecordingIntakePipeline.captured.append(brief)
         _RecordingIntakePipeline.stage_logs.append(initial_stage_log)
         return Report(

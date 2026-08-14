@@ -39,6 +39,16 @@ UNKNOWN_ANSWER = "не знаю"
 UNSPECIFIED_REQUIREMENT = "требование не специализировано"
 
 
+#: Оговорка клиенту, когда уточняющий диалог не состоялся и бриф собран кодом
+#: из текста задачи (РЕШ-58, П-1 аудита). Отказ интейка виден оператору в
+#: консоли, в логе и в `pipeline_logs`, но до эксперта и клиента доживает
+#: только отчёт — и он об этом молчал, хотя обеднённый бриф объясняет и
+#: широкую выдачу, и пустую сверку с требованиями в карточках.
+INTAKE_FALLBACK_CAVEAT = (
+    "Уточнения по задаче не собраны: бриф составлен из текста задачи. "
+    "Выдача может быть шире и менее точной, чем при уточнённой постановке."
+)
+
 #: Имена стадий интейка в журнале `pipeline_logs`. Разведены (совет С-2
 #: аудита): отказ разбора текста и отказ уточнения брифа — разные инциденты с
 #: разной починкой, а одинаковая строка `intake` их не различала. Маршрут
@@ -301,10 +311,13 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
         intake = None
 
     brief: Brief
+    intake_caveats: list[str] = []
     if intake is None:
         # Черновика нет вовсе — уточняющий диалог провести не из чего,
         # бриф собирается кодом из сырого текста задачи (инвариант №1).
+        # Клиент узнаёт об этом из отчёта, а не только оператор из консоли.
         brief = brief_from_raw_text(task, industry_hint=industry_hint)
+        intake_caveats.append(INTAKE_FALLBACK_CAVEAT)
     elif interactive:
         answers: dict[str, str] = {}
         for question in intake.questions:
@@ -385,7 +398,9 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
 
     pipeline = ScoutPipeline(settings=settings, router=router, progress=show, session_factory=db_session_factory)
     try:
-        report = await pipeline.run(brief, raw_text=task, initial_stage_log=intake_stage_log)
+        report = await pipeline.run(
+            brief, raw_text=task, initial_stage_log=intake_stage_log, initial_caveats=intake_caveats
+        )
     finally:
         await pipeline.aclose()
 

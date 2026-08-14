@@ -37,10 +37,17 @@ class _RecordingPipeline:
         _RecordingPipeline.session_factories.append(session_factory)
 
     async def run(
-        self, brief: Brief, *, request_id: int = 0, raw_text: str = "", initial_stage_log: list | None = None
+        self,
+        brief: Brief,
+        *,
+        request_id: int = 0,
+        raw_text: str = "",
+        initial_stage_log: list | None = None,
+        initial_caveats: list | None = None,
     ) -> Report:
         _RecordingPipeline.captured.append(brief)
         _RecordingPipeline.initial_stage_logs.append(initial_stage_log)
+        _RecordingPipeline.initial_caveats.append(initial_caveats)
         return Report(
             request_id=request_id,
             brief=brief,
@@ -59,6 +66,7 @@ def _patch_pipeline(monkeypatch):
     _RecordingPipeline.captured = []
     _RecordingPipeline.session_factories = []
     _RecordingPipeline.initial_stage_logs = []
+    _RecordingPipeline.initial_caveats = []
     monkeypatch.setattr(pipeline_pkg, "ScoutPipeline", _RecordingPipeline)
     return _RecordingPipeline
 
@@ -253,6 +261,26 @@ async def test_run_intake_failure_falls_back_to_brief_from_raw_text_and_warns(
 
     console_output = capsys.readouterr().out
     assert "интейк не удался" in console_output
+
+    # П-1: консоль, лог и pipeline_logs видит только оператор — до эксперта и
+    # клиента доживает отчёт, поэтому оговорка уходит и в него.
+    assert _RecordingPipeline.initial_caveats[-1] == [cli.INTAKE_FALLBACK_CAVEAT]
+
+
+async def test_successful_intake_adds_no_caveat_to_report(monkeypatch, settings, fake_provider_factory, tmp_path):
+    """Обратная сторона П-1: когда интейк отработал, оговорке в отчёте взяться
+    неоткуда — иначе клиент читал бы предупреждение о качестве выдачи на
+    каждом здоровом прогоне."""
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return IntakeResult(questions=[], draft_brief=_draft_brief(industry="нефтепереработка"))
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False)
+
+    assert _RecordingPipeline.initial_caveats[-1] == []
 
 
 # ── Т-2, цикл 2: границы запасного брифа ─────────────────────────────────────
