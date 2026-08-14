@@ -146,6 +146,24 @@ _GO = "Выполни инструкцию выше. Верни только JSO
 _FALLBACK_SUMMARY_LIMIT = 500
 
 
+def owner_answers_block(brief: Brief) -> str:
+    """Ответы владельца на уточняющие вопросы — блоком для сообщения модели.
+
+    Нужен там, где бриф уходит в промпт не целиком: в стадиях `plan_search`,
+    `author_card` и `summarize` бриф подаётся как `BRIEF_JSON`, и поле
+    `owner_answers` попадает в модель само, а скоринг собирает сообщение из
+    отдельных полей руками — без этого блока ответы владельца до него не
+    доходили бы (РЕШ-58).
+
+    Пустая строка, когда ответов нет: пустой заголовок в промпте — это шум,
+    который дешёвая модель принимается толковать.
+    """
+    if not brief.owner_answers:
+        return ""
+    lines = "\n".join(f"— {item.question}\n  Ответ: {item.answer}" for item in brief.owner_answers)
+    return f"Уточнения владельца (контекст постановки, не ограничения задачи):\n{lines}\n\n"
+
+
 def brief_from_raw_text(raw_text: str, *, industry_hint: str = "не указана") -> Brief:
     """Собрать бриф без вызова модели — запасной путь при отказе интейка.
 
@@ -270,6 +288,7 @@ async def score_candidates(
                         content=(
                             f"Задача бизнеса:\n{brief.task_summary}\n"
                             f"Отрасль: {brief.industry}\nОграничения: {'; '.join(brief.constraints) or 'не заданы'}\n\n"
+                            f"{owner_answers_block(brief)}"
                             f"Кандидаты ({len(chunk)} шт.):\n{listing}\n\n"
                             f"Верни ровно {len(chunk)} оценок, ссылаясь на кандидатов "
                             f"номерами от 0 до {len(chunk) - 1}."

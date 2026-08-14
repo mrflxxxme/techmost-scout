@@ -20,11 +20,31 @@ from rich.table import Table
 
 from app.config import get_settings
 from app.llm import CostLimitExceededError, LLMRouter
-from app.schemas import Brief, MaturityStage
+from app.schemas import Brief, MaturityStage, OwnerAnswer
 
 app = typer.Typer(add_completion=False, help="ТехМост Скаут — подбор научных решений под задачу бизнеса")
 console = Console()
 log = logging.getLogger(__name__)
+
+#: Умолчание уточняющего диалога: оператор, нажавший Enter, отвечает именно так.
+UNKNOWN_ANSWER = "не знаю"
+
+#: Как «не знаю» записывается в бриф (распоряжение владельца, РЕШ-58). Дословное
+#: «не знаю» читается как потерянные данные, хотя по смыслу это отсутствие
+#: требования к решению; ответ уходит в модель именно в этой формулировке.
+UNSPECIFIED_REQUIREMENT = "требование не специализировано"
+
+
+def _normalize_owner_answer(answer: str) -> str:
+    """Ответ оператора в том виде, в каком он уходит в бриф и в модель.
+
+    Сравнение по очищенному значению и без учёта регистра: умолчание
+    `typer.prompt` оператор может и дописать руками — «Не знаю», «не знаю  ».
+    """
+    cleaned = answer.strip()
+    if cleaned.casefold() == UNKNOWN_ANSWER.casefold():
+        return UNSPECIFIED_REQUIREMENT
+    return cleaned
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -197,7 +217,9 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
         answers: dict[str, str] = {}
         for question in intake.questions:
             console.print(f"\n[dim]{question.why}[/dim]")
-            answers[question.question] = typer.prompt(question.question, default="не знаю")
+            answers[question.question] = _normalize_owner_answer(
+                typer.prompt(question.question, default=UNKNOWN_ANSWER)
+            )
         if answers:
             refine_started = datetime.now(UTC)
             try:
@@ -212,11 +234,20 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
                     "[yellow]Предупреждение:[/yellow] уточнение брифа не удалось, "
                     "использую черновик интейка с вашими ответами"
                 )
-                # Ответы владельца не теряются: дописываются в constraints
-                # черновика в виде «вопрос — ответ» (Т-2).
-                qa_notes = [f"{question} — {answer}" for question, answer in answers.items()]
+                # Ответы владельца не теряются, но и не выдаются клиенту за
+                # ограничения задачи: у них своё поле брифа (РЕШ-58, П-2
+                # аудита). `constraints` печатается строкой «Ограничения:» и
+                # разворачивается в `requirement_checks` каждой карточки —
+                # паре «вопрос — ответ» там не место. До модели ответы доходят
+                # через `owner_answers` в BRIEF_JSON и через блок уточнений в
+                # сообщении скоринга (`stages.owner_answers_block`).
                 brief = intake.draft_brief.model_copy(
-                    update={"constraints": [*intake.draft_brief.constraints, *qa_notes]}
+                    update={
+                        "owner_answers": [
+                            *intake.draft_brief.owner_answers,
+                            *(OwnerAnswer(question=question, answer=answer) for question, answer in answers.items()),
+                        ]
+                    }
                 )
                 intake_stage_log.append(
                     StageRecord(

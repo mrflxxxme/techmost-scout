@@ -16,7 +16,9 @@ requirement_checks из ответа card_author доезжает до карт�
 адаптеры подменены синхронными заглушками, как в tests/test_pipeline_counters.py.
 
 Отдельно (Т-2, устойчивость интейка): отказ `refine_brief` в `cli._run` не
-теряет ответы владельца — они дописываются в `constraints` брифа; отказавшая
+теряет ответы владельца — они ложатся в `Brief.owner_answers` (РЕШ-58) и
+доходят оттуда до модели, а `constraints` остаются ограничениями задачи; ответ
+«не знаю» записывается как «требование не специализировано»; отказавшая
 стадия интейка, переданная оркестратору новым параметром `initial_stage_log`,
 доезжает до `pipeline_logs` строкой с непустым `error`, а статус запроса
 остаётся `drafted` — прогон дошёл до отчёта; `CostLimitExceededError` —
@@ -53,6 +55,7 @@ from app.schemas import (
     IntakeQuestion,
     IntakeResult,
     MaturityStage,
+    OwnerAnswer,
     Report,
     ReportSummary,
     ScoredCandidate,
@@ -548,13 +551,8 @@ def _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory) -> 
     monkeypatch.setattr("app.db.init_db", fake_init_db)
 
 
-async def test_refine_brief_failure_keeps_owner_answers_in_constraints(
-    monkeypatch, settings, fake_provider_factory, tmp_path
-):
-    """Отказ `refine_brief` не роняет прогон — ответы владельца дописываются
-    кодом в `constraints` брифа в виде «вопрос — ответ», а не теряются."""
-    _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
-    draft = Brief(industry="нефтепереработка", task_summary="Катализатор гидроочистки теряет активность раньше срока.")
+def _intake_with_one_question(draft: Brief):
+    """Черновик интейка с одним уточняющим вопросом — общая заготовка."""
 
     async def fake_run_intake(router, task, *, industry_hint="не указана"):
         return IntakeResult(
@@ -562,10 +560,28 @@ async def test_refine_brief_failure_keeps_owner_answers_in_constraints(
             draft_brief=draft,
         )
 
+    return fake_run_intake
+
+
+async def test_refine_brief_failure_keeps_owner_answers_in_own_field(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """Отказ `refine_brief` не роняет прогон и не теряет ответы владельца — они
+    ложатся в `Brief.owner_answers` (РЕШ-58, П-2 аудита), а `constraints`
+    черновика остаются нетронутыми: пара «вопрос — ответ» печатается клиенту
+    строкой «Ограничения:» и разворачивается в `requirement_checks` каждой
+    карточки, а ограничением задачи она не является."""
+    _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
+    draft = Brief(
+        industry="нефтепереработка",
+        task_summary="Катализатор гидроочистки теряет активность раньше срока.",
+        constraints=["работа при 340 °C"],
+    )
+
     async def broken_refine_brief(router, task, answers, *, industry_hint="не указана"):
         raise RuntimeError("модель недоступна")
 
-    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+    monkeypatch.setattr("app.pipeline.stages.run_intake", _intake_with_one_question(draft))
     monkeypatch.setattr("app.pipeline.stages.refine_brief", broken_refine_brief)
     monkeypatch.setattr("typer.prompt", lambda *args, **kwargs: "380 °C")
 
@@ -573,12 +589,64 @@ async def test_refine_brief_failure_keeps_owner_answers_in_constraints(
 
     assert len(_RecordingIntakePipeline.captured) == 1
     brief = _RecordingIntakePipeline.captured[0]
-    assert brief.constraints == ["Какая температура процесса? — 380 °C"]
+    assert brief.constraints == ["работа при 340 °C"], "ответы владельца не имеют права попадать в ограничения задачи"
+    assert [(item.question, item.answer) for item in brief.owner_answers] == [("Какая температура процесса?", "380 °C")]
 
     stage_log = _RecordingIntakePipeline.stage_logs[-1]
     assert stage_log is not None and len(stage_log) == 1
-    assert stage_log[0].stage == "intake"
     assert stage_log[0].error
+
+
+@pytest.mark.parametrize("typed", ["не знаю", "  Не Знаю  "])
+async def test_unknown_answer_is_recorded_as_unspecified_requirement(
+    monkeypatch, settings, fake_provider_factory, tmp_path, typed
+):
+    """Распоряжение владельца (РЕШ-58): ответ «не знаю» — а это умолчание
+    `typer.prompt`, которое получает любой нажавший Enter, — записывается в
+    бриф как «требование не специализировано». Сравнение по очищенному
+    значению и без учёта регистра."""
+    _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
+    draft = Brief(industry="нефтепереработка", task_summary="Катализатор гидроочистки теряет активность раньше срока.")
+
+    async def broken_refine_brief(router, task, answers, *, industry_hint="не указана"):
+        raise RuntimeError("модель недоступна")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", _intake_with_one_question(draft))
+    monkeypatch.setattr("app.pipeline.stages.refine_brief", broken_refine_brief)
+    monkeypatch.setattr("typer.prompt", lambda *args, **kwargs: typed)
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", True)
+
+    answers = _RecordingIntakePipeline.captured[0].owner_answers
+    assert [item.answer for item in answers] == ["требование не специализировано"]
+
+
+async def test_owner_answers_reach_planner_and_scorer_prompts(settings):
+    """Поле, которое никуда не доходит, хуже прежнего состояния: ответы
+    владельца обязаны быть видны модели на обеих стадиях, где бриф подаётся
+    по-разному — целиком (`plan_search`, BRIEF_JSON) и по полям (`score_candidates`)."""
+    brief_with_answers = Brief(
+        industry="нефтепереработка",
+        task_summary="Катализатор гидроочистки теряет активность раньше срока.",
+        owner_answers=[OwnerAnswer(question="Какая температура процесса?", answer="380 °C")],
+    )
+    provider = _ScriptedProvider({_PLANNER_KEY: [_PLAN_JSON], _SCORER_KEY: [_SCORE_JSON]})
+    router = LLMRouter(settings, providers={"deepseek": provider})
+    candidate = Candidate(
+        source_type=SourceType.PUBLICATION,
+        title="Катализатор",
+        url="https://doi.org/10.1/example",
+        provider="crossref",
+    )
+
+    await stages.plan_search(router, brief_with_answers)
+    await stages.score_candidates(router, brief_with_answers, [candidate])
+
+    planner_text = provider.calls[0][0].content
+    assert "Какая температура процесса?" in planner_text and "380 °C" in planner_text
+
+    scorer_text = provider.calls[1][1].content
+    assert "Какая температура процесса?" in scorer_text and "380 °C" in scorer_text
 
 
 async def test_intake_stage_error_reaches_pipeline_logs_with_drafted_status(
