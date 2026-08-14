@@ -61,6 +61,12 @@ filterwarnings = ["error::DeprecationWarning:app.*"]
 line-length = 120
 target-version = "py312"
 src = ["backend", "tests"]
+# ruff форматирует питоновские блоки внутри markdown. В .planning/ лежат план,
+# решения и доказательства — проза с примерами кода, которую переформатировать
+# нельзя: доказательство обязано совпадать с тем, что было фактически выведено.
+# Без этого исключения `ruff format --check .` падает на отчёте проверяющего и
+# валит критерий приёмки любой задачи (DLG-1 верификации Т-2).
+extend-exclude = [".planning"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ASYNC", "S"]
