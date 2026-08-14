@@ -1,0 +1,4 @@
+﻿requests 4
+solution_cards 22
+pipeline_logs 20
+статусы: [('drafted', 4)]
