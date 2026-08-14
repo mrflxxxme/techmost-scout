@@ -1,0 +1,42 @@
+﻿Независимая проверка оркестратора, задача T9, ветка E2A/T9
+Каталог: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2A-T9
+Коммит: 5788afd Т-9 (Э2-6): адаптер PatentsView на подменах, 17 тестов
+
+=== pytest -q ===
+.......................................................................F [ 33%]
+........................................................................ [ 66%]
+........................................................................ [100%]
+================================== FAILURES ===================================
+____________ test_каждый_рабочий_адаптер_достижим_типом_из_промпта ____________
+
+    def test_каждый_рабочий_адаптер_достижим_типом_из_промпта():
+        """Обратное направление: рабочий адаптер, который планировщик никогда не
+        запросит, простаивает весь прогон (вторая половина DLG-1)."""
+        prompt_types = _planner_allowed_types()
+        for name, adapter_cls in ADAPTERS.items():
+            if not getattr(adapter_cls, "implemented", True):
+                continue
+            adapter_types = {source_type.value for source_type in adapter_cls.source_types}
+>           assert adapter_types & prompt_types, (
+                f"адаптер {name} ({sorted(adapter_types)}) недостижим ни одним типом промпта "
+                f"planner.md ({sorted(prompt_types)})"
+            )
+E           AssertionError: адаптер patents_view (['patent']) недостижим ни одним типом промпта planner.md (['publication', 'showcase', 'web'])
+E           assert ({'patent'} & {'publication', 'showcase', 'web'})
+
+tests\test_plan_types.py:69: AssertionError
+============================== warnings summary ===============================
+..\..\..\.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\KUklonskiy\techmost-scout\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_plan_types.py::test_каждый_рабочий_адаптер_достижим_типом_из_промпта
+1 failed, 215 passed, 1 warning in 68.26s (0:01:08)
+
+=== ruff check . ===
+All checks passed!
+
+=== ruff format --check . ===
+114 files already formatted
