@@ -552,6 +552,7 @@ class _RecordingIntakePipeline:
     ) -> Report:
         _RecordingIntakePipeline.captured.append(brief)
         _RecordingIntakePipeline.stage_logs.append(initial_stage_log)
+        _RecordingIntakePipeline.caveats.append(initial_caveats)
         return Report(
             request_id=request_id,
             brief=brief,
@@ -572,6 +573,7 @@ def _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory) -> 
 
     _RecordingIntakePipeline.captured = []
     _RecordingIntakePipeline.stage_logs = []
+    _RecordingIntakePipeline.caveats = []
     monkeypatch.setattr(pipeline_pkg, "ScoutPipeline", _RecordingIntakePipeline)
     monkeypatch.setattr(cli, "get_settings", lambda: settings)
     router = LLMRouter(settings=settings, providers={"gigachat": fake_provider_factory("gigachat")})
@@ -627,6 +629,46 @@ async def test_refine_brief_failure_keeps_owner_answers_in_own_field(
     stage_log = _RecordingIntakePipeline.stage_logs[-1]
     assert stage_log is not None and len(stage_log) == 1
     assert stage_log[0].error
+
+
+async def test_refine_brief_failure_tells_the_client_the_brief_stayed_draft(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """Доводка П-1: отказ уточнения тоже обязан доехать до отчёта — раньше в
+    этой ветке оговорки не появлялось вовсе. Текст `INTAKE_FALLBACK_CAVEAT`
+    здесь неверен: он говорит «бриф составлен из текста задачи», а бриф взят из
+    черновика интейка — поэтому у ветки своя формулировка."""
+    _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
+    draft = Brief(industry="нефтепереработка", task_summary="Катализатор гидроочистки теряет активность раньше срока.")
+
+    async def broken_refine_brief(router, task, answers, *, industry_hint="не указана"):
+        raise RuntimeError("модель недоступна")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", _intake_with_one_question(draft))
+    monkeypatch.setattr("app.pipeline.stages.refine_brief", broken_refine_brief)
+    monkeypatch.setattr("typer.prompt", lambda *args, **kwargs: "380 °C")
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", True)
+
+    assert _RecordingIntakePipeline.caveats[-1] == [cli.REFINE_FALLBACK_CAVEAT]
+
+
+async def test_successful_refine_brief_adds_no_caveat(monkeypatch, settings, fake_provider_factory, tmp_path):
+    """Обратная сторона: когда уточнение отработало, оговорке взяться неоткуда —
+    иначе клиент читал бы про черновую постановку на здоровом прогоне."""
+    _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
+    draft = Brief(industry="нефтепереработка", task_summary="Катализатор гидроочистки теряет активность раньше срока.")
+
+    async def fake_refine_brief(router, task, answers, *, industry_hint="не указана"):
+        return draft.model_copy(update={"task_summary": "Уточнённая постановка."})
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", _intake_with_one_question(draft))
+    monkeypatch.setattr("app.pipeline.stages.refine_brief", fake_refine_brief)
+    monkeypatch.setattr("typer.prompt", lambda *args, **kwargs: "380 °C")
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", True)
+
+    assert _RecordingIntakePipeline.caveats[-1] == []
 
 
 async def test_intake_and_refine_failures_are_told_apart_in_stage_log(
