@@ -23,6 +23,7 @@ from app.schemas import Brief, MaturityStage
 
 app = typer.Typer(add_completion=False, help="ТехМост Скаут — подбор научных решений под задачу бизнеса")
 console = Console()
+log = logging.getLogger(__name__)
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -122,7 +123,9 @@ async def _doctor() -> None:
 @app.command()
 def run(
     task: str = typer.Argument(..., help="Описание технологической задачи (обезличенное)"),
-    industry: str = typer.Option("промышленность", "--industry", "-i"),
+    industry: str = typer.Option(
+        None, "--industry", "-i", help="Отрасль заказчика; если не задана, определяется разбором текста"
+    ),
     maturity: str = typer.Option(None, "--maturity", "-m", help="lab|prototype|pilot|series"),
     out: Path = typer.Option(None, "--out", "-o", help="Куда положить отчёт (по умолчанию out/)"),
     interactive: bool = typer.Option(True, "--interactive/--no-interactive", help="Задавать уточняющие вопросы"),
@@ -133,37 +136,63 @@ def run(
     asyncio.run(_run(task, industry, maturity, out, interactive))
 
 
-async def _run(task: str, industry: str, maturity: str | None, out: Path | None, interactive: bool) -> None:
+async def _run(task: str, industry: str | None, maturity: str | None, out: Path | None, interactive: bool) -> None:
+    from app.db import init_db, session_scope
     from app.pipeline import ScoutPipeline
     from app.pipeline.stages import refine_brief, run_intake
 
     settings = get_settings()
     router = LLMRouter(settings)
 
-    brief: Brief
+    # Таблицы для минимальной записи прогона (Ф-8, РЕШ-40); фабрика сессий —
+    # `session_scope`, тот же контракт, что и у `app.db.get_session`. Отказ
+    # подготовки схемы (файл базы залочен другим процессом и т. п.) не должен
+    # ронять прогон ДО построения отчёта: тот же принцип, что и в
+    # `persistence.persist_run` — markdown-отчёт первичен, запись в БД
+    # вторична. Без готовой схемы запись просто не делаем (session_factory=None).
+    db_session_factory = session_scope
+    try:
+        await init_db()
+    except Exception:
+        log.warning("не удалось подготовить БД, прогон продолжается без записи", exc_info=True)
+        db_session_factory = None
+
+    # Разбор текста нужен в обоих режимах: без него `constraints` брифа
+    # остаются пустыми, а именно они дают карточкам сверку с техтребованиями
+    # (РЕШ-38). Стадия дешёвая — маршрут `intake` идёт на бесплатный GigaChat.
+    industry_hint = industry or "не указана"
     if interactive:
         console.print("[bold]Уточняю задачу…[/bold]")
-        intake = await run_intake(router, task)
+    intake = await run_intake(router, task, industry_hint=industry_hint)
+
+    brief: Brief
+    if interactive:
         answers: dict[str, str] = {}
         for question in intake.questions:
             console.print(f"\n[dim]{question.why}[/dim]")
             answers[question.question] = typer.prompt(question.question, default="не знаю")
-        brief = await refine_brief(router, task, answers) if answers else intake.draft_brief
-    else:
-        brief = Brief(
-            industry=industry,
-            task_summary=task,
-            target_maturity=MaturityStage(maturity) if maturity else None,
+        brief = (
+            await refine_brief(router, task, answers, industry_hint=industry_hint) if answers else intake.draft_brief
         )
+    else:
+        # Немой режим: вопросы не задаются и не печатаются, бриф берётся как
+        # есть из разбора текста.
+        brief = intake.draft_brief
+
+    # Явно заданный флаг перекрывает то, что определила модель при разборе.
+    if industry:
+        brief = brief.model_copy(update={"industry": industry})
+    if maturity:
+        brief = brief.model_copy(update={"target_maturity": MaturityStage(maturity)})
 
     console.print(f"\n[bold]Бриф:[/bold] {brief.task_summary} [dim]({brief.industry})[/dim]\n")
 
     def show(stage: str, message: str, fraction: float) -> None:
         console.print(f"[dim]{int(fraction * 100):3d}%[/dim] [cyan]{stage:8s}[/cyan] {message}")
 
-    pipeline = ScoutPipeline(settings=settings, router=router, progress=show)
+    pipeline = ScoutPipeline(settings=settings, router=router, progress=show, session_factory=db_session_factory)
     try:
-        report = await pipeline.run(brief)
+        report = await pipeline.run(brief, raw_text=task)
     finally:
         await pipeline.aclose()
 

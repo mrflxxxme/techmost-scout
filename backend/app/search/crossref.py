@@ -16,10 +16,11 @@ import re
 from datetime import date
 from typing import Any
 
+import httpx
 from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
-from app.search.base import SearchAdapter
+from app.search.base import SearchAdapter, SearchError
 
 log = logging.getLogger(__name__)
 
@@ -58,11 +59,7 @@ class CrossrefAdapter(SearchAdapter):
             # mailto дублируем параметром: часть прокси срезает User-Agent
             "mailto": CONTACT_EMAIL,
         }
-        payload = await self._get_json(
-            API_URL,
-            params=params,
-            headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
-        )
+        payload = await self._fetch(params)
         if not isinstance(payload, dict):
             return []
 
@@ -79,6 +76,23 @@ class CrossrefAdapter(SearchAdapter):
             if candidate is not None:
                 candidates.append(candidate)
         return candidates[:limit]
+
+    async def _fetch(self, params: dict[str, str]) -> dict | list | None:
+        """GET к Crossref. Собственный метод вместо `base._get_json`: тот
+        гасит транспортный отказ в `None` для всех источников разом, а здесь
+        нужен явный отказ, не задевая общий помощник (им пользуются другие
+        адаптеры). Транспортный отказ поднимается как SearchError —
+        _safe_search оркестратора поймает его и честно отметит источник
+        недоступным (инвариант №5, РЕШ-45), вместо тихого пустого списка."""
+        await self._throttle()
+        try:
+            response = await self._client.get(
+                API_URL, params=params, headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
+            )
+            response.raise_for_status()
+            return response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise SearchError(f"crossref не ответил на «{params.get('query.bibliographic')}»: {exc}") from exc
 
     @staticmethod
     def _from_pub_date() -> str:

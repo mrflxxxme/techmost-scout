@@ -1,9 +1,33 @@
-"""Проверки чистых стадий пайплайна: склейка, отбор, группировка."""
+"""Проверки чистых стадий пайплайна: склейка, отбор, группировка, честная
+выдача карточек (Ф-7)."""
 
 from __future__ import annotations
 
-from app.pipeline.stages import deduplicate, group_for_cards, select_top
-from app.schemas import Candidate, ScoredCandidate, SourceType
+from app.pipeline.stages import deduplicate, group_for_cards, select_publishable_cards, select_top
+from app.schemas import Candidate, Evidence, ScoredCandidate, SolutionCard, SourceType
+
+
+def _card(title: str, *, evidence: bool = True) -> SolutionCard:
+    """Минимально достаточная карточка для тестов отбора."""
+    return SolutionCard(
+        title=title,
+        essence=f"Суть варианта «{title}».",
+        applicability="Закрывает часть задачи из брифа.",
+        next_step="Запросить у разработчика протокол испытаний.",
+        evidence=[Evidence(claim="Факт из источника", url="https://example.org/a")] if evidence else [],
+    )
+
+
+def _placeholder_card() -> SolutionCard:
+    """Каркас-заглушка из формата ошибок 1 `prompts/card_author.md`: группа
+    кандидатов без источников."""
+    return SolutionCard(
+        title="не найдено",
+        essence="не найдено",
+        applicability="не найдено",
+        next_step="не найдено",
+        evidence=[],
+    )
 
 
 def test_deduplicate_merges_same_doi(candidates):
@@ -125,3 +149,34 @@ def test_group_for_cards_respects_target():
     ]
 
     assert len(group_for_cards(scored, target=5)) == 5
+
+
+def test_select_publishable_cards_drops_empty_evidence_and_placeholder():
+    """Из шести карточек — две с пустым evidence и одна-пустышка «не найдено»
+    во всех ключевых полях — в отчёт идут три честных, порядок сохраняется."""
+    honest = [_card(f"Вариант {i}") for i in range(3)]
+    no_evidence = [_card(f"Без источника {i}", evidence=False) for i in range(2)]
+    cards = [honest[0], no_evidence[0], honest[1], _placeholder_card(), no_evidence[1], honest[2]]
+
+    published = select_publishable_cards(cards)
+
+    assert [c.title for c in published] == ["Вариант 0", "Вариант 1", "Вариант 2"]
+
+
+def test_select_publishable_cards_caps_at_seven():
+    """Девять честных карточек — в отчёте не больше семи (§2а SPEC, FR-9)."""
+    cards = [_card(f"Вариант {i}") for i in range(9)]
+
+    published = select_publishable_cards(cards)
+
+    assert len(published) == 7
+    assert [c.title for c in published] == [f"Вариант {i}" for i in range(7)]
+
+
+def test_select_publishable_cards_keeps_all_when_under_limit():
+    """Меньше семи честных карточек — нижней границы нет, отдаём сколько есть."""
+    cards = [_card(f"Вариант {i}") for i in range(3)]
+
+    published = select_publishable_cards(cards)
+
+    assert len(published) == 3

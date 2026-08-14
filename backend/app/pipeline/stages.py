@@ -18,12 +18,13 @@ from collections import defaultdict
 from pydantic import BaseModel, Field, field_validator
 
 from app.config import get_settings
-from app.llm import LLMRouter, Message
+from app.llm import CostLimitExceededError, LLMRouter, Message
 from app.schemas import (
     Brief,
     Candidate,
     Confidence,
     IntakeResult,
+    MaturityStage,
     ReportSummary,
     ScoredCandidate,
     SearchPlan,
@@ -259,6 +260,13 @@ async def score_candidates(
                 ScoreBatch,
                 max_tokens=4000,
             )
+        except CostLimitExceededError:
+            # Стоп-кран (РЕШ-45): исчерпанный лимит — не отказ модели, а
+            # команда «стоп тратить». Нейтральные оценки платили бы дальше на
+            # следующих батчах, тихо продолжая расходовать при исчерпанном
+            # лимите — это и есть скрытая деградация, которую стоп-кран
+            # обязан пресекать.
+            raise
         except Exception as exc:
             log.warning("скоринг батча не удался (%s), беру нейтральные оценки", exc)
             scored.extend(_neutral_scores(chunk))
@@ -371,6 +379,13 @@ async def author_card(router: LLMRouter, brief: Brief, group: list[ScoredCandida
     return card
 
 
+#: Формат записи о неподтверждённой зрелости из правила 7 prompts/verifier.md:
+#: «стадия зрелости не подтверждена: <стадия>». По этой записи (а не по
+#: пересказу) код понижает maturity_stage карточки — сама проверяющая стадия
+#: карточку не переписывает (РЕШ-42).
+_MATURITY_UNCONFIRMED_MARKER = "стадия зрелости не подтверждена"
+
+
 async def verify_card(
     router: LLMRouter, card: SolutionCard, group: list[ScoredCandidate] | None = None
 ) -> SolutionCard:
@@ -401,13 +416,46 @@ async def verify_card(
     card.confidence = verdict.confidence
     card.confidence_note = verdict.confidence_note
     if verdict.unsourced_claims:
-        # Не выбрасываем карточку: помечаем и оставляем решение эксперту.
-        card.risks.append("Проверка нашла утверждения без источника: " + "; ".join(verdict.unsourced_claims[:3]))
+        # РЕШ-42: находки проверки — это SolutionCard.unsourced_claims, а не
+        # только строка в risks. Без этого контракт промпта Ф-2 остаётся
+        # мёртвым: поле заполняет модель, но код его не читает.
+        card.unsourced_claims.extend(verdict.unsourced_claims)
         card.confidence = Confidence.LOW
+        if any(_MATURITY_UNCONFIRMED_MARKER in claim.lower() for claim in verdict.unsourced_claims):
+            # Неподтверждённая зрелость понижается до unknown, а не остаётся
+            # заявленной стадией (правило 7 prompts/verifier.md).
+            card.maturity_stage = MaturityStage.UNKNOWN
     if card.has_unsourced_claims():
         card.confidence = Confidence.LOW
         card.confidence_note = (card.confidence_note + " Нет ни одного подтверждения ссылкой.").strip()
     return card
+
+
+# ── 5а. Отбор карточек к публикации ─────────────────────────────────────────
+#: Верхняя граница выдачи (§2а SPEC, FR-9: 5–7 карточек). Нижней границы нет:
+#: сколько честных карточек получилось, столько и идёт в отчёт (Ф-7).
+MAX_PUBLISHED_CARDS = 7
+
+_EMPTY_CARD_TEXT = "не найдено"
+
+
+def select_publishable_cards(cards: list[SolutionCard], *, limit: int = MAX_PUBLISHED_CARDS) -> list[SolutionCard]:
+    """Отобрать карточки, которые честно можно показать клиенту.
+
+    Карточка без единого подтверждения (`evidence` пуст) до отчёта не доходит
+    — тот же инвариант №1, что и в экспортёре, только на входе, а не на
+    печати. Карточка-заглушка «не найдено» (формат ошибки 1 из
+    `prompts/card_author.md` — группа без источников) тоже не идёт: пустая
+    карточка дороже честного «карточек получилось меньше, чем просили».
+    Порядок сохраняется, число карточек в отчёте искусственно не добивается.
+    """
+    kept = [card for card in cards if card.evidence and not _is_empty_card(card)]
+    return kept[:limit]
+
+
+def _is_empty_card(card: SolutionCard) -> bool:
+    """Каркас-заглушка: и название, и суть — «не найдено»."""
+    return card.title.strip().lower() == _EMPTY_CARD_TEXT and card.essence.strip().lower() == _EMPTY_CARD_TEXT
 
 
 # ── 6. Сводка ───────────────────────────────────────────────────────────────
@@ -448,4 +496,39 @@ async def summarize(router: LLMRouter, brief: Brief, cards: list[SolutionCard]) 
         ],
         ReportSummary,
         max_tokens=6000,
+    )
+
+
+def fallback_summary(cards: list[SolutionCard]) -> ReportSummary:
+    """Запасная сводка, когда стадия summary отказала (Ф-7).
+
+    Не вызывает модель — сравнительная таблица собирается прямо из уже
+    провалидированных полей карточек, поэтому сама отказать не может. Отказ
+    настоящей сводки не должен уничтожать уже собранные карточки: раньше
+    именно это и происходило (прогон агропрома потерял пять готовых карточек
+    из-за LLMError на summary). Факт отказа — честная оговорка в caveats, а
+    не только запись в логе.
+    """
+    rows = [
+        {
+            "Вариант": card.title,
+            "Стадия зрелости": card.maturity_stage.value,
+            "Уверенность": card.confidence.value,
+        }
+        for card in cards
+    ]
+    if cards:
+        recommendation = (
+            "Автоматическая сводка не собралась. Сравните варианты по карточкам "
+            "ниже самостоятельно: у каждой есть подтверждения, риски и следующий шаг."
+        )
+    else:
+        recommendation = (
+            "Автоматическая сводка не собралась, а карточек для сравнения тоже нет — "
+            "результат поиска стоит проверить вручную."
+        )
+    return ReportSummary(
+        comparison_rows=rows,
+        recommendation=recommendation,
+        caveats=["Автоматическая сводка не собралась: раздел «Рекомендация» построен без участия модели."],
     )

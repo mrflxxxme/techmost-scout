@@ -17,6 +17,7 @@ MATURITY_RU: dict[MaturityStage, str] = {
     MaturityStage.PROTOTYPE: "есть опытный образец",
     MaturityStage.PILOT: "прошла пилот на объекте",
     MaturityStage.SERIES: "применяется серийно",
+    MaturityStage.UNKNOWN: "стадия не определена",
 }
 
 CONFIDENCE_RU: dict[Confidence, str] = {
@@ -75,10 +76,13 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
     for index, card in enumerate(report.cards, start=1):
         lines.append(f"### {index}. {card.title}")
         lines.append("")
-        maturity = MATURITY_RU.get(card.maturity_stage, card.maturity_stage.value)
-        trl = f" (TRL ≈ {card.trl_estimate})" if card.trl_estimate else ""
-        lines.append(f"**Стадия зрелости:** {maturity}{trl}")
-        lines.append("")
+        # Без единого подтверждения карточка не имеет права заявлять зрелость —
+        # это машинная проверка инварианта №1 (задача Ф-4).
+        if card.evidence:
+            maturity = MATURITY_RU.get(card.maturity_stage, card.maturity_stage.value)
+            trl = f" (TRL ≈ {card.trl_estimate})" if card.trl_estimate else ""
+            lines.append(f"**Стадия зрелости:** {maturity}{trl}")
+            lines.append("")
         lines.append(card.essence)
         lines.append("")
 
@@ -93,6 +97,19 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
 
         lines.append(f"**Применимость к задаче:** {card.applicability}")
         lines.append("")
+        if card.requirement_checks:
+            lines.append("**Сверка с требованиями задачи:**")
+            lines.append("")
+            for check in card.requirement_checks:
+                if check.status == "confirmed":
+                    status_text = "подтверждено источником"
+                    if check.evidence_url:
+                        status_text += f" ([ссылка]({check.evidence_url}))"
+                else:
+                    status_text = "не подтверждено источником"
+                check_note = f" — {check.note}" if check.note else ""
+                lines.append(f"- {check.requirement}: {status_text}{check_note}")
+            lines.append("")
         if card.risks:
             lines.append("**Риски:**")
             lines.append("")
@@ -123,6 +140,17 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
         else:
             lines.append("- _Подтверждений не приложено — карточку нельзя показывать клиенту._")
         lines.append("")
+
+        if card.unsourced_claims:
+            lines.append("**Не подтверждено проверкой:**")
+            lines.append("")
+            for claim in card.unsourced_claims:
+                lines.append(f"- {claim}")
+            lines.append("")
+
+        for pdf_url in card.pdf_urls:
+            lines.append(f"Полный текст: [PDF]({pdf_url})")
+            lines.append("")
 
     if report.sources_unavailable:
         lines.append("## Ограничения этого поиска")

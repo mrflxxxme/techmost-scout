@@ -19,7 +19,7 @@ from defusedxml import ElementTree as ET  # noqa: N817 — ET общеприня
 from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
-from app.search.base import SearchAdapter
+from app.search.base import SearchAdapter, SearchError
 
 log = logging.getLogger(__name__)
 
@@ -65,13 +65,14 @@ class ArxivAdapter(SearchAdapter):
             "max_results": str(max(1, min(limit, MAX_RESULTS))),
         }
         body = await self._fetch(params)
-        if body is None:
-            return []
         try:
             root = ET.fromstring(body)
         except ET.ParseError as exc:
-            log.warning("arxiv: Atom не разобран: %s", exc)
-            return []
+            # Нечитаемое тело при коде 200 (прокси, WAF, обрезанный ответ) —
+            # тот же транспортный отказ, что и HTTP-ошибка: инвариант №5
+            # требует, чтобы он дошёл до sources_unavailable, а не тихо
+            # превратился в «ничего не нашли».
+            raise SearchError(f"arxiv: тело ответа не разобрано как XML: {exc}") from exc
 
         candidates: list[Candidate] = []
         for entry in root.iterfind("atom:entry", NS):
@@ -80,15 +81,17 @@ class ArxivAdapter(SearchAdapter):
                 candidates.append(candidate)
         return candidates[:limit]
 
-    async def _fetch(self, params: dict[str, str]) -> str | None:
+    async def _fetch(self, params: dict[str, str]) -> str:
+        """GET к arXiv. Транспортный отказ поднимается как SearchError —
+        _safe_search оркестратора поймает его и честно отметит источник
+        недоступным (инвариант №5), вместо того чтобы тихо вернуть []."""
         await self._throttle()
         try:
             response = await self._client.get(API_URL, params=params)
             response.raise_for_status()
             return response.text
         except httpx.HTTPError as exc:
-            log.warning("arxiv не ответил на %s: %s", params.get("search_query"), exc)
-            return None
+            raise SearchError(f"arxiv не ответил на «{params.get('search_query')}»: {exc}") from exc
 
     def _to_candidate(self, entry: ET.Element) -> Candidate | None:
         title = _text(entry, "atom:title")
@@ -106,6 +109,7 @@ class ArxivAdapter(SearchAdapter):
         authors = [name for author in entry.iterfind("atom:author", NS) if (name := _text(author, "atom:name"))][
             :MAX_AUTHORS
         ]
+        raw_id, pdf_url = _arxiv_ids(url)
 
         try:
             return Candidate(
@@ -115,7 +119,8 @@ class ArxivAdapter(SearchAdapter):
                 authors=authors,
                 year=_year(_text(entry, "atom:published")),
                 snippet=summary[:MAX_SNIPPET],
-                raw_id=_raw_id(url),
+                raw_id=raw_id,
+                pdf_url=pdf_url,
                 provider=self.name,
             )
         except ValidationError as exc:
@@ -150,7 +155,12 @@ def _year(published: str) -> int | None:
     return int(match.group(0)) if match else None
 
 
-def _raw_id(url: str) -> str | None:
-    """Из https://arxiv.org/abs/2401.01234v2 делаем arXiv:2401.01234v2."""
+def _arxiv_ids(url: str) -> tuple[str | None, str | None]:
+    """Ключ склейки дублей и адрес PDF — оба выводятся из одного совпадения в
+    URL записи (https://arxiv.org/abs/2401.01234v2 → arXiv:2401.01234v2 и
+    https://arxiv.org/pdf/2401.01234v2), без дополнительных запросов."""
     match = _ARXIV_ID.search(url)
-    return f"arXiv:{match.group(1)}" if match else None
+    if not match:
+        return None, None
+    ident = match.group(1)
+    return f"arXiv:{ident}", f"https://arxiv.org/pdf/{ident}"

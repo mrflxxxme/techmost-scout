@@ -16,6 +16,7 @@ import respx
 
 from app.schemas import SearchQuery, SourceType
 from app.search import build_adapters
+from app.search.base import SearchError
 from app.search.yandex_search import OPERATION_URL, SEARCH_ASYNC_URL, YandexSearchAdapter
 
 
@@ -105,6 +106,18 @@ async def test_контур_выбирается_по_языку_формули�
     assert sent["query"]["searchType"] == expected_type
 
 
+@pytest.mark.parametrize(
+    ("lang", "expected_label"),
+    [("ru", "yandex-ru"), ("en", "yandex-com")],
+)
+async def test_метка_контура_совпадает_с_выбором_по_языку(make_adapter, lang, expected_label):
+    """Метка для hits_by_provider берётся тем же правилом, что и сам контур —
+    без живого вызова: contour_label не ходит в сеть."""
+    async with httpx.AsyncClient() as client:
+        adapter = make_adapter(client)
+        assert adapter.contour_label(_query(lang=lang)) == expected_label
+
+
 @respx.mock
 async def test_предел_платных_запросов_на_прогон(make_adapter):
     """Седьмая формулировка уже не уходит в сеть — запросы стоят денег."""
@@ -122,27 +135,47 @@ async def test_предел_платных_запросов_на_прогон(ma
 
 
 @respx.mock
-async def test_гранты_сужаются_до_реестров_только_в_российском_контуре(make_adapter):
+async def test_грантовый_маркер_в_web_формулировке_сужает_до_реестров_только_в_ru(make_adapter):
+    """Сужение `site:` больше не зависит от типа `grant` (планировщик его не выдаёт, РЕШ-39) —
+    оно включается по маркеру грантового намерения в тексте русской web-формулировки (РЕШ-41)."""
     route = respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
     respx.get(url__startswith=OPERATION_URL).mock(
         return_value=httpx.Response(200, json=_operation_done(_xml(_doc("https://rscf.ru/project/1"))))
     )
     async with httpx.AsyncClient() as client:
         adapter = make_adapter(client)
-        await adapter.search(_query(lang="ru", source_type=SourceType.GRANT), limit=5)
-        ru_text = json.loads(route.calls[0].request.content)["query"]["queryText"]
+        await adapter.search(
+            _query(text="поддержанные проекты РНФ катализатор гидроочистки", lang="ru", source_type=SourceType.WEB),
+            limit=5,
+        )
+        ru_grant_text = json.loads(route.calls[0].request.content)["query"]["queryText"]
 
-        await adapter.search(_query(lang="en", source_type=SourceType.GRANT), limit=5)
-        com_text = json.loads(route.calls[1].request.content)["query"]["queryText"]
+        await adapter.search(
+            _query(text="supported grant projects catalyst research", lang="en", source_type=SourceType.WEB),
+            limit=5,
+        )
+        en_text = json.loads(route.calls[1].request.content)["query"]["queryText"]
 
-        await adapter.search(_query(lang="ru", source_type=SourceType.WEB), limit=5)
-        web_text = json.loads(route.calls[2].request.content)["query"]["queryText"]
+        await adapter.search(
+            _query(text="лаборатория катализа сайт кафедры", lang="ru", source_type=SourceType.WEB), limit=5
+        )
+        ru_plain_text = json.loads(route.calls[2].request.content)["query"]["queryText"]
 
-    assert "site:rscf.ru" in ru_text and "site:fasie.ru" in ru_text
-    # В мировом контуре российские реестры бессмысленны
-    assert "site:" not in com_text
-    # Для обычного веба ограничение по сайтам убило бы весь смысл источника
-    assert "site:" not in web_text
+        # Совет ревью Ф-3: «конкурс» — тоже маркер грантового намерения (правило 9 planner.md
+        # предлагает его модели), а без других маркеров формулировка со словом «конкурс» не должна
+        # оставаться без сужения.
+        await adapter.search(
+            _query(text="конкурс поддержки разработок катализатор гидроочистки", lang="ru", source_type=SourceType.WEB),
+            limit=5,
+        )
+        ru_konkurs_text = json.loads(route.calls[3].request.content)["query"]["queryText"]
+
+    assert "site:rscf.ru" in ru_grant_text and "site:fasie.ru" in ru_grant_text
+    # В мировом контуре российские реестры бессмысленны, даже если в тексте есть слово grant
+    assert "site:" not in en_text
+    # Обычная русская web-формулировка без грантового маркера — без сужения
+    assert "site:" not in ru_plain_text
+    assert "site:rscf.ru" in ru_konkurs_text and "site:fasie.ru" in ru_konkurs_text
 
 
 @respx.mock
@@ -160,8 +193,11 @@ async def test_дубли_по_адресу_склеиваются(make_adapter)
 
 
 @respx.mock
-async def test_отказ_внутри_xml_не_роняет_пайплайн(make_adapter):
-    """Яндекс сообщает об отказе внутри XML, а не кодом HTTP."""
+async def test_отказ_внутри_xml_поднимает_searcherror(make_adapter):
+    """Яндекс сообщает об отказе (исчерпанный лимит, нет прав) внутри XML, а не
+    кодом HTTP — это транспортный отказ (инвариант №5, РЕШ-45), не тихий
+    пустой список: иначе «0» неотличимо от честного «источник ничего не
+    нашёл», и порог квоты (шесть платных запросов) нечем измерить."""
     xml = (
         '<?xml version="1.0" encoding="utf-8"?><yandexsearch><response>'
         '<error code="55">Превышен лимит запросов</error>'
@@ -169,19 +205,43 @@ async def test_отказ_внутри_xml_не_роняет_пайплайн(ma
     )
     _mock_ok(xml)
     async with httpx.AsyncClient() as client:
-        found = await make_adapter(client).search(_query(), limit=10)
-
-    assert found == []
+        adapter = make_adapter(client)
+        with pytest.raises(SearchError):
+            await adapter.search(_query(), limit=10)
 
 
 @respx.mock
-async def test_незавершившаяся_операция_возвращает_пусто(make_adapter):
+async def test_незавершившаяся_операция_поднимает_searcherror(make_adapter):
+    """Операция не завершилась за отведённое время — источник не отдал
+    результат, это отказ (инвариант №5, РЕШ-45), а не пустая выдача."""
     respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
     respx.get(url__startswith=OPERATION_URL).mock(return_value=httpx.Response(200, json={"done": False}))
     async with httpx.AsyncClient() as client:
-        found = await make_adapter(client, max_wait_seconds=0.2).search(_query(), limit=5)
+        adapter = make_adapter(client, max_wait_seconds=0.2)
+        with pytest.raises(SearchError):
+            await adapter.search(_query(), limit=5)
 
-    assert found == []
+
+@respx.mock
+async def test_поиск_не_запустился_поднимает_searcherror(make_adapter):
+    """HTTP-отказ запуска платного поиска — транспортный отказ (РЕШ-45)."""
+    respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(500, text="internal error"))
+    async with httpx.AsyncClient() as client:
+        adapter = make_adapter(client)
+        with pytest.raises(SearchError):
+            await adapter.search(_query(), limit=5)
+
+
+@respx.mock
+async def test_опрос_операции_не_отвечает_поднимает_searcherror(make_adapter):
+    """HTTP-отказ при опросе уже запущенной операции — тот же транспортный
+    отказ, что и при запуске (РЕШ-45)."""
+    respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
+    respx.get(url__startswith=OPERATION_URL).mock(return_value=httpx.Response(503, text="unavailable"))
+    async with httpx.AsyncClient() as client:
+        adapter = make_adapter(client)
+        with pytest.raises(SearchError):
+            await adapter.search(_query(), limit=5)
 
 
 @respx.mock

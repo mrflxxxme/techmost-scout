@@ -61,7 +61,7 @@ from defusedxml import ElementTree as ET  # noqa: N817 — ET общеприня
 from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
-from app.search.base import SearchAdapter
+from app.search.base import SearchAdapter, SearchError
 
 log = logging.getLogger(__name__)
 
@@ -157,12 +157,27 @@ class CyberLeninkaAdapter(SearchAdapter):
 
         scored: list[tuple[int, Candidate]] = []
         for page in range(MAX_PAGES):
-            body = await self._fetch(params)
-            if body is None:
-                break
-            root = _parse(body)
-            if root is None:
-                break
+            try:
+                body = await self._fetch(params)
+                root = _parse(body)
+                if root is None:
+                    # Нечитаемое тело при коде 200 — тот же транспортный
+                    # отказ, что и HTTP-ошибка (инвариант №5): не «страница
+                    # молча последняя», а честный отказ источника.
+                    raise SearchError(f"cyberleninka: страница {page + 1} не разобрана как XML")
+            except SearchError as exc:
+                if scored:
+                    # Частичный успех — это результат, а не отказ: то, что
+                    # уже нашли на предыдущих страницах, не выбрасываем,
+                    # адаптер остаётся доступным (правило «недоступен = не
+                    # отдал ничего И падал»). Пропавший хвост — не авария.
+                    log.warning(
+                        "cyberleninka: %s — возвращаю %s уже найденных записей вместо оставшихся страниц",
+                        exc,
+                        len(scored),
+                    )
+                    break
+                raise
             if (error := root.find("oai:error", NS)) is not None:
                 # noRecordsMatch — нормальный ответ, а не авария
                 log.info("cyberleninka: OAI-ошибка %s", error.get("code"))
@@ -208,7 +223,7 @@ class CyberLeninkaAdapter(SearchAdapter):
         этот метод в пайплайне — ответ большой.
         """
         body = await self._fetch({"verb": "ListSets"})
-        root = _parse(body) if body is not None else None
+        root = _parse(body)
         if root is None:
             return {}
         sets: dict[str, str] = {}
@@ -221,7 +236,11 @@ class CyberLeninkaAdapter(SearchAdapter):
 
     # --- сеть и кэш -----------------------------------------------------
 
-    async def _fetch(self, params: dict[str, str]) -> str | None:
+    async def _fetch(self, params: dict[str, str]) -> str:
+        """GET к OAI-PMH с диск-кэшем. Транспортный отказ поднимается как
+        SearchError — _safe_search оркестратора поймает его и честно отметит
+        источник недоступным (инвариант №5), вместо того чтобы страница молча
+        считалась последней."""
         cached = self._read_cache(params)
         if cached is not None:
             return cached
@@ -230,8 +249,7 @@ class CyberLeninkaAdapter(SearchAdapter):
             response = await self._client.get(BASE_URL, params=params)
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            log.warning("cyberleninka не ответила на %s: %s", params.get("verb"), exc)
-            return None
+            raise SearchError(f"cyberleninka не ответила на {params.get('verb')}: {exc}") from exc
         self._write_cache(params, response.text)
         return response.text
 

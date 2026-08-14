@@ -54,7 +54,7 @@ from defusedxml import ElementTree as ET  # noqa: N817 — ET общеприня
 from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
-from app.search.base import SearchAdapter, normalize_url
+from app.search.base import SearchAdapter, SearchError, normalize_url
 
 log = logging.getLogger(__name__)
 
@@ -64,17 +64,32 @@ OPERATION_URL = "https://operation.api.cloud.yandex.net/operations"
 #: Язык формулировки → контур выдачи
 SEARCH_TYPE_BY_LANG = {"ru": "SEARCH_TYPE_RU", "en": "SEARCH_TYPE_COM"}
 
+#: Контур выдачи → метка для счётчика кандидатов в оркестраторе (РЕШ-31).
+#: Метка живёт рядом с правилом, которое выбирает сам контур, — так они не
+#: могут разъехаться, а оркестратору не нужен частный случай под этот источник.
+CONTOUR_LABEL_BY_SEARCH_TYPE = {"SEARCH_TYPE_RU": "yandex-ru", "SEARCH_TYPE_COM": "yandex-com"}
+
 #: Яндекс отдаёт не больше сотни на страницу; нам столько и не нужно
 MAX_PER_PAGE = 100
 MAX_SNIPPET = 700
 
 #: Где искать гранты: у реестров РНФ и Фонда содействия инновациям нет API, и
 #: сузить выдачу до них — единственный способ вытащить поддержанные проекты.
-#: Ограничение применяется ТОЛЬКО к российскому контуру и ТОЛЬКО к запросам про
-#: гранты: для остальных типов `site:` отрезал бы всё живое, ради чего и нужен
+#: Ограничение применяется ТОЛЬКО к российскому контуру и ТОЛЬКО к
+#: web-формулировкам с грантовым намерением (маркеры — GRANT_INTENT_MARKERS
+#: ниже): для остального `site:` отрезал бы всё живое, ради чего и нужен
 #: открытый веб. Список держим здесь, а не в data/: две записи, и они следуют из
 #: смысла источника, а не из подкрутки качества.
 GRANT_SITES = ("rscf.ru", "fasie.ru")
+
+#: Признак грантового намерения в русской web-формулировке (РЕШ-39, РЕШ-41).
+#: Раньше сужение включалось по типу запроса `grant`, которого планировщик
+#: больше не выдаёт: состав типов промпта = состав рабочих адаптеров, а
+#: рабочего адаптера под `grant` нет и не было. Гранты не пропадают как задача
+#: поиска — они становятся web-запросами, и признак сужения переехал на текст
+#: формулировки. Владелец подтвердил ровно этот способ различения в составе
+#: задачи Ф-3 (`.planning/PLAN.md`).
+GRANT_INTENT_MARKERS = ("грант", "поддержанн", "фонд содействия", "рнф", "конкурс")
 
 
 class YandexSearchAdapter(SearchAdapter):
@@ -118,13 +133,26 @@ class YandexSearchAdapter(SearchAdapter):
             )
             return []
 
-        search_type = SEARCH_TYPE_BY_LANG.get(query.lang, "SEARCH_TYPE_RU")
+        search_type = self._search_type(query)
         text = _with_site_filter(query, search_type)
 
         raw = await self._run_search(text, search_type=search_type, limit=limit)
         if raw is None:
             return []
         return self._parse(raw, limit=limit)
+
+    @staticmethod
+    def _search_type(query: SearchQuery) -> str:
+        """Контур выдачи по языку формулировки — единственное место правила."""
+        return SEARCH_TYPE_BY_LANG.get(query.lang, "SEARCH_TYPE_RU")
+
+    def contour_label(self, query: SearchQuery) -> str:
+        """Метка контура для оркестратора: `yandex-ru` или `yandex-com`.
+
+        Берёт тот же контур, что реально уйдёт в `search()` — метка и правило
+        выбора не могут разойтись, потому что вычисляются одной функцией.
+        """
+        return CONTOUR_LABEL_BY_SEARCH_TYPE[self._search_type(query)]
 
     async def health(self) -> tuple[bool, str]:
         """Пробный поиск в мировом контуре.
@@ -167,8 +195,10 @@ class YandexSearchAdapter(SearchAdapter):
             response.raise_for_status()
             operation_id = response.json().get("id")
         except (httpx.HTTPError, ValueError) as exc:
-            log.warning("yandex_search: поиск не запустился (%s): %s", search_type, exc)
-            return None
+            # Транспортный отказ запуска платного поиска — не тихий пустой
+            # список, а SearchError (инвариант №5, РЕШ-45): _safe_search
+            # оркестратора поймает его и честно отметит источник недоступным.
+            raise SearchError(f"yandex_search: поиск не запустился ({search_type}): {exc}") from exc
         if not operation_id:
             log.warning("yandex_search: ответ без идентификатора операции")
             return None
@@ -176,7 +206,8 @@ class YandexSearchAdapter(SearchAdapter):
         return await self._await_operation(operation_id, headers)
 
     async def _await_operation(self, operation_id: str, headers: dict[str, str]) -> bytes | None:
-        """Опрашивать операцию, пока не завершится. Молча сдаться по времени."""
+        """Опрашивать операцию, пока не завершится. Транспортный отказ и
+        зависшая операция поднимают SearchError (РЕШ-45)."""
         deadline = asyncio.get_running_loop().time() + self._max_wait
         while asyncio.get_running_loop().time() < deadline:
             await asyncio.sleep(self._poll_interval)
@@ -185,8 +216,9 @@ class YandexSearchAdapter(SearchAdapter):
                 got.raise_for_status()
                 payload = got.json()
             except (httpx.HTTPError, ValueError) as exc:
-                log.warning("yandex_search: операция %s не опрашивается: %s", operation_id, exc)
-                return None
+                # Опрос операции недоступен — тот же транспортный отказ, что
+                # и при запуске поиска (инвариант №5, РЕШ-45).
+                raise SearchError(f"yandex_search: операция {operation_id} не опрашивается: {exc}") from exc
             if not payload.get("done"):
                 continue
             if (error := payload.get("error")) is not None:
@@ -202,8 +234,9 @@ class YandexSearchAdapter(SearchAdapter):
                 log.warning("yandex_search: результат не декодируется: %s", exc)
                 return None
 
-        log.warning("yandex_search: операция %s не завершилась за %s с", operation_id, self._max_wait)
-        return None
+        # Операция зависла и не завершилась за отведённое время — источник не
+        # отдал результат, это отказ, а не пустая выдача (инвариант №5, РЕШ-45).
+        raise SearchError(f"yandex_search: операция {operation_id} не завершилась за {self._max_wait} с")
 
     def _parse(self, raw: bytes, *, limit: int) -> list[Candidate]:
         try:
@@ -213,10 +246,12 @@ class YandexSearchAdapter(SearchAdapter):
             return []
 
         # Яндекс сообщает о своих отказах внутри XML, а не кодом HTTP:
-        # исчерпанный лимит, отсутствие прав, пустая выдача — всё сюда
+        # исчерпанный лимит, отсутствие прав. Раньше это тихо превращалось в
+        # пустой успех — «0» неотличимо от честного «источник ответил и
+        # ничего не нашёл», и порог квоты (шесть платных запросов) было
+        # нечем измерить. Теперь это SearchError (инвариант №5, РЕШ-45).
         for error in root.iter("error"):
-            log.warning("yandex_search: отказ поиска, код %s: %s", error.get("code"), (error.text or "")[:200])
-            return []
+            raise SearchError(f"yandex_search: отказ поиска, код {error.get('code')}: {(error.text or '')[:200]}")
 
         candidates: list[Candidate] = []
         seen: set[str] = set()
@@ -263,11 +298,13 @@ class YandexSearchAdapter(SearchAdapter):
 def _with_site_filter(query: SearchQuery, search_type: str) -> str:
     """Добавить операторы `site:` там, где это осмысленно.
 
-    Только российский контур и только гранты: реестры РНФ и Фонда содействия
-    инновациям иначе не достать. Для всего остального ограничение по сайтам
-    убило бы смысл открытого веба.
+    Только российский контур и только web-формулировки с грантовым
+    намерением: реестры РНФ и Фонда содействия инновациям иначе не достать.
+    Для всего остального ограничение по сайтам убило бы смысл открытого веба.
     """
-    if search_type != "SEARCH_TYPE_RU" or query.source_type is not SourceType.GRANT:
+    if search_type != "SEARCH_TYPE_RU" or query.source_type is not SourceType.WEB:
+        return query.text
+    if not any(marker in query.text.lower() for marker in GRANT_INTENT_MARKERS):
         return query.text
     sites = " | ".join(f"site:{site}" for site in GRANT_SITES)
     return f"{query.text} ({sites})"

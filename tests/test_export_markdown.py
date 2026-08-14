@@ -1,0 +1,174 @@
+"""Проверки экспортёра markdown: стадия «не определена», сверка с брифом,
+ссылка на полный текст. Задача Ф-4 — экспортёр несёт машинную проверку
+инварианта №1: карточка без evidence не имеет права заявлять зрелость."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+import pytest
+
+from app.export.markdown import render_markdown
+from app.schemas import (
+    Evidence,
+    MaturityStage,
+    Report,
+    ReportSummary,
+    RequirementCheck,
+    SolutionCard,
+)
+
+
+def _make_card(**overrides) -> SolutionCard:
+    """Карточка с минимально достаточным набором полей — переопределяемая точечно."""
+    fields = {
+        "title": "Регенерация катализатора добавками молибдена",
+        "essence": "Продление срока службы катализатора за счёт присадки.",
+        "applicability": "Закрывает задачу продления межрегенерационного цикла.",
+        "next_step": "Запросить образец у разработчика.",
+    }
+    fields.update(overrides)
+    return SolutionCard(**fields)
+
+
+def _make_report(cards: list[SolutionCard], **overrides) -> Report:
+    fields = {
+        "request_id": 1,
+        "brief": overrides.pop("brief"),
+        "cards": cards,
+        "summary": ReportSummary(recommendation="Начать с варианта №1."),
+        "generated_at": datetime(2026, 8, 12, 10, 0),
+    }
+    fields.update(overrides)
+    return Report(**fields)
+
+
+def test_card_without_evidence_hides_maturity_and_trl(brief):
+    """Машинная проверка инварианта №1: без evidence нет ни строки о стадии, ни TRL."""
+    card = _make_card(maturity_stage=MaturityStage.LAB, trl_estimate=5, evidence=[])
+    report = _make_report([card], brief=brief)
+
+    text = render_markdown(report)
+
+    assert "Стадия зрелости" not in text
+    assert "TRL" not in text
+    assert "Подтверждений не приложено" in text
+
+
+def test_unknown_stage_prints_stage_not_defined(brief):
+    """Стадия unknown с непустым evidence печатается словами, а не значением перечисления."""
+    card = _make_card(
+        maturity_stage=MaturityStage.UNKNOWN,
+        evidence=[Evidence(claim="Работает в лаборатории", url="https://example.org/a")],
+    )
+    report = _make_report([card], brief=brief)
+
+    text = render_markdown(report)
+
+    assert "стадия не определена" in text
+    assert "**Стадия зрелости:** unknown" not in text
+
+
+def test_maturity_still_printed_when_evidence_present(brief):
+    """Регрессия: карточка с подтверждениями по-прежнему показывает стадию и TRL."""
+    card = _make_card(
+        maturity_stage=MaturityStage.PILOT,
+        trl_estimate=6,
+        evidence=[Evidence(claim="Пилот на объекте", url="https://example.org/a")],
+    )
+    report = _make_report([card], brief=brief)
+
+    text = render_markdown(report)
+
+    assert "**Стадия зрелости:** прошла пилот на объекте (TRL ≈ 6)" in text
+
+
+def test_requirement_checks_printed_one_per_line(brief):
+    """По каждому пункту requirement_checks — одна строка: подтверждено или нет."""
+    card = _make_card(
+        requirement_checks=[
+            RequirementCheck(
+                requirement="работа при 340 °C",
+                status="confirmed",
+                evidence_url="https://example.org/proof",
+            ),
+            RequirementCheck(
+                requirement="сырьё с повышенным содержанием серы",
+                status="not_confirmed",
+            ),
+        ],
+    )
+    report = _make_report([card], brief=brief)
+
+    text = render_markdown(report)
+
+    assert "**Сверка с требованиями задачи:**" in text
+    assert "работа при 340 °C: подтверждено источником ([ссылка](https://example.org/proof))" in text
+    assert "сырьё с повышенным содержанием серы: не подтверждено источником" in text
+
+
+def test_requirement_checks_block_absent_when_empty(brief):
+    """Блок не печатается, если сверки по требованиям нет вовсе."""
+    card = _make_card(requirement_checks=[])
+    report = _make_report([card], brief=brief)
+
+    text = render_markdown(report)
+
+    assert "Сверка с требованиями задачи" not in text
+
+
+def test_unsourced_claims_visible_near_card(brief):
+    """unsourced_claims виден в тексте карточки, а не только в рисках."""
+    card = _make_card(unsourced_claims=["Утверждение о сроке окупаемости не подтверждено источником"])
+    report = _make_report([card], brief=brief)
+
+    text = render_markdown(report)
+
+    assert "**Не подтверждено проверкой:**" in text
+    assert "Утверждение о сроке окупаемости не подтверждено источником" in text
+
+
+def test_unsourced_claims_block_absent_when_empty(brief):
+    card = _make_card(unsourced_claims=[])
+    report = _make_report([card], brief=brief)
+
+    text = render_markdown(report)
+
+    assert "Не подтверждено проверкой" not in text
+
+
+def test_pdf_urls_printed_as_full_text_link(brief):
+    """pdf_urls непуст — в тексте появляется строка со ссылкой на полный текст."""
+    card = _make_card(pdf_urls=["https://arxiv.org/pdf/example.pdf"])
+    report = _make_report([card], brief=brief)
+
+    text = render_markdown(report)
+
+    assert "Полный текст: [PDF](https://arxiv.org/pdf/example.pdf)" in text
+
+
+def test_pdf_urls_absent_when_empty(brief):
+    card = _make_card(pdf_urls=[])
+    report = _make_report([card], brief=brief)
+
+    text = render_markdown(report)
+
+    assert "Полный текст:" not in text
+
+
+def test_sources_unavailable_line_not_broken(brief):
+    """Регрессия: строка «Не ответили источники» по-прежнему печатается при непустом списке."""
+    card = _make_card()
+    report = _make_report([card], brief=brief, sources_unavailable=["Роспатент", "YandexGPT"])
+
+    text = render_markdown(report)
+
+    assert "Не ответили источники: Роспатент, YandexGPT" in text
+
+
+@pytest.mark.parametrize("stage", list(MaturityStage))
+def test_all_maturity_stages_have_russian_label(stage):
+    """MATURITY_RU покрывает все значения перечисления, включая unknown."""
+    from app.export.markdown import MATURITY_RU
+
+    assert stage in MATURITY_RU
