@@ -40,21 +40,33 @@ def _placeholder_card() -> SolutionCard:
     )
 
 
-def _scored(number: int, *, relevance: int, provider: str = "crossref", notes: str = "") -> ScoredCandidate:
+def _candidate(number: int, *, provider: str = "crossref") -> Candidate:
+    """Кандидат-заготовка: различается только номером и источником."""
+    return Candidate(
+        source_type=SourceType.PUBLICATION,
+        title=f"Кандидат {number}",
+        url=f"https://example.org/{number}",
+        provider=provider,
+    )
+
+
+def _scored(
+    number: int, *, relevance: int, provider: str = "crossref", notes: str = "", others: int = 8
+) -> ScoredCandidate:
     """Оценённый кандидат с заданной релевантностью; прочие оценки одинаковы,
-    чтобы порядок отбора зависел только от `relevance`."""
+    чтобы порядок отбора зависел только от `relevance`.
+
+    `others` поднимает или опускает прочие оценки: так кандидат с низкой
+    релевантностью попадает в отбор за счёт взвешенной суммы — ровно тот случай,
+    ради которого отсечка и заводилась (РЕШ-48).
+    """
     return ScoredCandidate(
-        candidate=Candidate(
-            source_type=SourceType.PUBLICATION,
-            title=f"Кандидат {number}",
-            url=f"https://example.org/{number}",
-            provider=provider,
-        ),
+        candidate=_candidate(number, provider=provider),
         relevance=relevance,
-        maturity=8,
-        accessibility=8,
-        freshness=8,
-        completeness=8,
+        maturity=others,
+        accessibility=others,
+        freshness=others,
+        completeness=others,
         notes=notes,
     )
 
@@ -211,6 +223,137 @@ def test_calibration_line_printed_on_empty_input(caplog):
         select_top([], limit=6, relevance_min=0)
 
     assert any("калибровка relevance" in r.getMessage() for r in caplog.records)
+
+
+def _calibration_line(caplog) -> str:
+    """Строка калибровки из журнала: по ней и только по ней Т-10 выбирает порог."""
+    line = next((r.getMessage() for r in caplog.records if "калибровка relevance" in r.getMessage()), None)
+    assert line is not None, "строки калибровки нет в журнале"
+    return line
+
+
+def test_calibration_spread_uses_only_model_scores(caplog):
+    """min/медиана/max считаются по тем же оценкам, что и «отсеклось бы», — только
+    по оценкам модели.
+
+    Иначе один отказавший батч сдвигает распределение ровно в том диапазоне, из
+    которого Т-10 выбирает порог: те же десять оценок модели дают 1/2/4, а с
+    добавленным батчем из десяти нейтральных пятёрок — 1/4.5/5, при том что
+    колонка «отсеклось бы» не меняется ни на единицу.
+    """
+    scored = [_scored(number, relevance=relevance) for number, relevance in enumerate([1, 1, 2, 2, 3, 3, 4, 4, 2, 1])]
+    scored.extend(stages._neutral_scores([_candidate(100 + number) for number in range(10)]))
+
+    with caplog.at_level(logging.INFO, logger="app.pipeline.stages"):
+        select_top(scored, limit=12, relevance_min=0)
+
+    line = _calibration_line(caplog)
+    assert "оценок модели 10" in line, line
+    assert "min/медиана/max по оценкам модели 1/2/4" in line, line
+    assert "1/4.5/5" not in line, f"нейтральные оценки попали в распределение: {line}"
+    assert "нейтральных оценок 10" in line, line
+
+
+def test_calibration_says_nothing_measured_when_whole_batch_failed(caplog):
+    """Отказал весь батч — строка обязана показать, что измерять было нечего.
+
+    Предельный случай прежней формулы: `кандидатов 4, min/медиана/max 5/5/5,
+    отсечено 0` читается как здоровое измерение, хотя ни одной оценки модель не
+    дала.
+    """
+    scored = stages._neutral_scores([_candidate(number) for number in range(4)])
+
+    with caplog.at_level(logging.INFO, logger="app.pipeline.stages"):
+        select_top(scored, limit=6, relevance_min=6)
+
+    line = _calibration_line(caplog)
+    assert "кандидатов 4" in line, line
+    assert "оценок модели 0" in line, line
+    assert "нет оценок" in line, line
+    assert "5/5/5" not in line, f"нейтральные пятёрки выданы за распределение оценок: {line}"
+
+
+def test_calibration_reports_zero_cut_inside_selected_limit(caplog):
+    """Отсечка по всему списку и отсечка внутри отбираемых `limit` — разные числа.
+
+    Решение Т-10 принимается по составу карточек, а до карточек доходит только
+    top-`limit`. Здесь порог 6 срезал бы 30 кандидатов из 42, но состав top-12 не
+    изменился бы ни на одну позицию: по первой колонке это неотличимо от случая,
+    где меняется четверть выдачи.
+    """
+    scored = [_scored(number, relevance=9, provider="crossref" if number % 2 else "openalex") for number in range(12)]
+    scored.extend(
+        _scored(100 + number, relevance=1, provider="crossref" if number % 2 else "openalex") for number in range(30)
+    )
+
+    with caplog.at_level(logging.INFO, logger="app.pipeline.stages"):
+        select_top(scored, limit=12, relevance_min=0)
+
+    line = _calibration_line(caplog)
+    assert "кандидатов 42" in line, line
+    assert "отсеклось бы по всему списку при 4: 30, при 5: 30, при 6: 30, при 7: 30" in line, line
+    assert "среди отобранных 12 (лимит 12) ниже порога 4: 0, 5: 0, 6: 0, 7: 0" in line, line
+
+
+def test_calibration_counts_cut_inside_selected_limit(caplog):
+    """Вторая колонка считает только тех, кто реально доходит до карточек.
+
+    Шесть кандидатов «мимо задачи» на весь список, но лишь три из них взвешенная
+    сумма вытянула в top-12 — именно эти три и есть то, ради чего Т-10 включает
+    отсечку.
+    """
+    providers = ("crossref", "openalex", "elibrary")
+    scored = [_scored(number, relevance=8, provider=providers[number % 3]) for number in range(9)]
+    # Низкая релевантность, но высокие прочие оценки — в отбор попадают.
+    scored.extend(_scored(20 + number, relevance=3, others=10, provider=providers[number % 3]) for number in range(3))
+    # Те же 3 балла релевантности, но в отбор не проходят: не о них решение.
+    scored.extend(_scored(40 + number, relevance=3, others=4, provider=providers[number % 3]) for number in range(3))
+
+    with caplog.at_level(logging.INFO, logger="app.pipeline.stages"):
+        select_top(scored, limit=12, relevance_min=0)
+
+    line = _calibration_line(caplog)
+    assert "кандидатов 15" in line, line
+    assert "отсеклось бы по всему списку при 4: 6, при 5: 6, при 6: 6, при 7: 6" in line, line
+    assert "среди отобранных 12 (лимит 12) ниже порога 4: 3, 5: 3, 6: 3, 7: 3" in line, line
+
+
+def test_neutral_scores_from_producer_survive_cutoff():
+    """Фактический выход `_neutral_scores` проходит отсечку при пороге выше 5.
+
+    Прежние три теста строили пометку руками из константы, поэтому производитель
+    пометки и её потребитель могли разойтись молча: `_neutral_scores` в тестах не
+    вызывался ни разу.
+    """
+    neutral = stages._neutral_scores([_candidate(number) for number in range(3)])
+
+    picked = select_top(neutral, limit=6, relevance_min=7)
+
+    assert len(picked) == 3, "кандидаты с нейтральной оценкой отсечены порогом"
+
+
+def test_neutral_mark_survives_change_of_note_text(caplog):
+    """Пометка структурная: правка текста `notes` её не рвёт.
+
+    Со сравнением строк дописанный к пометке номер батча тихо отправлял бы
+    нейтральных кандидатов под отсечку, а журнал показывал бы «нейтральных
+    оценок 0».
+    """
+    item = stages.NeutralScoredCandidate(
+        candidate=_candidate(0),
+        relevance=5,
+        maturity=5,
+        accessibility=5,
+        freshness=5,
+        completeness=5,
+        notes=f"{NEUTRAL_SCORE_NOTE} (батч 2)",
+    )
+
+    with caplog.at_level(logging.INFO, logger="app.pipeline.stages"):
+        picked = select_top([item], limit=6, relevance_min=7)
+
+    assert len(picked) == 1, "нейтральный кандидат отсечён из-за изменения текста пометки"
+    assert "нейтральных оценок 1" in _calibration_line(caplog)
 
 
 def test_group_for_cards_merges_same_organisation():
