@@ -16,6 +16,12 @@
 
 Порядок в списке значимый: витрина партнёров идёт первой — это приоритетный
 слой с уже подтверждёнными контактами разработчиков.
+
+Отдельный режим `include_stubs=True` — для `scout doctor` (РЕШ-52.1): там нужен
+не рабочий набор, а полная картина. В этом режиме из списка не выбрасывается
+никто: и заготовка, и источник без ключа возвращаются с пометкой, почему они не
+работают (`adapter_status`). Раньше доктор молчал о заготовках вовсе, и
+проверить статус источника, которого нет в списке, было нечем.
 """
 
 from __future__ import annotations
@@ -31,7 +37,7 @@ from app.search.base import SearchAdapter, SearchError
 from app.search.crossref import CrossrefAdapter
 from app.search.cyberleninka import CyberLeninkaAdapter
 from app.search.google_search import GoogleSearchAdapter
-from app.search.openalex import OpenAlexAdapter
+from app.search.openalex import OpenAlexAdapter, normalize_doi
 from app.search.patents_view import PatentsViewAdapter
 from app.search.rospatent import RospatentAdapter
 from app.search.semanticscholar import SemanticScholarAdapter
@@ -91,6 +97,26 @@ CONSTRUCTOR_SETTINGS: dict[str, dict[str, tuple[str, ...]]] = {
 }
 
 
+#: Короткий статус источника-заготовки в таблице доктора
+STATUS_STUB = "не реализовано"
+#: Короткий статус источника, выключенного из-за незаполненных настроек
+STATUS_NO_KEY = "нет ключа"
+#: Имя атрибута экземпляра, куда build_adapters кладёт пару
+#: (короткий статус, пояснение). Живёт на экземпляре, а не в `SearchAdapter`:
+#: базовый контракт источника к сборке реестра отношения не имеет.
+_STATUS_ATTR = "disabled_status"
+
+
+def adapter_status(adapter: SearchAdapter) -> tuple[str, str] | None:
+    """Почему источник в списке есть, но работать не будет.
+
+    None — источник рабочий. Иначе пара «короткий статус, пояснение»: её
+    печатает `scout doctor`. Значений ключей в пояснении нет и быть не может —
+    только имена переменных окружения (инвариант №3).
+    """
+    return getattr(adapter, _STATUS_ATTR, None)
+
+
 def build_adapters(
     client: httpx.AsyncClient,
     settings: Any = None,
@@ -102,21 +128,37 @@ def build_adapters(
     settings — любой объект с атрибутами-настройками (pydantic Settings,
     dataclass, SimpleNamespace) или словарь. None означает «ключей нет»,
     тогда останутся только бесплатные источники.
+
+    `include_stubs=True` меняет смысл списка: возвращаются ВСЕ источники из
+    `ADAPTERS`, а нерабочие получают статус (`adapter_status`) вместо
+    исключения из списка. Этот режим — для доктора; пайплайн зовёт функцию без
+    него и получает только то, что действительно работает.
     """
     adapters: list[SearchAdapter] = []
     for name, cls in ADAPTERS.items():
-        if not include_stubs and not getattr(cls, "implemented", True):
+        stub = not getattr(cls, "implemented", True)
+        if stub and not include_stubs:
             log.debug("источник %s — заготовка, пропущен", name)
             continue
         missing = [key for key in REQUIRED_SETTINGS.get(name, ()) if not _setting(settings, key)]
-        if cls.requires_key and missing:
+        no_key = bool(cls.requires_key and missing)
+        if no_key and not include_stubs:
             log.info("источник %s выключен: нет настроек %s", name, ", ".join(missing))
             continue
         try:
-            adapters.append(_instantiate(name, cls, client, settings))
+            adapter = _instantiate(name, cls, client, settings)
         except Exception as exc:
             log.warning("источник %s не собрался: %s", name, exc)
-    log.info("активные источники: %s", ", ".join(a.name for a in adapters) or "нет")
+            continue
+        status: tuple[str, str] | None = None
+        if stub:
+            status = (STATUS_STUB, "заготовка: источник ещё не подключён")
+        elif no_key:
+            status = (STATUS_NO_KEY, "не заполнено: " + ", ".join(key.upper() for key in missing))
+        setattr(adapter, _STATUS_ATTR, status)
+        adapters.append(adapter)
+    working = [a.name for a in adapters if adapter_status(a) is None]
+    log.info("активные источники: %s", ", ".join(working) or "нет")
     return adapters
 
 
@@ -164,6 +206,8 @@ def _setting(settings: Any, key: str) -> Any:
 __all__ = [
     "ADAPTERS",
     "REQUIRED_SETTINGS",
+    "STATUS_NO_KEY",
+    "STATUS_STUB",
     "ArxivAdapter",
     "CrossrefAdapter",
     "CyberLeninkaAdapter",
@@ -176,6 +220,8 @@ __all__ = [
     "SemanticScholarAdapter",
     "ShowcaseAdapter",
     "YandexSearchAdapter",
+    "adapter_status",
     "build_adapters",
     "free_adapters",
+    "normalize_doi",
 ]

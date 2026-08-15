@@ -68,6 +68,24 @@ REFINE_FALLBACK_CAVEAT = (
 STAGE_INTAKE = "intake"
 STAGE_INTAKE_REFINE = "intake_refine"
 
+#: Таблица ключей доктора: (переменная окружения, поле настроек, зачем нужен).
+#: Отдельной константой, а не списком внутри `_doctor`: состав таблицы —
+#: проверяемое обещание (РЕШ-52.2), а спрятанный в теле функции список
+#: проверить нечем, кроме живого запуска.
+SECRET_CHECKS: tuple[tuple[str, str, str], ...] = (
+    ("GIGACHAT_AUTH_KEY", "gigachat_auth_key", "основная модель, бесплатный тариф"),
+    ("DEEPSEEK_API_KEY", "deepseek_api_key", "качественные стадии: карточки, проверка"),
+    ("YANDEX_API_KEY", "yandex_api_key", "аварийный резерв модели"),
+    ("YANDEX_CATALOG_ID", "yandex_catalog_id", "нужен вместе с ключом Яндекса"),
+    ("YANDEX_SEARCH_API_KEY", "yandex_search_api_key", "поиск по вебу РФ (платно)"),
+    ("GOOGLE_API_KEY", "google_api_key", "поиск по мировому вебу (100 запросов в сутки бесплатно)"),
+    ("GOOGLE_CSE_ID", "google_cse_id", "нужен вместе с ключом Google"),
+    ("OPENALEX_API_KEY", "openalex_api_key", "обогащение по DOI (с 02.2026 ключ обязателен)"),
+    ("SEMANTICSCHOLAR_API_KEY", "semanticscholar_api_key", "необязателен, повышает лимиты"),
+    ("ROSPATENT_API_KEY", "rospatent_api_key", "поисковая платформа Роспатента (Э2-2)"),
+    ("PATENTSVIEW_API_KEY", "patentsview_api_key", "патенты США, ключ обязателен с 05.2025"),
+)
+
 
 def _intake_stage_record(
     stage: str, *, started_at: datetime, cost_before: dict[str, float], router: LLMRouter, error: BaseException
@@ -173,18 +191,7 @@ async def _doctor() -> None:
     secrets_table.add_column("Переменная")
     secrets_table.add_column("Статус")
     secrets_table.add_column("Зачем")
-    checks = [
-        ("GIGACHAT_AUTH_KEY", "gigachat_auth_key", "основная модель, бесплатный тариф"),
-        ("DEEPSEEK_API_KEY", "deepseek_api_key", "качественные стадии: карточки, проверка"),
-        ("YANDEX_API_KEY", "yandex_api_key", "аварийный резерв модели"),
-        ("YANDEX_CATALOG_ID", "yandex_catalog_id", "нужен вместе с ключом Яндекса"),
-        ("YANDEX_SEARCH_API_KEY", "yandex_search_api_key", "поиск по вебу РФ (платно)"),
-        ("GOOGLE_API_KEY", "google_api_key", "поиск по мировому вебу (100 запросов в сутки бесплатно)"),
-        ("GOOGLE_CSE_ID", "google_cse_id", "нужен вместе с ключом Google"),
-        ("OPENALEX_API_KEY", "openalex_api_key", "обогащение по DOI (с 02.2026 ключ обязателен)"),
-        ("SEMANTICSCHOLAR_API_KEY", "semanticscholar_api_key", "необязателен, повышает лимиты"),
-    ]
-    for env_name, field_name, purpose in checks:
+    for env_name, field_name, purpose in SECRET_CHECKS:
         ok = settings.has_secret(field_name)
         secrets_table.add_row(env_name, "[green]есть[/green]" if ok else "[yellow]нет[/yellow]", purpose)
     console.print(secrets_table)
@@ -205,21 +212,34 @@ async def _doctor() -> None:
     console.print(f"[bold]Резервный порядок:[/bold] {', '.join(settings.fallback_order())}")
 
     console.print("\n[bold]Проверяю источники…[/bold]")
-    from app.search import build_adapters
+    from app.search import adapter_status, build_adapters
 
+    # include_stubs=True: доктор показывает ВСЕ источники из реестра (РЕШ-52.1).
+    # Источника, которого нет в таблице, нельзя ни проверить, ни починить —
+    # именно так заготовки и выключенные без ключа источники были невидимы.
     async with httpx.AsyncClient(
         timeout=settings.search_timeout_seconds,
         headers={"User-Agent": f"TechMostScout/1.0 (mailto:{settings.crossref_mailto})"},
         follow_redirects=True,
     ) as client:
-        adapters = build_adapters(client, settings)
-        results = await asyncio.gather(*(a.health() for a in adapters), return_exceptions=True)
+        adapters = build_adapters(client, settings, include_stubs=True)
+        # Здоровье спрашиваем только у рабочих: у заготовки спрашивать нечего,
+        # а у источника без ключа проверка всё равно упрётся в его отсутствие.
+        working = [a for a in adapters if adapter_status(a) is None]
+        results = await asyncio.gather(*(a.health() for a in working), return_exceptions=True)
 
+    health_by_name = dict(zip((a.name for a in working), results, strict=True))
     src_table = Table(show_lines=False)
     src_table.add_column("Источник")
     src_table.add_column("Статус")
     src_table.add_column("Подробности")
-    for adapter, outcome in zip(adapters, results, strict=True):
+    for adapter in adapters:
+        status = adapter_status(adapter)
+        if status is not None:
+            label, detail = status
+            src_table.add_row(adapter.name, f"[yellow]{label}[/yellow]", detail)
+            continue
+        outcome = health_by_name[adapter.name]
         if isinstance(outcome, BaseException):
             src_table.add_row(adapter.name, "[red]ошибка[/red]", f"{type(outcome).__name__}: {outcome}")
         else:
