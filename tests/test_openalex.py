@@ -13,10 +13,11 @@ import respx
 
 from app.cli import SECRET_CHECKS
 from app.llm import LLMRouter
+from app.pipeline import stages
 from app.pipeline.orchestrator import ScoutPipeline
-from app.schemas import Candidate, SearchPlan, SearchQuery, SourceType
+from app.schemas import Candidate, ReportSummary, SearchPlan, SearchQuery, SourceType
 from app.search import ADAPTERS, STATUS_NO_KEY, STATUS_STUB, adapter_status, build_adapters
-from app.search.base import SearchError
+from app.search.base import SearchAdapter, SearchError
 from app.search.openalex import API_URL, BATCH_SIZE, OpenAlexAdapter, normalize_doi
 
 DOI = "10.1234/example-a"
@@ -295,6 +296,60 @@ async def test_отказ_обогащения_не_роняет_прогон(se
 
     assert enriched == [candidate] and citations == {}
     assert any("обогащение по DOI не удалось" in record.getMessage() for record in caplog.records)
+
+
+class _OneHitAdapter(SearchAdapter):
+    """Источник, отдающий одного кандидата с DOI — на нём проверяется место
+    обогащения в прогоне."""
+
+    name = "crossref"
+    source_types = (SourceType.PUBLICATION,)
+
+    async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
+        return [_candidate(org=None, snippet="")]
+
+
+@respx.mock
+async def test_обогащение_встроено_между_дедупликацией_и_скорингом(settings, brief, monkeypatch):
+    """РЕШ-52.3 целиком: кандидат доезжает до скоринга уже обогащённым, а
+    цитируемость — вместе с ним.
+
+    Проверка сквозная по прогону, а не по одному вызову: обогащение, которое
+    работает, но не подключено к стадии-потребителю, ничем не отличается от
+    отсутствующего.
+    """
+    respx.get(url__startswith=LOOKUP).mock(return_value=httpx.Response(200, json=_work()))
+    captured: dict = {}
+
+    async def fake_plan(router, brief_):
+        return SearchPlan(
+            queries=[SearchQuery(text="катализатор", source_type=SourceType.PUBLICATION, lang="ru", rationale="тест")]
+        )
+
+    async def spy_score(router, brief_, candidates, *, batch_size=10, citations=None):
+        captured["candidates"] = candidates
+        captured["citations"] = citations
+        return []
+
+    async def fake_summarize(router, brief_, cards):
+        return ReportSummary(comparison_rows=[], recommendation="нечего рекомендовать", caveats=[])
+
+    monkeypatch.setattr(stages, "plan_search", fake_plan)
+    monkeypatch.setattr(stages, "score_candidates", spy_score)
+    monkeypatch.setattr(stages, "summarize", fake_summarize)
+
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(
+            settings=settings,
+            router=LLMRouter(settings),
+            adapters=[_OneHitAdapter(client), _adapter(client)],
+        )
+        report = await pipeline.run(brief)
+
+    scored_candidate = captured["candidates"][0]
+    assert scored_candidate.org == "Институт катализа СО РАН", "скоринг получил необогащённого кандидата"
+    assert captured["citations"] == {scored_candidate.dedup_key(): 42}, "цитируемость до скоринга не доехала"
+    assert report.sources_unavailable == []
 
 
 # ── Доктор ──────────────────────────────────────────────────────────────────
