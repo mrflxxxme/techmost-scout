@@ -603,13 +603,22 @@ class _FakeWebAdapter(SearchAdapter):
 
 
 class _FakeApiAdapter(SearchAdapter):
-    """Источник со структурированным API: флага нет, стадии не видит."""
+    """Источник со структурированным API: флага нет, стадии не видит.
+
+    `search_raw` намеренно взрывается: у источника без флага оркестратор обязан
+    спрашивать `search`. Правило это не косметическое — адаптер, собранный не от
+    `SearchAdapter` (в проекте такие есть в тестах доктора), метода `search_raw`
+    не имеет вовсе, и поход в него превратил бы рабочий источник в недоступный.
+    """
 
     name = "fake_api"
     source_types = (SourceType.PUBLICATION,)
 
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
         return [_candidate(1, provider=self.name)]
+
+    async def search_raw(self, query: SearchQuery, *, limit: int = 20) -> tuple[list[Candidate], list[dict]]:
+        raise AssertionError("источник без needs_extraction спрашивают через search")
 
 
 def _plan(*source_types: SourceType) -> SearchPlan:
