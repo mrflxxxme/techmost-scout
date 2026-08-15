@@ -64,24 +64,39 @@ def cost_delta(before: dict[str, float], after: dict[str, float]) -> tuple[float
 _PATCHABLE_FIELDS = ("org", "snippet", "pdf_url")
 
 
-def _apply_patch(candidate: Candidate, patch: dict) -> Candidate:
+def _apply_patch(candidate: Candidate, patch: dict) -> tuple[Candidate, list[str]]:
     """Заполнить пустые поля кандидата патчем обогащения.
 
     Непустое значение не перезаписывается никогда — это суть правки, а не
     деталь: иначе аффилиация из Crossref молча заменялась бы на организацию
     первого автора из OpenAlex, а фрагмент из витрины партнёров — на
     академическую аннотацию.
+
+    Поля проверяются по одному, и негодное отбрасывается в одиночку (П-2
+    аудита). Раньше валидация шла одним куском: патч с годной организацией и
+    мусорным `pdf_url` отбрасывался целиком, вместе с ссылкой пропадали
+    организация и аннотация, а сообщение уходило на `DEBUG`, которого в прогоне
+    не видно. Возвращает пару «кандидат, имена отброшенных полей»: молчаливое
+    отбрасывание — это ровно тот отказ, который снаружи неотличим от работы.
     """
     updates = {field: patch[field] for field in _PATCHABLE_FIELDS if patch.get(field) and not getattr(candidate, field)}
     if not updates:
-        return candidate
-    try:
-        # Через повторную валидацию, а не model_copy: в патче сырые строки, и
-        # кривой pdf_url обязан отвалиться здесь, а не в экспорте отчёта.
-        return Candidate.model_validate({**candidate.model_dump(mode="json"), **updates})
-    except ValidationError as exc:
-        log.debug("обогащение отброшено для %s: %s", candidate.url, exc)
-        return candidate
+        return candidate, []
+    # Через повторную валидацию, а не model_copy: в патче сырые строки, и
+    # кривой pdf_url обязан отвалиться здесь, а не в экспорте отчёта.
+    base = candidate.model_dump(mode="json")
+    result = candidate
+    accepted: dict = {}
+    dropped: list[str] = []
+    for field, value in updates.items():
+        try:
+            result = Candidate.model_validate({**base, **accepted, field: value})
+        except ValidationError as exc:
+            dropped.append(field)
+            log.info("обогащение: поле %s отброшено для %s: %s", field, candidate.url, exc)
+            continue
+        accepted[field] = value
+    return result, dropped
 
 
 @dataclass(slots=True)
@@ -232,13 +247,21 @@ class ScoutPipeline:
 
         enriched = list(candidates)
         citations: dict[str, int] = {}
+        dropped_fields: list[str] = []
         for doi, patch in patches.items():
             for index in by_doi.get(doi, ()):
                 candidate = enriched[index]
                 cited = patch.get("cited_by_count")
                 if isinstance(cited, int) and not isinstance(cited, bool):
                     citations[candidate.dedup_key()] = cited
-                enriched[index] = _apply_patch(candidate, patch)
+                enriched[index], dropped = _apply_patch(candidate, patch)
+                dropped_fields.extend(dropped)
+        if dropped_fields:
+            log.warning(
+                "обогащение: отброшено негодных полей — %s (%s)",
+                len(dropped_fields),
+                ", ".join(sorted(set(dropped_fields))),
+            )
         return enriched, citations
 
     async def _safe_search(self, adapter: SearchAdapter, query) -> list[Candidate] | None:

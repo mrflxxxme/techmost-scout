@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import httpx
 import pytest
 import respx
@@ -266,6 +268,32 @@ async def test_непустые_поля_кандидата_не_перезап�
     assert str(enriched[0].pdf_url) == "https://example.org/own.pdf"
     # Цитируемость полем кандидата не является и потому доезжает всегда
     assert citations == {candidate.dedup_key(): 42}
+
+
+@respx.mock
+async def test_негодное_поле_патча_не_уносит_годные(settings, caplog):
+    """П-2 аудита: отбрасывается ПОЛЕ, а не патч целиком.
+
+    Мусорная ссылка обязана отвалиться в одиночку: организация и аннотация из
+    того же ответа — годные данные, и терять их вместе со ссылкой значит
+    сходить за обогащением и выбросить его результат. Сообщение об
+    отбрасывании обязано быть видно в обычном прогоне: на `DEBUG` его не видел
+    никто.
+    """
+    respx.get(url__startswith=LOOKUP).mock(return_value=httpx.Response(200, json=_work(pdf_url="не ссылка")))
+    candidate = _candidate(org=None, snippet="", pdf_url=None)
+
+    with caplog.at_level(logging.INFO):
+        async with httpx.AsyncClient() as client:
+            enriched, citations = await _enrich(settings, _adapter(client), [candidate])
+
+    assert enriched[0].org == "Институт катализа СО РАН", "годная организация выброшена вместе с кривой ссылкой"
+    assert enriched[0].snippet == "Катализатор сохраняет активность"
+    assert enriched[0].pdf_url is None, "негодная ссылка всё же доехала до кандидата"
+    assert citations == {candidate.dedup_key(): 42}
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("поле pdf_url отброшено" in message for message in messages), "отбрасывание поля не видно в прогоне"
+    assert any("отброшено негодных полей — 1" in message for message in messages)
 
 
 @respx.mock
