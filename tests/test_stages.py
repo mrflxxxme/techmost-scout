@@ -674,7 +674,10 @@ async def test_extractor_заполняет_метки_промпта_через
 
 
 async def test_extractor_просит_свой_лимит_токенов(settings, fake_provider_factory):
-    """§0.1 п. 7: у каждой стадии своя щедрость по токенам, у extractor — 4096."""
+    """§0.1 п. 7 и РЕШ-61 п. 1: у каждой стадии своя щедрость по токенам, у
+    extractor — 7000, как у автора карточек. Пост-аудит измерил предельный по
+    контракту промпта ответ в ≈6 334 токена: при 4096 он обрывался, и роутер
+    переспрашивал заново, оплачивая вход второй раз."""
     base = fake_provider_factory
 
     class _Recording(base):  # type: ignore[misc, valid-type]
@@ -693,7 +696,7 @@ async def test_extractor_просит_свой_лимит_токенов(setting
 
     await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
 
-    assert provider.limits == [4096]
+    assert provider.limits == [7000]
 
 
 async def test_extractor_на_пустой_выдаче_модель_не_зовёт(settings, fake_provider_factory):
