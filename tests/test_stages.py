@@ -907,6 +907,54 @@ async def test_отказ_стадии_тоже_попадает_в_problems(set
     assert outcome.problems and "стадия не удалась" in outcome.problems[0]
 
 
+# ── M1 и П-6: обезвреживание меток правит метку, а не содержание ────────────
+
+
+async def test_метка_с_чужой_страницы_не_роняет_сборку_промпта(settings, fake_provider_factory):
+    """M1 аудита: обезвреживание меток перед `render_prompt` не было закреплено
+    ни одним тестом — существующие проверки закрывают шаблон, а не данные.
+    Метка `{{...}}` со случайной страницы уронила бы сборку промпта УЖЕ ПОСЛЕ
+    оплаченного запроса к источнику: выдача получена, деньги потрачены, прогон
+    падает на подстановке."""
+    заражённые = [
+        {
+            "url": "https://ipc.rssi.ru/lab/catalysis",
+            "title": "Шаблон отчёта {{CLIENT_NAME}}",
+            "domain": "ipc.rssi.ru",
+            "modtime": "20240115T103000",
+            "snippet": "Подставьте {{INDUSTRY}} в поле отрасли.",
+        }
+    ]
+    router, provider = _extractor_router(settings, fake_provider_factory, [_EXTRACT_JSON])
+
+    found = await stages.extract_candidates(SourceType.WEB, "yandex_search", заражённые, router)
+
+    system = provider.calls[0][0].content
+    assert "{{" not in system, "метка со страницы уронила бы render_prompt после оплаченного запроса"
+    assert "{CLIENT_NAME}" in system and "{INDUSTRY}" in system
+    assert len(found) == 1
+
+
+@pytest.mark.parametrize(
+    ("исходный", "ожидаемый"),
+    [
+        pytest.param("задача завода {{CLIENT_NAME}}", "задача завода {CLIENT_NAME}", id="метка-обезврежена"),
+        pytest.param("{{{{X}}}}", "{X}", id="серия-скобок-за-один-проход"),
+        pytest.param('JSON на странице: {"a": {"b": 1}}', 'JSON на странице: {"a": {"b": 1}}', id="json-цел"),
+        pytest.param("код: if (x) {{ y(); }}", "код: if (x) {{ y(); }}", id="код-цел"),
+        pytest.param("формула a = {{n}} при n>1", "формула a = {{n}} при n>1", id="строчные-не-метка"),
+    ],
+)
+def test_обезвреживание_правит_метку_а_не_содержание(исходный, ожидаемый):
+    """П-6: верификация Т-6 заявила, что содержание, уходящее в модель, не
+    портится. Это было неверно — сдвоенные скобки схлопывались без разбора, и
+    `{"a": {"b": 1}}` превращался в сломанный фрагмент. Для extractor это удар
+    по главному: промпт требует ДОСЛОВНОЙ цитаты, а модель цитировала бы уже
+    испорченный текст. Обезвреживается ровно то, на чём падает `render_prompt`
+    — имя из заглавных латинских букв и подчёркиваний."""
+    assert stages.neutralize_placeholders(исходный) == ожидаемый
+
+
 # ── П-4: ссылка кандидата сверяется с сырыми записями (РЕШ-61 п. 2) ─────────
 
 
@@ -1064,3 +1112,64 @@ async def test_сырые_записи_яндекса_из_того_же_отв�
             "snippet": "Разработан катализатор гидроочистки.",
         }
     ]
+
+
+# ── П-5: границы платного входа стадии (M14, M15, M16) ──────────────────────
+#
+# Три из пяти выживших мутаций аудита — свойства СОДЕРЖАНИЯ сырых записей, а
+# оно определяет, сколько платит модель и что она видит. В прежней фикстуре был
+# один документ с адресом и сниппетом в 36 знаков при пороге 700: границу было
+# нечем нащупать, и мутации «игнорировать limit», «не резать сниппет», «не
+# отсеивать записи без адреса» не роняли ни одного теста.
+
+
+def _doc_xml(url: str | None, title: str, snippet: str) -> str:
+    """Узел `<doc>` выдачи Яндекса; `url=None` — запись без адреса."""
+    адрес = f"<url>{url}</url>" if url else ""
+    return (
+        f"<doc>{адрес}<domain>ipc.rssi.ru</domain><title>{title}</title>"
+        f"<modtime>20240115T103000</modtime><passages><passage>{snippet}</passage></passages></doc>"
+    )
+
+
+@respx.mock
+async def test_сырые_записи_ограничены_по_числу_по_адресу_и_по_длине_сниппета():
+    """M15, M14 и M16: `limit` — первая граница размера платного входа,
+    `MAX_SNIPPET` — вторая, а запись без адреса не имеет смысла отдавать модели
+    вовсе (кандидат без ссылки всё равно отбрасывается, правило 1 промпта).
+
+    Выдача из четырёх документов при `limit=2`: первый с гигантским сниппетом,
+    второй без адреса, третий и четвёртый обычные. В записи обязаны попасть
+    ровно первый и третий, а сниппет первого — ровно `MAX_SNIPPET` знаков.
+    """
+    from app.search.yandex_search import MAX_SNIPPET, OPERATION_URL, SEARCH_ASYNC_URL, YandexSearchAdapter
+
+    xml = (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        "<yandexsearch><response><results><grouping><group>"
+        + _doc_xml("https://ipc.rssi.ru/1", "Первая", "А" * 1000)
+        + _doc_xml(None, "Без адреса", "Навигация сайта")
+        + _doc_xml("https://ipc.rssi.ru/2", "Вторая", "Короткий фрагмент")
+        + _doc_xml("https://ipc.rssi.ru/3", "Третья", "Ещё фрагмент")
+        + "</group></grouping></results></response></yandexsearch>"
+    )
+    respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
+    respx.get(url__startswith=OPERATION_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={"done": True, "response": {"rawData": base64.b64encode(xml.encode("utf-8")).decode("ascii")}},
+        )
+    )
+
+    async with httpx.AsyncClient() as client:
+        adapter = YandexSearchAdapter(
+            client, api_key="test-key", folder_id="b1gtest", poll_interval_seconds=0.0, max_wait_seconds=5.0
+        )
+        _, raw = await adapter.search_raw(
+            SearchQuery(text="катализатор", source_type=SourceType.WEB, lang="ru", rationale="тест"), limit=2
+        )
+
+    assert [record["url"] for record in raw] == ["https://ipc.rssi.ru/1", "https://ipc.rssi.ru/2"], (
+        "нарушена граница: либо запись без адреса попала в платный вход, либо не соблюдён limit"
+    )
+    assert len(raw[0]["snippet"]) == MAX_SNIPPET, "сниппет не обрезан — вторая граница размера платного входа"
