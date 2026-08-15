@@ -12,10 +12,11 @@ import json
 import logging
 
 import httpx
+import pytest
 import respx
 
 from app.config import Settings
-from app.llm import LLMRouter
+from app.llm import CostLimitExceededError, LLMRouter
 from app.pipeline import stages
 from app.pipeline.orchestrator import ScoutPipeline
 from app.pipeline.stages import (
@@ -742,6 +743,40 @@ async def test_отказ_стадии_не_роняет_прогон_и_не_п
     assert [c.title for c in outcome.candidates] == ["Разбор адаптера"]
     assert outcome.unavailable == []
     assert "extractor: стадия не удалась" in caplog.text
+
+
+async def test_стоп_кран_стоимости_из_стадии_не_подменяется_разбором_адаптера(settings, fake_provider_factory, caplog):
+    """РЕШ-45: исчерпанный лимит — не отказ модели, а команда «стоп тратить».
+
+    `CostLimitExceededError` — наследник `RuntimeError`, поэтому общий
+    `except Exception` в `_extract` поймал бы её вместе с отказами модели и
+    молча превратил стоп-кран в «беру разбор адаптера»: остальные формулировки
+    плана продолжили бы платить дальше. Проверяем ровно это: стадия падает по
+    лимиту, наружу выходит `CostLimitExceededError`, а не выдача с разбором
+    адаптера, и в лог не уходит «беру разбор адаптера».
+
+    Лимит 0.005 ₽ при 0.01 ₽ за вызов заглушки: первый же вызов стадии его
+    выбирает.
+    """
+    low_limit = settings.model_copy(update={"cost_limit_rub_per_request": 0.005})
+    router, provider = _extractor_router(low_limit, fake_provider_factory, [_EXTRACT_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=low_limit, router=router, adapters=[_FakeWebAdapter(client)])
+        with (
+            caplog.at_level(logging.WARNING, logger="app.pipeline.orchestrator"),
+            pytest.raises((CostLimitExceededError, BaseExceptionGroup)) as raised,
+        ):
+            await pipeline.gather_candidates(_plan(SourceType.WEB))
+
+    # Источники опрашиваются через `asyncio.TaskGroup`, а он заворачивает
+    # исключение задачи в `ExceptionGroup`. Проверяем суть — до вызывающего
+    # доехал стоп-кран, а не выдача, — не форму обёртки.
+    stopped = raised.value
+    inner = list(stopped.exceptions) if isinstance(stopped, BaseExceptionGroup) else [stopped]
+    assert [type(exc) for exc in inner] == [CostLimitExceededError]
+    assert "лимите" in str(inner[0])
+    assert len(provider.calls) == 1, "стадию звали ровно один раз — на нём лимит и кончился"
+    assert "беру разбор адаптера" not in caplog.text
 
 
 @respx.mock
