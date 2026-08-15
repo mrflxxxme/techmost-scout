@@ -768,15 +768,197 @@ async def test_стоп_кран_стоимости_из_стадии_не_по�
         ):
             await pipeline.gather_candidates(_plan(SourceType.WEB))
 
-    # Источники опрашиваются через `asyncio.TaskGroup`, а он заворачивает
-    # исключение задачи в `ExceptionGroup`. Проверяем суть — до вызывающего
-    # доехал стоп-кран, а не выдача, — не форму обёртки.
-    stopped = raised.value
-    inner = list(stopped.exceptions) if isinstance(stopped, BaseExceptionGroup) else [stopped]
-    assert [type(exc) for exc in inner] == [CostLimitExceededError]
-    assert "лимите" in str(inner[0])
+    # Требуем ТИП, а не «суть в любой обёртке» (П-1 аудита). Прежняя редакция
+    # теста принимала и `BaseExceptionGroup` — то есть узаконивала форму, на
+    # которой контракт РЕШ-45 ломается: `cli.py` ловит стоп-кран по типу, а в
+    # `requests.error` вместо причины и суммы попадала строка «unhandled errors
+    # in a TaskGroup». Гейт, принимающий фактическое поведение вместо
+    # требования контракта, перестаёт быть гейтом.
+    assert type(raised.value) is CostLimitExceededError
+    assert "лимите" in str(raised.value)
     assert len(provider.calls) == 1, "стадию звали ровно один раз — на нём лимит и кончился"
     assert "беру разбор адаптера" not in caplog.text
+
+
+async def test_стоп_кран_доезжает_до_записи_прогона_причиной_а_не_обёрткой(settings, fake_provider_factory):
+    """П-1: три теста `tests/test_persistence.py` требуют слова «лимит» в
+    `requests.error`, а `persist_run` пишет туда `str(exc)`. Обёртка
+    `TaskGroup` давала «unhandled errors in a TaskGroup (1 sub-exception)» —
+    без причины и без суммы. Проверяем ровно ту строку, что уйдёт в БД."""
+    low_limit = settings.model_copy(update={"cost_limit_rub_per_request": 0.005})
+    router, _ = _extractor_router(low_limit, fake_provider_factory, [_EXTRACT_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=low_limit, router=router, adapters=[_FakeWebAdapter(client)])
+        with pytest.raises(CostLimitExceededError) as raised:
+            await pipeline.gather_candidates(_plan(SourceType.WEB))
+
+    written = str(raised.value)
+    assert "лимит" in written
+    assert "TaskGroup" not in written
+
+
+# ── Н-1: текст вокруг JSON больше не обнуляет оплаченную выдачу ─────────────
+
+
+def _model_candidate(url: str, title: str) -> dict:
+    """Кандидат в ответе модели. `provider` и `source_type` намеренно чужие —
+    код обязан навязать свои."""
+    return {
+        "source_type": "publication",
+        "title": title,
+        "url": url,
+        "org": "ИПХФ РАН",
+        "authors": [],
+        "year": 2021,
+        "snippet": "Дословная цитата со страницы.",
+        "raw_id": None,
+        "provider": "модель-выдумщица",
+    }
+
+
+def _model_batch(*candidates: dict, dropped: int = 0) -> str:
+    return json.dumps({"candidates": list(candidates), "dropped_no_url": dropped}, ensure_ascii=False)
+
+
+#: Два годных кандидата — оба адреса есть в `_RAW_WEB`.
+_EXTRACT_JSON_TWO = _model_batch(
+    _model_candidate("https://ipc.rssi.ru/lab/catalysis", "Лаборатория катализа ИПХФ РАН"),
+    _model_candidate("https://ipc.rssi.ru/news/", "Новости института"),
+)
+
+
+@pytest.mark.parametrize(
+    ("ответ_модели", "ожидается"),
+    [
+        pytest.param(_EXTRACT_JSON + "\n\nЕсли нужно, разберу ещё.", 1, id="проза-после-json"),
+        pytest.param(_EXTRACT_JSON + ".", 1, id="одна-точка-после-json"),
+        pytest.param(_EXTRACT_JSON_TWO + "\n\nВот такие записи нашлись.", 2, id="два-кандидата-и-проза"),
+        pytest.param("Разобрал выдачу:\n" + _EXTRACT_JSON, 1, id="проза-перед-json"),
+        pytest.param(f"```json\n{_EXTRACT_JSON}\n```", 1, id="markdown-забор"),
+    ],
+)
+async def test_текст_вокруг_json_не_обнуляет_выдачу(settings, fake_provider_factory, ответ_модели, ожидается):
+    """Н-1: пока `candidates` имели значение по умолчанию, любой JSON-объект был
+    валиден как ПУСТОЙ батч, а разборщик берёт первый подошедший блок, перебирая
+    их от конца текста к началу, — выигрывал вложенный объект-кандидат.
+    Достаточно было ОДНОЙ ТОЧКИ после закрывающей скобки, чтобы оплаченная
+    выдача Яндекса стёрлась молча, без единого исключения."""
+    router, _ = _extractor_router(settings, fake_provider_factory, [ответ_модели])
+
+    found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
+
+    assert len(found) == ожидается
+    assert all(c.provider == "yandex_search" for c in found)
+
+
+async def test_стадия_возвращает_всех_годных_кандидатов_а_не_первого(settings, fake_provider_factory):
+    """Критерий 1 плана: «невалидная запись отбрасывается, стадия возвращает
+    ОСТАЛЬНЫЕ». Во всех прежних тестах валидный кандидат был ровно один, и
+    «первый» с «остальными» совпадали — мутация `return candidates[:1]`
+    переживала весь набор (M8 аудита)."""
+    ответ = _model_batch(
+        _model_candidate("https://ipc.rssi.ru/lab/catalysis", "Лаборатория катализа ИПХФ РАН"),
+        {"source_type": "web", "title": "Запись без ссылки", "url": "", "provider": "yandex_search"},
+        _model_candidate("https://ipc.rssi.ru/news/", "Новости института"),
+        dropped=1,
+    )
+    router, _ = _extractor_router(settings, fake_provider_factory, [ответ])
+
+    found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
+
+    assert [c.title for c in found] == ["Лаборатория катализа ИПХФ РАН", "Новости института"]
+
+
+_EXTRACT_EMPTY = _model_batch()
+
+
+async def test_пустой_результат_стадии_виден_снаружи_и_не_стирает_выдачу(settings, fake_provider_factory, caplog):
+    """Н-1, часть 2: ноль кандидатов из непустых сырых записей — не успех.
+
+    Откат живёт только в ветке `except`, а пустой список исключением не был:
+    оплаченная выдача исчезала, `hits` показывал 0, и снаружи это было
+    неотличимо от честного «источник ответил и ничего не нашёл». Теперь пробел
+    и назван в логе, и уехал в `SearchOutcome.problems`, а выдача восстановлена
+    разбором адаптера — тем самым, каким веб приходил в прогон до Т-6."""
+    router, _ = _extractor_router(settings, fake_provider_factory, [_EXTRACT_EMPTY])
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=settings, router=router, adapters=[_FakeWebAdapter(client)])
+        with caplog.at_level(logging.WARNING):
+            outcome = await pipeline.gather_candidates(_plan(SourceType.WEB))
+
+    assert [c.title for c in outcome.candidates] == ["Разбор адаптера"]
+    assert outcome.hits_by_provider == {"fake_web": 1}
+    assert outcome.unavailable == []
+    assert outcome.problems and "ноль кандидатов из 2 сырых записей" in outcome.problems[0]
+    assert "вклад оплаченной выдачи нулевой" in caplog.text
+
+
+async def test_отказ_стадии_тоже_попадает_в_problems(settings, fake_provider_factory):
+    """Отказ стадии и её пустой результат — один класс пробела: выдача
+    оплачена, вклад нулевой. Оба обязаны оставить след снаружи."""
+    router, _ = _extractor_router(settings, fake_provider_factory, ["не json"], fail_times=99)
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=settings, router=router, adapters=[_FakeWebAdapter(client)])
+        outcome = await pipeline.gather_candidates(_plan(SourceType.WEB))
+
+    assert outcome.problems and "стадия не удалась" in outcome.problems[0]
+
+
+# ── П-2: трата и пробел стадии extractor видны в журнале стадий ─────────────
+
+_PLAN_WEB_JSON = json.dumps(
+    {"queries": [{"text": "катализатор гидроочистки", "source_type": "web", "lang": "ru", "rationale": "тест"}]},
+    ensure_ascii=False,
+)
+_SCORE_ONE_JSON = json.dumps(
+    {"scores": [{"index": 0, "relevance": 8, "maturity": 6, "accessibility": 7, "freshness": 6, "completeness": 7}]}
+)
+_CARD_ONE_JSON = json.dumps(
+    {
+        "title": "Катализатор гидроочистки ИПХФ РАН",
+        "essence": "Разработка лаборатории катализа.",
+        "maturity_stage": "pilot",
+        "evidence": [{"claim": "Разработан катализатор гидроочистки", "url": "https://ipc.rssi.ru/lab/catalysis"}],
+        "applicability": "Закрывает задачу продления цикла.",
+        "next_step": "Запросить протокол испытаний.",
+        "candidate_urls": ["https://ipc.rssi.ru/lab/catalysis"],
+    },
+    ensure_ascii=False,
+)
+_VERIFY_OK_JSON = json.dumps(
+    {"needs_rework": False, "confidence": "medium", "confidence_note": "подтверждения найдены"}, ensure_ascii=False
+)
+_SUMMARY_ONE_JSON = json.dumps(
+    {"comparison_rows": [], "recommendation": "Рассмотреть вариант №1.", "caveats": []}, ensure_ascii=False
+)
+
+
+async def test_журнал_стадии_поиска_несёт_трату_и_пробел_extractor(settings, brief, fake_provider_factory):
+    """П-2 и Н-1: строка `search` в `pipeline_logs` создавалась без `provider`
+    и `cost_rub`, хотя поля есть и все прочие стадии их заполняют. До Т-6 поиск
+    не звал модель ни разу — пробел был безобиден по построению; задача сделала
+    его значимым. Здесь стадия ещё и вернула пусто: это обязано стать непустым
+    `error`, иначе прогон снаружи выглядит безупречным."""
+    from app.pipeline.persistence import StageRecord
+
+    responses = [
+        _PLAN_WEB_JSON,
+        _EXTRACT_EMPTY,
+        _SCORE_ONE_JSON,
+        _CARD_ONE_JSON,
+        _VERIFY_OK_JSON,
+        _SUMMARY_ONE_JSON,
+    ]
+    router, _ = _extractor_router(settings, fake_provider_factory, responses)
+    stage_log: list[StageRecord] = []
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=settings, router=router, adapters=[_FakeWebAdapter(client)])
+        await pipeline._run_stages(brief, 1, stage_log)
+
+    record = next(item for item in stage_log if item.stage == "search")
+    assert record.provider == "gigachat", "платный вызов стадии extractor не отражён в журнале"
+    assert record.cost_rub > 0
+    assert record.error and "ноль кандидатов" in record.error
 
 
 @respx.mock
