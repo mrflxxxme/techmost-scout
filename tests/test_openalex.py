@@ -7,17 +7,21 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import time
 
 import httpx
 import pytest
 import respx
+from rich.console import Console
 
+from app import cli
 from app.cli import SECRET_CHECKS
 from app.llm import LLMRouter
-from app.pipeline import stages
+from app.pipeline import orchestrator, stages
 from app.pipeline.orchestrator import ScoutPipeline
+from app.pipeline.persistence import StageRecord
 from app.schemas import Candidate, ReportSummary, SearchPlan, SearchQuery, SourceType
 from app.search import ADAPTERS, STATUS_NO_KEY, STATUS_STUB, adapter_status, build_adapters
 from app.search.base import SearchAdapter, SearchError
@@ -382,7 +386,7 @@ async def test_негодное_поле_патча_не_уносит_годны
     assert citations == {candidate.dedup_key(): 42}
     messages = [record.getMessage() for record in caplog.records]
     assert any("поле pdf_url отброшено" in message for message in messages), "отбрасывание поля не видно в прогоне"
-    assert any("отброшено негодных полей — 1" in message for message in messages)
+    assert any("отброшено негодных полей патча — 1" in message for message in messages)
 
 
 @respx.mock
@@ -397,22 +401,84 @@ async def test_кандидат_без_doi_обогащение_не_запра�
     assert enriched == [patent] and citations == {}
 
 
+class _FailingEnricher:
+    """Источник обогащения, который отказывает целиком."""
+
+    name = "openalex"
+
+    async def enrich_by_doi(self, dois: list[str]) -> dict:
+        raise SearchError("openalex не ответил на lookup DOI")
+
+
 async def test_отказ_обогащения_не_роняет_прогон(settings, caplog):
     """Адаптер поднимает `SearchError`, оркестратор решает продолжать: отказ
     виден в логе, кандидаты остаются прежними (РЕШ-52.3)."""
-
-    class _FailingEnricher:
-        name = "openalex"
-
-        async def enrich_by_doi(self, dois: list[str]) -> dict:
-            raise SearchError("openalex не ответил на lookup DOI")
-
     candidate = _candidate(org=None)
 
     enriched, citations = await _enrich(settings, _FailingEnricher(), [candidate])
 
     assert enriched == [candidate] and citations == {}
     assert any("обогащение по DOI не удалось" in record.getMessage() for record in caplog.records)
+
+
+async def test_отказ_обогащения_оставляет_строку_в_журнале_стадий(settings):
+    """П-5 аудита: отказ обязан быть виден не только в логе прогона.
+
+    Лог живёт до конца процесса, а `pipeline_logs` — след, по которому видно,
+    что обогащение отказывает в каждом прогоне. Без строки с `error`
+    отказывающее месяц подряд обогащение снаружи неотличимо от работающего.
+    Тот же принцип Т-2 завела для интейка.
+    """
+    stage_log: list[StageRecord] = []
+    pipeline = ScoutPipeline(settings=settings, router=LLMRouter(settings), adapters=[_FailingEnricher()])
+
+    await pipeline.enrich_candidates([_candidate(org=None)], stage_log=stage_log)
+
+    record = next(item for item in stage_log if item.stage == "enrich")
+    assert record.error and "обогащение по DOI не удалось" in record.error
+
+
+@respx.mock
+async def test_прерванный_обход_и_отброшенные_поля_тоже_попадают_в_журнал(settings):
+    """Три пути тихой деградации — отказ целиком, прерванный обход и
+    отброшенное поле патча — обязаны различаться в журнале, а не сливаться в
+    молчание. Здесь проверяются два оставшихся."""
+    respx.get(url__startswith=LOOKUP).mock(
+        side_effect=[
+            httpx.Response(200, json=_work(pdf_url="не ссылка")),
+            httpx.Response(429, json={"error": "слишком часто"}),
+        ]
+    )
+    first = _candidate(org=None, snippet="", pdf_url=None)
+    second = _candidate(raw_id="10.1234/example-b", url="https://doi.org/10.1234/example-b", org=None)
+    stage_log: list[StageRecord] = []
+
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=settings, router=LLMRouter(settings), adapters=[_adapter(client)])
+        enriched, _ = await pipeline.enrich_candidates([first, second], stage_log=stage_log)
+
+    record = next(item for item in stage_log if item.stage == "enrich")
+    assert record.error and "обход прерван" in record.error, "обрыв обхода не доехал до журнала"
+    assert "отброшено негодных полей патча" in record.error
+    assert enriched[0].org == "Институт катализа СО РАН", "частичный результат потерян"
+
+
+async def test_успешное_обогащение_пишет_стадию_без_ошибки(settings):
+    """Строка стадии есть всегда — иначе «обогащения не было» и «обогащение
+    прошло молча» в журнале выглядят одинаково."""
+    stage_log: list[StageRecord] = []
+
+    class _EmptyEnricher:
+        name = "openalex"
+
+        async def enrich_by_doi(self, dois: list[str]) -> dict:
+            return {}
+
+    pipeline = ScoutPipeline(settings=settings, router=LLMRouter(settings), adapters=[_EmptyEnricher()])
+    await pipeline.enrich_candidates([_candidate(org=None)], stage_log=stage_log)
+
+    record = next(item for item in stage_log if item.stage == "enrich")
+    assert record.error is None
 
 
 class _OneHitAdapter(SearchAdapter):
@@ -433,10 +499,17 @@ async def test_обогащение_встроено_между_дедуплик
 
     Проверка сквозная по прогону, а не по одному вызову: обогащение, которое
     работает, но не подключено к стадии-потребителю, ничем не отличается от
-    отсутствующего.
+    отсутствующего. Тем же прогоном проверяется, что журнал стадий доезжает до
+    записи: строка `enrich` в `pipeline_logs` — единственный след обогащения,
+    остающийся после прогона (П-5 аудита).
     """
     respx.get(url__startswith=LOOKUP).mock(return_value=httpx.Response(200, json=_work()))
     captured: dict = {}
+
+    async def spy_persist(session_factory, **kwargs) -> None:
+        captured["stages"] = kwargs["stages"]
+
+    monkeypatch.setattr(orchestrator, "persist_run", spy_persist)
 
     async def fake_plan(router, brief_):
         return SearchPlan(
@@ -467,6 +540,7 @@ async def test_обогащение_встроено_между_дедуплик
     assert scored_candidate.org == "Институт катализа СО РАН", "скоринг получил необогащённого кандидата"
     assert captured["citations"] == {scored_candidate.dedup_key(): 42}, "цитируемость до скоринга не доехала"
     assert report.sources_unavailable == []
+    assert "enrich" in [record.stage for record in captured["stages"]], "стадия обогащения не попала в журнал прогона"
 
 
 # ── Доктор ──────────────────────────────────────────────────────────────────
@@ -504,6 +578,107 @@ async def test_рабочий_набор_прежний_заготовок_в_н
     assert "rospatent" not in names and "patents_view" not in names
     assert "openalex" not in names, "без ключа обогащение не включается"
     assert "crossref" in names
+
+
+class _DoctorAdapter:
+    """Источник для проверок доктора: помнит, спрашивали ли у него здоровье."""
+
+    def __init__(self, name: str, status: tuple[str, str] | None = None) -> None:
+        self.name = name
+        #: Тот же атрибут, который ставит `build_adapters` и читает `adapter_status`
+        self.disabled_status = status
+        self.health_calls = 0
+
+    async def health(self) -> tuple[bool, str]:
+        self.health_calls += 1
+        return True, "ок, проба выполнена"
+
+
+async def _run_doctor(monkeypatch, adapters: list[_DoctorAdapter]) -> str:
+    """Прогнать `scout doctor` без сети, базы и моделей; вернуть напечатанное.
+
+    Живьём доктор ходит в сеть и делает платный вызов модели, поэтому здесь
+    подменены ровно три внешние опоры: инициализация БД, роутер моделей и
+    реестр источников. Всё остальное — настоящий код `_doctor`.
+    """
+    import app.db
+
+    class _FakeRouter:
+        def __init__(self, settings) -> None:
+            self._settings = settings
+
+        async def health(self) -> dict[str, tuple[bool, str]]:
+            return {"gigachat": (True, "заглушка")}
+
+    async def fake_init_db() -> None:
+        return None
+
+    monkeypatch.setattr(app.db, "init_db", fake_init_db)
+    monkeypatch.setattr("app.search.build_adapters", lambda client, settings, **kwargs: adapters)
+    monkeypatch.setattr(cli, "LLMRouter", _FakeRouter)
+    recorder = Console(file=io.StringIO(), width=200, record=True)
+    monkeypatch.setattr(cli, "console", recorder)
+
+    await cli._doctor()
+    return recorder.export_text()
+
+
+def _doctor_adapters() -> tuple[_DoctorAdapter, _DoctorAdapter, _DoctorAdapter]:
+    return (
+        _DoctorAdapter("crossref"),
+        _DoctorAdapter("rospatent", (STATUS_STUB, "заготовка: источник ещё не подключён")),
+        _DoctorAdapter("openalex", (STATUS_NO_KEY, "не заполнено: OPENALEX_API_KEY")),
+    )
+
+
+async def test_доктор_спрашивает_здоровье_только_у_рабочих_источников(monkeypatch):
+    """У `_doctor` не было ни одного автотеста: мутация `working = adapters`
+    пережила все 272 теста (M26 аудита), а единственной проверкой половины
+    задачи был один платный живой прогон.
+
+    Спрашивать здоровье у заготовки и у источника без ключа — не косметика:
+    `health()` рабочего источника ходит в сеть, ответ заранее известен
+    («нет ключа»), а у платного источника такая проба стоит денег.
+    """
+    working, stub, no_key = _doctor_adapters()
+
+    await _run_doctor(monkeypatch, [working, stub, no_key])
+
+    assert working.health_calls == 1, "у рабочего источника здоровье не спрошено"
+    assert stub.health_calls == 0, "здоровье спрошено у заготовки"
+    assert no_key.health_calls == 0, "здоровье спрошено у источника без ключа"
+
+
+async def test_доктор_печатает_каждый_источник_с_его_статусом(monkeypatch):
+    """РЕШ-52.1 глазами оператора: в таблице обязан быть весь реестр, а не
+    только рабочие источники — невидимый источник нельзя ни проверить, ни
+    починить. Значений ключей в таблице нет (инвариант №3)."""
+    working, stub, no_key = _doctor_adapters()
+
+    text = await _run_doctor(monkeypatch, [working, stub, no_key])
+
+    assert "crossref" in text and "ок, проба выполнена" in text
+    assert "rospatent" in text and STATUS_STUB in text
+    assert "openalex" in text and STATUS_NO_KEY in text
+    assert "OPENALEX_API_KEY" in text
+
+
+async def test_доктор_переживает_упавшую_пробу_источника(monkeypatch):
+    """`asyncio.gather(..., return_exceptions=True)` — не украшение: источник,
+    чья проба падает, обязан стать строкой «ошибка», а не уронить доктора и
+    вместе с ним проверку всех остальных источников."""
+    working, stub, _ = _doctor_adapters()
+
+    async def broken_health() -> tuple[bool, str]:
+        raise RuntimeError("проба не удалась")
+
+    broken = _DoctorAdapter("cyberleninka")
+    broken.health = broken_health
+
+    text = await _run_doctor(monkeypatch, [working, broken, stub])
+
+    assert "ошибка" in text and "проба не удалась" in text
+    assert working.health_calls == 1, "отказ одного источника отменил проверку остальных"
 
 
 async def test_здоровье_заготовок_не_падает():

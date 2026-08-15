@@ -211,7 +211,9 @@ class ScoutPipeline:
         )
 
     # ── Обогащение по DOI ───────────────────────────────────────────────────
-    async def enrich_candidates(self, candidates: list[Candidate]) -> tuple[list[Candidate], dict[str, int]]:
+    async def enrich_candidates(
+        self, candidates: list[Candidate], *, stage_log: list[StageRecord] | None = None
+    ) -> tuple[list[Candidate], dict[str, int]]:
         """Добрать метаданные по DOI у источника обогащения (РЕШ-52.3).
 
         Возвращает пару: кандидаты с заполненными ПУСТЫМИ полями и цитируемость
@@ -223,6 +225,14 @@ class ScoutPipeline:
         `SearchError` (инвариант №5 в редакции РЕШ-43), а здесь это становится
         строкой в логе и продолжением работы — обогащение необязательно, без
         него кандидаты просто беднее.
+
+        Но «не роняет» не значит «незаметно»: у стадии три независимых пути
+        тихой деградации — отказ целиком, прерванный обход и отброшенные поля
+        патча, — и ни один не оставлял следа в `pipeline_logs` (П-5 аудита).
+        Обогащение, отказывающее в каждом прогоне месяц подряд, снаружи было
+        неотличимо от работающего. Поэтому стадия пишет `StageRecord` с
+        непустым `error` — тем же способом, каким Т-2 завела запись об отказе
+        интейка.
         """
         adapters = await self._get_adapters()
         # Источник обогащения узнаётся по методу, а не по имени класса:
@@ -239,10 +249,20 @@ class ScoutPipeline:
         if not by_doi:
             return candidates, {}
 
+        started = datetime.now(UTC)
+
+        def write_stage(problem: str | None) -> None:
+            """Строка журнала стадии обогащения; `problem` — что именно деградировало."""
+            if stage_log is not None:
+                stage_log.append(
+                    StageRecord(stage="enrich", started_at=started, finished_at=datetime.now(UTC), error=problem)
+                )
+
         try:
             patches = await adapter.enrich_by_doi(list(by_doi))
         except Exception as exc:
             log.warning("обогащение по DOI не удалось (%s), прогон продолжается без него", exc)
+            write_stage(f"обогащение по DOI не удалось: {exc}")
             return candidates, {}
 
         enriched = list(candidates)
@@ -256,12 +276,18 @@ class ScoutPipeline:
                     citations[candidate.dedup_key()] = cited
                 enriched[index], dropped = _apply_patch(candidate, patch)
                 dropped_fields.extend(dropped)
+
+        problems: list[str] = []
+        # Обход, прерванный отказом на середине: патчи собраны не по всем DOI.
+        interrupted = getattr(adapter, "last_error", None)
+        if interrupted:
+            problems.append(str(interrupted))
         if dropped_fields:
-            log.warning(
-                "обогащение: отброшено негодных полей — %s (%s)",
-                len(dropped_fields),
-                ", ".join(sorted(set(dropped_fields))),
-            )
+            names = ", ".join(sorted(set(dropped_fields)))
+            summary = f"отброшено негодных полей патча — {len(dropped_fields)} ({names})"
+            log.warning("обогащение: %s", summary)
+            problems.append(summary)
+        write_stage("; ".join(problems) or None)
         return enriched, citations
 
     async def _safe_search(self, adapter: SearchAdapter, query) -> list[Candidate] | None:
@@ -375,7 +401,7 @@ class ScoutPipeline:
         # Между дедупликацией и скорингом (РЕШ-52.3): обогащать до склейки
         # дублей — платить лишние запросы за кандидатов, которые всё равно
         # схлопнутся, а после скоринга цитируемость уже никому не поможет.
-        unique, citations = await self.enrich_candidates(unique)
+        unique, citations = await self.enrich_candidates(unique, stage_log=stage_log)
         if citations:
             await self._notify("enrich", f"Цитируемость известна у кандидатов: {len(citations)}", 0.47)
 
