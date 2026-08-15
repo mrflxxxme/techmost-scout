@@ -271,6 +271,29 @@ async def test_непустые_поля_кандидата_не_перезап�
 
 
 @respx.mock
+async def test_ноль_цитирований_закреплён_у_производителя_патча(settings):
+    """Ноль — известное значение, а не «источник промолчал».
+
+    У потребителя (`candidates_listing`) это закреплено тестом, у производителя
+    не было закреплено ничем: `cited >= 0` тихо превращается в `cited > 0`, и
+    работа с нулём цитирований становится неотличима от работы, о цитируемости
+    которой ничего не известно (П-3 аудита). Проверяются оба конца: ключ в
+    патче и ноль в словаре цитируемости, который уезжает в скоринг.
+    """
+    respx.get(url__startswith=LOOKUP).mock(return_value=httpx.Response(200, json=_work(cited_by_count=0)))
+    candidate = _candidate(org=None)
+
+    async with httpx.AsyncClient() as client:
+        patches = await _adapter(client).enrich_by_doi([DOI])
+        enriched, citations = await _enrich(settings, _adapter(client), [candidate])
+
+    assert "cited_by_count" in patches[DOI], "ноль потерян уже в патче адаптера"
+    assert patches[DOI]["cited_by_count"] == 0
+    assert citations == {candidate.dedup_key(): 0}, "ноль не доехал до скоринга"
+    assert enriched[0].org == "Институт катализа СО РАН"
+
+
+@respx.mock
 async def test_негодное_поле_патча_не_уносит_годные(settings, caplog):
     """П-2 аудита: отбрасывается ПОЛЕ, а не патч целиком.
 
