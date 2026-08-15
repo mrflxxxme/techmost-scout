@@ -206,6 +206,27 @@ def test_битый_справочник_не_роняет_поиск(tmp_path: 
     assert any("справочник наборов" in record.message for record in caplog.records)
 
 
+async def test_справочник_в_чужой_кодировке_не_уносит_источник(tmp_path: Path, caplog):
+    """П-2 аудита: справочник целиком кириллический, и пересохранение
+    Windows-редактором в cp1251 — штатный операционный исход. UnicodeDecodeError
+    — подкласс ValueError, в прежний перехват `(OSError, yaml.YAMLError)` он не
+    попадал: исключение поднималось из конструктора адаптера и гасилось общим
+    `except Exception` в `build_adapters`, после чего источник не попадал ни в
+    сборку, ни в `sources_unavailable` — в отчёте он исчезал бесследно. Любая
+    поломка локального файла обязана давать запасной набор и видимую строку в
+    логе, а не уносить источник."""
+    path = tmp_path / "sets.yaml"
+    path.write_bytes(SETS_FILE.read_text(encoding="utf-8").encode("cp1251", errors="replace"))
+
+    with caplog.at_level("WARNING", logger="app.search.cyberleninka"):
+        assert resolve_oai_set("агропромышленный комплекс", fallback="rsci", sets_path=path) == "rsci"
+        async with httpx.AsyncClient() as client:
+            adapter = CyberLeninkaAdapter(client, oai_set="rsci", industry="агропромышленный комплекс", sets_path=path)
+
+    assert adapter.oai_set == "rsci"
+    assert any("справочник наборов" in record.message for record in caplog.records)
+
+
 def test_строка_лога_показывает_отрасль_и_набор(caplog):
     """Критерий 3 ворот проверяется по логу прогона — значит строка обязана
     быть, и в ней обязаны быть оба значения."""
