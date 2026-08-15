@@ -299,6 +299,13 @@ async def test_реестр_передаёт_отрасль_в_киберлен�
     assert _cyberleninka(with_industry).oai_set == "agris"
     # Без отрасли — прежнее поведение: набор из настройки
     assert _cyberleninka(without).oai_set == settings.cyberleninka_oai_set
+    # П-3 аудита: отрасль меняет набор КиберЛенинки и НИЧЕГО больше. Снятый
+    # гейт «конструктор принимает industry» отдаёт отрасль всем подряд, лишние
+    # конструкторы падают на TypeError и молча гасятся в build_adapters —
+    # оставалась одна КиберЛенинка из восьми, а весь набор тестов был зелёным.
+    assert {a.name for a in with_industry} == {a.name for a in without}
+    # Утверждение выше должно сравнивать состав, а не два пустых множества
+    assert {"crossref", "cyberleninka"} <= {a.name for a in without}
 
 
 def _cyberleninka(adapters) -> CyberLeninkaAdapter:
