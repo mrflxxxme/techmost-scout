@@ -907,6 +907,56 @@ async def test_отказ_стадии_тоже_попадает_в_problems(set
     assert outcome.problems and "стадия не удалась" in outcome.problems[0]
 
 
+# ── П-4: ссылка кандидата сверяется с сырыми записями (РЕШ-61 п. 2) ─────────
+
+
+async def test_кандидат_с_выдуманной_ссылкой_отбрасывается(settings, fake_provider_factory, caplog):
+    """До Т-6 адрес веб-кандидата брал код из ответа Яндекса — структурная
+    гарантия. Стадия поставила между источником и `evidence` языковую модель, и
+    выдуманная ссылка проходит все машинные проверки: поле непустое, `HttpUrl`
+    валиден, `evidence` непуст. Падает она там, где инвариант №1 проверяет
+    человек, — в отчёте клиенту."""
+    ответ = _model_batch(
+        _model_candidate("https://ipc.rssi.ru/lab/catalysis", "Лаборатория катализа ИПХФ РАН"),
+        _model_candidate("https://ipc.rssi.ru/lab/catalysis/2021-report.pdf", "Отчёт, которого в выдаче не было"),
+    )
+    router, _ = _extractor_router(settings, fake_provider_factory, [ответ])
+
+    with caplog.at_level(logging.WARNING, logger="app.pipeline.stages"):
+        found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
+
+    assert [c.title for c in found] == ["Лаборатория катализа ИПХФ РАН"]
+    assert "нет в выдаче источника" in caplog.text
+
+
+async def test_сверка_ссылок_не_придирается_к_оформлению(settings, fake_provider_factory):
+    """Сравнение нормализованное (`normalize_url`): хвостовой слэш, регистр и
+    `www.` — оформление, а не выдумка. Иначе сверка выкашивала бы годных
+    кандидатов, и её пришлось бы снять целиком."""
+    ответ = _model_batch(
+        _model_candidate("https://IPC.rssi.ru/lab/catalysis/", "Лаборатория катализа ИПХФ РАН"),
+        _model_candidate("https://www.ipc.rssi.ru/news", "Новости института"),
+    )
+    router, _ = _extractor_router(settings, fake_provider_factory, [ответ])
+
+    found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
+
+    assert len(found) == 2
+
+
+async def test_сверка_ссылок_молчит_когда_адресов_в_записях_нет(settings, fake_provider_factory):
+    """Записи без поля `url` — это источник другой формы, а не выдумка модели.
+    Пустое множество адресов выкосило бы всю выдачу: второй способ потерять
+    оплаченный ответ вместо защиты от первого."""
+    без_адресов = [{"title": "Запись без поля url", "snippet": "Текст страницы."}]
+    ответ = _model_batch(_model_candidate("https://example.org/whatever", "Кандидат"))
+    router, _ = _extractor_router(settings, fake_provider_factory, [ответ])
+
+    found = await stages.extract_candidates(SourceType.WEB, "yandex_search", без_адресов, router)
+
+    assert len(found) == 1
+
+
 # ── П-2: трата и пробел стадии extractor видны в журнале стадий ─────────────
 
 _PLAN_WEB_JSON = json.dumps(

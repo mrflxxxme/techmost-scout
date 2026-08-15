@@ -32,6 +32,7 @@ from app.schemas import (
     SolutionCard,
     SourceType,
 )
+from app.search.base import normalize_url
 
 log = logging.getLogger(__name__)
 
@@ -287,6 +288,16 @@ class ExtractedBatch(BaseModel):
     dropped_no_url: int = 0
 
 
+def _urls_of(raw_results: list[dict]) -> set[str]:
+    """Нормализованные адреса сырых записей — множество допустимых ссылок.
+
+    Нормализация та же, что склеивает веб-дубли (`normalize_url`): иначе
+    кандидат отвалился бы из-за хвостового слэша или регистра, то есть из-за
+    оформления, а не из-за выдумки.
+    """
+    return {normalize_url(str(record["url"])) for record in raw_results if record.get("url")}
+
+
 async def extract_candidates(
     source_type: SourceType,
     provider: str,
@@ -307,6 +318,10 @@ async def extract_candidates(
 
     Невалидная запись отбрасывается с записью в лог и стадию не роняет
     (инвариант №5): выдача из двадцати записей не должна пропадать из-за одной.
+    Так же отбрасывается кандидат, чьего адреса нет в сырых записях (РЕШ-61
+    п. 2). Сверка включается, только когда адреса в записях вообще есть: у
+    источника с другой формой записи пустое множество выкосило бы всю выдачу,
+    а это уже не защита, а второй способ потерять оплаченный ответ.
     """
     if not raw_results:
         return []
@@ -337,12 +352,29 @@ async def extract_candidates(
         max_tokens=7000,
     )
 
+    known_urls = _urls_of(raw_results)
     candidates: list[Candidate] = []
     for item in batch.candidates:
         try:
-            candidates.append(Candidate.model_validate({**item, "source_type": source_type, "provider": provider}))
+            candidate = Candidate.model_validate({**item, "source_type": source_type, "provider": provider})
         except ValidationError as exc:
             log.warning("extractor: запись отброшена (%s): %s", provider, exc)
+            continue
+        if known_urls and normalize_url(str(candidate.url)) not in known_urls:
+            # РЕШ-61 п. 2. До Т-6 адрес веб-кандидата брался кодом из ответа
+            # источника — структурная гарантия. Стадия поставила между
+            # источником и `evidence` языковую модель, а выдуманная либо
+            # усечённая ссылка проходит ВСЕ машинные проверки (поле непустое,
+            # `HttpUrl` валиден, `evidence` непуст) и падает только там, где
+            # инвариант №1 проверяет человек. Точное множество адресов лежит
+            # рядом — в тех же сырых записях, что уехали в модель.
+            log.warning(
+                "extractor: кандидат отброшен (%s) — ссылки %s нет в выдаче источника",
+                provider,
+                candidate.url,
+            )
+            continue
+        candidates.append(candidate)
     log.info("extractor: %s, сырых записей %s → кандидатов %s", provider, len(raw_results), len(candidates))
     if not candidates:
         # Ноль кандидатов из непустой выдачи — не успех, а пробел: выдача
