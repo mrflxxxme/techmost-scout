@@ -122,6 +122,7 @@ def build_adapters(
     settings: Any = None,
     *,
     include_stubs: bool = False,
+    industry: str | None = None,
 ) -> list[SearchAdapter]:
     """Собрать адаптеры, которые реально могут работать в этом запуске.
 
@@ -133,6 +134,12 @@ def build_adapters(
     `ADAPTERS`, а нерабочие получают статус (`adapter_status`) вместо
     исключения из списка. Этот режим — для доктора; пайплайн зовёт функцию без
     него и получает только то, что действительно работает.
+
+    `industry` — отрасль брифа этого прогона (Т-4, РЕШ-51). Это не настройка:
+    значение приходит из запроса, а не из окружения, поэтому и передаётся
+    отдельным аргументом, а не через `CONSTRUCTOR_SETTINGS`. Получают его
+    только те адаптеры, чей конструктор такой аргумент принимает
+    (КиберЛенинка выбирает по отрасли набор OAI); остальных это не касается.
     """
     adapters: list[SearchAdapter] = []
     for name, cls in ADAPTERS.items():
@@ -146,7 +153,7 @@ def build_adapters(
             log.info("источник %s выключен: нет настроек %s", name, ", ".join(missing))
             continue
         try:
-            adapter = _instantiate(name, cls, client, settings)
+            adapter = _instantiate(name, cls, client, settings, industry=industry)
         except Exception as exc:
             log.warning("источник %s не собрался: %s", name, exc)
             continue
@@ -172,6 +179,8 @@ def _instantiate(
     cls: type[SearchAdapter],
     client: httpx.AsyncClient,
     settings: Any,
+    *,
+    industry: str | None = None,
 ) -> SearchAdapter:
     """Передать в конструктор только те аргументы, которые он принимает."""
     accepted = inspect.signature(cls.__init__).parameters
@@ -183,6 +192,10 @@ def _instantiate(
             if (value := _setting(settings, key)) is not None:
                 kwargs[argument] = value
                 break
+    # Отрасль — не настройка, а данные прогона, поэтому идёт мимо
+    # CONSTRUCTOR_SETTINGS и достаётся только тем, кто её принимает.
+    if industry and "industry" in accepted:
+        kwargs["industry"] = industry
     return cls(client, **kwargs)
 
 

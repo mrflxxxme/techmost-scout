@@ -32,7 +32,10 @@ https://cyberleninka.ru/oai
   технологии), pubmed / im / medline (медицина), georef (геология), zbmath,
   rsci / rinc / vak (уровень издания), а также journal_<id> под конкретный
   журнал (например journal_1426 — «Уголь»). Список наборов можно получить
-  методом list_sets() и держать сопоставление «отрасль → set» в data/.
+  методом list_sets(). Сопоставление «отрасль → set» живёт в
+  data/cyberleninka_sets.yaml, набор под отрасль брифа выбирает
+  resolve_oai_set (Т-4, РЕШ-51): без осмысленного набора источник почти
+  бесполезен, а один набор на все задачи — это набор ни под одну из них.
 * set сужает первую страницу как надо (по cas приходит химия и биотех), но
   вторая и третья страницы по resumptionToken съезжают на другие темы — похоже,
   токен КиберЛенинки не сохраняет набор. Со стороны клиента это не лечится.
@@ -53,19 +56,25 @@ import json
 import logging
 import re
 import time
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
 import httpx
+import yaml
 from defusedxml import ElementTree as ET  # noqa: N817 — ET общепринятое сокращение; defusedxml защищает от XML-атак
 from pydantic import ValidationError
 
+from app.config import get_settings
 from app.schemas import Candidate, SearchQuery, SourceType
 from app.search.base import SearchAdapter, SearchError
 
 log = logging.getLogger(__name__)
 
 BASE_URL = "https://cyberleninka.ru/oai"
+#: Справочник «отрасль → набор» в data/ (Т-4, РЕШ-51). Держится файлом, а не в
+#: коде: наборы репозитория меняются, а правка справочника не требует релиза.
+SETS_FILE_NAME = "cyberleninka_sets.yaml"
 DEFAULT_CACHE_DIR = Path("out/cache/cyberleninka")
 CACHE_TTL_SECONDS = 7 * 24 * 3600
 #: Сервер отдаёт по 10 записей на страницу, размер страницы не настраивается —
@@ -112,6 +121,106 @@ _STOPWORDS = frozenset(
     }
 )
 
+#: Всё, что не буква и не цифра, при нормализации отрасли становится пробелом
+_NON_WORD = re.compile(r"[^\w]+", re.UNICODE)
+
+
+def _normalize_industry(value: str) -> str:
+    """Отрасль (или примету справочника) — к сравнимому виду: нижний регистр,
+    «ё» → «е», знаки препинания в пробелы. Иначе «Агропромышленный комплекс» и
+    «агропромышленный  комплекс» вели бы себя по-разному."""
+    lowered = value.lower().replace("ё", "е")
+    return _NON_WORD.sub(" ", lowered).strip()
+
+
+@dataclass(frozen=True, slots=True)
+class IndustrySet:
+    """Набор OAI и приметы отрасли, по которым он выбирается."""
+
+    oai_set: str
+    #: Обрезанные основы («агропром», «фарм»): русская морфология иначе не даст
+    #: совпадений. Сравнение — вхождением в нормализованную отрасль.
+    keywords: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class IndustrySets:
+    """Содержимое data/cyberleninka_sets.yaml."""
+
+    #: Запасной набор из справочника; настройка важнее его
+    fallback: str | None
+    #: Порядок значимый: выигрывает первая подошедшая запись
+    entries: tuple[IndustrySet, ...]
+
+    def match(self, industry: str) -> str | None:
+        """Набор под отрасль или None, если ни одна примета не подошла."""
+        normalized = _normalize_industry(industry)
+        if not normalized:
+            return None
+        for entry in self.entries:
+            if any(keyword in normalized for keyword in entry.keywords):
+                return entry.oai_set
+        return None
+
+
+def load_industry_sets(path: Path | str | None = None) -> IndustrySets:
+    """Прочитать справочник «отрасль → набор».
+
+    Любая поломка локального файла (нет его, битый YAML, чужая кодировка) — не
+    авария прогона: пустой справочник, набор из настройки, предупреждение в
+    логе. Исключение отсюда гасит `build_adapters`, и источник исчез бы из
+    прогона молча, даже не попав в «Не ответили источники».
+    """
+    file = Path(path) if path is not None else get_settings().data_dir / SETS_FILE_NAME
+    try:
+        raw = yaml.safe_load(file.read_text(encoding="utf-8"))
+    # Перехват намеренно широкий: cp1251 даёт UnicodeDecodeError — подкласс ValueError, в узкий список он не попадал.
+    except Exception as exc:
+        log.warning("cyberleninka: справочник наборов %s не прочитан: %s", file, exc)
+        return IndustrySets(fallback=None, entries=())
+    if not isinstance(raw, dict):
+        log.warning("cyberleninka: справочник наборов %s не похож на словарь", file)
+        return IndustrySets(fallback=None, entries=())
+
+    entries: list[IndustrySet] = []
+    for item in raw.get("sets") or []:
+        if not isinstance(item, dict):
+            continue
+        oai_set = str(item.get("set") or "").strip()
+        keywords = tuple(
+            normalized for word in item.get("keywords") or [] if (normalized := _normalize_industry(str(word)))
+        )
+        if oai_set and keywords:
+            entries.append(IndustrySet(oai_set=oai_set, keywords=keywords))
+    fallback = str(raw.get("fallback") or "").strip() or None
+    return IndustrySets(fallback=fallback, entries=tuple(entries))
+
+
+def resolve_oai_set(
+    industry: str | None,
+    *,
+    fallback: str | None = None,
+    sets_path: Path | str | None = None,
+) -> str | None:
+    """Набор OAI под отрасль брифа.
+
+    `fallback` — набор из настройки `CYBERLENINKA_OAI_SET`. Отрасли нет —
+    справочник не читается вовсе, поведение прежнее. Отрасль есть, но не
+    нашлась — берётся настройка, а если пуста и она, запасной из справочника.
+    Строка INFO обязательна: без неё «набор выбран по отрасли» и «набор остался
+    прежним» снаружи неотличимы.
+    """
+    if not industry or not industry.strip():
+        return fallback
+    catalogue = load_industry_sets(sets_path)
+    chosen = catalogue.match(industry)
+    if chosen is not None:
+        log.info("cyberleninka: отрасль %s → набор %s", industry, chosen)
+        return chosen
+    spare = fallback or catalogue.fallback
+    log.info("cyberleninka: отрасль %s → набор %s (запасной, в справочнике не нашлась)", industry, spare)
+    return spare
+
 
 class CyberLeninkaAdapter(SearchAdapter):
     """Публикации КиберЛенинки через OAI-PMH с локальной фильтрацией."""
@@ -127,11 +236,23 @@ class CyberLeninkaAdapter(SearchAdapter):
         client: httpx.AsyncClient,
         *,
         oai_set: str | None = None,
+        industry: str | None = None,
         cache_dir: Path | str | None = None,
+        sets_path: Path | str | None = None,
     ) -> None:
+        """`industry` — отрасль брифа: по ней справочник выбирает набор OAI.
+
+        Отрасли нет — набор остаётся тем, что задан настройкой (`oai_set`), как
+        было до справочника. `sets_path` подменяет файл и нужен только тестам.
+        """
         super().__init__(client)
-        self._oai_set = oai_set
+        self._oai_set = resolve_oai_set(industry, fallback=oai_set, sets_path=sets_path)
         self._cache_dir = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+
+    @property
+    def oai_set(self) -> str | None:
+        """Набор, с которым адаптер пойдёт в репозиторий, — уже после выбора по отрасли."""
+        return self._oai_set
 
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
         keywords = _keywords(query.text)

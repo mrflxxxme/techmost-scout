@@ -140,7 +140,14 @@ class ScoutPipeline:
         if asyncio.iscoroutine(result):
             await result
 
-    async def _get_adapters(self) -> list[SearchAdapter]:
+    async def _get_adapters(self, industry: str | None = None) -> list[SearchAdapter]:
+        """Адаптеры прогона. `industry` — отрасль брифа (Т-4, РЕШ-51): по ней
+        КиберЛенинка выбирает набор OAI.
+
+        Список собирается один раз и кэшируется, поэтому отрасль важна на
+        первом вызове — а он всегда идёт из поиска (`gather_candidates`),
+        обогащение работает уже на готовом списке.
+        """
         if self._adapters is not None:
             return self._adapters
         self._client = httpx.AsyncClient(
@@ -148,7 +155,7 @@ class ScoutPipeline:
             headers={"User-Agent": f"TechMostScout/1.0 (mailto:{self._settings.crossref_mailto})"},
             follow_redirects=True,
         )
-        self._adapters = build_adapters(self._client, self._settings)
+        self._adapters = build_adapters(self._client, self._settings, industry=industry)
         log.info("подключено источников: %s", ", ".join(a.name for a in self._adapters))
         return self._adapters
 
@@ -158,7 +165,7 @@ class ScoutPipeline:
             self._client = None
 
     # ── Поиск по всем источникам ────────────────────────────────────────────
-    async def gather_candidates(self, plan: SearchPlan) -> SearchOutcome:
+    async def gather_candidates(self, plan: SearchPlan, *, industry: str | None = None) -> SearchOutcome:
         """Опросить источники параллельно, каждому — только подходящие запросы.
 
         Счётчик `hits_by_provider` ключуется меткой контура (`contour_label`),
@@ -166,8 +173,13 @@ class ScoutPipeline:
         разных формулировок (РЕШ-31). `sources_unavailable` при этом остаётся
         по имени адаптера — этот список печатается в клиентском отчёте, и его
         состав задачей учёта не меняется.
+
+        `industry` — отрасль брифа, её подставляет `_run_stages`. Она едет
+        отдельным аргументом, а не полем `SearchPlan`: общий контракт данных
+        (`schemas.py`) задача Т-4 не расширяет, меняется только внутренний
+        контракт сборки адаптеров.
         """
-        adapters = await self._get_adapters()
+        adapters = await self._get_adapters(industry)
         tasks: list[tuple[str, str, asyncio.Task[list[Candidate]]]] = []
 
         async with asyncio.TaskGroup() as group:
@@ -394,7 +406,7 @@ class ScoutPipeline:
 
         await self._notify("search", "Опрашиваю источники", 0.15)
         started = datetime.now(UTC)
-        outcome = await self.gather_candidates(plan)
+        outcome = await self.gather_candidates(plan, industry=brief.industry)
         stage_log.append(
             StageRecord(
                 stage="search",
