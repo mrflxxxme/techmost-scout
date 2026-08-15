@@ -69,6 +69,13 @@ BATCH_SIZE = 50
 #: Пауза между батчами: источник бесплатный, но долбить его пачкой из сотен
 #: запросов подряд невежливо и быстро приводит к 429.
 BATCH_PAUSE_SECONDS = 0.2
+#: Пауза между отдельными lookup ВНУТРИ батча. Без неё обещание «не долбить
+#: пачкой» держалось на одной паузе между батчами, а сами 50 запросов уходили
+#: подряд, за доли секунды: `_throttle` базового адаптера при
+#: `min_interval_seconds <= 0` возвращается сразу и был чистой декорацией (П-4
+#: аудита). 0,05 с растягивает батч из 50 запросов на 2,5 с — контракт SPEC §4
+#: (батч 50, пауза 0,2 с между батчами) при этом не меняется.
+MIN_INTERVAL_SECONDS = 0.05
 #: Аннотация в OpenAlex лежит инвертированным индексом; собранный текст режем
 #: по той же границе, что и Crossref, — вход скоринга не резиновый.
 MAX_SNIPPET = 700
@@ -105,10 +112,17 @@ class OpenAlexAdapter(SearchAdapter):
     implemented = True
     #: Источник только для обогащения: оркестратор не зовёт его `search`
     enrich_only = True
+    #: Пауза между отдельными lookup — иначе `_throttle` ничего не делает
+    min_interval_seconds = MIN_INTERVAL_SECONDS
 
     def __init__(self, client: httpx.AsyncClient, *, api_key: str | None = None) -> None:
         super().__init__(client)
         self._api_key = api_key or None
+        #: Почему последний обход оборвался на середине. Заполняется, когда
+        #: часть патчей уже собрана и отдаётся, а обход прерван отказом:
+        #: возвращаемый словарь такой отказ не выражает никак, а прогон обязан
+        #: оставить след (П-4, П-5 аудита). None — обход прошёл целиком.
+        self.last_error: str | None = None
 
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
         raise NotImplementedError(
@@ -129,6 +143,11 @@ class OpenAlexAdapter(SearchAdapter):
         `SearchError` — инвариант №5 в редакции РЕШ-43: адаптер говорит «не
         смог», а решение «прогон из-за этого не останавливать» принимает
         оркестратор. Гасить отказ здесь в пустой успех запрещено.
+
+        Отказ в СЕРЕДИНЕ обхода — другой случай: собранные патчи остаются и
+        возвращаются, обход прекращается, а причина уходит в `last_error` и в
+        лог на `WARNING`. Пустым успехом это не становится: при отказе на
+        первом же DOI собирать нечего, и наружу уходит `SearchError`.
         """
         if not self._api_key:
             log.warning("openalex: обогащение пропущено: нет OPENALEX_API_KEY")
@@ -146,17 +165,42 @@ class OpenAlexAdapter(SearchAdapter):
 
         patches: dict[str, dict[str, Any]] = {}
         requests = 0
+        self.last_error = None
         for start in range(0, len(wanted), BATCH_SIZE):
             if start:
                 await self._pause_between_batches()
             for doi in wanted[start : start + BATCH_SIZE]:
-                payload = await self._lookup(doi)
+                try:
+                    payload = await self._lookup(doi)
+                except SearchError as exc:
+                    if not patches:
+                        # Ничего собрать не успели — это отказ источника
+                        # целиком, и он обязан дойти до оркестратора как отказ
+                        # (инвариант №5 в редакции РЕШ-43).
+                        raise
+                    # Отказ в середине обхода: один 429 на пятидесятом DOI не
+                    # причина выбрасывать сорок девять уже собранных патчей
+                    # (П-4 аудита). Обход прекращается, частичный результат
+                    # отдаётся, а причина остаётся видимой — и в логе, и в
+                    # `last_error` для журнала стадий.
+                    self.last_error = f"обход прерван на DOI {doi}: {exc}"
+                    break
                 requests += 1
                 if payload is None:
                     continue
                 patch = _to_patch(payload)
                 if patch:
                     patches[doi] = patch
+            if self.last_error:
+                break
+        if self.last_error:
+            log.warning(
+                "openalex: %s; сохранено патчей: %s, проверено DOI: %s из %s",
+                self.last_error,
+                len(patches),
+                requests,
+                len(wanted),
+            )
         # Lookup по DOI бесплатен и безлимитен, поэтому счётчик — не деньги, а
         # только объём работы; в Report.cost_rub он ничего не добавляет.
         log.info(

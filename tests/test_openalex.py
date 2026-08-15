@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 import httpx
 import pytest
@@ -141,15 +142,44 @@ async def test_обход_идёт_батчами_по_50_с_паузой_меж
         nonlocal pauses
         pauses += 1
 
+    async def no_throttle() -> None:
+        """Троттлинг внутри батча проверяется отдельным тестом; здесь он выключен,
+        иначе 120 lookup растянулись бы на шесть секунд набора."""
+
     async with httpx.AsyncClient() as client:
         adapter = _adapter(client)
         monkeypatch.setattr(adapter, "_pause_between_batches", count_pause)
+        monkeypatch.setattr(adapter, "_throttle", no_throttle)
         patches = await adapter.enrich_by_doi(dois)
 
     assert BATCH_SIZE == 50
     assert route.call_count == 120
     assert pauses == 2, "пауза обязана быть между батчами, а не после каждого запроса"
     assert len(patches) == 120
+
+
+@respx.mock
+async def test_внутри_батча_запросы_идут_не_подряд():
+    """Пауза между батчами не защищает от 429 внутри батча.
+
+    До правки `min_interval_seconds` у адаптера не был задан, а базовый
+    `_throttle` при нуле возвращается сразу — пятьдесят запросов уходили за
+    доли секунды, и «вежливость» из комментария существовала только на бумаге
+    (П-4 аудита). Проверяем фактом: три lookup подряд обязаны занять не меньше
+    двух интервалов.
+    """
+    respx.get(url__startswith=LOOKUP).mock(return_value=httpx.Response(200, json=_work()))
+
+    async with httpx.AsyncClient() as client:
+        adapter = _adapter(client)
+        assert adapter.min_interval_seconds > 0, "троттлинг адаптера — пустая операция"
+        started = time.perf_counter()
+        await adapter.enrich_by_doi(["10.1234/work-a", "10.1234/work-b", "10.1234/work-c"])
+        elapsed = time.perf_counter() - started
+
+    # Первый запрос не ждёт (ждать не от чего), поэтому интервалов ровно два.
+    # Допуск на разрешение системного таймера — отсюда 0,9.
+    assert elapsed >= 2 * adapter.min_interval_seconds * 0.9, f"запросы ушли подряд, за {elapsed:.3f} с"
 
 
 # ── Отказы ──────────────────────────────────────────────────────────────────
@@ -185,6 +215,42 @@ async def test_нечитаемое_тело_ответа_тоже_отказ():
     async with httpx.AsyncClient() as client:
         with pytest.raises(SearchError):
             await _adapter(client).enrich_by_doi([DOI])
+
+
+@respx.mock
+async def test_отказ_в_середине_обхода_не_стирает_собранное(caplog):
+    """Один 429 на середине не отменяет уже собранное обогащение.
+
+    При 50–100 последовательных lookup один отказ — не гипотеза: именно 429 на
+    каждом запросе трёх прогонов и был исходным уроком инварианта №5. Раньше
+    `SearchError` уходил наружу из середины цикла и уносил все накопленные
+    патчи (П-4 аудита). Теперь обход прекращается, частичный результат
+    остаётся, а причина видна и в логе, и в `last_error`.
+    """
+    respx.get(url__startswith=LOOKUP).mock(
+        side_effect=[httpx.Response(200, json=_work()), httpx.Response(429, json={"error": "слишком часто"})]
+    )
+
+    with caplog.at_level(logging.WARNING):
+        async with httpx.AsyncClient() as client:
+            adapter = _adapter(client)
+            patches = await adapter.enrich_by_doi([DOI, "10.1234/example-b"])
+
+    assert list(patches) == [DOI], "собранное до отказа обогащение потеряно"
+    assert adapter.last_error and "10.1234/example-b" in adapter.last_error
+    assert any("обход прерван" in record.getMessage() for record in caplog.records), "обрыв обхода не виден в прогоне"
+
+
+@respx.mock
+async def test_отказ_на_первом_же_doi_остаётся_отказом():
+    """Обратная сторона частичного результата: собрать ничего не успели —
+    значит это отказ источника целиком, и он обязан дойти до оркестратора, а не
+    превратиться в пустой успех (инвариант №5)."""
+    respx.get(url__startswith=LOOKUP).mock(return_value=httpx.Response(429, json={"error": "слишком часто"}))
+
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(SearchError):
+            await _adapter(client).enrich_by_doi([DOI, "10.1234/example-b"])
 
 
 @respx.mock
