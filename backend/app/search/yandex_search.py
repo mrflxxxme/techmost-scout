@@ -101,6 +101,10 @@ class YandexSearchAdapter(SearchAdapter):
     requires_key = True
     #: Запросы платные и асинхронные; частота ограничена не жёстко
     min_interval_seconds = 0.5
+    #: Выдача веб-поиска неструктурирована: заголовок и куски текста страницы.
+    #: Организацию, год и авторов из неё достаёт стадия extractor (Э2-5), а не
+    #: разбор XML — домен и modtime это лишь самая честная догадка кода.
+    needs_extraction = True
 
     def __init__(
         self,
@@ -122,24 +126,38 @@ class YandexSearchAdapter(SearchAdapter):
         self.queries_used = 0
 
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
+        candidates, _ = await self.search_raw(query, limit=limit)
+        return candidates
+
+    async def search_raw(self, query: SearchQuery, *, limit: int = 20) -> tuple[list[Candidate], list[dict]]:
+        """Кандидаты и сырые записи одного и того же ответа — за один запрос.
+
+        Полный путь поиска живёт здесь, а `search` его только сужает до
+        кандидатов: так у сырых записей физически нет способа появиться из
+        второго платного вызова — они собираются из того же XML, который тут же
+        разбирается в кандидатов (Р-8 плана, критерий Т-6).
+        """
         if not (self._api_key and self._folder_id):
             log.warning("yandex_search: нет ключа или идентификатора каталога")
-            return []
+            return [], []
         if self.queries_used >= self._max_queries:
             log.warning(
                 "yandex_search: предел %s платных запросов на прогон исчерпан — формулировка «%s» пропущена",
                 self._max_queries,
                 query.text,
             )
-            return []
+            return [], []
 
         search_type = self._search_type(query)
         text = _with_site_filter(query, search_type)
 
         raw = await self._run_search(text, search_type=search_type, limit=limit)
         if raw is None:
-            return []
-        return self._parse(raw, limit=limit)
+            return [], []
+        root = self._root(raw)
+        if root is None:
+            return [], []
+        return self._to_candidates(root, limit=limit), _raw_records(root, limit=limit)
 
     @staticmethod
     def _search_type(query: SearchQuery) -> str:
@@ -238,12 +256,18 @@ class YandexSearchAdapter(SearchAdapter):
         # отдал результат, это отказ, а не пустая выдача (инвариант №5, РЕШ-45).
         raise SearchError(f"yandex_search: операция {operation_id} не завершилась за {self._max_wait} с")
 
-    def _parse(self, raw: bytes, *, limit: int) -> list[Candidate]:
+    def _root(self, raw: bytes) -> Any | None:
+        """Разобрать XML один раз на весь ответ. None — тело нечитаемо.
+
+        Отдельно от сборки кандидатов, потому что из одного и того же дерева
+        собираются и кандидаты, и сырые записи для стадии extractor: разбирать
+        ответ дважды незачем, а ходить за ним второй раз — тем более.
+        """
         try:
             root = ET.fromstring(raw)
         except ET.ParseError as exc:
             log.warning("yandex_search: XML не разобран: %s", exc)
-            return []
+            return None
 
         # Яндекс сообщает о своих отказах внутри XML, а не кодом HTTP:
         # исчерпанный лимит, отсутствие прав. Раньше это тихо превращалось в
@@ -252,7 +276,9 @@ class YandexSearchAdapter(SearchAdapter):
         # нечем измерить. Теперь это SearchError (инвариант №5, РЕШ-45).
         for error in root.iter("error"):
             raise SearchError(f"yandex_search: отказ поиска, код {error.get('code')}: {(error.text or '')[:200]}")
+        return root
 
+    def _to_candidates(self, root: Any, *, limit: int) -> list[Candidate]:
         candidates: list[Candidate] = []
         seen: set[str] = set()
         for doc in root.findall(".//doc"):
@@ -293,6 +319,37 @@ class YandexSearchAdapter(SearchAdapter):
         except ValidationError as exc:
             log.debug("yandex_search: запись отброшена (%s): %s", url, exc)
             return None
+
+
+def _raw_records(root: Any, *, limit: int) -> list[dict]:
+    """Записи выдачи как есть — вход стадии extractor (Э2-5).
+
+    Те же самые узлы `<doc>`, из которых собираются кандидаты: сырые записи
+    ничего не стоят сверх уже оплаченного запроса. Поля переносятся без
+    толкования — что из домена и времени правки страницы следует, решает
+    стадия, а не адаптер. Запись без адреса пропускается сразу: кандидат без
+    ссылки всё равно отбрасывается (правило 1 `prompts/extractor.md`).
+    """
+    records: list[dict] = []
+    for doc in root.findall(".//doc"):
+        url = (doc.findtext("url") or "").strip()
+        if not url:
+            continue
+        passages = doc.find("passages")
+        records.append(
+            {
+                "url": url,
+                "title": _text_of(doc.find("title")),
+                "domain": (doc.findtext("domain") or "").strip(),
+                "modtime": (doc.findtext("modtime") or "").strip(),
+                "snippet": (_text_of(passages) if passages is not None else _text_of(doc.find("headline")))[
+                    :MAX_SNIPPET
+                ],
+            }
+        )
+        if len(records) >= limit:
+            break
+    return records
 
 
 def _with_site_filter(query: SearchQuery, search_type: str) -> str:

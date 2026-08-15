@@ -320,13 +320,55 @@ class ScoutPipeline:
 
     async def _safe_search(self, adapter: SearchAdapter, query) -> list[Candidate] | None:
         """Обёртка: любая ошибка адаптера превращается в None, а не в падение запроса."""
+        raw: list[dict] = []
         try:
-            return await adapter.search(query, limit=self._settings.max_candidates_per_query)
+            if getattr(adapter, "needs_extraction", False):
+                # Кандидаты и сырые записи одним ответом источника: спрашивать
+                # ту же выдачу второй раз ради стадии extractor — двойной счёт
+                # у платного источника (Э2-5, Р-8 плана).
+                found, raw = await adapter.search_raw(query, limit=self._settings.max_candidates_per_query)
+            else:
+                # Структурированный источник: разбор кодом точнее и бесплатен,
+                # модель ему не нужна.
+                found = await adapter.search(query, limit=self._settings.max_candidates_per_query)
         except NotImplementedError:
             return None
         except Exception as exc:
             log.warning("источник %s не смог выполнить поиск «%s»: %s", adapter.name, query.text, exc)
             return None
+        if not raw:
+            return found
+        return await self._extract(adapter, query, found, raw)
+
+    async def _extract(
+        self, adapter: SearchAdapter, query, parsed: list[Candidate], raw: list[dict]
+    ) -> list[Candidate]:
+        """Нормализовать сырую выдачу моделью (Э2-5).
+
+        Результат стадии заменяет собственный разбор адаптера, а не дополняет
+        его: это одни и те же записи выдачи, и складывать их значило бы
+        протащить каждую страницу в отбор дважды — ключи склейки у них разные
+        (у разбора адаптера это адрес, у стадии — DOI либо название).
+
+        Отказ стадии прогон не роняет и источник недоступным не делает
+        (инвариант №5): выдача уже оплачена и разобрана адаптером, поэтому
+        берём его разбор и пишем причину в лог.
+        """
+        try:
+            return await stages.extract_candidates(query.source_type, adapter.name, raw, self._router)
+        except CostLimitExceededError:
+            # Стоп-кран (РЕШ-45): исчерпанный лимит — не отказ модели, а
+            # команда «стоп тратить». Продолжить на разборе адаптера значило бы
+            # оставить остальные формулировки платить дальше.
+            raise
+        except Exception as exc:
+            log.warning(
+                "extractor: стадия не удалась для %s («%s»): %s — беру разбор адаптера",
+                adapter.name,
+                query.text,
+                exc,
+            )
+            return parsed
 
     # ── Полный проход ───────────────────────────────────────────────────────
     async def run(
