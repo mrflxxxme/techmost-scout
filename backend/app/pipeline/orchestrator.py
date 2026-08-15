@@ -268,6 +268,7 @@ class ScoutPipeline:
         enriched = list(candidates)
         citations: dict[str, int] = {}
         dropped_fields: list[str] = []
+        filled_org = 0
         for doi, patch in patches.items():
             for index in by_doi.get(doi, ()):
                 candidate = enriched[index]
@@ -276,6 +277,21 @@ class ScoutPipeline:
                     citations[candidate.dedup_key()] = cited
                 enriched[index], dropped = _apply_patch(candidate, patch)
                 dropped_fields.extend(dropped)
+                if not candidate.org and enriched[index].org:
+                    filled_org += 1
+
+        # Счётчик заполненных организаций — не косметика (П-1 аудита):
+        # `stages.group_for_cards` группирует отобранных кандидатов по ТОЧНОЙ
+        # строке `org`, а OpenAlex часто отдаёт зонтичную организацию
+        # («Russian Academy of Sciences») вместо лаборатории. Значит обогащение
+        # способно схлопнуть две несвязанные работы в одну карточку и сдвинуть
+        # число карточек независимо от порога отбора. Без этой строки эффект не
+        # измерить ни в одном прогоне.
+        log.info(
+            "обогащение: заполнен пустой org у %s кандидатов из %s (карточки группируются по точной строке org)",
+            filled_org,
+            len(candidates),
+        )
 
         problems: list[str] = []
         # Обход, прерванный отказом на середине: патчи собраны не по всем DOI.

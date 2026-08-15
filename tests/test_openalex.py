@@ -341,6 +341,29 @@ async def test_непустые_поля_кандидата_не_перезап�
 
 
 @respx.mock
+async def test_прогон_считает_скольким_кандидатам_заполнен_org(settings, caplog):
+    """П-1 аудита: эффект обогащения на состав карточек обязан быть измерим.
+
+    Карточки группируются по ТОЧНОЙ строке `org`, а OpenAlex часто отдаёт
+    зонтичную организацию вместо лаборатории: заполнение пустого `org` способно
+    схлопнуть две несвязанные работы в одну карточку. Считается именно
+    заполнение пустого поля — у кандидата с уже известной организацией ничего
+    не меняется.
+    """
+    respx.get(url__startswith=LOOKUP).mock(return_value=httpx.Response(200, json=_work()))
+    empty = _candidate(org=None)
+    known = _candidate(raw_id="10.1234/example-b", url="https://doi.org/10.1234/example-b", org="НИИ нефтехимии")
+
+    with caplog.at_level(logging.INFO):
+        async with httpx.AsyncClient() as client:
+            enriched, _ = await _enrich(settings, _adapter(client), [empty, known])
+
+    assert enriched[0].org == "Институт катализа СО РАН" and enriched[1].org == "НИИ нефтехимии"
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("заполнен пустой org у 1 кандидатов из 2" in message for message in messages), messages
+
+
+@respx.mock
 async def test_ноль_цитирований_закреплён_у_производителя_патча(settings):
     """Ноль — известное значение, а не «источник промолчал».
 
