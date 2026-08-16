@@ -1,0 +1,57 @@
+Т-13 · Скоринг не переживает рассуждающую модель — вывод проверок
+Ветка E2A/T13, дерево .claude/worktrees/E2A-T13, интерпретатор .venv (РЕШ-64)
+
+=== 1. Целевой файл: pytest tests/test_stage_token_budgets.py -v ===
+============================= test session starts =============================
+collecting ... collected 4 items
+
+tests/test_stage_token_budgets.py::test_pipeline_has_llm_calls_to_guard PASSED [ 25%]
+tests/test_stage_token_budgets.py::test_every_stage_sets_explicit_max_tokens PASSED [ 50%]
+tests/test_stage_token_budgets.py::test_no_stage_falls_below_reasoning_floor PASSED [ 75%]
+tests/test_stage_token_budgets.py::test_scorer_budget_covers_full_batch_answer PASSED [100%]
+
+============================== 4 passed in 0.35s ==============================
+
+=== 2. Полный набор: pytest -q ===
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+375 passed, 1 warning in 68.00s (0:01:07)
+
+=== 3. ruff check . ===
+All checks passed!
+
+=== 4. ruff format --check . ===
+85 files already formatted
+
+=== 5. Мутации (копия вне репозитория, git archive + tar) ===
+
+--- М1 · понизить лимит стадии scorer до 4000 (обязательная мутация задачи) ---
+    assert 4000 >= (1660.0 + 4000)
+     +  where 4000 = _scorer_max_tokens()
+C:\Users\KUklonskiy\AppData\Local\Temp\claude\C--Users-KUklonskiy-DBH\3130df4e-aadb-4e44-bddd-7ebd1a9b01c2\scratchpad\mut\tests\test_stage_token_budgets.py:163: AssertionError: лимит скоринга не покрывает ответ на батч из 10 кандидатов (≈1660 токенов) вместе с запасом на рассуждение (4000)
+=========================== short test summary info ===========================
+FAILED tests/test_stage_token_budgets.py::test_no_stage_falls_below_reasoning_floor
+FAILED tests/test_stage_token_budgets.py::test_scorer_budget_covers_full_batch_answer
+2 failed, 2 passed in 0.43s
+
+--- М2 · убрать max_tokens у scorer — стадия падает на умолчание роутера 4096 ---
+C:\Users\KUklonskiy\AppData\Local\Temp\claude\C--Users-KUklonskiy-DBH\3130df4e-aadb-4e44-bddd-7ebd1a9b01c2\scratchpad\mut\tests\test_stage_token_budgets.py:85: AssertionError: стадия зовёт модель без явного max_tokens и получает умолчание 4096 — у рассуждающей модели это пустой ответ: ['stages.py:530 стадия scorer']
+E   Failed: вызов стадии scorer не найден — разбор исходника сломался
+C:\Users\KUklonskiy\AppData\Local\Temp\claude\C--Users-KUklonskiy-DBH\3130df4e-aadb-4e44-bddd-7ebd1a9b01c2\scratchpad\mut\tests\test_stage_token_budgets.py:129: Failed: вызов стадии scorer не найден — разбор исходника сломался
+=========================== short test summary info ===========================
+FAILED tests/test_stage_token_budgets.py::test_every_stage_sets_explicit_max_tokens
+FAILED tests/test_stage_token_budgets.py::test_scorer_budget_covers_full_batch_answer
+2 failed, 2 passed in 0.41s
+
+--- М3 · завести новую стадию newbie с лимитом 4096 ---
+================================== FAILURES ===================================
+E   AssertionError: лимит стадии ниже порога 6000 токенов. У рассуждающей модели лимит уходит в reasoning_content, content приходит пустым, и стадия деградирует молча (скоринг так отдавал нейтральные оценки на каждом батче): ['stages.py:969 стадия newbie: 4096']
+    assert not ['stages.py:969 стадия newbie: 4096']
+C:\Users\KUklonskiy\AppData\Local\Temp\claude\C--Users-KUklonskiy-DBH\3130df4e-aadb-4e44-bddd-7ebd1a9b01c2\scratchpad\mut\tests\test_stage_token_budgets.py:113: AssertionError: лимит стадии ниже порога 6000 токенов. У рассуждающей модели лимит уходит в reasoning_content, content приходит пустым, и стадия деградирует молча (скоринг так отдавал нейтральные оценки на каждом батче): ['stages.py:969 стадия newbie: 4096']
+=========================== short test summary info ===========================
+FAILED tests/test_stage_token_budgets.py::test_no_stage_falls_below_reasoning_floor
+1 failed, 3 passed in 0.41s
+
+--- Контроль: копия восстановлена без мутации ---
+....                                                                     [100%]
+4 passed in 0.41s

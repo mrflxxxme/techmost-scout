@@ -126,7 +126,7 @@ def _scorer_max_tokens() -> int:
         for keyword in node.keywords:
             if keyword.arg == "max_tokens" and isinstance(keyword.value, ast.Constant):
                 return int(keyword.value.value)
-    pytest.fail("вызов стадии scorer не найден — разбор исходника сломался")
+    pytest.fail("у стадии scorer нет max_tokens числом — либо лимит убрали, либо разбор исходника сломался")
 
 
 def test_scorer_budget_covers_full_batch_answer():
