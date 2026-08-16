@@ -29,6 +29,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -38,6 +39,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.export.markdown import render_markdown
 from app.llm import CostLimitExceededError, LLMRouter
 from app.llm.base import LLMError, LLMProvider, LLMResult, Message
 from app.models import Base, PipelineLog
@@ -352,6 +354,106 @@ async def test_broken_factory_does_not_crash_run(settings, brief, fake_provider_
 
     assert len(report.cards) == 1
     assert report.summary.recommendation
+
+
+# ── Т-7: номер записанного запроса доезжает до отчёта ───────────────────────
+#
+# До Т-7 `persist_run` не возвращала ничего, `Report.request_id` оставался
+# нулём, и экспорт печатал «Запрос №—». Номер существовал только в БД: связать
+# выданный клиенту отчёт со строкой журнала и с карточками было нечем.
+
+
+async def test_persist_run_returns_id_of_written_request(db_session_factory):
+    """`persist_run` возвращает id созданной строки `requests` — тот самый, что лежит в базе."""
+    returned = await persist_run(
+        db_session_factory,
+        raw_text="текст задачи, у которой должен появиться номер",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[_card()],
+        stages=[],
+    )
+
+    async with db_session_factory() as session:
+        row = (await session.execute(select(RequestRow))).scalars().one()
+        card = (await session.execute(select(SolutionCardRow))).scalars().one()
+
+    assert returned == row.id
+    assert returned > 0
+    # Номер обязан быть настоящим ключом, а не порядковым номером в памяти:
+    # по нему карточки прогона находятся в базе.
+    assert card.request_id == returned
+
+
+async def test_persist_run_returns_none_when_write_fails(caplog):
+    """Отказ записи возвращает `None` и НЕ бросает: прогон не роняется (инвариант №5, РЕШ-43).
+
+    Прочерк вместо номера — честный признак того, что записи не было; молчаливая
+    подстановка любого числа выдала бы отказ БД за успешную запись.
+    """
+
+    def broken_factory():
+        raise RuntimeError("база залокирована другим процессом")
+
+    with caplog.at_level(logging.WARNING):
+        returned = await persist_run(
+            broken_factory,
+            raw_text="текст задачи при сломанной фабрике",
+            status="drafted",
+            cost_rub=0.0,
+            cards=[_card()],
+            stages=[],
+        )
+
+    assert returned is None
+    # Отказ не роняет прогон, но и не прячется: он обязан остаться в логе.
+    assert any("запись прогона в БД не удалась" in record.message for record in caplog.records)
+
+
+async def test_persist_run_returns_none_without_factory():
+    """Фабрики нет — записи нет, номера нет. Не ноль и не исключение, а `None`."""
+    assert (
+        await persist_run(
+            None,
+            raw_text="текст задачи без фабрики сессий",
+            status="drafted",
+            cost_rub=0.0,
+            cards=[_card()],
+            stages=[],
+        )
+        is None
+    )
+
+
+async def test_run_puts_persisted_id_into_report(settings, brief, fake_provider_factory, db_session_factory):
+    """Оркестратор ставит номер записанного запроса в `Report.request_id` до возврата отчёта."""
+    provider = fake_provider_factory("deepseek", [_PLAN_JSON, _SCORE_JSON, _CARD_JSON, _VERIFY_JSON, _SUMMARY_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(settings, provider, [_OneHitAdapter(client)], session_factory=db_session_factory)
+        # request_id=0 — как из `scout run`: номера до записи не существует.
+        report = await pipeline.run(brief, request_id=0, raw_text="текст задачи с номером в отчёте")
+
+    async with db_session_factory() as session:
+        row = (await session.execute(select(RequestRow))).scalars().one()
+
+    assert report.request_id == row.id
+    assert report.request_id > 0, "нулевой номер экспорт печатает прочерком — «Запрос №—»"
+
+
+async def test_run_keeps_zero_request_id_when_write_fails(settings, brief, fake_provider_factory):
+    """Отказ записи не даёт отчёту выдуманного номера: остаётся ноль, экспорт печатает прочерк."""
+    provider = fake_provider_factory("deepseek", [_PLAN_JSON, _SCORE_JSON, _CARD_JSON, _VERIFY_JSON, _SUMMARY_JSON])
+
+    def broken_factory():
+        raise RuntimeError("база залокирована другим процессом")
+
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(settings, provider, [_OneHitAdapter(client)], session_factory=broken_factory)
+        report = await pipeline.run(brief, request_id=0, raw_text="текст задачи без записи в БД")
+
+    assert len(report.cards) == 1, "отказ записи не роняет прогон"
+    assert report.request_id == 0
+    assert "Запрос №—" in render_markdown(report)
 
 
 # ── Падение прогона: статус failed и текст ошибки в requests ────────────────

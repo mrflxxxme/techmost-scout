@@ -1,0 +1,363 @@
+Т-7 · Долги фазы: кэш префикса, requests.id в отчёт, честный статус Google
+Ветка E2A/T7, коммит 6f37c1e, 16.08.2026 17:06
+PYTHONPATH=<дерево>\backend (иначе подтягивается schemas.py основного каталога)
+
+════════ ШАГ 0 · ОСНОВАНИЕ (нетронутое дерево, HEAD f1eebdf) ════════
+$ pytest -q                             → 352 passed, 1 warning in 82.51s
+$ ruff check .                          → All checks passed!
+$ ruff format --check .                 → 84 files already formatted
+Основание ЗЕЛЁНОЕ.
+
+════════ КРИТЕРИЙ 1 · pytest tests/test_prompts.py -v ════════
+============================= test session starts =============================
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[card_author] PASSED [  2%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[extractor] PASSED [  5%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[intake] PASSED [  7%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[planner] PASSED [ 10%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[scorer] PASSED [ 12%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[summary] PASSED [ 15%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[verifier] PASSED [ 17%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[card_author] PASSED [ 20%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[extractor] PASSED [ 23%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[intake] PASSED [ 25%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[planner] PASSED [ 28%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[scorer] PASSED [ 30%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[summary] PASSED [ 33%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[verifier] PASSED [ 35%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[card_author] PASSED [ 38%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[extractor] PASSED [ 41%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[intake] PASSED [ 43%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[planner] PASSED [ 46%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[summary] PASSED [ 48%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[verifier] PASSED [ 51%]
+tests/test_prompts.py::test_render_prompt_fails_loudly_on_missing_value PASSED [ 53%]
+tests/test_prompts.py::test_prompt_has_error_section[intake] PASSED      [ 56%]
+tests/test_prompts.py::test_prompt_has_error_section[planner] PASSED     [ 58%]
+tests/test_prompts.py::test_prompt_has_error_section[card_author] PASSED [ 61%]
+tests/test_prompts.py::test_prompt_has_error_section[verifier] PASSED    [ 64%]
+tests/test_prompts.py::test_prompt_has_error_section[summary] PASSED     [ 66%]
+tests/test_prompts.py::test_prompt_has_error_section[scorer] PASSED      [ 69%]
+tests/test_prompts.py::test_gov_support_reference_is_loadable PASSED     [ 71%]
+tests/test_prompts.py::test_card_author_does_not_default_to_lab_without_signs PASSED [ 74%]
+tests/test_prompts.py::test_card_author_response_format_has_requirement_checks PASSED [ 76%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[card_author] PASSED [ 79%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[extractor] PASSED [ 82%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[intake] PASSED [ 84%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[planner] PASSED [ 87%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[scorer] PASSED [ 89%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[summary] PASSED [ 92%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[verifier] PASSED [ 94%]
+tests/test_prompts.py::test_intake_empty_questions_requires_all_four_conditions PASSED [ 97%]
+tests/test_prompts.py::test_candidates_to_json_keeps_url_and_trims_snippet PASSED [100%]
+
+============================= 39 passed in 0.37s ==============================
+
+════════ КРИТЕРИЙ 2 · pytest tests/test_llm_router.py -v ════════
+============================= test session starts =============================
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+
+tests/test_llm_router.py::test_stage_route_picks_configured_provider PASSED [  5%]
+tests/test_llm_router.py::test_short_answer_stage_goes_to_free_provider PASSED [ 11%]
+tests/test_llm_router.py::test_falls_back_when_primary_fails PASSED      [ 17%]
+tests/test_llm_router.py::test_all_providers_down_raises PASSED          [ 23%]
+tests/test_llm_router.py::test_json_parsed_from_markdown_fence PASSED    [ 29%]
+tests/test_llm_router.py::test_broken_json_is_repaired_once PASSED       [ 35%]
+tests/test_llm_router.py::test_truncated_json_is_retried_with_bigger_budget PASSED [ 41%]
+tests/test_llm_router.py::test_cost_limit_stops_runaway_request PASSED   [ 47%]
+tests/test_llm_router.py::test_answer_is_picked_by_schema_not_by_size PASSED [ 52%]
+tests/test_llm_router.py::test_extract_json_block_pulls_answer_out_of_reasoning PASSED [ 58%]
+tests/test_llm_router.py::test_braces_inside_strings_do_not_break_parsing PASSED [ 64%]
+tests/test_llm_router.py::test_extract_json_block_returns_none_on_prose PASSED [ 70%]
+tests/test_llm_router.py::test_parse_json_payload_survives_leading_explanation PASSED [ 76%]
+tests/test_llm_router.py::test_cache_hit_increments_cached_calls PASSED  [ 82%]
+tests/test_llm_router.py::test_call_without_cache_hit_does_not_increment_cached_calls PASSED [ 88%]
+tests/test_llm_router.py::test_cached_calls_counts_only_cached_of_several PASSED [ 94%]
+tests/test_llm_router.py::test_chain_puts_preferred_first PASSED         [100%]
+
+============================= 17 passed in 2.29s ==============================
+
+════════ КРИТЕРИЙ 3 · pytest tests/test_persistence.py -v ════════
+============================= test session starts =============================
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+
+tests/test_persistence.py::test_successful_run_persists_request_card_and_search_log PASSED [  6%]
+tests/test_persistence.py::test_new_card_fields_persist_without_loss PASSED [ 13%]
+tests/test_persistence.py::test_card_without_new_fields_persists_empty_lists_not_null PASSED [ 20%]
+tests/test_persistence.py::test_new_columns_default_to_empty_list_on_bare_insert PASSED [ 26%]
+tests/test_persistence.py::test_without_factory_pipeline_runs_and_writes_nothing PASSED [ 33%]
+tests/test_persistence.py::test_broken_factory_does_not_crash_run PASSED [ 40%]
+tests/test_persistence.py::test_persist_run_returns_id_of_written_request PASSED [ 46%]
+tests/test_persistence.py::test_persist_run_returns_none_when_write_fails PASSED [ 53%]
+tests/test_persistence.py::test_persist_run_returns_none_without_factory PASSED [ 60%]
+tests/test_persistence.py::test_run_puts_persisted_id_into_report PASSED [ 66%]
+tests/test_persistence.py::test_run_keeps_zero_request_id_when_write_fails PASSED [ 73%]
+tests/test_persistence.py::test_pipeline_failure_persists_failed_status_and_error PASSED [ 80%]
+tests/test_persistence.py::test_cost_limit_exceeded_during_scoring_raises_and_persists_failed PASSED [ 86%]
+tests/test_persistence.py::test_cost_limit_exceeded_during_card_authoring_raises_and_persists_failed PASSED [ 93%]
+tests/test_persistence.py::test_cost_limit_exceeded_during_summary_raises_and_persists_failed PASSED [100%]
+
+============================= 15 passed in 5.27s ==============================
+
+════════ КРИТЕРИЙ 4 · scout run … --no-interactive ════════
+НЕ ВЫПОЛНЯЛСЯ исполнителем: живые вызовы моделей запрещены (инвариант №7).
+Критерий закрывает оркестратор платным прогоном. Что он обязан увидеть:
+  1) в отчёте .md строка «*Запрос №N · …» с N > 0 вместо «Запрос №—»;
+  2) в консоли последней строкой: «Стоимость запроса: X.XX ₽; вызовов
+     модели N, из них с кэшем префикса M».
+Кэш префикса считает только DeepSeek (prompt_cache_hit_tokens); стадии на
+GigaChat в M не попадут никогда — M > 0 ожидается со второго вызова
+DeepSeek в прогоне (card_author/verifier/summary идут на него).
+
+════════ КРИТЕРИЙ 5 · pytest -q, ruff ════════
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+370 passed, 1 warning in 67.20s (0:01:07)
+
+$ ruff check .
+All checks passed!
+$ ruff format --check .
+84 files already formatted
+
+════════ МУТАЦИИ (ловушка критерия 1 и остальные три пункта) ════════
+Копия дерева вне репозитория: git archive -o <scratch>\t7.tar HEAD; tar -xf.
+
+М1 · Блок `## Вход` возвращён в НАЧАЛО всех шести промптов
+    pytest tests/test_prompts.py -q → 6 failed, 33 passed
+    FAILED test_placeholders_stand_after_instruction_blocks[card_author]
+    FAILED test_placeholders_stand_after_instruction_blocks[extractor]
+    FAILED test_placeholders_stand_after_instruction_blocks[intake]
+    FAILED test_placeholders_stand_after_instruction_blocks[planner]
+    FAILED test_placeholders_stand_after_instruction_blocks[summary]
+    FAILED test_placeholders_stand_after_instruction_blocks[verifier]
+    МУТАНТ УБИТ.
+
+М2 · Блок `## Вход` в СЕРЕДИНЕ: после «Формата ответа», перед «Форматами ошибок».
+    Дефект тот же: раздел инструкций стоит НИЖЕ метки и выпадает из
+    кэшируемого префикса. Это и есть демонстрация ловушки — наивный порог
+    «метка во второй половине файла» такой мутант ПРОПУСКАЕТ:
+      intake      метка на 81 % файла — порог ПРОЙДЕН
+      planner     метка на 84 % файла — порог ПРОЙДЕН
+      card_author метка на 87 % файла — порог ПРОЙДЕН
+      verifier    метка на 78 % файла — порог ПРОЙДЕН
+      summary     метка на 82 % файла — порог ПРОЙДЕН
+      extractor   метка на 82 % файла — порог ПРОЙДЕН
+    pytest tests/test_prompts.py -q → 6 failed, 33 passed (те же шесть)
+    МУТАНТ УБИТ проверкой по существу, наивным порогом — НЕ убит.
+
+М3 · `cached_calls += 1` безусловно, без проверки `usage.cached`
+    pytest tests/test_llm_router.py -q → 2 failed, 15 passed
+    FAILED test_call_without_cache_hit_does_not_increment_cached_calls
+    FAILED test_cached_calls_counts_only_cached_of_several
+    МУТАНТ УБИТ.
+
+М4 · `persist_run` пишет в БД, но всегда возвращает None
+    pytest tests/test_persistence.py -q → 2 failed, 13 passed
+    FAILED test_persist_run_returns_id_of_written_request
+    FAILED test_run_puts_persisted_id_into_report
+    МУТАНТ УБИТ.
+
+М5 · Возвращено прежнее пояснение «100 запросов в сутки бесплатно»
+    pytest tests/test_openalex.py -q -k "google or роспатент" → 1 failed, 1 passed
+    FAILED test_таблица_ключей_доктора_честна_про_закрытый_доступ_к_google
+    МУТАНТ УБИТ.
+
+════════════════════════════════════════════════════════════════════════
+ЦИКЛ 2 · починка трёх тестов кэша, коммит d12df1e, 16.08.2026
+════════════════════════════════════════════════════════════════════════
+
+──── ПРОВЕРКА ОКРУЖЕНИЯ (ключей в переменных ОС нет) ────
+$ Get-ChildItem env: | Where-Object { $_.Name -match "DEEPSEEK|GIGACHAT|YANDEX" }
+(пусто)
+$ Test-Path <дерево>\.env            → False
+$ Test-Path <дерево>\backend\.env    → False
+
+──── ПРОВЕРКА 1 · pytest tests/test_llm_router.py -q ────
+.................                                                        [100%]
+17 passed in 2.50s
+
+──── ПРОВЕРКА 2 · pytest -q ────
+370 passed, 1 warning in 96.41s (0:01:36)
+(до правки было 370 — новых тестов не добавлялось, три существующих
+переведены на локальную фикстуру)
+
+──── ПРОВЕРКА 3 · ruff ────
+$ ruff check .            → All checks passed!
+$ ruff format --check .   → 84 files already formatted
+
+════════ КОРЕНЬ ОТКАЗА: ЗАВИСИТ ОТ ИНТЕРПРЕТАТОРА ════════
+Диагноз владельца подтверждён, но воспроизводится НЕ на любом Python.
+
+  .venv репозитория : pydantic 2.13.4 / pydantic-settings 2.15.0
+  системный python  : pydantic 2.11.5 / pydantic-settings 2.9.1
+                      (C:\...\Programs\Python\Python313\python.exe)
+
+Проба Settings в чистом дереве:
+  на .venv (2.15.0)          by-name  -> 'sk-test'   by-alias -> 'sk-test'
+  на системном py (2.9.1)    by-name  -> ''          by-alias -> 'sk-test'
+
+То есть в pydantic-settings 2.9.1 значение, переданное по ИМЕНИ ПОЛЯ при
+заданном validation_alias и выключенном populate_by_name, отбрасывается
+(extra="ignore"); в 2.15.0 оно проходит — case_sensitive=False сводит
+имя поля и алиас. Ревью гоняло набор системным python, поэтому и видело
+три падения, а на .venv их не было ни до правки, ни после.
+
+Прогон ДО правки (HEAD~1 = 6bf0a42), системный python:
+  $ pytest tests/test_llm_router.py -q
+  .............FFF.                                                    [100%]
+  FAILED tests/test_llm_router.py::test_cache_hit_increments_cached_calls
+  FAILED tests/test_llm_router.py::test_call_without_cache_hit_does_not_increment_cached_calls
+  FAILED tests/test_llm_router.py::test_cached_calls_counts_only_cached_of_several
+  E  app.llm.base.LLMError: router: все провайдеры отказали на стадии
+     card_author: deepseek: не задан DEEPSEEK_API_KEY
+  WARNING app.llm.router: стадия card_author: deepseek не подходит
+     (deepseek: не задан DEEPSEEK_API_KEY), перехожу к резерву
+  3 failed, 14 passed in 0.24s
+  ← в точности отчёт ревью.
+
+Прогон ПОСЛЕ правки (HEAD = d12df1e), системный python:
+  $ pytest tests/test_llm_router.py -q
+  .................                                                    [100%]
+  17 passed in 3.26s
+
+════════ МУТАЦИЯ М6 (цикл 2) ════════
+Копия дерева вне репозитория: git archive -o <scratch>\t7.tar HEAD; tar -xf.
+
+М6 · В test_cache_hit_increments_cached_calls ключ снова передан по ИМЕНИ
+     ПОЛЯ (deepseek_api_key="sk-test") вместо алиаса DEEPSEEK_API_KEY —
+     ровно как в общей фикстуре tests/conftest.py.
+
+  На системном python (pydantic-settings 2.9.1):
+  $ pytest tests/test_llm_router.py -q --tb=line
+  .............F...                                                    [100%]
+  E  app.llm.base.LLMError: router: все провайдеры отказали на стадии
+     card_author: deepseek: не задан DEEPSEEK_API_KEY
+  WARNING app.llm.router: стадия card_author: deepseek не подходит
+     (deepseek: не задан DEEPSEEK_API_KEY), перехожу к резерву
+  FAILED tests/test_llm_router.py::test_cache_hit_increments_cached_calls
+  1 failed, 16 passed in 2.41s
+  МУТАНТ УБИТ — починка лечит причину, а не маскирует симптом.
+
+  На .venv (pydantic-settings 2.15.0) тот же мутант проходит: 3 passed.
+  Это не слабость теста, а свойство версии — см. пробу выше.
+
+════════ ЗАМЕЧАНО ЗА ГРАНИЦАМИ ЗАДАЧИ (не правил) ════════
+1. tests/conftest.py и backend/app/config.py — общая дыра: фикстура
+   settings передаёт ВСЕ ключи по имени поля, а у полей задан
+   validation_alias без populate_by_name. На pydantic-settings 2.9.1 все
+   ключи в этой фикстуре пустые. Сейчас это никого не роняет только
+   потому, что остальные тесты идут через FakeProvider. Выносится
+   отдельной задачей по решению владельца.
+2. Набор гоняется двумя разными интерпретаторами: .venv репозитория и
+   системным python из PATH. Версии зависимостей расходятся, поведение
+   тоже. Референсным стоит объявить один.
+3. Полный `pytest -q` на системном python на починенном коде тоже зелёный:
+   370 passed, 1 warning in 122.74s (0:02:02). То есть после правки набор
+   проходит на ОБОИХ интерпретаторах — и на .venv (96.41 с), и на
+   системном python (122.74 с).
+
+
+════════════════════════════════════════════════════════════════════════════
+ЦИКЛ ПРАВОК ПОСТ-АУДИТА Т-7 (PASS-WITH-FIXES, блокирующих 0) — 16.08.2026
+исполнитель impl-T7-postaudit, дерево .claude/worktrees/E2A-T7, ветка E2A/T7
+эталонный интерпретатор .venv репозитория (РЕШ-64), PYTHONPATH=<дерево>/backend
+════════════════════════════════════════════════════════════════════════════
+
+──── ЧТО ИЗМЕНЕНО ────
+1. tests/test_prompts.py — test_placeholders_stand_after_instruction_blocks:
+   добавлено ТРЕТЬЕ условие, меряющее остаток, а не позиции заголовков:
+   ниже ПОСЛЕДНЕЙ метки, после вычета закрывающей ограды ``` и метки
+   `<!-- версия … -->`, остаётся не более _TAIL_LIMIT = 200 знаков без
+   пробелов. Докстрока переписана под то, что тест действительно делает,
+   с обоснованием порога.
+2. tests/test_cli_run.py — новый тест
+   test_cost_line_says_cache_is_counted_only_for_deepseek: в выводе
+   `scout run` обязана быть подстрока «кэш считается только у DeepSeek».
+   Живых вызовов нет — интейк и пайплайн подменены существующими в файле
+   заглушками (_patch_llm_router, _RecordingPipeline).
+3. tests/test_llm_router.py — докстрока фикстуры deepseek_settings: прежнее
+   «pydantic-settings при extra=ignore молча отбрасывает значение по имени
+   поля» неверно на эталонном интерпретаторе. Переписано как ВЕРСИОННАЯ
+   разница со ссылками на РЕШ-63 и РЕШ-64. Код фикстуры не тронут.
+
+──── ОБОСНОВАНИЕ ПОРОГА 200 ЗНАКОВ ────
+Замер законных хвостов ниже последней метки (знаков без пробелов, после
+вычета ``` и метки версии):
+  card_author.md  0     extractor.md  0     planner.md  0
+  summary.md      0     verifier.md   0     intake.md   50
+intake.md — единственный законный ненулевой хвост: однострочное пояснение
+про пустой INDUSTRY_HINT. Порог 200 даёт запас ещё на строку-другую такого
+рода и остаётся на порядок ниже самого маленького из воспроизведённых
+разрывов (1147 знаков в M2), то есть отличает пояснение от переехавшего
+вниз корпуса инструкций.
+
+──── ТАБЛИЦА МУТАЦИЙ ────
+Мутации ставились на КОПИИ вне репозитория (git archive → tar -xf), по две
+копии: c910c89 (до правки) и 7622f52 (после). После каждой мутации файл
+восстанавливался.
+
+  мутация                              до правки      после правки
+  M2 intake.md   блок «## Вход» под
+     заголовком «## Форматы ошибок»    39 passed      1 failed, 38 passed
+  M3 planner.md  120 строк статики
+     под «### Приложение» ниже меток   39 passed      1 failed, 38 passed
+  M4 summary.md  «## Правила» —
+     отсылка, корпус правил под метки  39 passed      1 failed, 38 passed
+  M-оговорка cli.py  вырезано
+     «(кэш считается только у DeepSeek
+      …)» из строки счётчика           12 passed      1 failed, 12 passed
+
+Все четыре мутанта переживали прогон до правки и убиты после.
+
+──── ФАКТИЧЕСКИЙ ВЫВОД МУТАЦИЙ (после правки) ────
+M2 · intake.md: блок «## Вход» вставлен сразу под заголовком «## Форматы ошибок»
+    файл 8234 знаков; первая метка на 81.2 %; хвост ниже последней метки 1428 знаков = 17.3 %
+E   AssertionError: промпт intake: ниже последней метки осталось 1147 знаков текста
+    при пределе 200 (всего хвоста 1428 знаков, файл 8234). Этот текст неизменен, но
+    кэшируемым префиксом уже не покрыт: перенесите его ВЫШЕ блока подстановок.
+    Начало хвоста: 'Если`INDUSTRY_HINT`пустой—определиотрасльизтекста.ВсегдавозвращайвалидныйJSONука'
+FAILED tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[intake]
+1 failed, 38 passed in 0.41s
+
+M3 · planner.md: 120 строк статики под «### Приложение» ниже блока подстановок
+    файл 28552 знаков; первая метка на 33.2 %; хвост ниже последней метки 19056 знаков = 66.7 %
+E   AssertionError: промпт planner: ниже последней метки осталось 16261 знаков текста
+    при пределе 200 (всего хвоста 19056 знаков, файл 28552). …
+    Начало хвоста: '###Приложение.Словарьтерминовитиповыеформулировки1.Терминуточняетсяпоотраслевому'
+FAILED tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[planner]
+1 failed, 38 passed in 0.41s
+
+M4 · summary.md: «## Правила» — отсылка, корпус правил уехал под метки
+    файл 10089 знаков; первая метка на 65.7 %; хвост ниже последней метки 3353 знаков = 33.2 %
+E   AssertionError: промпт summary: ниже последней метки осталось 2776 знаков текста
+    при пределе 200 (всего хвоста 3353 знаков, файл 10089). …
+    Начало хвоста: '###Приложение.Правиласборкисводки1.Всеутверждениясводкиберутсяизкарточек.Новыхфа'
+FAILED tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[summary]
+1 failed, 38 passed in 0.42s
+
+M-оговорка · cli.py: из строки счётчика кэша вырезано пояснение про DeepSeek
+E   AssertionError: у счётчика кэша пропала оговорка: без неё ноль на прогоне через
+    GigaChat или Yandex читается как «кэш префикса не работает»
+FAILED tests/test_cli_run.py::test_cost_line_says_cache_is_counted_only_for_deepseek
+1 failed, 12 passed in 0.57s
+
+КОНТРОЛЬ · все файлы копии восстановлены, набор снова зелёный
+39 passed in 0.32s   (tests/test_prompts.py)
+13 passed in 0.48s   (tests/test_cli_run.py)
+
+──── ФИНАЛЬНЫЕ ПРОВЕРКИ НА ДЕРЕВЕ (.venv) ────
+pytest tests/test_prompts.py -q                 → 39 passed in 0.29s
+pytest tests/test_cli_run.py -q                 → 13 passed in 0.42s  (было 12)
+pytest -q                                       → 371 passed, 1 warning in 92.95s
+                                                  (было 370; самый долгий тест 3.24s)
+ruff check .                                    → All checks passed!
+ruff format --check .                           → 84 files already formatted
+
+──── ГРАНИЦЫ ────
+tests/conftest.py и backend/app/config.py не тронуты (РЕШ-63).
+stages.py и orchestrator.py не рефакторились.
+Содержание промптов не менялось: правка 1 касается только теста.
+Три совета аудита (регулярка заголовков внутри кодовых блоков, порядок
+записей в CHANGELOG, печать доли вместо абсолюта) не брались — уходят долгом.
+Живых вызовов моделей и платных источников не делалось (инвариант №7).

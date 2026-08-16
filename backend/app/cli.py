@@ -78,8 +78,14 @@ SECRET_CHECKS: tuple[tuple[str, str, str], ...] = (
     ("YANDEX_API_KEY", "yandex_api_key", "аварийный резерв модели"),
     ("YANDEX_CATALOG_ID", "yandex_catalog_id", "нужен вместе с ключом Яндекса"),
     ("YANDEX_SEARCH_API_KEY", "yandex_search_api_key", "поиск по вебу РФ (платно)"),
-    ("GOOGLE_API_KEY", "google_api_key", "поиск по мировому вебу (100 запросов в сутки бесплатно)"),
-    ("GOOGLE_CSE_ID", "google_cse_id", "нужен вместе с ключом Google"),
+    # Google больше не источник, а закрытая дверь: Custom Search JSON API закрыт
+    # для новых клиентов, сам API отключается 01.01.2027 (РЕШ-21), значения в
+    # `.env` очищены (РЕШ-32). Прежнее «100 запросов в сутки бесплатно» читалось
+    # как рабочая возможность, которой просто не воспользовались, — оператор мог
+    # часами добывать ключ, который всё равно отдаёт 403. Код адаптера остаётся
+    # (РЕШ-52.4), в таблице источников он виден выключенным.
+    ("GOOGLE_API_KEY", "google_api_key", "не используется: доступ закрыт Google, API отключается 01.01.2027"),
+    ("GOOGLE_CSE_ID", "google_cse_id", "не используется: шёл в паре с ключом Google, значение очищено"),
     ("OPENALEX_API_KEY", "openalex_api_key", "обогащение по DOI (с 02.2026 ключ обязателен)"),
     ("SEMANTICSCHOLAR_API_KEY", "semanticscholar_api_key", "необязателен, повышает лимиты"),
     ("ROSPATENT_API_KEY", "rospatent_api_key", "поисковая платформа Роспатента (Э2-2)"),
@@ -448,7 +454,21 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(render_markdown(report), encoding="utf-8")
     console.print(f"\n[green]Отчёт сохранён:[/green] {target}")
-    console.print(f"[bold]Стоимость запроса:[/bold] {report.cost_rub:.2f} ₽ за {router.cost.calls} вызовов модели")
+    # Счётчик кэша печатается рядом со стоимостью (Т-7): перенос блоков
+    # подстановки в конец промптов (РЕШ-52.6) сделан ради попаданий в кэш
+    # префикса, и без этой строки эффект правки на живом прогоне не виден.
+    #
+    # Оговорка в подписи не косметическая: попадание в кэш выставляет только
+    # DeepSeek (поле `prompt_cache_hit_tokens` в ответе). У GigaChat и Yandex
+    # `Usage.cached` всегда False, поэтому на прогоне через них строка покажет
+    # ноль — и без оговорки читатель решит, что кэш не работает, хотя его просто
+    # не измеряют.
+    console.print(
+        f"[bold]Стоимость запроса:[/bold] {report.cost_rub:.2f} ₽; "
+        f"вызовов модели {router.cost.calls}, "
+        f"из них с кэшем префикса {router.cost.cached_calls} "
+        f"(кэш считается только у DeepSeek; у остальных провайдеров всегда 0)"
+    )
 
 
 # ── serve ───────────────────────────────────────────────────────────────────

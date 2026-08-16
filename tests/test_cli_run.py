@@ -284,6 +284,38 @@ async def test_successful_intake_adds_no_caveat_to_report(monkeypatch, settings,
     assert _RecordingPipeline.initial_caveats[-1] == []
 
 
+# ── Т-7, пост-аудит: оговорка у счётчика кэша ────────────────────────────────
+async def test_cost_line_says_cache_is_counted_only_for_deepseek(
+    monkeypatch, settings, fake_provider_factory, tmp_path, capsys
+):
+    """Итоговая строка со стоимостью обязана нести оговорку про DeepSeek.
+
+    Счётчик `cached_calls` заполняет только DeepSeek (поле
+    `prompt_cache_hit_tokens` в ответе); у GigaChat и Yandex `Usage.cached`
+    всегда False, поэтому на прогоне через них строка честно покажет ноль. Без
+    оговорки оператор прочтёт этот ноль как «кэш префикса не работает» и пойдёт
+    чинить работающее. Мутант «вырезать оговорку из строки счётчика» пережил
+    прогон Т-7: печатаемый вывод `scout run` не смотрел ни один тест.
+    """
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return IntakeResult(questions=[], draft_brief=_draft_brief(industry="нефтепереработка"))
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False)
+
+    # rich переносит длинную строку по ширине терминала, поэтому сверяем текст
+    # со схлопнутыми пробелами, а не сырой вывод: иначе перенос разорвёт фразу.
+    console_output = " ".join(capsys.readouterr().out.split())
+    assert "из них с кэшем префикса" in console_output, "строки со счётчиком кэша в выводе вовсе нет"
+    assert "кэш считается только у DeepSeek" in console_output, (
+        "у счётчика кэша пропала оговорка: без неё ноль на прогоне через GigaChat или Yandex "
+        "читается как «кэш префикса не работает»"
+    )
+
+
 # ── Т-2, цикл 2: границы запасного брифа ─────────────────────────────────────
 #: Фраза ровно в 50 знаков, последний из них — пробел. При повторении знак с
 #: индексом 499 (тот, на котором обрывается срез `[:500]`) всегда оказывается

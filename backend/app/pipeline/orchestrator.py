@@ -488,7 +488,7 @@ class ScoutPipeline:
             # В начало: оговорка о том, из чего собран бриф, объясняет качество
             # всей выдачи, а оговорки стадий — только своей части.
             report.summary.caveats = [*initial_caveats, *report.summary.caveats]
-        await persist_run(
+        persisted_id = await persist_run(
             self._session_factory,
             raw_text=raw_text,
             status="drafted",
@@ -497,6 +497,15 @@ class ScoutPipeline:
             stages=stage_log,
             error=None,
         )
+        if persisted_id is not None:
+            # Номер прогона появляется только в момент записи: до неё строки
+            # `requests` не существует. Экспорт печатает «Запрос №N» — по нему
+            # выданный клиенту отчёт связывается со строкой журнала и с
+            # карточками в БД (Т-7). Записи не было или она отказала — номера
+            # нет, `request_id` остаётся нулём, и экспорт печатает прочерк:
+            # отказ БД не роняет прогон, но и не выдаётся за успешную запись
+            # (инвариант №5 в редакции РЕШ-43).
+            report.request_id = persisted_id
         return report
 
     async def _run_stages(self, brief: Brief, request_id: int, stage_log: list[StageRecord]) -> Report:

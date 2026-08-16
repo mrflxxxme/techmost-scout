@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
+import respx
 from pydantic import BaseModel
 
+from app.config import Settings
 from app.llm.base import LLMError, Message, extract_json_block, parse_json_payload
+from app.llm.deepseek import DeepSeekProvider
 from app.llm.router import CostLimitExceededError, LLMRouter
 
 
@@ -181,6 +185,111 @@ def test_parse_json_payload_survives_leading_explanation():
     text = 'Хорошо, вот результат:\n{"answer": "да", "number": 3}'
 
     assert parse_json_payload(text)["number"] == 3
+
+
+DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
+
+
+@pytest.fixture
+def deepseek_settings() -> Settings:
+    """Настройки, в которых ключ DeepSeek действительно доходит до провайдера.
+
+    Поля `Settings` объявлены с `validation_alias` (`DEEPSEEK_API_KEY` и
+    прочие), а `populate_by_name` в `model_config` не включён. Что при этом
+    происходит со значением, переданным по ИМЕНИ ПОЛЯ (`deepseek_api_key=...`),
+    ЗАВИСИТ ОТ ВЕРСИИ pydantic-settings, а `pyproject.toml` держит плавающий
+    предел `pydantic-settings>=2.6`, поэтому законны обе:
+
+        2.9.1  (системный python):   Settings(deepseek_api_key=...) -> ''
+        2.15.0 (эталонный .venv):    Settings(deepseek_api_key=...) -> 'sk-...'
+
+    На 2.9.1 значение при `extra="ignore"` молча отбрасывается и в настройках
+    остаётся пустой `SecretStr("")` — именно на этой версии и был найден отказ
+    (РЕШ-63). На 2.15.0, которая стоит в эталонном интерпретаторе (РЕШ-64),
+    имя поля работает. Передача по АЛИАСУ работает в обеих, поэтому ключ здесь
+    передаётся под именем алиаса: тест не должен зависеть от того, какая версия
+    подтянулась.
+
+    Общая фикстура `settings` из conftest.py передаёт ключи по имени поля; всем
+    остальным тестам это безразлично, потому что они работают через
+    `FakeProvider`. Здесь же строится настоящий `DeepSeekProvider`, который без
+    ключа отказывает ещё до похода в подменённый respx-ом HTTP. Общую оснастку
+    не чиним: это отдельная задача (РЕШ-63).
+    """
+    return Settings(
+        APP_ENV="test",
+        database_url="sqlite+aiosqlite:///:memory:",
+        DEEPSEEK_API_KEY="sk-test",
+        cost_limit_rub_per_request=10.0,
+    )
+
+
+def _deepseek_reply(*, cache_hit_tokens: int) -> dict:
+    """Ответ DeepSeek с попаданием в кэш префикса и без него.
+
+    Поле `prompt_cache_hit_tokens` — единственное, чем провайдер отличает
+    кэшированный вход от обычного, и оно же даёт скидку в цене.
+    """
+    return {
+        "choices": [{"message": {"content": '{"answer": "да", "number": 1}'}, "finish_reason": "stop"}],
+        "usage": {
+            "prompt_tokens": 4000,
+            "completion_tokens": 100,
+            "prompt_cache_hit_tokens": cache_hit_tokens,
+        },
+    }
+
+
+@respx.mock
+async def test_cache_hit_increments_cached_calls(deepseek_settings):
+    """Ответ с `prompt_cache_hit_tokens > 0` увеличивает счётчик кэша (Т-7, РЕШ-52.6).
+
+    Перенос блоков подстановки в конец промптов делался ради попаданий в кэш
+    префикса, а измерить эффект было нечем: `CostTracker` терял `Usage.cached`,
+    и оставалась только цена в рублях — она падает и от короткого ответа модели.
+    """
+    respx.post(DEEPSEEK_URL).mock(return_value=httpx.Response(200, json=_deepseek_reply(cache_hit_tokens=3900)))
+    router = _router(deepseek_settings, {"deepseek": DeepSeekProvider(deepseek_settings)})
+
+    await router.complete("card_author", [Message(role="user", content="?")])
+
+    assert router.cost.calls == 1
+    assert router.cost.cached_calls == 1
+
+
+@respx.mock
+async def test_call_without_cache_hit_does_not_increment_cached_calls(deepseek_settings):
+    """Без попадания в кэш счётчик кэша стоит на месте, а счётчик вызовов растёт.
+
+    Обратная половина проверки: счётчик, который увеличивается на каждом вызове,
+    показывал бы стопроцентный кэш при полностью холодном префиксе.
+    """
+    respx.post(DEEPSEEK_URL).mock(return_value=httpx.Response(200, json=_deepseek_reply(cache_hit_tokens=0)))
+    router = _router(deepseek_settings, {"deepseek": DeepSeekProvider(deepseek_settings)})
+
+    await router.complete("card_author", [Message(role="user", content="?")])
+
+    assert router.cost.calls == 1
+    assert router.cost.cached_calls == 0
+
+
+@respx.mock
+async def test_cached_calls_counts_only_cached_of_several(deepseek_settings):
+    """Из трёх вызовов в кэш попали два — счётчик обязан показать именно два, а не «был кэш»."""
+    respx.post(DEEPSEEK_URL).mock(
+        side_effect=[
+            httpx.Response(200, json=_deepseek_reply(cache_hit_tokens=0)),
+            httpx.Response(200, json=_deepseek_reply(cache_hit_tokens=3900)),
+            httpx.Response(200, json=_deepseek_reply(cache_hit_tokens=3800)),
+        ]
+    )
+    router = _router(deepseek_settings, {"deepseek": DeepSeekProvider(deepseek_settings)})
+
+    for _ in range(3):
+        await router.complete("card_author", [Message(role="user", content="?")])
+
+    assert router.cost.calls == 3
+    assert router.cost.cached_calls == 2
 
 
 def test_chain_puts_preferred_first(settings, fake_provider_factory):
