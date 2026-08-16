@@ -162,3 +162,97 @@ $ ruff format --check .
     pytest tests/test_openalex.py -q -k "google or роспатент" → 1 failed, 1 passed
     FAILED test_таблица_ключей_доктора_честна_про_закрытый_доступ_к_google
     МУТАНТ УБИТ.
+
+════════════════════════════════════════════════════════════════════════
+ЦИКЛ 2 · починка трёх тестов кэша, коммит d12df1e, 16.08.2026
+════════════════════════════════════════════════════════════════════════
+
+──── ПРОВЕРКА ОКРУЖЕНИЯ (ключей в переменных ОС нет) ────
+$ Get-ChildItem env: | Where-Object { $_.Name -match "DEEPSEEK|GIGACHAT|YANDEX" }
+(пусто)
+$ Test-Path <дерево>\.env            → False
+$ Test-Path <дерево>\backend\.env    → False
+
+──── ПРОВЕРКА 1 · pytest tests/test_llm_router.py -q ────
+.................                                                        [100%]
+17 passed in 2.50s
+
+──── ПРОВЕРКА 2 · pytest -q ────
+370 passed, 1 warning in 96.41s (0:01:36)
+(до правки было 370 — новых тестов не добавлялось, три существующих
+переведены на локальную фикстуру)
+
+──── ПРОВЕРКА 3 · ruff ────
+$ ruff check .            → All checks passed!
+$ ruff format --check .   → 84 files already formatted
+
+════════ КОРЕНЬ ОТКАЗА: ЗАВИСИТ ОТ ИНТЕРПРЕТАТОРА ════════
+Диагноз владельца подтверждён, но воспроизводится НЕ на любом Python.
+
+  .venv репозитория : pydantic 2.13.4 / pydantic-settings 2.15.0
+  системный python  : pydantic 2.11.5 / pydantic-settings 2.9.1
+                      (C:\...\Programs\Python\Python313\python.exe)
+
+Проба Settings в чистом дереве:
+  на .venv (2.15.0)          by-name  -> 'sk-test'   by-alias -> 'sk-test'
+  на системном py (2.9.1)    by-name  -> ''          by-alias -> 'sk-test'
+
+То есть в pydantic-settings 2.9.1 значение, переданное по ИМЕНИ ПОЛЯ при
+заданном validation_alias и выключенном populate_by_name, отбрасывается
+(extra="ignore"); в 2.15.0 оно проходит — case_sensitive=False сводит
+имя поля и алиас. Ревью гоняло набор системным python, поэтому и видело
+три падения, а на .venv их не было ни до правки, ни после.
+
+Прогон ДО правки (HEAD~1 = 6bf0a42), системный python:
+  $ pytest tests/test_llm_router.py -q
+  .............FFF.                                                    [100%]
+  FAILED tests/test_llm_router.py::test_cache_hit_increments_cached_calls
+  FAILED tests/test_llm_router.py::test_call_without_cache_hit_does_not_increment_cached_calls
+  FAILED tests/test_llm_router.py::test_cached_calls_counts_only_cached_of_several
+  E  app.llm.base.LLMError: router: все провайдеры отказали на стадии
+     card_author: deepseek: не задан DEEPSEEK_API_KEY
+  WARNING app.llm.router: стадия card_author: deepseek не подходит
+     (deepseek: не задан DEEPSEEK_API_KEY), перехожу к резерву
+  3 failed, 14 passed in 0.24s
+  ← в точности отчёт ревью.
+
+Прогон ПОСЛЕ правки (HEAD = d12df1e), системный python:
+  $ pytest tests/test_llm_router.py -q
+  .................                                                    [100%]
+  17 passed in 3.26s
+
+════════ МУТАЦИЯ М6 (цикл 2) ════════
+Копия дерева вне репозитория: git archive -o <scratch>\t7.tar HEAD; tar -xf.
+
+М6 · В test_cache_hit_increments_cached_calls ключ снова передан по ИМЕНИ
+     ПОЛЯ (deepseek_api_key="sk-test") вместо алиаса DEEPSEEK_API_KEY —
+     ровно как в общей фикстуре tests/conftest.py.
+
+  На системном python (pydantic-settings 2.9.1):
+  $ pytest tests/test_llm_router.py -q --tb=line
+  .............F...                                                    [100%]
+  E  app.llm.base.LLMError: router: все провайдеры отказали на стадии
+     card_author: deepseek: не задан DEEPSEEK_API_KEY
+  WARNING app.llm.router: стадия card_author: deepseek не подходит
+     (deepseek: не задан DEEPSEEK_API_KEY), перехожу к резерву
+  FAILED tests/test_llm_router.py::test_cache_hit_increments_cached_calls
+  1 failed, 16 passed in 2.41s
+  МУТАНТ УБИТ — починка лечит причину, а не маскирует симптом.
+
+  На .venv (pydantic-settings 2.15.0) тот же мутант проходит: 3 passed.
+  Это не слабость теста, а свойство версии — см. пробу выше.
+
+════════ ЗАМЕЧАНО ЗА ГРАНИЦАМИ ЗАДАЧИ (не правил) ════════
+1. tests/conftest.py и backend/app/config.py — общая дыра: фикстура
+   settings передаёт ВСЕ ключи по имени поля, а у полей задан
+   validation_alias без populate_by_name. На pydantic-settings 2.9.1 все
+   ключи в этой фикстуре пустые. Сейчас это никого не роняет только
+   потому, что остальные тесты идут через FakeProvider. Выносится
+   отдельной задачей по решению владельца.
+2. Набор гоняется двумя разными интерпретаторами: .venv репозитория и
+   системным python из PATH. Версии зависимостей расходятся, поведение
+   тоже. Референсным стоит объявить один.
+3. Полный `pytest -q` на системном python на починенном коде тоже зелёный:
+   370 passed, 1 warning in 122.74s (0:02:02). То есть после правки набор
+   проходит на ОБОИХ интерпретаторах — и на .venv (96.41 с), и на
+   системном python (122.74 с).
