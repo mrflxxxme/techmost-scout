@@ -1,0 +1,164 @@
+Т-7 · Долги фазы: кэш префикса, requests.id в отчёт, честный статус Google
+Ветка E2A/T7, коммит 6f37c1e, 16.08.2026 17:06
+PYTHONPATH=<дерево>\backend (иначе подтягивается schemas.py основного каталога)
+
+════════ ШАГ 0 · ОСНОВАНИЕ (нетронутое дерево, HEAD f1eebdf) ════════
+$ pytest -q                             → 352 passed, 1 warning in 82.51s
+$ ruff check .                          → All checks passed!
+$ ruff format --check .                 → 84 files already formatted
+Основание ЗЕЛЁНОЕ.
+
+════════ КРИТЕРИЙ 1 · pytest tests/test_prompts.py -v ════════
+============================= test session starts =============================
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[card_author] PASSED [  2%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[extractor] PASSED [  5%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[intake] PASSED [  7%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[planner] PASSED [ 10%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[scorer] PASSED [ 12%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[summary] PASSED [ 15%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[verifier] PASSED [ 17%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[card_author] PASSED [ 20%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[extractor] PASSED [ 23%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[intake] PASSED [ 25%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[planner] PASSED [ 28%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[scorer] PASSED [ 30%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[summary] PASSED [ 33%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[verifier] PASSED [ 35%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[card_author] PASSED [ 38%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[extractor] PASSED [ 41%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[intake] PASSED [ 43%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[planner] PASSED [ 46%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[summary] PASSED [ 48%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[verifier] PASSED [ 51%]
+tests/test_prompts.py::test_render_prompt_fails_loudly_on_missing_value PASSED [ 53%]
+tests/test_prompts.py::test_prompt_has_error_section[intake] PASSED      [ 56%]
+tests/test_prompts.py::test_prompt_has_error_section[planner] PASSED     [ 58%]
+tests/test_prompts.py::test_prompt_has_error_section[card_author] PASSED [ 61%]
+tests/test_prompts.py::test_prompt_has_error_section[verifier] PASSED    [ 64%]
+tests/test_prompts.py::test_prompt_has_error_section[summary] PASSED     [ 66%]
+tests/test_prompts.py::test_prompt_has_error_section[scorer] PASSED      [ 69%]
+tests/test_prompts.py::test_gov_support_reference_is_loadable PASSED     [ 71%]
+tests/test_prompts.py::test_card_author_does_not_default_to_lab_without_signs PASSED [ 74%]
+tests/test_prompts.py::test_card_author_response_format_has_requirement_checks PASSED [ 76%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[card_author] PASSED [ 79%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[extractor] PASSED [ 82%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[intake] PASSED [ 84%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[planner] PASSED [ 87%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[scorer] PASSED [ 89%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[summary] PASSED [ 92%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[verifier] PASSED [ 94%]
+tests/test_prompts.py::test_intake_empty_questions_requires_all_four_conditions PASSED [ 97%]
+tests/test_prompts.py::test_candidates_to_json_keeps_url_and_trims_snippet PASSED [100%]
+
+============================= 39 passed in 0.37s ==============================
+
+════════ КРИТЕРИЙ 2 · pytest tests/test_llm_router.py -v ════════
+============================= test session starts =============================
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+
+tests/test_llm_router.py::test_stage_route_picks_configured_provider PASSED [  5%]
+tests/test_llm_router.py::test_short_answer_stage_goes_to_free_provider PASSED [ 11%]
+tests/test_llm_router.py::test_falls_back_when_primary_fails PASSED      [ 17%]
+tests/test_llm_router.py::test_all_providers_down_raises PASSED          [ 23%]
+tests/test_llm_router.py::test_json_parsed_from_markdown_fence PASSED    [ 29%]
+tests/test_llm_router.py::test_broken_json_is_repaired_once PASSED       [ 35%]
+tests/test_llm_router.py::test_truncated_json_is_retried_with_bigger_budget PASSED [ 41%]
+tests/test_llm_router.py::test_cost_limit_stops_runaway_request PASSED   [ 47%]
+tests/test_llm_router.py::test_answer_is_picked_by_schema_not_by_size PASSED [ 52%]
+tests/test_llm_router.py::test_extract_json_block_pulls_answer_out_of_reasoning PASSED [ 58%]
+tests/test_llm_router.py::test_braces_inside_strings_do_not_break_parsing PASSED [ 64%]
+tests/test_llm_router.py::test_extract_json_block_returns_none_on_prose PASSED [ 70%]
+tests/test_llm_router.py::test_parse_json_payload_survives_leading_explanation PASSED [ 76%]
+tests/test_llm_router.py::test_cache_hit_increments_cached_calls PASSED  [ 82%]
+tests/test_llm_router.py::test_call_without_cache_hit_does_not_increment_cached_calls PASSED [ 88%]
+tests/test_llm_router.py::test_cached_calls_counts_only_cached_of_several PASSED [ 94%]
+tests/test_llm_router.py::test_chain_puts_preferred_first PASSED         [100%]
+
+============================= 17 passed in 2.29s ==============================
+
+════════ КРИТЕРИЙ 3 · pytest tests/test_persistence.py -v ════════
+============================= test session starts =============================
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+
+tests/test_persistence.py::test_successful_run_persists_request_card_and_search_log PASSED [  6%]
+tests/test_persistence.py::test_new_card_fields_persist_without_loss PASSED [ 13%]
+tests/test_persistence.py::test_card_without_new_fields_persists_empty_lists_not_null PASSED [ 20%]
+tests/test_persistence.py::test_new_columns_default_to_empty_list_on_bare_insert PASSED [ 26%]
+tests/test_persistence.py::test_without_factory_pipeline_runs_and_writes_nothing PASSED [ 33%]
+tests/test_persistence.py::test_broken_factory_does_not_crash_run PASSED [ 40%]
+tests/test_persistence.py::test_persist_run_returns_id_of_written_request PASSED [ 46%]
+tests/test_persistence.py::test_persist_run_returns_none_when_write_fails PASSED [ 53%]
+tests/test_persistence.py::test_persist_run_returns_none_without_factory PASSED [ 60%]
+tests/test_persistence.py::test_run_puts_persisted_id_into_report PASSED [ 66%]
+tests/test_persistence.py::test_run_keeps_zero_request_id_when_write_fails PASSED [ 73%]
+tests/test_persistence.py::test_pipeline_failure_persists_failed_status_and_error PASSED [ 80%]
+tests/test_persistence.py::test_cost_limit_exceeded_during_scoring_raises_and_persists_failed PASSED [ 86%]
+tests/test_persistence.py::test_cost_limit_exceeded_during_card_authoring_raises_and_persists_failed PASSED [ 93%]
+tests/test_persistence.py::test_cost_limit_exceeded_during_summary_raises_and_persists_failed PASSED [100%]
+
+============================= 15 passed in 5.27s ==============================
+
+════════ КРИТЕРИЙ 4 · scout run … --no-interactive ════════
+НЕ ВЫПОЛНЯЛСЯ исполнителем: живые вызовы моделей запрещены (инвариант №7).
+Критерий закрывает оркестратор платным прогоном. Что он обязан увидеть:
+  1) в отчёте .md строка «*Запрос №N · …» с N > 0 вместо «Запрос №—»;
+  2) в консоли последней строкой: «Стоимость запроса: X.XX ₽; вызовов
+     модели N, из них с кэшем префикса M».
+Кэш префикса считает только DeepSeek (prompt_cache_hit_tokens); стадии на
+GigaChat в M не попадут никогда — M > 0 ожидается со второго вызова
+DeepSeek в прогоне (card_author/verifier/summary идут на него).
+
+════════ КРИТЕРИЙ 5 · pytest -q, ruff ════════
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+370 passed, 1 warning in 67.20s (0:01:07)
+
+$ ruff check .
+All checks passed!
+$ ruff format --check .
+84 files already formatted
+
+════════ МУТАЦИИ (ловушка критерия 1 и остальные три пункта) ════════
+Копия дерева вне репозитория: git archive -o <scratch>\t7.tar HEAD; tar -xf.
+
+М1 · Блок `## Вход` возвращён в НАЧАЛО всех шести промптов
+    pytest tests/test_prompts.py -q → 6 failed, 33 passed
+    FAILED test_placeholders_stand_after_instruction_blocks[card_author]
+    FAILED test_placeholders_stand_after_instruction_blocks[extractor]
+    FAILED test_placeholders_stand_after_instruction_blocks[intake]
+    FAILED test_placeholders_stand_after_instruction_blocks[planner]
+    FAILED test_placeholders_stand_after_instruction_blocks[summary]
+    FAILED test_placeholders_stand_after_instruction_blocks[verifier]
+    МУТАНТ УБИТ.
+
+М2 · Блок `## Вход` в СЕРЕДИНЕ: после «Формата ответа», перед «Форматами ошибок».
+    Дефект тот же: раздел инструкций стоит НИЖЕ метки и выпадает из
+    кэшируемого префикса. Это и есть демонстрация ловушки — наивный порог
+    «метка во второй половине файла» такой мутант ПРОПУСКАЕТ:
+      intake      метка на 81 % файла — порог ПРОЙДЕН
+      planner     метка на 84 % файла — порог ПРОЙДЕН
+      card_author метка на 87 % файла — порог ПРОЙДЕН
+      verifier    метка на 78 % файла — порог ПРОЙДЕН
+      summary     метка на 82 % файла — порог ПРОЙДЕН
+      extractor   метка на 82 % файла — порог ПРОЙДЕН
+    pytest tests/test_prompts.py -q → 6 failed, 33 passed (те же шесть)
+    МУТАНТ УБИТ проверкой по существу, наивным порогом — НЕ убит.
+
+М3 · `cached_calls += 1` безусловно, без проверки `usage.cached`
+    pytest tests/test_llm_router.py -q → 2 failed, 15 passed
+    FAILED test_call_without_cache_hit_does_not_increment_cached_calls
+    FAILED test_cached_calls_counts_only_cached_of_several
+    МУТАНТ УБИТ.
+
+М4 · `persist_run` пишет в БД, но всегда возвращает None
+    pytest tests/test_persistence.py -q → 2 failed, 13 passed
+    FAILED test_persist_run_returns_id_of_written_request
+    FAILED test_run_puts_persisted_id_into_report
+    МУТАНТ УБИТ.
+
+М5 · Возвращено прежнее пояснение «100 запросов в сутки бесплатно»
+    pytest tests/test_openalex.py -q -k "google or роспатент" → 1 failed, 1 passed
+    FAILED test_таблица_ключей_доктора_честна_про_закрытый_доступ_к_google
+    МУТАНТ УБИТ.
