@@ -7,6 +7,7 @@ import pytest
 import respx
 from pydantic import BaseModel
 
+from app.config import Settings
 from app.llm.base import LLMError, Message, extract_json_block, parse_json_payload
 from app.llm.deepseek import DeepSeekProvider
 from app.llm.router import CostLimitExceededError, LLMRouter
@@ -189,6 +190,29 @@ def test_parse_json_payload_survives_leading_explanation():
 DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 
 
+@pytest.fixture
+def deepseek_settings() -> Settings:
+    """Настройки, в которых ключ DeepSeek действительно доходит до провайдера.
+
+    Поля `Settings` объявлены с `validation_alias` (`DEEPSEEK_API_KEY` и
+    прочие), а `populate_by_name` в `model_config` не включён. Значение,
+    переданное по ИМЕНИ ПОЛЯ (`deepseek_api_key=...`), pydantic-settings при
+    `extra="ignore"` молча отбрасывает, и в настройках остаётся пустой
+    `SecretStr("")`. Общая фикстура `settings` из conftest.py передаёт ключи
+    именно по имени поля; всем остальным тестам это безразлично, потому что они
+    работают через `FakeProvider`. Здесь строится настоящий `DeepSeekProvider`,
+    который без ключа отказывает ещё до похода в подменённый respx-ом HTTP, —
+    поэтому ключ передаём под именем алиаса. Общую оснастку не чиним: это
+    отдельная задача.
+    """
+    return Settings(
+        APP_ENV="test",
+        database_url="sqlite+aiosqlite:///:memory:",
+        DEEPSEEK_API_KEY="sk-test",
+        cost_limit_rub_per_request=10.0,
+    )
+
+
 def _deepseek_reply(*, cache_hit_tokens: int) -> dict:
     """Ответ DeepSeek с попаданием в кэш префикса и без него.
 
@@ -206,7 +230,7 @@ def _deepseek_reply(*, cache_hit_tokens: int) -> dict:
 
 
 @respx.mock
-async def test_cache_hit_increments_cached_calls(settings):
+async def test_cache_hit_increments_cached_calls(deepseek_settings):
     """Ответ с `prompt_cache_hit_tokens > 0` увеличивает счётчик кэша (Т-7, РЕШ-52.6).
 
     Перенос блоков подстановки в конец промптов делался ради попаданий в кэш
@@ -214,7 +238,7 @@ async def test_cache_hit_increments_cached_calls(settings):
     и оставалась только цена в рублях — она падает и от короткого ответа модели.
     """
     respx.post(DEEPSEEK_URL).mock(return_value=httpx.Response(200, json=_deepseek_reply(cache_hit_tokens=3900)))
-    router = _router(settings, {"deepseek": DeepSeekProvider(settings)})
+    router = _router(deepseek_settings, {"deepseek": DeepSeekProvider(deepseek_settings)})
 
     await router.complete("card_author", [Message(role="user", content="?")])
 
@@ -223,14 +247,14 @@ async def test_cache_hit_increments_cached_calls(settings):
 
 
 @respx.mock
-async def test_call_without_cache_hit_does_not_increment_cached_calls(settings):
+async def test_call_without_cache_hit_does_not_increment_cached_calls(deepseek_settings):
     """Без попадания в кэш счётчик кэша стоит на месте, а счётчик вызовов растёт.
 
     Обратная половина проверки: счётчик, который увеличивается на каждом вызове,
     показывал бы стопроцентный кэш при полностью холодном префиксе.
     """
     respx.post(DEEPSEEK_URL).mock(return_value=httpx.Response(200, json=_deepseek_reply(cache_hit_tokens=0)))
-    router = _router(settings, {"deepseek": DeepSeekProvider(settings)})
+    router = _router(deepseek_settings, {"deepseek": DeepSeekProvider(deepseek_settings)})
 
     await router.complete("card_author", [Message(role="user", content="?")])
 
@@ -239,7 +263,7 @@ async def test_call_without_cache_hit_does_not_increment_cached_calls(settings):
 
 
 @respx.mock
-async def test_cached_calls_counts_only_cached_of_several(settings):
+async def test_cached_calls_counts_only_cached_of_several(deepseek_settings):
     """Из трёх вызовов в кэш попали два — счётчик обязан показать именно два, а не «был кэш»."""
     respx.post(DEEPSEEK_URL).mock(
         side_effect=[
@@ -248,7 +272,7 @@ async def test_cached_calls_counts_only_cached_of_several(settings):
             httpx.Response(200, json=_deepseek_reply(cache_hit_tokens=3800)),
         ]
     )
-    router = _router(settings, {"deepseek": DeepSeekProvider(settings)})
+    router = _router(deepseek_settings, {"deepseek": DeepSeekProvider(deepseek_settings)})
 
     for _ in range(3):
         await router.complete("card_author", [Message(role="user", content="?")])
