@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import httpx
@@ -58,6 +58,35 @@ def cost_delta(before: dict[str, float], after: dict[str, float]) -> tuple[float
     return round(total, 6), provider
 
 
+def _unwrap_group(wrapped: BaseExceptionGroup) -> BaseException:
+    """Достать из обёртки `asyncio.TaskGroup` исходное исключение.
+
+    Группа задач заворачивает падение любой из них, и наружу вместо причины
+    уходит «unhandled errors in a TaskGroup (1 sub-exception)». Это ломает
+    контракт РЕШ-45 сразу в двух местах: `cli.py` ловит стоп-кран **по типу**,
+    а `persist_run` пишет в `requests.error` текст исключения — три теста
+    персистентности требуют в нём слова «лимит». До Т-6 внутри группы работали
+    только адаптеры, и `_safe_search` гасил любое их исключение; стадия
+    extractor сделала группу первым местом, где стоп-кран возникает внутри
+    `TaskGroup` (П-1 аудита).
+
+    Стоп-кран выбирается из листьев первым: если лимит выбрали сразу несколько
+    формулировок, причина остановки прогона — именно он, а не соседний отказ.
+    """
+    leaves: list[BaseException] = []
+    queue: list[BaseException] = list(wrapped.exceptions)
+    while queue:
+        current = queue.pop(0)
+        if isinstance(current, BaseExceptionGroup):
+            queue = [*current.exceptions, *queue]
+        else:
+            leaves.append(current)
+    for leaf in leaves:
+        if isinstance(leaf, CostLimitExceededError):
+            return leaf
+    return leaves[0] if leaves else wrapped
+
+
 #: Поля кандидата, которые обогащение имеет право заполнить. Только пустые:
 #: данные источника, нашедшего кандидата, точнее — он видел его в контексте
 #: своей выдачи, а обогащение работает вслепую по DOI.
@@ -88,14 +117,14 @@ def _apply_patch(candidate: Candidate, patch: dict) -> tuple[Candidate, list[str
     result = candidate
     accepted: dict = {}
     dropped: list[str] = []
-    for field, value in updates.items():
+    for field_name, value in updates.items():
         try:
-            result = Candidate.model_validate({**base, **accepted, field: value})
+            result = Candidate.model_validate({**base, **accepted, field_name: value})
         except ValidationError as exc:
-            dropped.append(field)
-            log.info("обогащение: поле %s отброшено для %s: %s", field, candidate.url, exc)
+            dropped.append(field_name)
+            log.info("обогащение: поле %s отброшено для %s: %s", field_name, candidate.url, exc)
             continue
-        accepted[field] = value
+        accepted[field_name] = value
     return result, dropped
 
 
@@ -108,6 +137,12 @@ class SearchOutcome:
     #: Имя адаптера — тот же ключ, что и в `unavailable`; без него вклад
     #: адаптера с несколькими контурами (Яндекс) было нечем восстановить
     hits_by_name: dict[str, int]
+    #: Что деградировало внутри поиска, не сделав источник недоступным:
+    #: отказ стадии extractor и её пустой результат при непустой выдаче.
+    #: Отсюда строка попадает в `error` записи стадии `search` (Н-1 аудита) —
+    #: иначе пробел не виден ни в отчёте, ни в журнале, ни в списке
+    #: недоступных источников.
+    problems: list[str] = field(default_factory=list)
 
 
 class ScoutPipeline:
@@ -181,23 +216,27 @@ class ScoutPipeline:
         """
         adapters = await self._get_adapters(industry)
         tasks: list[tuple[str, str, asyncio.Task[list[Candidate]]]] = []
+        problems: list[str] = []
 
-        async with asyncio.TaskGroup() as group:
-            for adapter in adapters:
-                if getattr(adapter, "enrich_only", False):
-                    # Источник обогащения (OpenAlex): поиска у него нет вовсе.
-                    # Спросить его — значит получить NotImplementedError и
-                    # записать в отчёт «не ответил» источник, который никто не
-                    # спрашивал. Обогащение вызывается отдельно, после дедупа.
-                    continue
-                for query in plan.queries:
-                    if adapter.source_types and query.source_type not in adapter.source_types:
+        try:
+            async with asyncio.TaskGroup() as group:
+                for adapter in adapters:
+                    if getattr(adapter, "enrich_only", False):
+                        # Источник обогащения (OpenAlex): поиска у него нет вовсе.
+                        # Спросить его — значит получить NotImplementedError и
+                        # записать в отчёт «не ответил» источник, который никто не
+                        # спрашивал. Обогащение вызывается отдельно, после дедупа.
                         continue
-                    task = group.create_task(
-                        self._safe_search(adapter, query),
-                        name=f"{adapter.name}:{query.source_type.value}",
-                    )
-                    tasks.append((adapter.name, adapter.contour_label(query), task))
+                    for query in plan.queries:
+                        if adapter.source_types and query.source_type not in adapter.source_types:
+                            continue
+                        task = group.create_task(
+                            self._safe_search(adapter, query, problems),
+                            name=f"{adapter.name}:{query.source_type.value}",
+                        )
+                        tasks.append((adapter.name, adapter.contour_label(query), task))
+        except BaseExceptionGroup as wrapped:
+            raise _unwrap_group(wrapped) from wrapped
 
         candidates: list[Candidate] = []
         hits_by_label: dict[str, int] = {}
@@ -220,6 +259,7 @@ class ScoutPipeline:
             unavailable=unavailable,
             hits_by_provider=hits_by_label,
             hits_by_name=hits_by_name,
+            problems=problems,
         )
 
     # ── Обогащение по DOI ───────────────────────────────────────────────────
@@ -318,8 +358,12 @@ class ScoutPipeline:
         write_stage("; ".join(problems) or None)
         return enriched, citations
 
-    async def _safe_search(self, adapter: SearchAdapter, query) -> list[Candidate] | None:
-        """Обёртка: любая ошибка адаптера превращается в None, а не в падение запроса."""
+    async def _safe_search(self, adapter: SearchAdapter, query, problems: list[str]) -> list[Candidate] | None:
+        """Обёртка: любая ошибка адаптера превращается в None, а не в падение запроса.
+
+        `problems` — общий на прогон список деградаций стадии extractor, см.
+        `SearchOutcome.problems`.
+        """
         raw: list[dict] = []
         try:
             if getattr(adapter, "needs_extraction", False):
@@ -338,10 +382,10 @@ class ScoutPipeline:
             return None
         if not raw:
             return found
-        return await self._extract(adapter, query, found, raw)
+        return await self._extract(adapter, query, found, raw, problems)
 
     async def _extract(
-        self, adapter: SearchAdapter, query, parsed: list[Candidate], raw: list[dict]
+        self, adapter: SearchAdapter, query, parsed: list[Candidate], raw: list[dict], problems: list[str]
     ) -> list[Candidate]:
         """Нормализовать сырую выдачу моделью (Э2-5).
 
@@ -353,9 +397,23 @@ class ScoutPipeline:
         Отказ стадии прогон не роняет и источник недоступным не делает
         (инвариант №5): выдача уже оплачена и разобрана адаптером, поэтому
         берём его разбор и пишем причину в лог.
+
+        Пустой результат при непустых сырых записях лечится тем же откатом, и
+        это осознанный выбор, а не симметрия ради симметрии (Н-1 аудита). До
+        Т-6 весь веб приходил в прогон именно разбором адаптера, поэтому откат
+        не может выдать ничего хуже прежнего состояния; ссылки в нём взяты
+        кодом из ответа источника, а не написаны моделью. Обратный вариант —
+        отдать пусто — стирал бы оплаченную выдачу целиком ради случая, когда
+        модель честно сочла все двадцать записей мусором (правило 11 промпта);
+        случай редкий, а цена ошибки в нём — вклад единственного платного
+        источника прогона. Отбор мусора и без того делает скоринг.
+
+        В обоих случаях причина уходит в `problems` — оттуда она попадает в
+        `error` записи стадии `search`, потому что лога прогона снаружи не
+        видно, а «источник ответил и ничего не нашёл» выглядит так же.
         """
         try:
-            return await stages.extract_candidates(query.source_type, adapter.name, raw, self._router)
+            found = await stages.extract_candidates(query.source_type, adapter.name, raw, self._router)
         except CostLimitExceededError:
             # Стоп-кран (РЕШ-45): исчерпанный лимит — не отказ модели, а
             # команда «стоп тратить». Продолжить на разборе адаптера значило бы
@@ -368,7 +426,20 @@ class ScoutPipeline:
                 query.text,
                 exc,
             )
+            problems.append(f"extractor ({adapter.name}): стадия не удалась — {exc}; взят разбор адаптера")
             return parsed
+        if not found:
+            log.warning(
+                "extractor: %s («%s») вернул ноль кандидатов из %s сырых записей — беру разбор адаптера",
+                adapter.name,
+                query.text,
+                len(raw),
+            )
+            problems.append(
+                f"extractor ({adapter.name}): ноль кандидатов из {len(raw)} сырых записей; взят разбор адаптера"
+            )
+            return parsed
+        return found
 
     # ── Полный проход ───────────────────────────────────────────────────────
     async def run(
@@ -448,13 +519,22 @@ class ScoutPipeline:
 
         await self._notify("search", "Опрашиваю источники", 0.15)
         started = datetime.now(UTC)
+        # Снимок счётчика вокруг поиска: до Т-6 стадия поиска не звала модель
+        # ни разу, и пустые `provider`/`cost_rub` были безобидны по построению.
+        # Стадия extractor сделала поиск платным — трата обязана быть видна в
+        # журнале стадий тем же способом, что у остальных стадий (П-2 аудита).
+        cost_before = dict(self._router.cost.by_provider)
         outcome = await self.gather_candidates(plan, industry=brief.industry)
+        stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
                 stage="search",
                 started_at=started,
                 finished_at=datetime.now(UTC),
+                provider=provider,
+                cost_rub=stage_cost,
                 sources_hit=dict(outcome.hits_by_provider),
+                error="; ".join(outcome.problems) or None,
             )
         )
         found_summary = ", ".join(f"{name}: {count}" for name, count in sorted(outcome.hits_by_provider.items()))

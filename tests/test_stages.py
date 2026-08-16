@@ -674,7 +674,10 @@ async def test_extractor_заполняет_метки_промпта_через
 
 
 async def test_extractor_просит_свой_лимит_токенов(settings, fake_provider_factory):
-    """§0.1 п. 7: у каждой стадии своя щедрость по токенам, у extractor — 4096."""
+    """§0.1 п. 7 и РЕШ-61 п. 1: у каждой стадии своя щедрость по токенам, у
+    extractor — 7000, как у автора карточек. Пост-аудит измерил предельный по
+    контракту промпта ответ в ≈6 334 токена: при 4096 он обрывался, и роутер
+    переспрашивал заново, оплачивая вход второй раз."""
     base = fake_provider_factory
 
     class _Recording(base):  # type: ignore[misc, valid-type]
@@ -693,7 +696,7 @@ async def test_extractor_просит_свой_лимит_токенов(setting
 
     await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
 
-    assert provider.limits == [4096]
+    assert provider.limits == [7000]
 
 
 async def test_extractor_на_пустой_выдаче_модель_не_зовёт(settings, fake_provider_factory):
@@ -768,15 +771,408 @@ async def test_стоп_кран_стоимости_из_стадии_не_по�
         ):
             await pipeline.gather_candidates(_plan(SourceType.WEB))
 
-    # Источники опрашиваются через `asyncio.TaskGroup`, а он заворачивает
-    # исключение задачи в `ExceptionGroup`. Проверяем суть — до вызывающего
-    # доехал стоп-кран, а не выдача, — не форму обёртки.
-    stopped = raised.value
-    inner = list(stopped.exceptions) if isinstance(stopped, BaseExceptionGroup) else [stopped]
-    assert [type(exc) for exc in inner] == [CostLimitExceededError]
-    assert "лимите" in str(inner[0])
+    # Требуем ТИП, а не «суть в любой обёртке» (П-1 аудита). Прежняя редакция
+    # теста принимала и `BaseExceptionGroup` — то есть узаконивала форму, на
+    # которой контракт РЕШ-45 ломается: `cli.py` ловит стоп-кран по типу, а в
+    # `requests.error` вместо причины и суммы попадала строка «unhandled errors
+    # in a TaskGroup». Гейт, принимающий фактическое поведение вместо
+    # требования контракта, перестаёт быть гейтом.
+    assert type(raised.value) is CostLimitExceededError
+    assert "лимите" in str(raised.value)
     assert len(provider.calls) == 1, "стадию звали ровно один раз — на нём лимит и кончился"
     assert "беру разбор адаптера" not in caplog.text
+
+
+async def test_стоп_кран_доезжает_до_записи_прогона_причиной_а_не_обёрткой(settings, fake_provider_factory):
+    """П-1: три теста `tests/test_persistence.py` требуют слова «лимит» в
+    `requests.error`, а `persist_run` пишет туда `str(exc)`. Обёртка
+    `TaskGroup` давала «unhandled errors in a TaskGroup (1 sub-exception)» —
+    без причины и без суммы. Проверяем ровно ту строку, что уйдёт в БД."""
+    low_limit = settings.model_copy(update={"cost_limit_rub_per_request": 0.005})
+    router, _ = _extractor_router(low_limit, fake_provider_factory, [_EXTRACT_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=low_limit, router=router, adapters=[_FakeWebAdapter(client)])
+        with pytest.raises(CostLimitExceededError) as raised:
+            await pipeline.gather_candidates(_plan(SourceType.WEB))
+
+    written = str(raised.value)
+    assert "лимит" in written
+    assert "TaskGroup" not in written
+
+
+# ── Н-1: текст вокруг JSON больше не обнуляет оплаченную выдачу ─────────────
+
+
+def _model_candidate(url: str, title: str) -> dict:
+    """Кандидат в ответе модели. `provider` и `source_type` намеренно чужие —
+    код обязан навязать свои."""
+    return {
+        "source_type": "publication",
+        "title": title,
+        "url": url,
+        "org": "ИПХФ РАН",
+        "authors": [],
+        "year": 2021,
+        "snippet": "Дословная цитата со страницы.",
+        "raw_id": None,
+        "provider": "модель-выдумщица",
+    }
+
+
+def _model_batch(*candidates: dict, dropped: int = 0) -> str:
+    return json.dumps({"candidates": list(candidates), "dropped_no_url": dropped}, ensure_ascii=False)
+
+
+#: Два годных кандидата — оба адреса есть в `_RAW_WEB`.
+_EXTRACT_JSON_TWO = _model_batch(
+    _model_candidate("https://ipc.rssi.ru/lab/catalysis", "Лаборатория катализа ИПХФ РАН"),
+    _model_candidate("https://ipc.rssi.ru/news/", "Новости института"),
+)
+
+
+@pytest.mark.parametrize(
+    ("ответ_модели", "ожидается"),
+    [
+        pytest.param(_EXTRACT_JSON + "\n\nЕсли нужно, разберу ещё.", 1, id="проза-после-json"),
+        pytest.param(_EXTRACT_JSON + ".", 1, id="одна-точка-после-json"),
+        pytest.param(_EXTRACT_JSON_TWO + "\n\nВот такие записи нашлись.", 2, id="два-кандидата-и-проза"),
+        pytest.param("Разобрал выдачу:\n" + _EXTRACT_JSON, 1, id="проза-перед-json"),
+        pytest.param(f"```json\n{_EXTRACT_JSON}\n```", 1, id="markdown-забор"),
+    ],
+)
+async def test_текст_вокруг_json_не_обнуляет_выдачу(settings, fake_provider_factory, ответ_модели, ожидается):
+    """Н-1: пока `candidates` имели значение по умолчанию, любой JSON-объект был
+    валиден как ПУСТОЙ батч, а разборщик берёт первый подошедший блок, перебирая
+    их от конца текста к началу, — выигрывал вложенный объект-кандидат.
+    Достаточно было ОДНОЙ ТОЧКИ после закрывающей скобки, чтобы оплаченная
+    выдача Яндекса стёрлась молча, без единого исключения."""
+    router, _ = _extractor_router(settings, fake_provider_factory, [ответ_модели])
+
+    found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
+
+    assert len(found) == ожидается
+    assert all(c.provider == "yandex_search" for c in found)
+
+
+async def test_стадия_возвращает_всех_годных_кандидатов_а_не_первого(settings, fake_provider_factory):
+    """Критерий 1 плана: «невалидная запись отбрасывается, стадия возвращает
+    ОСТАЛЬНЫЕ». Во всех прежних тестах валидный кандидат был ровно один, и
+    «первый» с «остальными» совпадали — мутация `return candidates[:1]`
+    переживала весь набор (M8 аудита)."""
+    ответ = _model_batch(
+        _model_candidate("https://ipc.rssi.ru/lab/catalysis", "Лаборатория катализа ИПХФ РАН"),
+        {"source_type": "web", "title": "Запись без ссылки", "url": "", "provider": "yandex_search"},
+        _model_candidate("https://ipc.rssi.ru/news/", "Новости института"),
+        dropped=1,
+    )
+    router, _ = _extractor_router(settings, fake_provider_factory, [ответ])
+
+    found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
+
+    assert [c.title for c in found] == ["Лаборатория катализа ИПХФ РАН", "Новости института"]
+
+
+_EXTRACT_EMPTY = _model_batch()
+
+
+async def test_пустой_результат_стадии_виден_снаружи_и_не_стирает_выдачу(settings, fake_provider_factory, caplog):
+    """Н-1, часть 2: ноль кандидатов из непустых сырых записей — не успех.
+
+    Откат живёт только в ветке `except`, а пустой список исключением не был:
+    оплаченная выдача исчезала, `hits` показывал 0, и снаружи это было
+    неотличимо от честного «источник ответил и ничего не нашёл». Теперь пробел
+    и назван в логе, и уехал в `SearchOutcome.problems`, а выдача восстановлена
+    разбором адаптера — тем самым, каким веб приходил в прогон до Т-6."""
+    router, _ = _extractor_router(settings, fake_provider_factory, [_EXTRACT_EMPTY])
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=settings, router=router, adapters=[_FakeWebAdapter(client)])
+        with caplog.at_level(logging.WARNING):
+            outcome = await pipeline.gather_candidates(_plan(SourceType.WEB))
+
+    assert [c.title for c in outcome.candidates] == ["Разбор адаптера"]
+    assert outcome.hits_by_provider == {"fake_web": 1}
+    assert outcome.unavailable == []
+    assert outcome.problems and "ноль кандидатов из 2 сырых записей" in outcome.problems[0]
+    assert "вклад оплаченной выдачи нулевой" in caplog.text
+
+
+async def test_отказ_стадии_тоже_попадает_в_problems(settings, fake_provider_factory):
+    """Отказ стадии и её пустой результат — один класс пробела: выдача
+    оплачена, вклад нулевой. Оба обязаны оставить след снаружи."""
+    router, _ = _extractor_router(settings, fake_provider_factory, ["не json"], fail_times=99)
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=settings, router=router, adapters=[_FakeWebAdapter(client)])
+        outcome = await pipeline.gather_candidates(_plan(SourceType.WEB))
+
+    assert outcome.problems and "стадия не удалась" in outcome.problems[0]
+
+
+# ── M1 и П-6: обезвреживание меток правит метку, а не содержание ────────────
+
+
+async def test_метка_с_чужой_страницы_не_роняет_сборку_промпта(settings, fake_provider_factory):
+    """M1 аудита: обезвреживание меток перед `render_prompt` не было закреплено
+    ни одним тестом — существующие проверки закрывают шаблон, а не данные.
+    Метка `{{...}}` со случайной страницы уронила бы сборку промпта УЖЕ ПОСЛЕ
+    оплаченного запроса к источнику: выдача получена, деньги потрачены, прогон
+    падает на подстановке."""
+    заражённые = [
+        {
+            "url": "https://ipc.rssi.ru/lab/catalysis",
+            "title": "Шаблон отчёта {{CLIENT_NAME}}",
+            "domain": "ipc.rssi.ru",
+            "modtime": "20240115T103000",
+            "snippet": "Подставьте {{INDUSTRY}} в поле отрасли.",
+        }
+    ]
+    router, provider = _extractor_router(settings, fake_provider_factory, [_EXTRACT_JSON])
+
+    found = await stages.extract_candidates(SourceType.WEB, "yandex_search", заражённые, router)
+
+    system = provider.calls[0][0].content
+    assert "{{" not in system, "метка со страницы уронила бы render_prompt после оплаченного запроса"
+    assert "{CLIENT_NAME}" in system and "{INDUSTRY}" in system
+    assert len(found) == 1
+
+
+@pytest.mark.parametrize(
+    ("исходный", "ожидаемый"),
+    [
+        pytest.param("задача завода {{CLIENT_NAME}}", "задача завода {CLIENT_NAME}", id="метка-обезврежена"),
+        pytest.param("{{{{X}}}}", "{X}", id="серия-скобок-за-один-проход"),
+        pytest.param('JSON на странице: {"a": {"b": 1}}', 'JSON на странице: {"a": {"b": 1}}', id="json-цел"),
+        pytest.param("код: if (x) {{ y(); }}", "код: if (x) {{ y(); }}", id="код-цел"),
+        pytest.param("формула a = {{n}} при n>1", "формула a = {{n}} при n>1", id="строчные-не-метка"),
+    ],
+)
+def test_обезвреживание_правит_метку_а_не_содержание(исходный, ожидаемый):
+    """П-6: верификация Т-6 заявила, что содержание, уходящее в модель, не
+    портится. Это было неверно — сдвоенные скобки схлопывались без разбора, и
+    `{"a": {"b": 1}}` превращался в сломанный фрагмент. Для extractor это удар
+    по главному: промпт требует ДОСЛОВНОЙ цитаты, а модель цитировала бы уже
+    испорченный текст. Обезвреживается ровно то, на чём падает `render_prompt`
+    — имя из заглавных латинских букв и подчёркиваний."""
+    assert stages.neutralize_placeholders(исходный) == ожидаемый
+
+
+# ── П-4: ссылка кандидата сверяется с сырыми записями (РЕШ-61 п. 2) ─────────
+
+
+async def test_кандидат_с_выдуманной_ссылкой_отбрасывается(settings, fake_provider_factory, caplog):
+    """До Т-6 адрес веб-кандидата брал код из ответа Яндекса — структурная
+    гарантия. Стадия поставила между источником и `evidence` языковую модель, и
+    выдуманная ссылка проходит все машинные проверки: поле непустое, `HttpUrl`
+    валиден, `evidence` непуст. Падает она там, где инвариант №1 проверяет
+    человек, — в отчёте клиенту."""
+    ответ = _model_batch(
+        _model_candidate("https://ipc.rssi.ru/lab/catalysis", "Лаборатория катализа ИПХФ РАН"),
+        _model_candidate("https://ipc.rssi.ru/lab/catalysis/2021-report.pdf", "Отчёт, которого в выдаче не было"),
+    )
+    router, _ = _extractor_router(settings, fake_provider_factory, [ответ])
+
+    with caplog.at_level(logging.WARNING, logger="app.pipeline.stages"):
+        found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
+
+    assert [c.title for c in found] == ["Лаборатория катализа ИПХФ РАН"]
+    assert "нет в выдаче источника" in caplog.text
+
+
+async def test_сверка_ссылок_не_придирается_к_оформлению(settings, fake_provider_factory):
+    """Сравнение нормализованное (`normalize_url`): хвостовой слэш, регистр и
+    `www.` — оформление, а не выдумка. Иначе сверка выкашивала бы годных
+    кандидатов, и её пришлось бы снять целиком."""
+    ответ = _model_batch(
+        _model_candidate("https://IPC.rssi.ru/lab/catalysis/", "Лаборатория катализа ИПХФ РАН"),
+        _model_candidate("https://www.ipc.rssi.ru/news", "Новости института"),
+    )
+    router, _ = _extractor_router(settings, fake_provider_factory, [ответ])
+
+    found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
+
+    assert len(found) == 2
+
+
+async def test_сверка_ссылок_молчит_когда_адресов_в_записях_нет(settings, fake_provider_factory):
+    """Записи без поля `url` — это источник другой формы, а не выдумка модели.
+    Пустое множество адресов выкосило бы всю выдачу: второй способ потерять
+    оплаченный ответ вместо защиты от первого."""
+    без_адресов = [{"title": "Запись без поля url", "snippet": "Текст страницы."}]
+    ответ = _model_batch(_model_candidate("https://example.org/whatever", "Кандидат"))
+    router, _ = _extractor_router(settings, fake_provider_factory, [ответ])
+
+    found = await stages.extract_candidates(SourceType.WEB, "yandex_search", без_адресов, router)
+
+    assert len(found) == 1
+
+
+# ── РЕШ-62 п. 1: сверка ссылок симметрична ──────────────────────────────────
+
+#: Один и тот же адрес в двух написаниях: так его пишет страница и так его
+#: переписывает pydantic, прогоняя через `HttpUrl`.
+_КИРИЛЛИЦА_КАК_ЕСТЬ = "https://ipc.rssi.ru/статьи/2024"
+_КИРИЛЛИЦА_КОДИРОВАННАЯ = "https://ipc.rssi.ru/%D1%81%D1%82%D0%B0%D1%82%D1%8C%D0%B8/2024"
+
+
+def _raw_one(url: str) -> list[dict]:
+    """Сырая запись источника с заданным адресом."""
+    return [{"url": url, "title": "Страница источника", "domain": "ipc.rssi.ru", "snippet": "Текст страницы."}]
+
+
+@pytest.mark.parametrize(
+    ("сырой_адрес", "ссылка_кандидата", "оставлен"),
+    [
+        # Края, на которых сверка ложно срабатывала: слева нормализовалась
+        # сырая строка, справа — адрес ПОСЛЕ `HttpUrl`, а pydantic
+        # percent-кодирует не-ASCII путь, переводит домен в punycode и
+        # выбрасывает порт по умолчанию.
+        pytest.param(_КИРИЛЛИЦА_КАК_ЕСТЬ, _КИРИЛЛИЦА_КАК_ЕСТЬ, True, id="кириллический-путь-дословно"),
+        pytest.param(
+            "https://наука.рф/новости/катализатор",
+            "https://наука.рф/новости/катализатор",
+            True,
+            id="кириллический-домен-в-зоне-рф",
+        ),
+        pytest.param("https://ipc.rssi.ru:443/lab/catalysis", "https://ipc.rssi.ru/lab/catalysis", True, id="порт-443"),
+        pytest.param("http://ipc.rssi.ru:80/lab", "http://ipc.rssi.ru/lab", True, id="порт-80"),
+        pytest.param("наука.рф/новости", "https://наука.рф/новости", True, id="запись-без-схемы"),
+        # Кодировка с любой стороны: модель копирует ссылку то как есть, то в
+        # том виде, в каком её отдала страница.
+        pytest.param(_КИРИЛЛИЦА_КАК_ЕСТЬ, _КИРИЛЛИЦА_КОДИРОВАННАЯ, True, id="кандидат-кодирует-запись-нет"),
+        pytest.param(_КИРИЛЛИЦА_КОДИРОВАННАЯ, _КИРИЛЛИЦА_КАК_ЕСТЬ, True, id="запись-кодирует-кандидат-нет"),
+        pytest.param(_КИРИЛЛИЦА_КОДИРОВАННАЯ, _КИРИЛЛИЦА_КОДИРОВАННАЯ, True, id="кодировка-с-обеих-сторон"),
+        # Оформление, которое сверка не считала выдумкой и раньше.
+        pytest.param("https://ipc.rssi.ru/lab", "https://ipc.rssi.ru/lab/", True, id="хвостовой-слэш"),
+        pytest.param("https://IPC.rssi.ru/Lab", "https://ipc.rssi.ru/lab", True, id="регистр"),
+        pytest.param("https://ipc.rssi.ru/lab", "https://www.ipc.rssi.ru/lab", True, id="www"),
+        pytest.param("https://ipc.rssi.ru/lab", "https://ipc.rssi.ru/lab#catalysis", True, id="якорь"),
+        pytest.param("https://ipc.rssi.ru/lab", "https://ipc.rssi.ru/lab?utm_source=yandex", True, id="параметры"),
+        pytest.param("http://ipc.rssi.ru/lab", "https://ipc.rssi.ru/lab", True, id="http-против-https"),
+        # Обратное направление: защита обязана остаться защитой.
+        pytest.param("https://ipc.rssi.ru/lab", "https://ipc-ran.ru/lab", False, id="выдуманный-домен"),
+        pytest.param("https://ipc.rssi.ru/lab/catalysis", "https://ipc.rssi.ru/lab", False, id="усечённый-путь"),
+        pytest.param(
+            "https://наука.рф/новости/катализатор",
+            "https://наука.рф/новости/катализатор-2021",
+            False,
+            id="выдуманный-кириллический-путь",
+        ),
+    ],
+)
+async def test_сверка_ссылок_симметрична(
+    settings, fake_provider_factory, caplog, сырой_адрес, ссылка_кандидата, оставлен
+):
+    """РЕШ-62 п. 1. Сверка сравнивала разнородные величины: слева — сырую строку
+    записи, справа — `str(candidate.url)`, то есть адрес после `HttpUrl`.
+    Ссылка, скопированная моделью из записи БУКВА В БУКВУ, не совпадала сама с
+    собой: `наука.рф` → `xn--80aa3ak5a.xn--p1ai`, `/статьи` → `/%D1%81%D1%82…`.
+    Годный кандидат отбрасывался как выдуманный, лог утверждал, что «ссылки нет
+    в выдаче источника», а `problems` молчал, пока список кандидатов не пуст, —
+    тихая потеря части оплаченной выдачи, которую откат не страхует.
+
+    Вторая половина таблицы важна не меньше первой: симметризация не имеет
+    права снять защиту. Выдуманный домен, усечённый путь и подмена
+    кириллического слага обязаны отбрасываться по-прежнему.
+    """
+    ответ = _model_batch(_model_candidate(ссылка_кандидата, "Лаборатория катализа ИПХФ РАН"))
+    router, _ = _extractor_router(settings, fake_provider_factory, [ответ])
+
+    with caplog.at_level(logging.WARNING, logger="app.pipeline.stages"):
+        found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _raw_one(сырой_адрес), router)
+
+    assert [c.title for c in found] == (["Лаборатория катализа ИПХФ РАН"] if оставлен else [])
+    assert ("нет в выдаче источника" in caplog.text) is not оставлен
+
+
+# ── П-2: трата и пробел стадии extractor видны в журнале стадий ─────────────
+
+_PLAN_WEB_JSON = json.dumps(
+    {"queries": [{"text": "катализатор гидроочистки", "source_type": "web", "lang": "ru", "rationale": "тест"}]},
+    ensure_ascii=False,
+)
+_SCORE_ONE_JSON = json.dumps(
+    {"scores": [{"index": 0, "relevance": 8, "maturity": 6, "accessibility": 7, "freshness": 6, "completeness": 7}]}
+)
+_CARD_ONE_JSON = json.dumps(
+    {
+        "title": "Катализатор гидроочистки ИПХФ РАН",
+        "essence": "Разработка лаборатории катализа.",
+        "maturity_stage": "pilot",
+        "evidence": [{"claim": "Разработан катализатор гидроочистки", "url": "https://ipc.rssi.ru/lab/catalysis"}],
+        "applicability": "Закрывает задачу продления цикла.",
+        "next_step": "Запросить протокол испытаний.",
+        "candidate_urls": ["https://ipc.rssi.ru/lab/catalysis"],
+    },
+    ensure_ascii=False,
+)
+_VERIFY_OK_JSON = json.dumps(
+    {"needs_rework": False, "confidence": "medium", "confidence_note": "подтверждения найдены"}, ensure_ascii=False
+)
+_SUMMARY_ONE_JSON = json.dumps(
+    {"comparison_rows": [], "recommendation": "Рассмотреть вариант №1.", "caveats": []}, ensure_ascii=False
+)
+
+
+async def test_журнал_стадии_поиска_несёт_трату_и_пробел_extractor(settings, brief, fake_provider_factory):
+    """П-2 и Н-1: строка `search` в `pipeline_logs` создавалась без `provider`
+    и `cost_rub`, хотя поля есть и все прочие стадии их заполняют. До Т-6 поиск
+    не звал модель ни разу — пробел был безобиден по построению; задача сделала
+    его значимым. Здесь стадия ещё и вернула пусто: это обязано стать непустым
+    `error`, иначе прогон снаружи выглядит безупречным."""
+    from app.pipeline.persistence import StageRecord
+
+    responses = [
+        _PLAN_WEB_JSON,
+        _EXTRACT_EMPTY,
+        _SCORE_ONE_JSON,
+        _CARD_ONE_JSON,
+        _VERIFY_OK_JSON,
+        _SUMMARY_ONE_JSON,
+    ]
+    router, _ = _extractor_router(settings, fake_provider_factory, responses)
+    stage_log: list[StageRecord] = []
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=settings, router=router, adapters=[_FakeWebAdapter(client)])
+        await pipeline._run_stages(brief, 1, stage_log)
+
+    record = next(item for item in stage_log if item.stage == "search")
+    assert record.provider == "gigachat", "платный вызов стадии extractor не отражён в журнале"
+    assert record.cost_rub > 0
+    assert record.error and "ноль кандидатов" in record.error
+
+
+async def test_журнал_стадии_поиска_несёт_фактическую_цену_а_не_любое_число(settings, brief, fake_provider_factory):
+    """РЕШ-62 п. 2: закрепить П-2 значением, а не признаком «больше нуля».
+
+    Заглушка провайдера берёт 0.01 ₽ за вызов, а стадия поиска зовёт модель
+    ровно один раз — extractor поверх единственного веб-источника. Значит в
+    записи `search` обязано лежать 0.01 ₽: не ноль (поля journal не заполнены
+    вовсе) и не 0.02 ₽ — столько роутер потратил К ЭТОМУ МОМЕНТУ вместе с
+    планировщиком, и подстановка накопленного итога вместо разницы снимков
+    выглядела бы в журнале так же правдоподобно. Цена стадии — доля прогона:
+    сверка с полным расходом роутера показывает, что это именно доля.
+    """
+    from app.pipeline.persistence import StageRecord
+
+    responses = [
+        _PLAN_WEB_JSON,
+        _EXTRACT_EMPTY,
+        _SCORE_ONE_JSON,
+        _CARD_ONE_JSON,
+        _VERIFY_OK_JSON,
+        _SUMMARY_ONE_JSON,
+    ]
+    router, provider = _extractor_router(settings, fake_provider_factory, responses)
+    stage_log: list[StageRecord] = []
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=settings, router=router, adapters=[_FakeWebAdapter(client)])
+        await pipeline._run_stages(brief, 1, stage_log)
+
+    record = next(item for item in stage_log if item.stage == "search")
+    цена_вызова = 0.01
+    assert record.provider == "gigachat"
+    assert record.cost_rub == pytest.approx(цена_вызова), "в журнале не цена стадии, а другое число"
+    assert router.cost.spent_rub == pytest.approx(цена_вызова * len(provider.calls))
+    assert record.cost_rub < router.cost.spent_rub, "цена стадии подменена накопленным итогом прогона"
 
 
 @respx.mock
@@ -829,3 +1225,64 @@ async def test_сырые_записи_яндекса_из_того_же_отв�
             "snippet": "Разработан катализатор гидроочистки.",
         }
     ]
+
+
+# ── П-5: границы платного входа стадии (M14, M15, M16) ──────────────────────
+#
+# Три из пяти выживших мутаций аудита — свойства СОДЕРЖАНИЯ сырых записей, а
+# оно определяет, сколько платит модель и что она видит. В прежней фикстуре был
+# один документ с адресом и сниппетом в 36 знаков при пороге 700: границу было
+# нечем нащупать, и мутации «игнорировать limit», «не резать сниппет», «не
+# отсеивать записи без адреса» не роняли ни одного теста.
+
+
+def _doc_xml(url: str | None, title: str, snippet: str) -> str:
+    """Узел `<doc>` выдачи Яндекса; `url=None` — запись без адреса."""
+    адрес = f"<url>{url}</url>" if url else ""
+    return (
+        f"<doc>{адрес}<domain>ipc.rssi.ru</domain><title>{title}</title>"
+        f"<modtime>20240115T103000</modtime><passages><passage>{snippet}</passage></passages></doc>"
+    )
+
+
+@respx.mock
+async def test_сырые_записи_ограничены_по_числу_по_адресу_и_по_длине_сниппета():
+    """M15, M14 и M16: `limit` — первая граница размера платного входа,
+    `MAX_SNIPPET` — вторая, а запись без адреса не имеет смысла отдавать модели
+    вовсе (кандидат без ссылки всё равно отбрасывается, правило 1 промпта).
+
+    Выдача из четырёх документов при `limit=2`: первый с гигантским сниппетом,
+    второй без адреса, третий и четвёртый обычные. В записи обязаны попасть
+    ровно первый и третий, а сниппет первого — ровно `MAX_SNIPPET` знаков.
+    """
+    from app.search.yandex_search import MAX_SNIPPET, OPERATION_URL, SEARCH_ASYNC_URL, YandexSearchAdapter
+
+    xml = (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        "<yandexsearch><response><results><grouping><group>"
+        + _doc_xml("https://ipc.rssi.ru/1", "Первая", "А" * 1000)
+        + _doc_xml(None, "Без адреса", "Навигация сайта")
+        + _doc_xml("https://ipc.rssi.ru/2", "Вторая", "Короткий фрагмент")
+        + _doc_xml("https://ipc.rssi.ru/3", "Третья", "Ещё фрагмент")
+        + "</group></grouping></results></response></yandexsearch>"
+    )
+    respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
+    respx.get(url__startswith=OPERATION_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={"done": True, "response": {"rawData": base64.b64encode(xml.encode("utf-8")).decode("ascii")}},
+        )
+    )
+
+    async with httpx.AsyncClient() as client:
+        adapter = YandexSearchAdapter(
+            client, api_key="test-key", folder_id="b1gtest", poll_interval_seconds=0.0, max_wait_seconds=5.0
+        )
+        _, raw = await adapter.search_raw(
+            SearchQuery(text="катализатор", source_type=SourceType.WEB, lang="ru", rationale="тест"), limit=2
+        )
+
+    assert [record["url"] for record in raw] == ["https://ipc.rssi.ru/1", "https://ipc.rssi.ru/2"], (
+        "нарушена граница: либо запись без адреса попала в платный вход, либо не соблюдён limit"
+    )
+    assert len(raw[0]["snippet"]) == MAX_SNIPPET, "сниппет не обрезан — вторая граница размера платного входа"
