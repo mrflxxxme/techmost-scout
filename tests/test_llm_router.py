@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
+import respx
 from pydantic import BaseModel
 
 from app.llm.base import LLMError, Message, extract_json_block, parse_json_payload
+from app.llm.deepseek import DeepSeekProvider
 from app.llm.router import CostLimitExceededError, LLMRouter
 
 
@@ -181,6 +184,77 @@ def test_parse_json_payload_survives_leading_explanation():
     text = 'Хорошо, вот результат:\n{"answer": "да", "number": 3}'
 
     assert parse_json_payload(text)["number"] == 3
+
+
+DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
+
+
+def _deepseek_reply(*, cache_hit_tokens: int) -> dict:
+    """Ответ DeepSeek с попаданием в кэш префикса и без него.
+
+    Поле `prompt_cache_hit_tokens` — единственное, чем провайдер отличает
+    кэшированный вход от обычного, и оно же даёт скидку в цене.
+    """
+    return {
+        "choices": [{"message": {"content": '{"answer": "да", "number": 1}'}, "finish_reason": "stop"}],
+        "usage": {
+            "prompt_tokens": 4000,
+            "completion_tokens": 100,
+            "prompt_cache_hit_tokens": cache_hit_tokens,
+        },
+    }
+
+
+@respx.mock
+async def test_cache_hit_increments_cached_calls(settings):
+    """Ответ с `prompt_cache_hit_tokens > 0` увеличивает счётчик кэша (Т-7, РЕШ-52.6).
+
+    Перенос блоков подстановки в конец промптов делался ради попаданий в кэш
+    префикса, а измерить эффект было нечем: `CostTracker` терял `Usage.cached`,
+    и оставалась только цена в рублях — она падает и от короткого ответа модели.
+    """
+    respx.post(DEEPSEEK_URL).mock(return_value=httpx.Response(200, json=_deepseek_reply(cache_hit_tokens=3900)))
+    router = _router(settings, {"deepseek": DeepSeekProvider(settings)})
+
+    await router.complete("card_author", [Message(role="user", content="?")])
+
+    assert router.cost.calls == 1
+    assert router.cost.cached_calls == 1
+
+
+@respx.mock
+async def test_call_without_cache_hit_does_not_increment_cached_calls(settings):
+    """Без попадания в кэш счётчик кэша стоит на месте, а счётчик вызовов растёт.
+
+    Обратная половина проверки: счётчик, который увеличивается на каждом вызове,
+    показывал бы стопроцентный кэш при полностью холодном префиксе.
+    """
+    respx.post(DEEPSEEK_URL).mock(return_value=httpx.Response(200, json=_deepseek_reply(cache_hit_tokens=0)))
+    router = _router(settings, {"deepseek": DeepSeekProvider(settings)})
+
+    await router.complete("card_author", [Message(role="user", content="?")])
+
+    assert router.cost.calls == 1
+    assert router.cost.cached_calls == 0
+
+
+@respx.mock
+async def test_cached_calls_counts_only_cached_of_several(settings):
+    """Из трёх вызовов в кэш попали два — счётчик обязан показать именно два, а не «был кэш»."""
+    respx.post(DEEPSEEK_URL).mock(
+        side_effect=[
+            httpx.Response(200, json=_deepseek_reply(cache_hit_tokens=0)),
+            httpx.Response(200, json=_deepseek_reply(cache_hit_tokens=3900)),
+            httpx.Response(200, json=_deepseek_reply(cache_hit_tokens=3800)),
+        ]
+    )
+    router = _router(settings, {"deepseek": DeepSeekProvider(settings)})
+
+    for _ in range(3):
+        await router.complete("card_author", [Message(role="user", content="?")])
+
+    assert router.cost.calls == 3
+    assert router.cost.cached_calls == 2
 
 
 def test_chain_puts_preferred_first(settings, fake_provider_factory):

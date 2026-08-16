@@ -737,3 +737,19 @@ def test_таблица_ключей_доктора_знает_про_роспа
     assert len(names) == 11
     assert "ROSPATENT_API_KEY" in names and "PATENTSVIEW_API_KEY" in names
     assert len(set(names)) == 11, "дубли в таблице ключей"
+
+
+def test_таблица_ключей_доктора_честна_про_закрытый_доступ_к_google():
+    """Т-7: пояснение к ключам Google говорит правду, а не рекламирует закрытую дверь.
+
+    Прежнее «100 запросов в сутки бесплатно» читалось как рабочая возможность,
+    которой просто не воспользовались. На деле Custom Search JSON API закрыт для
+    новых клиентов и отключается 01.01.2027 (РЕШ-21), значения в `.env` очищены
+    (РЕШ-32): оператор мог часами добывать ключ, который отдаёт 403.
+    """
+    purposes = {env_name: purpose for env_name, _, purpose in SECRET_CHECKS}
+
+    for env_name in ("GOOGLE_API_KEY", "GOOGLE_CSE_ID"):
+        assert "не используется" in purposes[env_name], f"{env_name}: пояснение не говорит, что источник выключен"
+        assert "бесплатно" not in purposes[env_name], f"{env_name}: пояснение всё ещё рекламирует закрытый доступ"
+    assert "01.01.2027" in purposes["GOOGLE_API_KEY"], "не назван срок отключения API (РЕШ-21)"

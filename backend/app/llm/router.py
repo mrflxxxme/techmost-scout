@@ -81,17 +81,27 @@ def _looks_truncated(text: str) -> bool:
 
 @dataclass(slots=True)
 class CostTracker:
-    """Копилка расходов одного запроса, чтобы оператор видел цену."""
+    """Копилка расходов одного запроса, чтобы оператор видел цену.
+
+    `cached_calls` — сколько вызовов попали в кэш префикса провайдера (РЕШ-52.6,
+    Т-7). Провайдер уже отдаёт этот факт в `Usage.cached` и уже считает по нему
+    скидку, но счётчик его терял, и эффект переноса блоков подстановки в конец
+    промптов измерить было нечем: цена в рублях падает и от короткого ответа
+    модели тоже. Число вызовов с попаданием — прямая мера, а не косвенная.
+    """
 
     limit_rub: float
     spent_rub: float = 0.0
     by_provider: dict[str, float] = field(default_factory=dict)
     calls: int = 0
+    cached_calls: int = 0
 
     def add(self, usage: Usage) -> None:
         self.spent_rub += usage.cost_rub
         self.by_provider[usage.provider] = self.by_provider.get(usage.provider, 0.0) + usage.cost_rub
         self.calls += 1
+        if usage.cached:
+            self.cached_calls += 1
         if self.spent_rub > self.limit_rub:
             raise CostLimitExceededError(
                 f"запрос израсходовал {self.spent_rub:.2f} ₽ при лимите {self.limit_rub:.2f} ₽"

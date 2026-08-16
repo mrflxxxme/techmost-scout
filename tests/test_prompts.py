@@ -52,6 +52,49 @@ def test_render_prompt_leaves_no_placeholders(name: str):
     assert not PLACEHOLDER.findall(rendered)
 
 
+_HEADING = re.compile(r"^## .*$", re.MULTILINE)
+
+#: Разделы инструкций, которые обязаны стоять ВЫШЕ блока подстановок.
+_INSTRUCTION_HEADINGS = ("## Правила", "## Формат ответа")
+
+
+@pytest.mark.parametrize("name", sorted(n for n, marks in EXPECTED_PLACEHOLDERS.items() if marks))
+def test_placeholders_stand_after_instruction_blocks(name: str):
+    """Метки подстановки стоят ПОСЛЕ блока инструкций — иначе кэш префикса не работает (РЕШ-52.6).
+
+    Рендер промпта уходит провайдеру одним системным сообщением, а кэш префикса
+    совпадает только по неизменной ГОЛОВЕ запроса и обрывается на первом же
+    изменяемом байте. Метка `{{...}}` в начале файла оставляла кэшируемым
+    огрызок в десяток строк, а корпус правил, таблиц и примеров пересчитывался
+    каждым вызовом заново.
+
+    Мерим положение метки ОТНОСИТЕЛЬНО последнего заголовка инструкций, а не
+    относительно середины файла: порог «во второй половине файла» проходится
+    сам собой на коротком промпте с метками в конце входного блока и не
+    отличает перенесённый файл от неперенесённого — то есть не измеряет ничего.
+    """
+    text = load_prompt(name)
+    headings = list(_HEADING.finditer(text))
+    positions = [match.start() for match in PLACEHOLDER.finditer(text)]
+    assert positions, f"промпт {name}: ни одной метки — тест должен идти только по промптам с метками"
+    assert len(headings) >= 2, f"промпт {name}: меньше двух разделов, положение блока подстановок не определено"
+
+    first_placeholder = min(positions)
+    last_heading = headings[-1]
+    assert first_placeholder > last_heading.start(), (
+        f"промпт {name}: первая метка стоит выше последнего раздела «{last_heading.group(0).strip()}». "
+        "Блок подстановок обязан быть последним разделом файла, иначе кэшируемый префикс обрывается на нём"
+    )
+
+    for heading in _INSTRUCTION_HEADINGS:
+        index = text.find(f"\n{heading}")
+        assert index != -1, f"промпт {name}: нет раздела «{heading}»"
+        assert index < first_placeholder, (
+            f"промпт {name}: раздел «{heading}» стоит НИЖЕ первой метки подстановки — "
+            "инструкции обязаны быть в неизменяемом префиксе, а меняющиеся данные под ними"
+        )
+
+
 def test_render_prompt_fails_loudly_on_missing_value():
     """Забыли метку — падаем сразу, а не отправляем её модели."""
     with pytest.raises(ValueError, match="не заполнены метки"):
@@ -96,7 +139,7 @@ _CHANGELOG_ENTRY_VERSION = re.compile(r"^##\s*([\d.]+)\s", re.MULTILINE)
 _FILE_VERSION_LABEL = re.compile(r"<!--\s*версия\s*([\d.]+)\s*-->")
 
 
-@pytest.mark.parametrize("name", ["card_author", "verifier", "intake", "scorer"])
+@pytest.mark.parametrize("name", sorted(EXPECTED_PLACEHOLDERS))
 def test_prompt_version_matches_latest_changelog_entry(name: str):
     """Метка версии в конце файла обязана совпадать с версией самой свежей записи CHANGELOG.md,
     где этот файл упомянут: иначе история изменений расходится с фактическим состоянием промпта."""

@@ -71,22 +71,30 @@ async def persist_run(
     cards: list[SolutionCard],
     stages: list[StageRecord],
     error: str | None = None,
-) -> None:
+) -> int | None:
     """Записать прогон одной транзакцией: запрос, карточки, журнал стадий.
 
+    Возвращает `requests.id` записанной строки — оркестратор ставит его в
+    `Report.request_id`, и экспорт печатает «Запрос №N» вместо прочерка (Т-7).
+    До этого номер прогона существовал только в БД, и связать выданный клиенту
+    отчёт со строкой журнала было нечем.
+
     Фабрика не передана (тесты, веб до Э3) — запись не выполняется, прогон не
-    меняется ни на шаг. Любой отказ самой записи (открытия сессии, вставки)
-    гасится и уходит в лог: он не должен уничтожить уже готовый отчёт.
+    меняется ни на шаг, номера нет: возвращается `None`. Любой отказ самой
+    записи (открытия сессии, вставки) гасится и уходит в лог, наружу тоже
+    уходит `None`: он не должен уничтожить уже готовый отчёт (инвариант №5 в
+    редакции РЕШ-43 — отказ не роняет прогон, но и не выдаётся за успех).
     """
     if session_factory is None:
-        return
+        return None
     try:
         async with session_factory() as session:
-            await _write(
+            return await _write(
                 session, raw_text=raw_text, status=status, cost_rub=cost_rub, cards=cards, stages=stages, error=error
             )
     except Exception:
         log.warning("запись прогона в БД не удалась — отчёт сохранён без неё", exc_info=True)
+        return None
 
 
 async def _write(
@@ -98,15 +106,18 @@ async def _write(
     cards: list[SolutionCard],
     stages: list[StageRecord],
     error: str | None,
-) -> None:
+) -> int:
     request_row = RequestRow(raw_text=raw_text, status=status, cost_rub=cost_rub, error=error)
     session.add(request_row)
     await session.flush()  # нужен id запроса для внешних ключей карточек и журнала
+    # Снимаем номер сразу значением: после выхода из `session_scope` сессия
+    # закрыта, и обращение к атрибуту ORM-объекта уже полезло бы в базу.
+    request_id = int(request_row.id)
 
     for position, card in enumerate(cards):
         session.add(
             SolutionCardRow(
-                request_id=request_row.id,
+                request_id=request_id,
                 position=position,
                 title=card.title,
                 essence=card.essence,
@@ -132,7 +143,7 @@ async def _write(
     for record in stages:
         session.add(
             PipelineLogRow(
-                request_id=request_row.id,
+                request_id=request_id,
                 stage=record.stage,
                 started_at=record.started_at,
                 finished_at=record.finished_at,
@@ -144,3 +155,5 @@ async def _write(
                 error=record.error,
             )
         )
+
+    return request_id
