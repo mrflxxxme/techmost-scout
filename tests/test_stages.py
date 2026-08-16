@@ -1005,6 +1005,84 @@ async def test_сверка_ссылок_молчит_когда_адресов_
     assert len(found) == 1
 
 
+# ── РЕШ-62 п. 1: сверка ссылок симметрична ──────────────────────────────────
+
+#: Один и тот же адрес в двух написаниях: так его пишет страница и так его
+#: переписывает pydantic, прогоняя через `HttpUrl`.
+_КИРИЛЛИЦА_КАК_ЕСТЬ = "https://ipc.rssi.ru/статьи/2024"
+_КИРИЛЛИЦА_КОДИРОВАННАЯ = "https://ipc.rssi.ru/%D1%81%D1%82%D0%B0%D1%82%D1%8C%D0%B8/2024"
+
+
+def _raw_one(url: str) -> list[dict]:
+    """Сырая запись источника с заданным адресом."""
+    return [{"url": url, "title": "Страница источника", "domain": "ipc.rssi.ru", "snippet": "Текст страницы."}]
+
+
+@pytest.mark.parametrize(
+    ("сырой_адрес", "ссылка_кандидата", "оставлен"),
+    [
+        # Края, на которых сверка ложно срабатывала: слева нормализовалась
+        # сырая строка, справа — адрес ПОСЛЕ `HttpUrl`, а pydantic
+        # percent-кодирует не-ASCII путь, переводит домен в punycode и
+        # выбрасывает порт по умолчанию.
+        pytest.param(_КИРИЛЛИЦА_КАК_ЕСТЬ, _КИРИЛЛИЦА_КАК_ЕСТЬ, True, id="кириллический-путь-дословно"),
+        pytest.param(
+            "https://наука.рф/новости/катализатор",
+            "https://наука.рф/новости/катализатор",
+            True,
+            id="кириллический-домен-в-зоне-рф",
+        ),
+        pytest.param("https://ipc.rssi.ru:443/lab/catalysis", "https://ipc.rssi.ru/lab/catalysis", True, id="порт-443"),
+        pytest.param("http://ipc.rssi.ru:80/lab", "http://ipc.rssi.ru/lab", True, id="порт-80"),
+        pytest.param("наука.рф/новости", "https://наука.рф/новости", True, id="запись-без-схемы"),
+        # Кодировка с любой стороны: модель копирует ссылку то как есть, то в
+        # том виде, в каком её отдала страница.
+        pytest.param(_КИРИЛЛИЦА_КАК_ЕСТЬ, _КИРИЛЛИЦА_КОДИРОВАННАЯ, True, id="кандидат-кодирует-запись-нет"),
+        pytest.param(_КИРИЛЛИЦА_КОДИРОВАННАЯ, _КИРИЛЛИЦА_КАК_ЕСТЬ, True, id="запись-кодирует-кандидат-нет"),
+        pytest.param(_КИРИЛЛИЦА_КОДИРОВАННАЯ, _КИРИЛЛИЦА_КОДИРОВАННАЯ, True, id="кодировка-с-обеих-сторон"),
+        # Оформление, которое сверка не считала выдумкой и раньше.
+        pytest.param("https://ipc.rssi.ru/lab", "https://ipc.rssi.ru/lab/", True, id="хвостовой-слэш"),
+        pytest.param("https://IPC.rssi.ru/Lab", "https://ipc.rssi.ru/lab", True, id="регистр"),
+        pytest.param("https://ipc.rssi.ru/lab", "https://www.ipc.rssi.ru/lab", True, id="www"),
+        pytest.param("https://ipc.rssi.ru/lab", "https://ipc.rssi.ru/lab#catalysis", True, id="якорь"),
+        pytest.param("https://ipc.rssi.ru/lab", "https://ipc.rssi.ru/lab?utm_source=yandex", True, id="параметры"),
+        pytest.param("http://ipc.rssi.ru/lab", "https://ipc.rssi.ru/lab", True, id="http-против-https"),
+        # Обратное направление: защита обязана остаться защитой.
+        pytest.param("https://ipc.rssi.ru/lab", "https://ipc-ran.ru/lab", False, id="выдуманный-домен"),
+        pytest.param("https://ipc.rssi.ru/lab/catalysis", "https://ipc.rssi.ru/lab", False, id="усечённый-путь"),
+        pytest.param(
+            "https://наука.рф/новости/катализатор",
+            "https://наука.рф/новости/катализатор-2021",
+            False,
+            id="выдуманный-кириллический-путь",
+        ),
+    ],
+)
+async def test_сверка_ссылок_симметрична(
+    settings, fake_provider_factory, caplog, сырой_адрес, ссылка_кандидата, оставлен
+):
+    """РЕШ-62 п. 1. Сверка сравнивала разнородные величины: слева — сырую строку
+    записи, справа — `str(candidate.url)`, то есть адрес после `HttpUrl`.
+    Ссылка, скопированная моделью из записи БУКВА В БУКВУ, не совпадала сама с
+    собой: `наука.рф` → `xn--80aa3ak5a.xn--p1ai`, `/статьи` → `/%D1%81%D1%82…`.
+    Годный кандидат отбрасывался как выдуманный, лог утверждал, что «ссылки нет
+    в выдаче источника», а `problems` молчал, пока список кандидатов не пуст, —
+    тихая потеря части оплаченной выдачи, которую откат не страхует.
+
+    Вторая половина таблицы важна не меньше первой: симметризация не имеет
+    права снять защиту. Выдуманный домен, усечённый путь и подмена
+    кириллического слага обязаны отбрасываться по-прежнему.
+    """
+    ответ = _model_batch(_model_candidate(ссылка_кандидата, "Лаборатория катализа ИПХФ РАН"))
+    router, _ = _extractor_router(settings, fake_provider_factory, [ответ])
+
+    with caplog.at_level(logging.WARNING, logger="app.pipeline.stages"):
+        found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _raw_one(сырой_адрес), router)
+
+    assert [c.title for c in found] == (["Лаборатория катализа ИПХФ РАН"] if оставлен else [])
+    assert ("нет в выдаче источника" in caplog.text) is not оставлен
+
+
 # ── П-2: трата и пробел стадии extractor видны в журнале стадий ─────────────
 
 _PLAN_WEB_JSON = json.dumps(

@@ -16,7 +16,7 @@ import re
 import statistics
 from collections import defaultdict
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, HttpUrl, TypeAdapter, ValidationError, field_validator
 
 from app.config import get_settings
 from app.llm import CostLimitExceededError, LLMRouter, Message
@@ -296,14 +296,59 @@ class ExtractedBatch(BaseModel):
     dropped_no_url: int = 0
 
 
-def _urls_of(raw_results: list[dict]) -> set[str]:
-    """Нормализованные адреса сырых записей — множество допустимых ссылок.
+#: Тот же тип, что у `Candidate.url`. Нужен, чтобы прогнать через него сырую
+#: строку записи — ровно так же, как её уже прогнал pydantic на стороне
+#: кандидата (см. `_canonical_url`).
+_HTTP_URL = TypeAdapter(HttpUrl)
 
-    Нормализация та же, что склеивает веб-дубли (`normalize_url`): иначе
-    кандидат отвалился бы из-за хвостового слэша или регистра, то есть из-за
-    оформления, а не из-за выдумки.
+
+def _canonical_url(url: str) -> str:
+    """Привести адрес к виду, пригодному для сравнения с любым другим адресом.
+
+    Обе стороны сверки проходят ЭТУ функцию, и в этом всё содержание. Раньше
+    слева нормализовалась сырая строка записи источника, а справа —
+    `str(candidate.url)`, то есть адрес ПОСЛЕ `HttpUrl`; сравнивались разные
+    величины. Pydantic percent-кодирует не-ASCII путь (`/статьи` →
+    `/%D1%81%D1%82…`), переводит домен в punycode (`наука.рф` →
+    `xn--80aa3ak5a.xn--p1ai`) и убирает порт по умолчанию (`:443`).
+    `normalize_url` этой разницы не снимает: она отбрасывает схему, `www`,
+    параметры и хвостовой слэш, но не кодировку. Поэтому ссылка, скопированная
+    моделью из сырой записи БУКВА В БУКВУ, не совпадала сама с собой и
+    отбрасывалась как выдуманная — вместе со строкой лога, утверждавшей
+    неправду («ссылки нет в выдаче источника»). Список кандидатов при этом
+    оставался непустым, так что в `problems` не попадало ничего: тихая потеря
+    части оплаченной выдачи, которую откат не страхует.
+
+    Порядок «сначала `HttpUrl`, потом `normalize_url`», а не набор поправок на
+    кодировку: канонизацию делает та же библиотека, что построила
+    `candidate.url`, поэтому симметрия держится по построению, а не по списку
+    учтённых случаев.
+
+    Схема добавляется, если её нет: `normalize_url` её всё равно отбросит, а
+    без неё `HttpUrl` адрес не берёт — и запись вида `наука.рф/новости`
+    осталась бы некодированной, то есть асимметрия вернулась бы с чёрного
+    хода. Адрес, который не берётся и так, нормализуется как есть: он не
+    совпадёт с прошедшим `HttpUrl` кандидатом, но это лучше исключения посреди
+    разбора уже оплаченной выдачи.
     """
-    return {normalize_url(str(record["url"])) for record in raw_results if record.get("url")}
+    raw = url.strip()
+    with_scheme = raw if "://" in raw else f"https://{raw}"
+    try:
+        canonical = str(_HTTP_URL.validate_python(with_scheme))
+    except ValidationError:
+        return normalize_url(raw)
+    return normalize_url(canonical)
+
+
+def _urls_of(raw_results: list[dict]) -> set[str]:
+    """Канонизированные адреса сырых записей — множество допустимых ссылок.
+
+    Канонизация та же, что применяется к ссылке кандидата (`_canonical_url`), и
+    включает нормализацию, которая склеивает веб-дубли: иначе кандидат отвалился
+    бы из-за хвостового слэша, регистра или кодировки — из-за оформления, а не
+    из-за выдумки.
+    """
+    return {_canonical_url(str(record["url"])) for record in raw_results if record.get("url")}
 
 
 async def extract_candidates(
@@ -368,7 +413,7 @@ async def extract_candidates(
         except ValidationError as exc:
             log.warning("extractor: запись отброшена (%s): %s", provider, exc)
             continue
-        if known_urls and normalize_url(str(candidate.url)) not in known_urls:
+        if known_urls and _canonical_url(str(candidate.url)) not in known_urls:
             # РЕШ-61 п. 2. До Т-6 адрес веб-кандидата брался кодом из ответа
             # источника — структурная гарантия. Стадия поставила между
             # источником и `evidence` языковую модель, а выдуманная либо
