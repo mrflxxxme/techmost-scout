@@ -1140,6 +1140,41 @@ async def test_журнал_стадии_поиска_несёт_трату_и_�
     assert record.error and "ноль кандидатов" in record.error
 
 
+async def test_журнал_стадии_поиска_несёт_фактическую_цену_а_не_любое_число(settings, brief, fake_provider_factory):
+    """РЕШ-62 п. 2: закрепить П-2 значением, а не признаком «больше нуля».
+
+    Заглушка провайдера берёт 0.01 ₽ за вызов, а стадия поиска зовёт модель
+    ровно один раз — extractor поверх единственного веб-источника. Значит в
+    записи `search` обязано лежать 0.01 ₽: не ноль (поля journal не заполнены
+    вовсе) и не 0.02 ₽ — столько роутер потратил К ЭТОМУ МОМЕНТУ вместе с
+    планировщиком, и подстановка накопленного итога вместо разницы снимков
+    выглядела бы в журнале так же правдоподобно. Цена стадии — доля прогона:
+    сверка с полным расходом роутера показывает, что это именно доля.
+    """
+    from app.pipeline.persistence import StageRecord
+
+    responses = [
+        _PLAN_WEB_JSON,
+        _EXTRACT_EMPTY,
+        _SCORE_ONE_JSON,
+        _CARD_ONE_JSON,
+        _VERIFY_OK_JSON,
+        _SUMMARY_ONE_JSON,
+    ]
+    router, provider = _extractor_router(settings, fake_provider_factory, responses)
+    stage_log: list[StageRecord] = []
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=settings, router=router, adapters=[_FakeWebAdapter(client)])
+        await pipeline._run_stages(brief, 1, stage_log)
+
+    record = next(item for item in stage_log if item.stage == "search")
+    цена_вызова = 0.01
+    assert record.provider == "gigachat"
+    assert record.cost_rub == pytest.approx(цена_вызова), "в журнале не цена стадии, а другое число"
+    assert router.cost.spent_rub == pytest.approx(цена_вызова * len(provider.calls))
+    assert record.cost_rub < router.cost.spent_rub, "цена стадии подменена накопленным итогом прогона"
+
+
 @respx.mock
 async def test_сырые_записи_яндекса_из_того_же_ответа_без_второго_платного_запроса():
     """Критерий 2 Т-6 и риск Р-8: вход стадии extractor не стоит ни одного
