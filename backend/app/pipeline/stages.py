@@ -16,7 +16,7 @@ import re
 import statistics
 from collections import defaultdict
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from app.config import get_settings
 from app.llm import CostLimitExceededError, LLMRouter, Message
@@ -258,6 +258,77 @@ async def plan_search(router: LLMRouter, brief: Brief) -> SearchPlan:
         # стандартных 4096 токенов на это не хватает.
         max_tokens=8000,
     )
+
+
+# ── 2а. Разбор сырой выдачи моделью (extractor) ─────────────────────────────
+class ExtractedBatch(BaseModel):
+    """Ответ стадии extractor.
+
+    `candidates` объявлены словарями намеренно: записи проверяются поштучно, а
+    не всем списком. Со списком `Candidate` одна кривая запись (пустой адрес,
+    год строкой) роняла бы разбор всей выдачи, а вместе с ним — вклад платного
+    источника целиком.
+    """
+
+    candidates: list[dict] = Field(default_factory=list)
+    #: Сколько записей модель отбросила из-за отсутствия ссылки; служебное
+    #: число из промпта, в пайплайн не идёт
+    dropped_no_url: int = 0
+
+
+async def extract_candidates(
+    source_type: SourceType,
+    provider: str,
+    raw_results: list[dict],
+    router: LLMRouter,
+) -> list[Candidate]:
+    """Собрать кандидатов из неструктурированной выдачи источника.
+
+    Нужна источникам без структурированных полей — веб-поиску прежде всего:
+    у страницы нет ни аффилиации, ни года публикации, они лежат в тексте.
+    Источники со структурированным API (Crossref, arXiv, КиберЛенинка,
+    витрина) через стадию не идут — разбор кодом там точнее и бесплатен.
+
+    `source_type` и `provider` навязываются коду, а не берутся из ответа
+    модели: правило 9 промпта модель нарушает регулярно, а кандидат с чужим
+    провайдером испортил бы и счётчики выдачи, и ограничение доли одного
+    источника в отборе.
+
+    Невалидная запись отбрасывается с записью в лог и стадию не роняет
+    (инвариант №5): выдача из двадцати записей не должна пропадать из-за одной.
+    """
+    if not raw_results:
+        return []
+    # Сырая выдача — чужой текст: метка `{{...}}` со страницы иначе уронила бы
+    # `render_prompt` уже после оплаченного запроса (см. neutralize_placeholders).
+    raw_text = neutralize_placeholders(json.dumps(raw_results, ensure_ascii=False, indent=2))
+    batch = await router.complete_json(
+        "extractor",
+        [
+            Message(
+                role="system",
+                content=render_prompt(
+                    "extractor",
+                    SOURCE_TYPE=source_type.value,
+                    PROVIDER=provider,
+                    RAW_RESULTS=raw_text,
+                ),
+            ),
+            Message(role="user", content=_GO),
+        ],
+        ExtractedBatch,
+        # Ответ короткий: до двадцати кандидатов без рассуждений (§0.1 п. 7).
+        max_tokens=4096,
+    )
+
+    candidates: list[Candidate] = []
+    for item in batch.candidates:
+        try:
+            candidates.append(Candidate.model_validate({**item, "source_type": source_type, "provider": provider}))
+        except ValidationError as exc:
+            log.warning("extractor: запись отброшена (%s): %s", provider, exc)
+    log.info("extractor: %s, сырых записей %s → кандидатов %s", provider, len(raw_results), len(candidates))
+    return candidates
 
 
 # ── 3. Дедупликация ─────────────────────────────────────────────────────────

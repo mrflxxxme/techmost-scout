@@ -1,13 +1,24 @@
 """Проверки чистых стадий пайплайна: склейка, отбор, отсечка по предметному
-соответствию, группировка, честная выдача карточек (Ф-7)."""
+соответствию, группировка, честная выдача карточек (Ф-7), нормализация сырой
+выдачи моделью (Э2-5).
+
+Сети нет: провайдер модели — заглушка из conftest, ответ Яндекса подменяется
+через respx."""
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 
+import httpx
+import pytest
+import respx
+
 from app.config import Settings
-from app.llm import LLMRouter
+from app.llm import CostLimitExceededError, LLMRouter
 from app.pipeline import stages
+from app.pipeline.orchestrator import ScoutPipeline
 from app.pipeline.stages import (
     NEUTRAL_SCORE_NOTE,
     candidates_listing,
@@ -16,7 +27,8 @@ from app.pipeline.stages import (
     select_publishable_cards,
     select_top,
 )
-from app.schemas import Candidate, Evidence, ScoredCandidate, SolutionCard, SourceType
+from app.schemas import Candidate, Evidence, ScoredCandidate, SearchPlan, SearchQuery, SolutionCard, SourceType
+from app.search.base import SearchAdapter
 
 #: Ответ скоринга на одного кандидата — ровно по схеме `ScoreBatch`.
 _SCORE_JSON = (
@@ -506,3 +518,314 @@ def test_select_publishable_cards_keeps_all_when_under_limit():
     published = select_publishable_cards(cards)
 
     assert len(published) == 3
+
+
+# ── Стадия extractor: нормализация сырой выдачи моделью (Э2-5) ──────────────
+
+#: Сырые записи веб-поиска: заголовок, домен, время правки и кусок текста
+#: страницы. Ни организации, ни года, ни авторов в полях нет — они лежат
+#: внутри текста, ради этого стадия и заведена.
+_RAW_WEB = [
+    {
+        "url": "https://ipc.rssi.ru/lab/catalysis",
+        "title": "Лаборатория катализа ИПХФ РАН",
+        "domain": "ipc.rssi.ru",
+        "modtime": "20240115T103000",
+        "snippet": "В 2021 году в ИПХФ РАН разработан катализатор гидроочистки дизельных фракций.",
+    },
+    {
+        "url": "https://ipc.rssi.ru/news/",
+        "title": "Новости института",
+        "domain": "ipc.rssi.ru",
+        "modtime": "20250101T000000",
+        "snippet": "Читайте также: конференции, объявления, вакансии.",
+    },
+]
+
+#: Ответ модели: годный кандидат плюс запись без ссылки. `provider` и
+#: `source_type` в ответе намеренно чужие — код обязан навязать свои.
+_EXTRACT_JSON = json.dumps(
+    {
+        "candidates": [
+            {
+                "source_type": "publication",
+                "title": "Лаборатория катализа ИПХФ РАН",
+                "url": "https://ipc.rssi.ru/lab/catalysis",
+                "org": "ИПХФ РАН",
+                "authors": [],
+                "year": 2021,
+                "snippet": "В 2021 году в ИПХФ РАН разработан катализатор гидроочистки дизельных фракций.",
+                "raw_id": None,
+                "provider": "модель-выдумщица",
+            },
+            {
+                "source_type": "web",
+                "title": "Запись без ссылки",
+                "url": "",
+                "authors": [],
+                "year": None,
+                "snippet": "",
+                "raw_id": None,
+                "provider": "yandex_search",
+            },
+        ],
+        "dropped_no_url": 1,
+    },
+    ensure_ascii=False,
+)
+
+
+def _extractor_router(settings, fake_provider_factory, responses: list[str] | None = None, **kwargs):
+    """Роутер с заглушкой на месте GigaChat: маршрут стадии — `extractor:gigachat`."""
+    provider = fake_provider_factory("gigachat", responses, **kwargs)
+    return LLMRouter(settings, providers={"gigachat": provider}), provider
+
+
+class _FakeWebAdapter(SearchAdapter):
+    """Источник с неструктурированной выдачей: отдаёт свой разбор и сырые
+    записи ТОГО ЖЕ ответа — как настоящий веб-поиск (`search_raw`)."""
+
+    name = "fake_web"
+    source_types = (SourceType.WEB,)
+    needs_extraction = True
+
+    async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
+        candidates, _ = await self.search_raw(query, limit=limit)
+        return candidates
+
+    async def search_raw(self, query: SearchQuery, *, limit: int = 20) -> tuple[list[Candidate], list[dict]]:
+        own = Candidate(
+            source_type=SourceType.WEB,
+            title="Разбор адаптера",
+            url="https://ipc.rssi.ru/lab/catalysis",
+            provider=self.name,
+        )
+        return [own], [dict(record) for record in _RAW_WEB]
+
+
+class _FakeApiAdapter(SearchAdapter):
+    """Источник со структурированным API: флага нет, стадии не видит.
+
+    `search_raw` намеренно взрывается: у источника без флага оркестратор обязан
+    спрашивать `search`. Правило это не косметическое — адаптер, собранный не от
+    `SearchAdapter` (в проекте такие есть в тестах доктора), метода `search_raw`
+    не имеет вовсе, и поход в него превратил бы рабочий источник в недоступный.
+    """
+
+    name = "fake_api"
+    source_types = (SourceType.PUBLICATION,)
+
+    async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
+        return [_candidate(1, provider=self.name)]
+
+    async def search_raw(self, query: SearchQuery, *, limit: int = 20) -> tuple[list[Candidate], list[dict]]:
+        raise AssertionError("источник без needs_extraction спрашивают через search")
+
+
+def _plan(*source_types: SourceType) -> SearchPlan:
+    return SearchPlan(
+        queries=[
+            SearchQuery(text="катализатор гидроочистки", source_type=source_type, lang="ru", rationale="тест")
+            for source_type in source_types
+        ]
+    )
+
+
+async def test_extractor_собирает_кандидата_из_сырого_сниппета(settings, fake_provider_factory):
+    """Из текста страницы получается Candidate, а провайдер и тип источника —
+    те, что передал код: правило 9 промпта модель нарушает регулярно, а
+    кандидат с чужим провайдером испортил бы и счётчики, и отбор."""
+    router, _ = _extractor_router(settings, fake_provider_factory, [_EXTRACT_JSON])
+
+    found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
+
+    assert len(found) == 1
+    assert found[0].provider == "yandex_search"
+    assert found[0].source_type is SourceType.WEB
+    assert found[0].org == "ИПХФ РАН"
+    assert found[0].year == 2021
+
+
+async def test_extractor_отбрасывает_невалидную_запись_и_отдаёт_остальные(settings, fake_provider_factory, caplog):
+    """Запись без ссылки выпадает с записью в лог, а выдача из-за неё не
+    пропадает целиком (инвариант №5)."""
+    router, _ = _extractor_router(settings, fake_provider_factory, [_EXTRACT_JSON])
+
+    with caplog.at_level(logging.INFO, logger="app.pipeline.stages"):
+        found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
+
+    assert [c.title for c in found] == ["Лаборатория катализа ИПХФ РАН"]
+    assert "extractor: запись отброшена (yandex_search)" in caplog.text
+    assert "extractor: yandex_search, сырых записей 2 → кандидатов 1" in caplog.text
+
+
+async def test_extractor_заполняет_метки_промпта_через_render_prompt(settings, fake_provider_factory):
+    """Инвариант №4: незаполненная метка ушла бы в модель текстом. Проверяем
+    факт подстановки всех трёх, а не их состав — состав закреплён
+    `tests/test_prompts.py`."""
+    router, provider = _extractor_router(settings, fake_provider_factory, [_EXTRACT_JSON])
+
+    await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
+
+    system = provider.calls[0][0].content
+    assert "{{" not in system
+    assert "web" in system and "yandex_search" in system
+    assert "https://ipc.rssi.ru/lab/catalysis" in system
+
+
+async def test_extractor_просит_свой_лимит_токенов(settings, fake_provider_factory):
+    """§0.1 п. 7: у каждой стадии своя щедрость по токенам, у extractor — 4096."""
+    base = fake_provider_factory
+
+    class _Recording(base):  # type: ignore[misc, valid-type]
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.limits: list[int] = []
+
+        async def complete(self, messages, *, model=None, temperature=0.2, max_tokens=4096, json_mode=False):
+            self.limits.append(max_tokens)
+            return await super().complete(
+                messages, model=model, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode
+            )
+
+    provider = _Recording("gigachat", [_EXTRACT_JSON])
+    router = LLMRouter(settings, providers={"gigachat": provider})
+
+    await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
+
+    assert provider.limits == [4096]
+
+
+async def test_extractor_на_пустой_выдаче_модель_не_зовёт(settings, fake_provider_factory):
+    """Пустых записей нечего нормализовать — платить за это незачем."""
+    router, provider = _extractor_router(settings, fake_provider_factory, [_EXTRACT_JSON])
+
+    assert await stages.extract_candidates(SourceType.WEB, "yandex_search", [], router) == []
+    assert provider.calls == []
+
+
+async def test_адаптер_без_флага_стадию_не_вызывает(settings, fake_provider_factory):
+    """Структурированный источник через модель не гоняем — незачем жечь токены."""
+    router, provider = _extractor_router(settings, fake_provider_factory, [_EXTRACT_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=settings, router=router, adapters=[_FakeApiAdapter(client)])
+        outcome = await pipeline.gather_candidates(_plan(SourceType.PUBLICATION))
+
+    assert provider.calls == [], "стадия вызвана для источника со структурированным API"
+    assert [c.provider for c in outcome.candidates] == ["fake_api"]
+
+
+async def test_адаптер_с_флагом_отдаёт_кандидатов_стадии(settings, fake_provider_factory):
+    """У источника с `needs_extraction` в пайплайн идёт разбор модели, а не
+    собственный разбор адаптера: это одни и те же записи выдачи, и складывать
+    их значило бы протащить страницу в отбор дважды."""
+    router, provider = _extractor_router(settings, fake_provider_factory, [_EXTRACT_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=settings, router=router, adapters=[_FakeWebAdapter(client)])
+        outcome = await pipeline.gather_candidates(_plan(SourceType.WEB))
+
+    assert len(provider.calls) == 1
+    assert [c.title for c in outcome.candidates] == ["Лаборатория катализа ИПХФ РАН"]
+    assert outcome.hits_by_provider == {"fake_web": 1}
+    assert outcome.unavailable == []
+
+
+async def test_отказ_стадии_не_роняет_прогон_и_не_прячет_источник(settings, fake_provider_factory, caplog):
+    """Инвариант №5: модель отказала — выдача уже оплачена и разобрана
+    адаптером, берём его разбор. Недоступным источник при этом не становится:
+    он ответил."""
+    router, _ = _extractor_router(settings, fake_provider_factory, ["не json"], fail_times=99)
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=settings, router=router, adapters=[_FakeWebAdapter(client)])
+        with caplog.at_level(logging.WARNING, logger="app.pipeline.orchestrator"):
+            outcome = await pipeline.gather_candidates(_plan(SourceType.WEB))
+
+    assert [c.title for c in outcome.candidates] == ["Разбор адаптера"]
+    assert outcome.unavailable == []
+    assert "extractor: стадия не удалась" in caplog.text
+
+
+async def test_стоп_кран_стоимости_из_стадии_не_подменяется_разбором_адаптера(settings, fake_provider_factory, caplog):
+    """РЕШ-45: исчерпанный лимит — не отказ модели, а команда «стоп тратить».
+
+    `CostLimitExceededError` — наследник `RuntimeError`, поэтому общий
+    `except Exception` в `_extract` поймал бы её вместе с отказами модели и
+    молча превратил стоп-кран в «беру разбор адаптера»: остальные формулировки
+    плана продолжили бы платить дальше. Проверяем ровно это: стадия падает по
+    лимиту, наружу выходит `CostLimitExceededError`, а не выдача с разбором
+    адаптера, и в лог не уходит «беру разбор адаптера».
+
+    Лимит 0.005 ₽ при 0.01 ₽ за вызов заглушки: первый же вызов стадии его
+    выбирает.
+    """
+    low_limit = settings.model_copy(update={"cost_limit_rub_per_request": 0.005})
+    router, provider = _extractor_router(low_limit, fake_provider_factory, [_EXTRACT_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=low_limit, router=router, adapters=[_FakeWebAdapter(client)])
+        with (
+            caplog.at_level(logging.WARNING, logger="app.pipeline.orchestrator"),
+            pytest.raises((CostLimitExceededError, BaseExceptionGroup)) as raised,
+        ):
+            await pipeline.gather_candidates(_plan(SourceType.WEB))
+
+    # Источники опрашиваются через `asyncio.TaskGroup`, а он заворачивает
+    # исключение задачи в `ExceptionGroup`. Проверяем суть — до вызывающего
+    # доехал стоп-кран, а не выдача, — не форму обёртки.
+    stopped = raised.value
+    inner = list(stopped.exceptions) if isinstance(stopped, BaseExceptionGroup) else [stopped]
+    assert [type(exc) for exc in inner] == [CostLimitExceededError]
+    assert "лимите" in str(inner[0])
+    assert len(provider.calls) == 1, "стадию звали ровно один раз — на нём лимит и кончился"
+    assert "беру разбор адаптера" not in caplog.text
+
+
+@respx.mock
+async def test_сырые_записи_яндекса_из_того_же_ответа_без_второго_платного_запроса():
+    """Критерий 2 Т-6 и риск Р-8: вход стадии extractor не стоит ни одного
+    дополнительного запроса. Одна формулировка — один POST searchAsync и один
+    шаг счётчика `queries_used`, при этом сырые записи получены.
+
+    Тест живёт здесь, а не в `tests/test_search_yandex.py`: файл адаптерных
+    тестов в границы задачи Т-6 не входит, а проверяемое свойство — свойство
+    самой стадии.
+    """
+    from app.search.yandex_search import OPERATION_URL, SEARCH_ASYNC_URL, YandexSearchAdapter
+
+    xml = (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        "<yandexsearch><response><results><grouping><group><doc>"
+        "<url>https://ipc.rssi.ru/lab/catalysis</url><domain>ipc.rssi.ru</domain>"
+        "<title>Лаборатория <hlword>катализа</hlword></title><modtime>20240115T103000</modtime>"
+        "<passages><passage>Разработан катализатор гидроочистки.</passage></passages>"
+        "</doc></group></grouping></results></response></yandexsearch>"
+    )
+    started = respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
+    polled = respx.get(url__startswith=OPERATION_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={"done": True, "response": {"rawData": base64.b64encode(xml.encode("utf-8")).decode("ascii")}},
+        )
+    )
+
+    async with httpx.AsyncClient() as client:
+        adapter = YandexSearchAdapter(
+            client, api_key="test-key", folder_id="b1gtest", poll_interval_seconds=0.0, max_wait_seconds=5.0
+        )
+        candidates, raw = await adapter.search_raw(
+            SearchQuery(text="катализатор", source_type=SourceType.WEB, lang="ru", rationale="тест"), limit=10
+        )
+
+    assert adapter.needs_extraction is True
+    assert started.call_count == 1, "сырые записи взяты вторым платным запросом"
+    assert adapter.queries_used == 1
+    assert polled.call_count == 1
+    assert len(candidates) == 1
+    assert raw == [
+        {
+            "url": "https://ipc.rssi.ru/lab/catalysis",
+            "title": "Лаборатория катализа",
+            "domain": "ipc.rssi.ru",
+            "modtime": "20240115T103000",
+            "snippet": "Разработан катализатор гидроочистки.",
+        }
+    ]

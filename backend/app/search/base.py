@@ -53,6 +53,10 @@ class SearchAdapter(abc.ABC):
     requires_key: bool = False
     #: Пауза между запросами, если у источника есть предел частоты
     min_interval_seconds: float = 0.0
+    #: Нужна ли выдаче источника нормализация моделью — стадия extractor (Э2-5).
+    #: Источник со структурированным API разбирается кодом и флага не поднимает:
+    #: гонять его через модель значит жечь токены без выигрыша.
+    needs_extraction: bool = False
 
     def __init__(self, client: httpx.AsyncClient) -> None:
         self._client = client
@@ -62,6 +66,21 @@ class SearchAdapter(abc.ABC):
     @abc.abstractmethod
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
         """Найти кандидатов по одной формулировке."""
+
+    async def search_raw(self, query: SearchQuery, *, limit: int = 20) -> tuple[list[Candidate], list[dict]]:
+        """Кандидаты и сырые записи ТОГО ЖЕ ответа источника.
+
+        Второй элемент пары — вход стадии extractor (Э2-5). Отдельный метод, а
+        не расширение `search`: публичный контракт `search` менять нельзя, а
+        второй заход в источник за той же выдачей недопустим — у платного
+        источника он попросту удваивает счёт (Р-8 плана). Поэтому адаптер с
+        `needs_extraction = True` обязан отдать записи из уже полученного
+        ответа, а не сходить за ними ещё раз.
+
+        По умолчанию сырых записей нет: источник со структурированным API
+        разбирается кодом, и нормализовать моделью у него нечего.
+        """
+        return await self.search(query, limit=limit), []
 
     def contour_label(self, query: SearchQuery) -> str:
         """Метка контура выдачи для формулировки — ключ `hits_by_provider` в
