@@ -39,15 +39,16 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.llm import LLMRouter
+from app.llm import CostLimitExceededError, LLMRouter
 from app.llm.base import LLMError, LLMProvider, LLMResult, Message, Usage
 from app.models import Base, PipelineLog
 from app.models import Candidate as CandidateRow
+from app.models import Request as RequestRow
 from app.models import SearchPlan as SearchPlanRow
 from app.pipeline import stages
 from app.pipeline.orchestrator import ScoutPipeline
 from app.schemas import Candidate, SourceType
-from app.search.base import SearchAdapter
+from app.search.base import SearchAdapter, SearchError
 
 # Ключевые фразы из "## Роль" промптов — по ним заглушка узнаёт стадию, не
 # завися от порядка вызовов. Фраза replanner не пересекается с фразой планировщика:
@@ -133,18 +134,28 @@ class _TwoPassAdapter(SearchAdapter):
     Формулировка первого плана даёт одну выдачу, формулировка второго (её видно
     по пометке в тексте) — другую. Так проверяется главное свойство второго
     прохода: он ищет ДРУГИМИ словами и приносит то, чего не было.
+
+    `fail_second` — источник ответил первому проходу и отказал второму (429,
+    таймаут, нечитаемое тело): адаптер честно поднимает `SearchError`, как
+    предписывает инвариант №5 в редакции РЕШ-43.
     """
 
     name = "crossref"
     source_types = (SourceType.PUBLICATION,)
 
-    def __init__(self, client: httpx.AsyncClient, *, first: list[int], second: list[int]) -> None:
+    def __init__(
+        self, client: httpx.AsyncClient, *, first: list[int], second: list[int], fail_second: bool = False
+    ) -> None:
         super().__init__(client)
         self._first = first
         self._second = second
+        self._fail_second = fail_second
 
     async def search(self, query, *, limit: int = 20) -> list[Candidate]:
-        numbers = self._second if _SECOND_PASS_MARK in query.text else self._first
+        second_pass = _SECOND_PASS_MARK in query.text
+        if second_pass and self._fail_second:
+            raise SearchError(self.name, "источник ответил 429 на формулировку второго прохода")
+        numbers = self._second if second_pass else self._first
         return [_candidate(number) for number in numbers]
 
 
@@ -265,15 +276,19 @@ async def _run_pipeline(
     threshold: int,
     first: list[int],
     second: list[int],
+    fail_second: bool = False,
 ):
-    """Полный прогон с заданным порогом второго прохода и двумя выдачами."""
+    """Полный прогон с заданным порогом второго прохода и двумя выдачами.
+
+    `fail_second` — источник отказывает на формулировке второго плана.
+    """
     tuned = settings.model_copy(update={"second_pass_relevance_max": threshold})
     router = LLMRouter(tuned, providers={"deepseek": provider})
     async with httpx.AsyncClient() as client:
         pipeline = ScoutPipeline(
             settings=tuned,
             router=router,
-            adapters=[_TwoPassAdapter(client, first=first, second=second)],
+            adapters=[_TwoPassAdapter(client, first=first, second=second, fail_second=fail_second)],
             session_factory=session_factory,
         )
         return await pipeline.run(brief, request_id=1, raw_text="задача теста")
@@ -504,3 +519,81 @@ async def test_решение_о_втором_проходе_печатаетс�
     decisions = [line for line in caplog.text.splitlines() if "второй проход" in line]
     assert len(decisions) == 1, f"строка решения обязана быть ровно одна, найдено: {decisions}"
     assert expected_line in decisions[0]
+
+
+# ── Инвариант №5: отказ источника во втором проходе виден в отчёте ──────────
+async def test_отказ_источника_во_втором_проходе_доезжает_до_отчёта(settings, brief, db_session_factory):
+    """Источник ответил первому проходу и отказал второму — его имя обязано
+    попасть в `sources_unavailable` отчёта, а прогон — дойти до карточек.
+
+    Это дословно инвариант №5: скрытый отказ хуже видимого. На Э1-2 источник
+    отвечал 429 три прогона подряд, и ни один отчёт об этом не сказал, потому
+    что отказ гасился в пустой список. Второй проход завёл вторую, отдельную
+    выдачу со своим списком недоступных: не слей его с первым — и отчёт объявит
+    полное покрытие источников там, где половина запросов не дозвалась. Разбор
+    выдачи на живом прогоне (Т-29) при этом не отличит «источник ничего не
+    нашёл» от «источник не ответил».
+    """
+    provider = _ScriptedProvider(_routes(first_relevance=4))
+    report = await _run_pipeline(
+        settings,
+        brief,
+        provider,
+        db_session_factory,
+        threshold=6,
+        first=list(range(1, 11)),
+        second=[11, 12, 13, 14],
+        fail_second=True,
+    )
+
+    assert report.sources_unavailable == ["crossref"], (
+        "источник, не ответивший второму проходу, обязан быть назван в отчёте — "
+        "молчание здесь неотличимо от полного покрытия источников"
+    )
+    assert report.cards, "отказ источника во втором проходе прогон не роняет: карточки первой выдачи на месте"
+
+    logs = await _rows(db_session_factory, PipelineLog)
+    assert [row.stage for row in logs].count("search") == 2, "второй поиск состоялся и отказал именно в нём"
+    candidates = await _rows(db_session_factory, CandidateRow)
+    assert {row.pass_no for row in candidates} == {1}, "второй проход не принёс ни одного кандидата — их и нет в базе"
+
+
+# ── РЕШ-45: стоп-кран по стоимости не смягчается новой стадией ──────────────
+async def test_стоп_кран_на_стадии_replan_роняет_прогон(settings, brief, db_session_factory, monkeypatch):
+    """`CostLimitExceededError` на `replan` — команда владельца «стоп тратить»,
+    а не отказ модели: она обязана уйти наружу, а не попасть в широкий
+    `except Exception` рядом.
+
+    Разница дорогая. Отказ стадии оставляет строку журнала с `error`, и прогон
+    честно идёт дальше на первой выдаче — за карточки и сводку платится ещё
+    раз. Исчерпанный лимит означает обратное: платить больше нечем. Проект
+    закрыл этот риск для интейка, уточнения брифа, скоринга, extractor, сборки
+    карточек и сводки; `replan` — последняя стадия конвейера, у которой такого
+    замка не было.
+    """
+
+    async def broken_replan(router, task_brief, plan, scored):
+        raise CostLimitExceededError("запрос израсходовал 10.00 ₽ при лимите 10.00 ₽")
+
+    monkeypatch.setattr(stages, "replan_search", broken_replan)
+    provider = _ScriptedProvider(_routes(first_relevance=4))
+
+    with pytest.raises(CostLimitExceededError):
+        await _run_pipeline(
+            settings,
+            brief,
+            provider,
+            db_session_factory,
+            threshold=6,
+            first=list(range(1, 11)),
+            second=[11, 12, 13, 14],
+        )
+
+    # Оборванный стоп-краном прогон обязан оставить след: статус `failed` и уже
+    # потраченные деньги (РЕШ-40, П-5 аудита) — иначе трата была бы, а записи о
+    # ней нет.
+    requests = await _rows(db_session_factory, RequestRow)
+    assert [row.status for row in requests] == ["failed"]
+    assert requests[0].error
+    logs = await _rows(db_session_factory, PipelineLog)
+    assert "cards" not in [row.stage for row in logs], "после стоп-крана прогон не имеет права платить дальше"
