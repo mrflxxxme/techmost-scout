@@ -1286,3 +1286,107 @@ async def test_сырые_записи_ограничены_по_числу_по
         "нарушена граница: либо запись без адреса попала в платный вход, либо не соблюдён limit"
     )
     assert len(raw[0]["snippet"]) == MAX_SNIPPET, "сниппет не обрезан — вторая граница размера платного входа"
+
+
+# ── Т-26: лимит стадии скоринга и учёт повторов по лимиту ───────────────────
+#
+# На воротах Э2-А часть батчей скоринга бралась со второй попытки: роутер видел
+# обрыв JSON, удваивал лимит и переспрашивал заново — со всем входом. Повтор
+# стал штатным путём вместо страховки, и прогон вырос до 25–30 минут. Здесь
+# закрепляются обе меры: щедрый лимит и строка учёта, по которой видно, стало
+# ли повторов меньше.
+
+
+def _recording_provider(fake_provider_factory, name: str, responses: list[str]):
+    """Провайдер-заглушка, запоминающий запрошенный лимит токенов."""
+
+    class _Recording(fake_provider_factory):  # type: ignore[misc, valid-type]
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.limits: list[int] = []
+
+        async def complete(self, messages, *, model=None, temperature=0.2, max_tokens=4096, json_mode=False):
+            self.limits.append(max_tokens)
+            return await super().complete(
+                messages, model=model, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode
+            )
+
+    return _Recording(name, responses)
+
+
+def _scoring_line(caplog) -> str:
+    """Строка учёта стадии скоринга из журнала; её отсутствие — сразу отказ."""
+    line = next((r.getMessage() for r in caplog.records if "скоринг: батчей" in r.getMessage()), None)
+    assert line is not None, "строка учёта скоринга не напечатана — измерять повторы нечем"
+    return line
+
+
+async def test_скоринг_просит_16000_а_планировщик_остаётся_на_8000(settings, fake_provider_factory, brief):
+    """Т-26: лимит поднят ровно у скоринга.
+
+    В `stages.py` четыре вызова с лимитом 8000 (интейк, уточнение, планировщик,
+    скоринг) — ровно та картина, в которой правка расползается по соседям. Тест
+    держит обе стороны: 16000 у скоринга и нетронутые 8000 у планировщика.
+    """
+    scorer = _recording_provider(fake_provider_factory, "deepseek", [_SCORE_JSON])
+    planner = _recording_provider(fake_provider_factory, "gigachat", [_PLAN_WEB_JSON])
+
+    await stages.score_candidates(LLMRouter(settings, providers={"deepseek": scorer}), brief, [_candidate(1)])
+    await stages.plan_search(LLMRouter(settings, providers={"gigachat": planner}), brief)
+
+    assert scorer.limits == [16000], "скоринг снова уходит на прежнем лимите — повтор остаётся штатным путём"
+    assert planner.limits == [8000], "правка лимита расползлась на соседний вызов"
+
+
+async def test_строка_учёта_скоринга_печатается_и_при_нуле_повторов(settings, fake_provider_factory, brief, caplog):
+    """Строка печатается всегда. Молчание при нуле сделало бы «повторов не
+    стало» неотличимым от «код до счётчика не дошёл» — тот же урок, ради
+    которого всегда печатается строка калибровки."""
+    provider = fake_provider_factory("deepseek", [_SCORE_JSON])
+    router = LLMRouter(settings, providers={"deepseek": provider})
+
+    with caplog.at_level(logging.INFO, logger="app.pipeline.stages"):
+        await stages.score_candidates(router, brief, [_candidate(1)])
+
+    line = _scoring_line(caplog)
+    assert "батчей 1" in line
+    assert "повторов по лимиту 0" in line
+    assert "время стадии" in line
+
+
+async def test_повтор_по_нехватке_лимита_попадает_в_строку_учёта(settings, fake_provider_factory, brief, caplog):
+    """Счётчик считает именно повтор роутера по лимиту, а не любую вторую
+    попытку: путь проходится настоящим роутером — первый ответ обрезан на
+    середине, второй целый."""
+    обрезанный = '{"scores": [{"index": 0, "relevance": 8, "maturity": 6,'
+    provider = _recording_provider(fake_provider_factory, "deepseek", [обрезанный, _SCORE_JSON])
+    router = LLMRouter(settings, providers={"deepseek": provider})
+
+    with caplog.at_level(logging.INFO, logger="app.pipeline.stages"):
+        scored = await stages.score_candidates(router, brief, [_candidate(1)])
+
+    assert [item.relevance for item in scored] == [8]
+    assert provider.limits == [16000, 32000], "роутер переспросил не с удвоенным лимитом — путь повтора не тот"
+    assert "повторов по лимиту 1" in _scoring_line(caplog)
+
+
+async def test_счётчик_повторов_не_приписывает_скорингу_чужие_стадии(settings, fake_provider_factory, brief, caplog):
+    """Стадии идут через один и тот же роутер: повтор extractor'а, случившийся
+    во время скоринга, не должен попасть в его счёт — иначе измеритель показывает
+    чужую работу."""
+
+    class _Noisy(fake_provider_factory):  # type: ignore[misc, valid-type]
+        async def complete(self, messages, *, model=None, temperature=0.2, max_tokens=4096, json_mode=False):
+            logging.getLogger("app.llm.router").warning(
+                "стадия %s: ответ обрезан по лимиту токенов, переспрашиваю с лимитом %s", "extractor", 14000
+            )
+            return await super().complete(
+                messages, model=model, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode
+            )
+
+    router = LLMRouter(settings, providers={"deepseek": _Noisy("deepseek", [_SCORE_JSON])})
+
+    with caplog.at_level(logging.INFO, logger="app.pipeline.stages"):
+        await stages.score_candidates(router, brief, [_candidate(1)])
+
+    assert "повторов по лимиту 0" in _scoring_line(caplog)

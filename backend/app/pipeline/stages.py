@@ -14,6 +14,7 @@ import json
 import logging
 import re
 import statistics
+import time
 from collections import defaultdict
 
 from pydantic import BaseModel, Field, HttpUrl, TypeAdapter, ValidationError, field_validator
@@ -506,6 +507,38 @@ def candidates_listing(chunk: list[Candidate], citations: dict[str, int] | None 
     return "\n\n".join(blocks)
 
 
+#: Подстрока предупреждения роутера о повторе из-за нехватки лимита
+#: (`complete_json`, `app/llm/router.py`). Стадия зовёт роутер и о его
+#: внутреннем повторе иначе не узнаёт вовсе: наружу возвращается обычный
+#: разобранный ответ, хотя вход оплачен второй раз целиком.
+_LIMIT_RETRY_MARKER = "ответ обрезан по лимиту токенов"
+
+
+class _TokenRetryCounter(logging.Handler):
+    """Счётчик повторов роутера по нехватке лимита за время одной стадии.
+
+    Слушает журнал роутера, а не подменяет его вызов: контракт `llm/` — общий,
+    и правка ради измерителя одной стадии стоила бы дороже, чем даёт. Связь с
+    формулировкой роутера закреплена тестом, который проходит настоящий путь
+    повтора (`tests/test_stages.py`), — смена текста уронит его, а не спрячется
+    вечным нулём.
+
+    Записи чужих стадий не в счёт: имя стадии — первый аргумент записи. Стадии
+    делят один роутер, и чужой повтор в своём счёте — это измеритель, который
+    показывает не свою работу.
+    """
+
+    def __init__(self, stage: str) -> None:
+        super().__init__(level=logging.WARNING)
+        self._stage = stage
+        self.count = 0
+
+    def emit(self, record: logging.LogRecord) -> None:
+        args = record.args if isinstance(record.args, tuple) else ()
+        if args[:1] == (self._stage,) and _LIMIT_RETRY_MARKER in str(record.msg):
+            self.count += 1
+
+
 async def score_candidates(
     router: LLMRouter,
     brief: Brief,
@@ -523,77 +556,102 @@ async def score_candidates(
     """
 
     scored: list[ScoredCandidate] = []
-    for start in range(0, len(candidates), batch_size):
-        chunk = candidates[start : start + batch_size]
-        listing = candidates_listing(chunk, citations)
-        try:
-            batch = await router.complete_json(
-                "scorer",
-                [
-                    Message(role="system", content=load_prompt("scorer")),
-                    Message(
-                        role="user",
-                        content=(
-                            f"Задача бизнеса:\n{brief.task_summary}\n"
-                            f"Отрасль: {brief.industry}\nОграничения: {'; '.join(brief.constraints) or 'не заданы'}\n\n"
-                            f"{owner_answers_block(brief)}"
-                            f"Кандидаты ({len(chunk)} шт.):\n{listing}\n\n"
-                            f"Верни ровно {len(chunk)} оценок, ссылаясь на кандидатов "
-                            f"номерами от 0 до {len(chunk) - 1}."
+    batches = 0
+    started_at = time.monotonic()
+    retries = _TokenRetryCounter("scorer")
+    router_log = logging.getLogger(LLMRouter.__module__)
+    router_log.addHandler(retries)
+    try:
+        for start in range(0, len(candidates), batch_size):
+            batches += 1
+            chunk = candidates[start : start + batch_size]
+            listing = candidates_listing(chunk, citations)
+            try:
+                batch = await router.complete_json(
+                    "scorer",
+                    [
+                        Message(role="system", content=load_prompt("scorer")),
+                        Message(
+                            role="user",
+                            content=(
+                                f"Задача бизнеса:\n{brief.task_summary}\n"
+                                f"Отрасль: {brief.industry}\n"
+                                f"Ограничения: {'; '.join(brief.constraints) or 'не заданы'}\n\n"
+                                f"{owner_answers_block(brief)}"
+                                f"Кандидаты ({len(chunk)} шт.):\n{listing}\n\n"
+                                f"Верни ровно {len(chunk)} оценок, ссылаясь на кандидатов "
+                                f"номерами от 0 до {len(chunk) - 1}."
+                            ),
                         ),
-                    ),
-                ],
-                ScoreBatch,
-                # Т-13: на 4000 рассуждающая модель не доходила до ответа —
-                # лимит целиком уходил в reasoning_content, `content` приходил
-                # пустым, и КАЖДЫЙ батч скатывался в нейтральные оценки, то
-                # есть ранжирование умирало молча, оплаченное полностью.
-                # Расчёт. Худший ответ на батч из 10 кандидатов (пять оценок и
-                # `notes` до 160 знаков на каждого) — 3 320 знаков, ≈1 660
-                # токенов при консервативных двух знаках на токен. Остальное —
-                # запас на рассуждение: на 4000 оно обрывалось, не дойдя до
-                # ответа, значит одних рассуждений здесь больше 4 000 токенов.
-                # 8000 = 1 660 на ответ плюс ≈6 300 на рассуждение, вровень с
-                # планом поиска: стадия взвешивает 10 кандидатов по пяти
-                # якорным шкалам — 50 суждений за вызов, самая тяжёлая по
-                # рассуждению стадия конвейера.
-                # Щедрость здесь бесплатна: `max_tokens` — потолок, а не счёт,
-                # несгенерированные токены не оплачиваются. Нехватка, наоборот,
-                # стоит повторного запроса целиком со всем входом.
-                max_tokens=8000,
-            )
-        except CostLimitExceededError:
-            # Стоп-кран (РЕШ-45): исчерпанный лимит — не отказ модели, а
-            # команда «стоп тратить». Нейтральные оценки платили бы дальше на
-            # следующих батчах, тихо продолжая расходовать при исчерпанном
-            # лимите — это и есть скрытая деградация, которую стоп-кран
-            # обязан пресекать.
-            raise
-        except Exception as exc:
-            log.warning("скоринг батча не удался (%s), беру нейтральные оценки", exc)
-            scored.extend(_neutral_scores(chunk))
-            continue
-
-        by_index = {item.index: item for item in batch.scores}
-        for position, candidate in enumerate(chunk):
-            score = by_index.get(position)
-            if score is None:
-                # Модель потеряла кандидата — не выбрасываем его, а ставим
-                # нейтральную оценку: пусть решает отбор, а не пропуск.
-                log.info("скоринг пропустил кандидата %s, ставлю нейтральную оценку", candidate.title[:60])
-                scored.extend(_neutral_scores([candidate]))
-                continue
-            scored.append(
-                ScoredCandidate(
-                    candidate=candidate,
-                    relevance=score.relevance,
-                    maturity=score.maturity,
-                    accessibility=score.accessibility,
-                    freshness=score.freshness,
-                    completeness=score.completeness,
-                    notes=score.notes,
+                    ],
+                    ScoreBatch,
+                    # Т-13: на 4000 рассуждающая модель не доходила до ответа —
+                    # лимит целиком уходил в reasoning_content, `content`
+                    # приходил пустым, и КАЖДЫЙ батч скатывался в нейтральные
+                    # оценки, то есть ранжирование умирало молча, оплаченное
+                    # полностью. Расчёт. Худший ответ на батч из 10 кандидатов
+                    # (пять оценок и `notes` до 160 знаков на каждого) — 3 320
+                    # знаков, ≈1 660 токенов при консервативных двух знаках на
+                    # токен. Остальное — запас на рассуждение: стадия взвешивает
+                    # 10 кандидатов по пяти якорным шкалам, 50 суждений за
+                    # вызов, самая тяжёлая по рассуждению стадия конвейера.
+                    # Т-26: 8000 оказались впритык. На воротах Э2-А часть батчей
+                    # бралась со ВТОРОЙ попытки — роутер видел обрыв JSON,
+                    # удваивал лимит и переспрашивал заново, со всем входом.
+                    # Повтор перестал быть страховкой и стал штатным путём, а
+                    # прогон вырос до 25–30 минут; второй проход (РЕШ-81) удвоил
+                    # бы и это. 16000 — тот самый удвоенный лимит, на котором
+                    # ответ доходил, только запрошенный сразу.
+                    # Щедрость здесь бесплатна: `max_tokens` — потолок, а не
+                    # счёт, несгенерированные токены не оплачиваются. Нехватка,
+                    # наоборот, стоит повторного запроса целиком со всем входом.
+                    max_tokens=16000,
                 )
-            )
+            except CostLimitExceededError:
+                # Стоп-кран (РЕШ-45): исчерпанный лимит — не отказ модели, а
+                # команда «стоп тратить». Нейтральные оценки платили бы дальше на
+                # следующих батчах, тихо продолжая расходовать при исчерпанном
+                # лимите — это и есть скрытая деградация, которую стоп-кран
+                # обязан пресекать.
+                raise
+            except Exception as exc:
+                log.warning("скоринг батча не удался (%s), беру нейтральные оценки", exc)
+                scored.extend(_neutral_scores(chunk))
+                continue
+
+            by_index = {item.index: item for item in batch.scores}
+            for position, candidate in enumerate(chunk):
+                score = by_index.get(position)
+                if score is None:
+                    # Модель потеряла кандидата — не выбрасываем его, а ставим
+                    # нейтральную оценку: пусть решает отбор, а не пропуск.
+                    log.info("скоринг пропустил кандидата %s, ставлю нейтральную оценку", candidate.title[:60])
+                    scored.extend(_neutral_scores([candidate]))
+                    continue
+                scored.append(
+                    ScoredCandidate(
+                        candidate=candidate,
+                        relevance=score.relevance,
+                        maturity=score.maturity,
+                        accessibility=score.accessibility,
+                        freshness=score.freshness,
+                        completeness=score.completeness,
+                        notes=score.notes,
+                    )
+                )
+    finally:
+        router_log.removeHandler(retries)
+        # Печатается ВСЕГДА: и при нуле повторов, и при пустом входе, и когда
+        # стадию оборвал стоп-кран. Молчание сделало бы «повторов не стало»
+        # неотличимым от «код до счётчика не дошёл» — тот же урок, ради
+        # которого всегда печатается строка калибровки. Время стадии здесь же:
+        # длительность прогона — то, ради чего лимит и поднимали.
+        log.info(
+            "скоринг: батчей %s, повторов по лимиту %s, время стадии %.1f с",
+            batches,
+            retries.count,
+            time.monotonic() - started_at,
+        )
     return scored
 
 
