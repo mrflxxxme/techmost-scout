@@ -80,6 +80,36 @@ def test_типы_промпта_подмножество_source_type():
     assert not unknown, f"planner.md разрешает неизвестные типы: {sorted(unknown)}"
 
 
+def test_патентный_запрос_один_и_на_русском():
+    """Правило 2 обязано задавать по `patent` ровно одну русскую формулировку.
+
+    Тип разрешён ради рабочего патентного источника, но цена прогона не должна
+    вырасти: одна формулировка — один дополнительный запрос. Английская
+    формулировка в патентном поиске по РФ бесполезна — база ищет по русскому
+    тексту, поэтому язык задан жёстко, а не оставлен на усмотрение модели.
+    """
+    text = load_prompt("planner")
+    rule_2 = re.search(r"^2\.\s.*?(?=^\d+\.\s)", text, re.MULTILINE | re.DOTALL)
+    assert rule_2, "planner.md: не найдено правило 2 про число формулировок"
+    body = rule_2.group(0)
+    assert "`patent`" in body, "planner.md: правило 2 не задаёт число формулировок на `patent`"
+    assert 'lang: "ru"' in body, "planner.md: правило 2 не требует русского языка для `patent`"
+    assert "от 6 до 9" in body, "planner.md: правило 2 не обновило общий объём плана под патентный запрос"
+
+
+def test_патент_достижим_обоими_патентными_адаптерами():
+    """Разрешён ТИП, а не источник: под `patent` обязаны подходить оба патентных
+    адаптера — `rospatent` и `patents_view` (Т-9), независимо от того, какой из
+    них уже реализован."""
+    prompt_types = _planner_allowed_types()
+    for name in ("rospatent", "patents_view"):
+        adapter_cls = ADAPTERS[name]
+        adapter_types = {source_type.value for source_type in adapter_cls.source_types}
+        assert adapter_types & prompt_types, (
+            f"патентный адаптер {name} ({sorted(adapter_types)}) не покрыт типами промпта {sorted(prompt_types)}"
+        )
+
+
 def test_версия_planner_совпадает_с_changelog():
     """Метка версии planner.md обязана совпадать с версией самой свежей записи
     CHANGELOG.md, где этот файл упомянут (та же проверка, что для card_author и
