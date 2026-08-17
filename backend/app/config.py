@@ -70,9 +70,13 @@ class Settings(BaseSettings):
     # ответ на середине и стадия уходит на резерв. Поэтому бесплатный тариф
     # используем там, где он работает, остальное считает DeepSeek: при
     # измеренных 3–5 ₽ на запрос экономить на этом нечего.
+    # `replan` (Т-21, РЕШ-81) идёт туда же, куда `planner`: это та же работа —
+    # длинный структурированный JSON плана поиска, — а на ней GigaChat-2 Lite
+    # обрывает ответ. Без явного маршрута стадия ушла бы по общему резерву,
+    # который начинается как раз с gigachat.
     llm_stage_routes: str = Field(
         default=(
-            "intake:gigachat,extractor:gigachat,planner:deepseek,scorer:deepseek,"
+            "intake:gigachat,extractor:gigachat,planner:deepseek,replan:deepseek,scorer:deepseek,"
             "card_author:deepseek,verifier:deepseek,summary:deepseek"
         )
     )
@@ -127,6 +131,20 @@ class Settings(BaseSettings):
     # Значение подбирается по журналу калибровки на живом прогоне, а не
     # угадывается: сохранённых оценок прошлых прогонов не существует.
     relevance_min: int = Field(default=0, ge=0, le=10, description="Порог relevance для отбора; 0 — отсечка выключена")
+
+    # Условный второй проход поиска (РЕШ-81, Т-21): если максимум `relevance` по
+    # оценкам МОДЕЛИ первой выдачи строго ниже этого порога, система признаёт
+    # выдачу мимо задачи, перестраивает план и ищет второй раз. По умолчанию 0 —
+    # проход выключен: при нулевом пороге ни один максимум не окажется строго
+    # ниже. Значение подбирается на живом прогоне (Т-29) тем же способом, каким
+    # подбирался `RELEVANCE_MIN`, а не угадывается здесь: цена ошибки — лишний
+    # платный проход на каждом прогоне.
+    second_pass_relevance_max: int = Field(
+        default=0,
+        ge=0,
+        le=10,
+        description="Порог включения второго прохода поиска; 0 — второй проход выключен",
+    )
 
     @field_validator("gigachat_scope")
     @classmethod

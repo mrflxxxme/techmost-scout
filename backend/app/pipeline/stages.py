@@ -695,15 +695,30 @@ def _neutral_scores(candidates: list[Candidate]) -> list[NeutralScoredCandidate]
     ]
 
 
-def _has_neutral_score(item: ScoredCandidate) -> bool:
+def has_neutral_score(item: ScoredCandidate) -> bool:
     """Оценки проставлены кодом после отказа скоринга, а не получены от модели.
 
     Основной признак — тип. Сравнение с `NEUTRAL_SCORE_NOTE` оставлено запасным
     путём: `ScoredCandidate` собирают не только в `_neutral_scores`, и кандидат,
     восстановленный из обычной модели с той же пометкой (`model_validate`,
     фикстура теста), обязан остаться защищённым от отсечки.
+
+    Имя публичное, потому что признак спрашивают снаружи модуля: `orchestrator`
+    ставит по нему пометку нейтральной оценки в таблице `candidates` (РЕШ-84).
+    До Т-21 он обращался к приватному `_has_neutral_score` — единственное во
+    всём `backend/app` обращение к приватному имени чужого модуля, то есть
+    контракт, о котором знали только двое.
     """
     return isinstance(item, NeutralScoredCandidate) or item.notes.strip() == NEUTRAL_SCORE_NOTE
+
+
+def _has_neutral_score(item: ScoredCandidate) -> bool:
+    """Прежнее приватное имя — тонкая обёртка над `has_neutral_score`.
+
+    Оставлено ради вызовов внутри модуля, которых много; поведение целиком
+    задаётся публичной функцией, второй копии знания здесь нет.
+    """
+    return has_neutral_score(item)
 
 
 def _cut_by_relevance(scored: list[ScoredCandidate], threshold: int) -> int:
@@ -761,6 +776,118 @@ def log_relevance_calibration(
         limit,
         picked_below,
         sum(1 for item in scored if _has_neutral_score(item)),
+    )
+
+
+# ── 4а. Условный второй проход поиска (РЕШ-81) ──────────────────────────────
+#: Дословные строки решения о втором проходе. Печатается ВСЕГДА ровно одна из
+#: двух — в том числе при выключенном пороге. Молчание сделало бы «проход не
+#: сработал» неотличимым от «код до проверки не дошёл»: тот же урок, ради
+#: которого всегда печатается строка калибровки `log_relevance_calibration`.
+REPLAN_ENTER_LOG = "второй проход: максимум relevance %s ниже порога %s — иду повторно"
+REPLAN_SKIP_LOG = "второй проход не нужен: максимум relevance %s не ниже порога %s"
+
+#: Что встаёт в строку вместо максимума, когда оценок модели нет вовсе (все
+#: батчи скоринга отказали). Слово вместо числа — чтобы разбор прогона не читал
+#: отсутствие измерения как измеренный ноль.
+NO_MODEL_SCORES_LABEL = "нет оценок модели"
+
+
+def max_model_relevance(scored: list[ScoredCandidate]) -> int | None:
+    """Максимум `relevance` по оценкам МОДЕЛИ; `None`, если их нет ни одной.
+
+    Нейтральные оценки в максимум не входят (`_model_relevance`): они равны
+    ровно пятёрке, и отказавший батч на слабой выдаче нарисовал бы максимум 5
+    там, где модель не поставила выше четырёх, — то есть погасил бы второй
+    проход ровно на той задаче, ради которой он затеян (агропром, максимум 4).
+    """
+    values = _model_relevance(scored)
+    return max(values) if values else None
+
+
+def needs_second_pass(scored: list[ScoredCandidate], *, threshold: int) -> bool:
+    """Нужен ли второй проход поиска, и запись об этом в журнал (РЕШ-81).
+
+    Условие входа — максимум `relevance` по оценкам модели **строго ниже**
+    порога. Строго, а не «не выше»: порог здесь — граница годной выдачи, и
+    выдача, дотянувшая до неё, годной уже считается. При пороге 0 (умолчание,
+    проход выключен) условие не выполняется ни при каком максимуме.
+
+    Оценок модели нет вовсе — проход не запускается: платить за второй заход
+    можно по измеренному промаху, а не по отсутствию измерения.
+    """
+    top = max_model_relevance(scored)
+    if top is not None and top < threshold:
+        log.info(REPLAN_ENTER_LOG, top, threshold)
+        return True
+    log.info(REPLAN_SKIP_LOG, NO_MODEL_SCORES_LABEL if top is None else top, threshold)
+    return False
+
+
+def plan_queries_listing(plan: SearchPlan) -> str:
+    """Формулировки плана строками — вход стадии `replan`.
+
+    Модель обязана видеть, что уже спрашивали: без этого «уточнённый» план
+    получается пересказом прежнего, и второй проход опрашивает источники теми
+    же словами за те же деньги.
+    """
+    lines = [f"— [{query.source_type.value}/{query.lang}] {query.text}" for query in plan.queries]
+    return "\n".join(lines) or "формулировок не было"
+
+
+#: Сколько кандидатов первой выдачи показывать стадии `replan`. Прогон приносит
+#: до сотни, и весь список раздул бы вход ради хвоста с одинаково низкими
+#: оценками: для вывода «искали не там» хватает верхушки.
+_REPLAN_LISTING_LIMIT = 40
+
+
+def first_pass_listing(scored: list[ScoredCandidate], *, limit: int = _REPLAN_LISTING_LIMIT) -> str:
+    """Первая выдача для стадии `replan`: оценка, тип источника, заголовок, организация.
+
+    Ни ссылок, ни фрагментов: стадия не сверяет утверждения, а называет, чего не
+    нашли, и лишний текст тут только съедает лимит. Кандидаты идут по убыванию
+    `relevance` — промах виднее всего по верхушке списка.
+
+    Нейтральные оценки помечены словами, а не пятёркой (`has_neutral_score`):
+    показать модели поставленное кодом число как её собственное суждение значит
+    соврать ей о качестве выдачи.
+    """
+    ranked = sorted(scored, key=lambda item: item.relevance, reverse=True)[:limit]
+    lines = []
+    for position, item in enumerate(ranked):
+        mark = "оценка не получена" if has_neutral_score(item) else f"relevance {item.relevance}"
+        org = item.candidate.org or "организация не указана"
+        lines.append(f"[{position}] {mark} | {item.candidate.source_type.value} | {item.candidate.title[:160]} | {org}")
+    return "\n".join(lines) or "первая выдача пуста"
+
+
+async def replan_search(router: LLMRouter, brief: Brief, plan: SearchPlan, scored: list[ScoredCandidate]) -> SearchPlan:
+    """Новый план поиска по итогам слабой первой выдачи (РЕШ-81).
+
+    Модель получает бриф, прежние формулировки и верхушку первой выдачи с
+    оценками, а возвращает ТОЛЬКО новые формулировки той же схемы `SearchPlan`:
+    переписывать вход в ответ её не просят (грабля §0.1 п. 2 SPEC) — на
+    кандидатов она ссылается номерами списка.
+    """
+    return await router.complete_json(
+        "replan",
+        [
+            Message(
+                role="system",
+                content=render_prompt(
+                    "replanner",
+                    BRIEF_JSON=brief.model_dump_json(indent=2),
+                    PREVIOUS_QUERIES=plan_queries_listing(plan),
+                    FIRST_PASS_RESULTS=first_pass_listing(scored),
+                ),
+            ),
+            Message(role="user", content=_GO),
+        ],
+        SearchPlan,
+        # Тот же расчёт, что у `plan_search`: ответ — план до двенадцати
+        # формулировок с обоснованием каждой, и стадии предстоит рассуждение о
+        # промахе первой выдачи вдобавок к нему.
+        max_tokens=8000,
     )
 
 
