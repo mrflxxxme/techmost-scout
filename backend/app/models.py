@@ -94,12 +94,24 @@ class SearchPlan(Base):
 
 
 class Candidate(Base):
-    """Найденный кандидат до превращения в карточку."""
+    """Найденный кандидат до превращения в карточку.
+
+    Строки пишутся с Т-20 (РЕШ-84): до неё оценки скоринга жили только в строке
+    журнала калибровки, и числовой критерий приёмки подэтапа (РЕШ-86 — «максимум
+    `relevance` вырос с 4 до ≥6, число кандидатов не ниже порога выросло с 3»)
+    подтвердить было нечем.
+    """
 
     __tablename__ = "candidates"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), index=True)
+    #: 1 — первый проход поиска, 2 — второй (условный второй проход, РЕШ-81).
+    #: Колонка заведена сразу, хотя пишется пока только единица: `init_db` — это
+    #: `create_all`, а он не добавляет колонки в уже существующую таблицу, и
+    #: вторая правка схемы обошлась бы ручным переносом базы (грабля Э2-А). Тем
+    #: же способом и по той же причине Т-19 завела `search_plans.pass_no`.
+    pass_no: Mapped[int] = mapped_column(Integer, default=1, index=True)
     source_type: Mapped[str] = mapped_column(String(32))
     provider: Mapped[str] = mapped_column(String(64))
     title: Mapped[str] = mapped_column(Text)
@@ -110,6 +122,10 @@ class Candidate(Base):
     snippet: Mapped[str] = mapped_column(Text, default="")
     raw_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     dedup_key: Mapped[str] = mapped_column(String(512), index=True)
+    #: Все пять оценок, взвешенная сумма `total` и признак `neutral` — оценку
+    #: поставил код после отказа батча, а не модель (`app.metrics.score_payload`).
+    #: Без признака измеритель «доля `relevance` ≥ 4» считал бы следы отказов за
+    #: результат: нейтральная оценка — ровно пятёрка по всем шкалам.
     score: Mapped[dict] = mapped_column(JSON, default=dict)
     # found → deduped → selected → rejected
     status: Mapped[str] = mapped_column(String(32), default="found")

@@ -1132,7 +1132,9 @@ async def test_журнал_стадии_поиска_несёт_трату_и_�
     stage_log: list[StageRecord] = []
     async with httpx.AsyncClient() as client:
         pipeline = ScoutPipeline(settings=settings, router=router, adapters=[_FakeWebAdapter(client)])
-        await pipeline._run_stages(brief, 1, stage_log)
+        # Журналы плана и кандидатов обязательны (РЕШ-89): тесту нужен только
+        # журнал стадий, но необязательная ветка переживала бы мутацию молча.
+        await pipeline._run_stages(brief, 1, stage_log, [], [])
 
     record = next(item for item in stage_log if item.stage == "search")
     assert record.provider == "gigachat", "платный вызов стадии extractor не отражён в журнале"
@@ -1165,7 +1167,9 @@ async def test_журнал_стадии_поиска_несёт_фактиче�
     stage_log: list[StageRecord] = []
     async with httpx.AsyncClient() as client:
         pipeline = ScoutPipeline(settings=settings, router=router, adapters=[_FakeWebAdapter(client)])
-        await pipeline._run_stages(brief, 1, stage_log)
+        # Журналы плана и кандидатов обязательны (РЕШ-89): тесту нужен только
+        # журнал стадий, но необязательная ветка переживала бы мутацию молча.
+        await pipeline._run_stages(brief, 1, stage_log, [], [])
 
     record = next(item for item in stage_log if item.stage == "search")
     цена_вызова = 0.01

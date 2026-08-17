@@ -23,9 +23,10 @@ from pydantic import ValidationError
 
 from app.config import Settings, get_settings
 from app.llm import CostLimitExceededError, LLMRouter
+from app.metrics import score_payload
 from app.pipeline import stages
-from app.pipeline.persistence import PlanRecord, SessionFactory, StageRecord, persist_run
-from app.schemas import Brief, Candidate, Report, SearchPlan, SolutionCard
+from app.pipeline.persistence import CandidateRecord, PlanRecord, SessionFactory, StageRecord, persist_run
+from app.schemas import Brief, Candidate, Report, ScoredCandidate, SearchPlan, SolutionCard
 from app.search import build_adapters, normalize_doi
 from app.search.base import SearchAdapter
 
@@ -126,6 +127,33 @@ def _apply_patch(candidate: Candidate, patch: dict) -> tuple[Candidate, list[str
             continue
         accepted[field_name] = value
     return result, dropped
+
+
+def candidate_records(
+    scored: list[ScoredCandidate], selected: list[ScoredCandidate], *, pass_no: int = 1
+) -> list[CandidateRecord]:
+    """Строки таблицы `candidates` по итогам скоринга и отбора (РЕШ-84).
+
+    Судьба кандидата берётся по ключу склейки, а не по совпадению объектов: до
+    записи список успевает пройти сортировку и потолок на источник, и сравнение
+    по `id()` держалось бы на том, что отбор не пересобирает элементы.
+
+    Признак нейтральной оценки спрашивается у стадии скоринга
+    (`stages._has_neutral_score`), а не вычисляется здесь заново: вторая копия
+    этого знания молча разошлась бы с первой, и в базе следы отказа батча стали
+    бы неотличимы от оценок модели — ровно то, что ловит измеритель
+    `app.metrics`.
+    """
+    picked = {item.candidate.dedup_key() for item in selected}
+    return [
+        CandidateRecord(
+            candidate=item.candidate,
+            score=score_payload(item, neutral=stages._has_neutral_score(item)),
+            status="selected" if item.candidate.dedup_key() in picked else "rejected",
+            pass_no=pass_no,
+        )
+        for item in scored
+    ]
 
 
 @dataclass(slots=True)
@@ -492,8 +520,12 @@ class ScoutPipeline:
         #: Отдельным списком, а не полем отчёта: клиенту план не показывают,
         #: он нужен для повторяемого прогона и сравнения выдачи.
         plan_log: list[PlanRecord] = []
+        #: Кандидаты прогона с оценками (РЕШ-84) — тем же способом и по той же
+        #: причине, что и планы: без сохранённых оценок числовой критерий
+        #: приёмки (РЕШ-86) не с чем сравнивать.
+        candidate_log: list[CandidateRecord] = []
         try:
-            report = await self._run_stages(brief, request_id, stage_log, plan_log)
+            report = await self._run_stages(brief, request_id, stage_log, plan_log, candidate_log)
         except Exception as exc:
             await persist_run(
                 self._session_factory,
@@ -503,6 +535,7 @@ class ScoutPipeline:
                 cards=[],
                 stages=stage_log,
                 plans=plan_log,
+                candidates=candidate_log,
                 error=str(exc),
             )
             raise
@@ -518,6 +551,7 @@ class ScoutPipeline:
             cards=report.cards,
             stages=stage_log,
             plans=plan_log,
+            candidates=candidate_log,
             error=None,
         )
         if persisted_id is not None:
@@ -532,14 +566,23 @@ class ScoutPipeline:
         return report
 
     async def _run_stages(
-        self, brief: Brief, request_id: int, stage_log: list[StageRecord], plan_log: list[PlanRecord] | None = None
+        self,
+        brief: Brief,
+        request_id: int,
+        stage_log: list[StageRecord],
+        plan_log: list[PlanRecord],
+        candidate_log: list[CandidateRecord],
     ) -> Report:
-        """Прежнее тело `run` — прогон стадий, теперь ещё собирает `stage_log`
-        и планы проходов в `plan_log` (РЕШ-83).
+        """Прежнее тело `run` — прогон стадий, теперь ещё собирает `stage_log`,
+        планы проходов в `plan_log` (РЕШ-83) и кандидатов с оценками в
+        `candidate_log` (РЕШ-84).
 
-        `plan_log` необязателен: стадии прогона он не меняет, а вызовам из
-        тестов, которым нужен только журнал стадий, незачем заводить пустой
-        список ради записи в БД.
+        Оба журнала **обязательны** (РЕШ-89). Пока `plan_log` был необязательным,
+        ветка «списка не передали» переживала мутацию молча: следующий
+        вызывающий — второй проход поиска (Т-21) — потерял бы ровно ту запись,
+        ради которой затеян РЕШ-83, и ни один тест этого не заметил бы. Вызовам
+        из тестов, которым нужен только журнал стадий, дешевле передать пустой
+        список, чем оставлять в коде необязательную ветку.
         """
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
@@ -566,8 +609,7 @@ class ScoutPipeline:
         # План прогона сохраняется независимо от того, построен он моделью или
         # взят из базы: прогон по чужому плану — тоже прогон, и восстановить
         # его формулировки потом больше неоткуда.
-        if plan_log is not None:
-            plan_log.append(PlanRecord(plan=plan, pass_no=1))
+        plan_log.append(PlanRecord(plan=plan, pass_no=1))
         await self._notify("planner", f"Формулировок в плане: {len(plan.queries)}", 0.1)
 
         await self._notify("search", "Опрашиваю источники", 0.15)
@@ -624,6 +666,10 @@ class ScoutPipeline:
         )
         target = self._settings.target_cards
         selected = stages.select_top(scored, limit=target * 2)
+        # Оценки уезжают в БД сразу после отбора, а не в конце прогона: отказ
+        # сборки карточек или сводки не должен уносить с собой единственное
+        # числовое свидетельство того, что нашёл и как оценил этот прогон.
+        candidate_log.extend(candidate_records(scored, selected))
         groups = stages.group_for_cards(selected, target=target)
         await self._notify("scorer", f"Отобрано вариантов для карточек: {len(groups)}", 0.6)
 
