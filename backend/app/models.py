@@ -38,6 +38,7 @@ class Request(Base):
 
     brief: Mapped[Brief | None] = relationship(back_populates="request", uselist=False, cascade="all, delete-orphan")
     candidates: Mapped[list[Candidate]] = relationship(back_populates="request", cascade="all, delete-orphan")
+    search_plans: Mapped[list[SearchPlan]] = relationship(back_populates="request", cascade="all, delete-orphan")
     cards: Mapped[list[SolutionCard]] = relationship(back_populates="request", cascade="all, delete-orphan")
     logs: Mapped[list[PipelineLog]] = relationship(back_populates="request", cascade="all, delete-orphan")
 
@@ -61,6 +62,35 @@ class Brief(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     request: Mapped[Request] = relationship(back_populates="brief")
+
+
+class SearchPlan(Base):
+    """План поиска одного прохода — из чего собрана вся выдача прогона (РЕШ-83).
+
+    Без сохранённого плана эффект правок поиска неотличим от разброса между
+    прогонами: модель строит план заново каждый раз, и один и тот же запрос
+    агропрома дал 92 и 72 кандидата в двух прогонах Э2-А. Сохранённый план
+    позволяет повторить прогон по тем же формулировкам и сравнивать выдачу, а
+    не удачу планировщика.
+    """
+
+    __tablename__ = "search_plans"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), index=True)
+    #: 1 — первый проход, 2 — второй (условный второй проход, РЕШ-81). Колонка
+    #: заведена сразу, хотя пишется пока только единица: `init_db` — это
+    #: `create_all`, а он не добавляет колонки в уже существующую таблицу, и
+    #: вторая правка схемы обошлась бы ручным переносом базы (грабля Э2-А).
+    pass_no: Mapped[int] = mapped_column(Integer, default=1, index=True)
+    #: Дамп `schemas.SearchPlan.model_dump(mode="json")` целиком, вместе с
+    #: ключом `queries`: план читается обратно той же схемой одним вызовом, без
+    #: собственного разбора полей — иначе расхождение схемы и разбора всплыло бы
+    #: только на платном прогоне.
+    queries: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    request: Mapped[Request] = relationship(back_populates="search_plans")
 
 
 class Candidate(Base):

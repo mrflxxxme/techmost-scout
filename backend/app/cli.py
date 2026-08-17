@@ -21,7 +21,7 @@ from rich.table import Table
 
 from app.config import get_settings
 from app.llm import CostLimitExceededError, LLMRouter
-from app.schemas import Brief, MaturityStage, OwnerAnswer
+from app.schemas import Brief, MaturityStage, OwnerAnswer, SearchPlan
 
 if TYPE_CHECKING:  # только для аннотаций: тяжёлые модули грузятся лениво, внутри команд
     from app.pipeline.persistence import SessionFactory, StageRecord
@@ -273,14 +273,24 @@ def run(
     maturity: str = typer.Option(None, "--maturity", "-m", help="lab|prototype|pilot|series"),
     out: Path = typer.Option(None, "--out", "-o", help="Куда положить отчёт (по умолчанию out/)"),
     interactive: bool = typer.Option(True, "--interactive/--no-interactive", help="Задавать уточняющие вопросы"),
+    plan_id: int = typer.Option(
+        None, "--plan-id", help="Прогнать по сохранённому плану поиска (номер строки search_plans), не строя новый"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Прогнать запрос через пайплайн и сохранить отчёт в markdown."""
     _setup_logging(verbose)
-    asyncio.run(_run(task, industry, maturity, out, interactive))
+    asyncio.run(_run(task, industry, maturity, out, interactive, plan_id))
 
 
-async def _run(task: str, industry: str | None, maturity: str | None, out: Path | None, interactive: bool) -> None:
+async def _run(
+    task: str,
+    industry: str | None,
+    maturity: str | None,
+    out: Path | None,
+    interactive: bool,
+    plan_id: int | None = None,
+) -> None:
     from app.db import init_db, session_scope
     from app.pipeline import ScoutPipeline
     from app.pipeline.stages import brief_from_raw_text, neutralize_placeholders, refine_brief, run_intake
@@ -300,6 +310,25 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
     except Exception:
         log.warning("не удалось подготовить БД, прогон продолжается без записи", exc_info=True)
         db_session_factory = None
+
+    # Прогон по сохранённому плану (РЕШ-83) — до интейка, то есть до первого
+    # платного вызова: неверный номер обязан стоить ноль рублей и оборвать
+    # прогон сразу, а не на середине, когда интейк уже оплачен. План читается
+    # и валидируется схемой `SearchPlan` здесь же — пайплайн получает готовую
+    # схему, а не номер строки.
+    preset_plan: SearchPlan | None = None
+    if plan_id is not None:
+        from app.pipeline.persistence import SearchPlanNotFoundError, load_search_plan
+
+        try:
+            preset_plan = await load_search_plan(db_session_factory, plan_id)
+        except SearchPlanNotFoundError as exc:
+            console.print(f"[red]Прогон не начат:[/red] {exc}")
+            raise typer.Exit(code=2) from exc
+        console.print(
+            f"[bold]План поиска взят из базы:[/bold] №{plan_id}, "
+            f"формулировок {len(preset_plan.queries)} — планировщик не вызывается"
+        )
 
     # Разбор текста нужен в обоих режимах: без него `constraints` брифа
     # остаются пустыми, а именно они дают карточкам сверку с техтребованиями
@@ -440,7 +469,13 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
     def show(stage: str, message: str, fraction: float) -> None:
         console.print(f"[dim]{int(fraction * 100):3d}%[/dim] [cyan]{stage:8s}[/cyan] {message}")
 
-    pipeline = ScoutPipeline(settings=settings, router=router, progress=show, session_factory=db_session_factory)
+    pipeline = ScoutPipeline(
+        settings=settings,
+        router=router,
+        progress=show,
+        session_factory=db_session_factory,
+        preset_plan=preset_plan,
+    )
     try:
         report = await pipeline.run(
             brief, raw_text=task, initial_stage_log=intake_stage_log, initial_caveats=intake_caveats
