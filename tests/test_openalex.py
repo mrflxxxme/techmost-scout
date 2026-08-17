@@ -16,28 +16,32 @@ from __future__ import annotations
 import io
 import logging
 import time
-from datetime import date
+from datetime import UTC, date, datetime
+from typing import ClassVar
 
 import httpx
 import pytest
 import respx
 from rich.console import Console
 
+import app.pipeline as pipeline_pkg
 from app import cli
 from app.cli import SECRET_CHECKS
 from app.llm import LLMRouter
 from app.pipeline import orchestrator, stages
 from app.pipeline.orchestrator import ScoutPipeline
 from app.pipeline.persistence import StageRecord
-from app.schemas import Candidate, ReportSummary, SearchPlan, SearchQuery, SourceType
-from app.search import ADAPTERS, STATUS_NO_KEY, STATUS_STUB, adapter_status, build_adapters
+from app.schemas import Brief, Candidate, IntakeResult, Report, ReportSummary, SearchPlan, SearchQuery, SourceType
+from app.search import ADAPTERS, REQUIRED_SETTINGS, STATUS_NO_KEY, STATUS_STUB, adapter_status, build_adapters
 from app.search.base import SearchAdapter, SearchError
 from app.search.crossref import CONTACT_EMAIL
 from app.search.openalex import (
     API_URL,
     BATCH_SIZE,
+    FREE_DAILY_USD,
     FRESHNESS_YEARS,
     MAX_SNIPPET,
+    USD_PER_SEARCH,
     OpenAlexAdapter,
     _abstract_from_inverted_index,
     normalize_doi,
@@ -1050,6 +1054,223 @@ def test_таблица_ключей_доктора_знает_про_роспа
     assert len(names) == 11
     assert "ROSPATENT_API_KEY" in names and "PATENTSVIEW_API_KEY" in names
     assert len(set(names)) == 11, "дубли в таблице ключей"
+
+
+# ── Правки пост-аудита (Т-18) ───────────────────────────────────────────────
+@respx.mock
+async def test_ключ_обогащения_уходит_в_заголовок_запроса():
+    """П-1 аудита: шов «ключ → обогащение» не был закреплён ничем.
+
+    Существующая проверка смотрела только, что ключ доехал до КОНСТРУКТОРА
+    (`._api_key == "k"`), а не что он уходит В ЗАПРОС. Мутация «удалить
+    заголовок `Authorization` из `_lookup`» переживала весь файл: обогащение
+    молча ходило бы анонимно, и заметить это было бы нечем до живого прогона.
+    """
+    route = respx.get(url__startswith=LOOKUP).mock(return_value=httpx.Response(200, json=_work()))
+
+    async with httpx.AsyncClient() as client:
+        await _adapter(client, api_key="test-key").enrich_by_doi([DOI])
+
+    assert route.calls[0].request.headers.get("Authorization") == "Bearer test-key"
+
+
+def test_платные_источники_реестра_согласованы_с_required_settings():
+    """П-2 аудита: гейт платных источников держится на согласии двух словарей.
+
+    В `build_adapters` источник выключается только тогда, когда `requires_key`
+    И непустой список настроек в `REQUIRED_SETTINGS` совпали. Нет записи в
+    `REQUIRED_SETTINGS` → `missing == []` → источник включается НЕЗАВИСИМО от
+    `requires_key`; именно поэтому мутация «вернуть `requires_key = True` у
+    OpenAlex» переживала весь набор. Согласие пары — не косметика: рассогласование
+    в одну сторону включает платный источник без ключа, в другую — выключает
+    бесплатный.
+    """
+    paid = {name for name, cls in ADAPTERS.items() if cls.requires_key}
+
+    assert set(REQUIRED_SETTINGS) == paid, (
+        "рассогласование REQUIRED_SETTINGS и requires_key: "
+        f"без настроек {sorted(paid - set(REQUIRED_SETTINGS))}, "
+        f"лишние записи {sorted(set(REQUIRED_SETTINGS) - paid)}"
+    )
+    assert "openalex" not in paid, "поиск OpenAlex ключа не требует (РЕШ-71)"
+
+
+def test_горизонт_свежести_закреплён_числом():
+    """П-5 аудита: горизонт свежести проверялся выводом ожидаемой даты ИЗ САМОЙ
+    константы — самоссылка, проверяющая формат, а не решение. Мутация
+    `FRESHNESS_YEARS = 100` переживала весь набор, а прогон тихо начинал тащить
+    работы столетней давности."""
+    assert FRESHNESS_YEARS == 5
+    assert OpenAlexAdapter._from_publication_date() == f"{date.today().year - 5}-01-01"
+
+
+@respx.mock
+async def test_поисковые_запросы_считаются_и_остаток_нормы_запоминается():
+    """П-4 (решение владельца): поиск ключа не требует, но тарифицируется.
+
+    Живая анонимная проба вернула `X-RateLimit-Cost-USD: 0.001` при норме
+    `X-RateLimit-Limit-USD: 0.1` — сто запросов в сутки. Без счётчика прогон
+    незаметно выедает норму: в `Report.cost_rub` эти доллары не попадают (там
+    рубли моделей), и больше их не видит никто.
+    """
+    respx.get(url__startswith=API_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json=_search_payload(),
+            headers={"X-RateLimit-Remaining-USD": "0.099", "X-RateLimit-Remaining": "99"},
+        )
+    )
+
+    async with httpx.AsyncClient() as client:
+        adapter = _adapter(client)
+        await adapter.search(_query(), limit=5)
+        await adapter.search(_query(), limit=5)
+
+    assert adapter.search_queries_used == 2
+    assert adapter.search_cost_usd == pytest.approx(2 * USD_PER_SEARCH)
+    assert adapter.daily_remaining_usd == pytest.approx(0.099)
+    assert adapter.daily_remaining_calls == 99
+
+
+@respx.mock
+async def test_отказ_поиска_тоже_попадает_в_счётчик():
+    """Источник тарифицирует принятый запрос, а не удачный: 429 и 500 стоят
+    ровно столько же. Счётчик, растущий только на успехе, занижал бы расход
+    именно в тот прогон, когда источник и так капризничает."""
+    respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(429, json={"error": "слишком часто"}))
+
+    async with httpx.AsyncClient() as client:
+        adapter = _adapter(client)
+        with pytest.raises(SearchError):
+            await adapter.search(_query(), limit=5)
+
+    assert adapter.search_queries_used == 1
+
+
+@respx.mock
+async def test_остаток_нормы_без_заголовков_остаётся_неизвестным():
+    """Заголовков может не быть — прокси срезал, источник поменял схему.
+    Подставлять сюда расчётное значение нельзя: норма общая на все прогоны за
+    сутки, и вычитание своих запросов врало бы после второго запуска."""
+    respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(200, json=_search_payload()))
+
+    async with httpx.AsyncClient() as client:
+        adapter = _adapter(client)
+        await adapter.search(_query(), limit=5)
+
+    assert adapter.daily_remaining_usd is None
+    assert "остаток источник не сообщил" in adapter.search_usage_note()
+
+
+async def test_строка_счётчика_называет_платность_норму_и_остаток():
+    """Требование П-4 к формулировке: из строки обязано быть понятно, что
+    источник ПЛАТНЫЙ, что у него есть суточная норма и сколько её осталось.
+    Счётчик без оговорки про платность читается как объём работы — ровно так и
+    выглядел бесплатный lookup обогащения."""
+    async with httpx.AsyncClient() as client:
+        adapter = _adapter(client)
+        adapter.search_queries_used = 12
+        adapter.daily_remaining_usd = 0.088
+        adapter.daily_remaining_calls = 88
+
+        note = adapter.search_usage_note()
+
+    assert "платный" in note.lower(), "строка не говорит, что источник платный"
+    assert "суточная" in note and f"${FREE_DAILY_USD:.2f}" in note, "не названа суточная норма"
+    assert "осталось $0.088" in note and "88 запросов" in note, "не показан остаток нормы"
+    assert "12" in note and "$0.012" in note, "не показан расход этого прогона"
+
+
+class _CountingPipeline:
+    """Пайплайн-заглушка для `cli._run`: в источники и модели не ходит, но
+    отдаёт наружу тот же список адаптеров, что и настоящий прогон."""
+
+    adapters: ClassVar[list] = []
+
+    def __init__(self, **kwargs) -> None:
+        del kwargs
+
+    async def run(self, brief, **kwargs) -> Report:
+        return Report(
+            request_id=0,
+            brief=brief,
+            cards=[],
+            summary=ReportSummary(recommendation="тест: пайплайн подменён заглушкой"),
+            generated_at=datetime.now(UTC),
+        )
+
+    async def aclose(self) -> None:
+        pass
+
+
+async def _run_cli(monkeypatch, settings, fake_provider_factory, tmp_path, adapters: list) -> str:
+    """Прогнать `scout run` с подменённым пайплайном; вернуть напечатанное.
+
+    Ни сети, ни базы, ни моделей: подменены интейк, инициализация БД, роутер и
+    сам пайплайн. Настоящий здесь только конец `_run` — тот, что печатает
+    расход.
+    """
+
+    async def fake_init_db() -> None:
+        return None
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return IntakeResult(
+            questions=[],
+            draft_brief=Brief(industry="нефтепереработка", task_summary="Катализатор теряет активность."),
+        )
+
+    def fake_router(_settings):
+        return LLMRouter(settings=settings, providers={"gigachat": fake_provider_factory("gigachat")})
+
+    _CountingPipeline.adapters = adapters
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+    monkeypatch.setattr("app.db.init_db", fake_init_db)
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+    monkeypatch.setattr(cli, "LLMRouter", fake_router)
+    monkeypatch.setattr(pipeline_pkg, "ScoutPipeline", _CountingPipeline)
+    recorder = Console(file=io.StringIO(), width=200, record=True)
+    monkeypatch.setattr(cli, "console", recorder)
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False)
+    return recorder.export_text()
+
+
+async def test_счётчик_поиска_виден_оператору_в_конце_прогона(monkeypatch, settings, fake_provider_factory, tmp_path):
+    """Вторая половина П-4: счётчик, которого никто не печатает, ничем не
+    отличается от отсутствующего. Строка обязана стоять рядом со стоимостью
+    запроса — там, где оператор и смотрит расход."""
+    async with httpx.AsyncClient() as client:
+        adapter = _adapter(client)
+        adapter.search_queries_used = 3
+        adapter.daily_remaining_usd = 0.097
+        adapter.daily_remaining_calls = 97
+
+        text = await _run_cli(monkeypatch, settings, fake_provider_factory, tmp_path, [adapter])
+
+    assert "OpenAlex" in text and "платный поиск" in text, "расход платного поиска оператору не показан"
+    assert "запросов 3" in text and "осталось $0.097" in text
+
+
+async def test_источник_без_счётчика_ничего_не_печатает(monkeypatch, settings, fake_provider_factory, tmp_path):
+    """Обратная сторона утиной проверки: источник, который считать себя не
+    умеет, не обязан выдумывать строку и не роняет конец прогона."""
+    async with httpx.AsyncClient() as client:
+        text = await _run_cli(monkeypatch, settings, fake_provider_factory, tmp_path, [_OneHitAdapter(client)])
+
+    assert "Платные источники" not in text
+
+
+async def test_пайплайн_отдаёт_свои_источники_наружу(settings):
+    """Счётчику нужен путь от адаптера до CLI. До Т-18 его не было вовсе:
+    список источников жил приватным полем, и добраться до него можно было
+    только через `_adapters`."""
+    async with httpx.AsyncClient() as client:
+        adapter = _adapter(client)
+        pipeline = ScoutPipeline(settings=settings, router=LLMRouter(settings), adapters=[adapter])
+
+        assert pipeline.adapters == [adapter]
+        assert ScoutPipeline(settings=settings, router=LLMRouter(settings)).adapters == []
 
 
 def test_таблица_ключей_доктора_честна_про_закрытый_доступ_к_google():

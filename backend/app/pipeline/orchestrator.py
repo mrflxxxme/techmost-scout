@@ -194,6 +194,15 @@ class ScoutPipeline:
         log.info("подключено источников: %s", ", ".join(a.name for a in self._adapters))
         return self._adapters
 
+    @property
+    def adapters(self) -> list[SearchAdapter]:
+        """Источники этого прогона — для тех, кому нужны их счётчики после
+        прогона (Т-18: расход платного поиска OpenAlex печатается в конце
+        `scout run`). Пустой список означает «поиск ни разу не запускался»:
+        список собирается лениво, на первом обращении к источникам.
+        """
+        return list(self._adapters or [])
+
     async def aclose(self) -> None:
         if self._client is not None:
             await self._client.aclose()

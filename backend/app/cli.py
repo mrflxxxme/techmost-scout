@@ -469,6 +469,26 @@ async def _run(task: str, industry: str | None, maturity: str | None, out: Path 
         f"из них с кэшем префикса {router.cost.cached_calls} "
         f"(кэш считается только у DeepSeek; у остальных провайдеров всегда 0)"
     )
+    # Расход платных источников — отдельной строкой, а не слагаемым в
+    # `report.cost_rub` (Т-18): там рубли моделей, и смешение двух валют в
+    # одном поле хуже отсутствия счётчика. Строку собирает сам источник — он
+    # один знает свою цену, норму и остаток.
+    for note in _paid_source_notes(pipeline):
+        console.print(f"[bold]Платные источники:[/bold] {note}")
+
+
+def _paid_source_notes(pipeline: object) -> list[str]:
+    """Строки расхода тех источников, которые умеют его посчитать.
+
+    Утиная проверка, а не список имён: источник, научившийся считать себя,
+    начинает печататься сам, и ещё одна правка CLI для этого не нужна.
+    """
+    notes: list[str] = []
+    for adapter in getattr(pipeline, "adapters", []) or []:
+        note = getattr(adapter, "search_usage_note", None)
+        if callable(note):
+            notes.append(str(note()))
+    return notes
 
 
 # ── serve ───────────────────────────────────────────────────────────────────

@@ -30,9 +30,27 @@
     только при заполненном `OPENALEX_API_KEY`. С обоими флагами поиск был
     недостижим: `enrich_only` заставлял оркестратор пропускать источник, а
     `requires_key` не давал ему попасть в сборку вовсе. РЕШ-71 отменяет запрет,
-    поэтому `requires_key = False` (поиск бесплатен), а `enrich_only` снят.
+    поэтому `requires_key = False` (ключ поиску не нужен), а `enrich_only` снят.
     Ключ остался нужен обогащению — это проверяется внутри `enrich_by_doi`, и
     без ключа оно просто пропускается, не задевая поиск.
+
+ПОИСК КЛЮЧА НЕ ТРЕБУЕТ, НО ТАРИФИЦИРУЕТСЯ (Т-18)
+    Живая анонимная проба 17.08.2026 (без ключа, только `mailto`) ответила 200
+    и вернула тарифные заголовки: `X-RateLimit-Cost-USD: 0.001`,
+    `X-RateLimit-Limit-USD: 0.1`, `X-RateLimit-Remaining-USD: 0.099`. То есть
+    поисковый запрос стоит $0,001, а суточная бесплатная норма — $0,10, ровно
+    сто запросов. Это меняет не право искать (РЕШ-10 отменён), а обязанность
+    считать: расход обязан быть виден оператору, иначе прогон незаметно
+    выедает дневную норму. Счётчик ведётся в `search_queries_used`, остаток
+    берётся из заголовка ответа, а строку для оператора собирает
+    `search_usage_note()`.
+
+    В `Report.cost_rub` эти доллары НЕ подмешиваются: там рубли моделей, и
+    смешение двух валют в одном поле хуже отсутствия счётчика. Расход поиска —
+    отдельная строка.
+
+    Lookup обогащения (`_lookup`) к этому счётчику отношения не имеет: он
+    бесплатен и считается своим числом запросов внутри `enrich_by_doi`.
 
 ЧТО ЗАБИРАЕТСЯ ИЗ ОТВЕТА (задача Т-3, РЕШ-50)
     * аннотация (`abstract_inverted_index`) → `Candidate.snippet`;
@@ -60,6 +78,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from contextlib import suppress
 from datetime import date
 from typing import Any
 
@@ -79,6 +98,15 @@ USER_AGENT = f"TechMostScout/1.0 (mailto:{CONTACT_EMAIL})"
 #: Свежесть выдачи поиска. Пять лет — ровно та граница, на которой разведка
 #: проверила источник живьём (`from_publication_date:2021-01-01` в 2026 году).
 FRESHNESS_YEARS = 5
+#: Цена одного ПОИСКОВОГО запроса в долларах. Не оценка: заголовок
+#: `X-RateLimit-Cost-USD` живой анонимной пробы 17.08.2026 вернул ровно 0.001.
+USD_PER_SEARCH = 0.001
+#: Суточная бесплатная норма (`X-RateLimit-Limit-USD` той же пробы) — сто
+#: поисковых запросов в сутки. Ключ на неё не влияет, она считается по mailto.
+FREE_DAILY_USD = 0.1
+#: Заголовки ответа с остатком нормы: доллары и число запросов
+REMAINING_USD_HEADER = "X-RateLimit-Remaining-USD"
+REMAINING_CALLS_HEADER = "X-RateLimit-Remaining"
 #: Потолок `per-page` у OpenAlex
 MAX_PER_PAGE = 200
 #: select экономит трафик: без него на каждую работу приезжают десятки
@@ -145,6 +173,15 @@ class OpenAlexAdapter(SearchAdapter):
         #: возвращаемый словарь такой отказ не выражает никак, а прогон обязан
         #: оставить след (П-4, П-5 аудита). None — обход прошёл целиком.
         self.last_error: str | None = None
+        #: Сколько ПОИСКОВЫХ запросов ушло за жизнь адаптера. Поиск ключа не
+        #: требует, но тарифицируется ($0,001 за запрос при суточной норме
+        #: $0,10), поэтому расход обязан быть посчитан и показан оператору.
+        self.search_queries_used = 0
+        #: Остаток суточной нормы из заголовков последнего ответа. None —
+        #: источник его не сообщил (или поиска в этом прогоне не было вовсе):
+        #: подставлять сюда расчётное значение нельзя, это было бы выдумкой.
+        self.daily_remaining_usd: float | None = None
+        self.daily_remaining_calls: int | None = None
 
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
         """Найти работы по формулировке, отфильтровав их по языку и свежести.
@@ -189,17 +226,66 @@ class OpenAlexAdapter(SearchAdapter):
     async def _fetch_search(self, params: dict[str, str], text: str) -> dict | None:
         """GET к поиску OpenAlex. Отдельно от `_lookup`, чтобы правка поиска
         физически не могла задеть обогащение по DOI: у ролей разные адреса,
-        разные заголовки и разные условия отказа."""
+        разные заголовки и разные условия отказа.
+
+        Счётчик растёт сразу после того, как ответ получен, — до проверки кода
+        ответа: источник тарифицирует принятый запрос, а не удачный, и 429 с
+        500 стоят ровно столько же. Не выросшим счётчик остаётся только там,
+        где ответа не было вовсе (обрыв соединения, таймаут).
+        """
         await self._throttle()
         try:
             response = await self._client.get(
                 API_URL, params=params, headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
             )
+        except httpx.HTTPError as exc:
+            raise SearchError(f"openalex не ответил на поиск «{text}»: {exc}") from exc
+        self.search_queries_used += 1
+        self._remember_quota(response.headers)
+        try:
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
             raise SearchError(f"openalex не ответил на поиск «{text}»: {exc}") from exc
         return payload if isinstance(payload, dict) else None
+
+    def _remember_quota(self, headers: Any) -> None:
+        """Запомнить остаток суточной нормы из заголовков ответа.
+
+        Заголовков может не быть (прокси срезал, источник поменял схему) —
+        тогда прежнее значение не трогается и остаётся None: «не знаю» честнее
+        придуманного остатка.
+        """
+        with suppress(TypeError, ValueError):
+            self.daily_remaining_usd = float(headers.get(REMAINING_USD_HEADER))
+        with suppress(TypeError, ValueError):
+            self.daily_remaining_calls = int(headers.get(REMAINING_CALLS_HEADER))
+
+    @property
+    def search_cost_usd(self) -> float:
+        """Во сколько обошёлся поиск за этот прогон. Доллары, не рубли: в
+        `Report.cost_rub` они не подмешиваются (границы Т-18)."""
+        return round(self.search_queries_used * USD_PER_SEARCH, 4)
+
+    def search_usage_note(self) -> str:
+        """Строка расхода поиска для оператора в конце `scout run`.
+
+        Из неё обязано быть видно три вещи: источник платный, у него есть
+        суточная норма и сколько её осталось. Остаток берётся из заголовка
+        ответа, а не считается: норма общая на все прогоны за сутки, и
+        вычитание своих запросов из неё врало бы после второго запуска.
+        """
+        note = (
+            f"OpenAlex — платный поиск: запросов {self.search_queries_used}, "
+            f"${self.search_cost_usd:.3f} по ${USD_PER_SEARCH:.3f} за запрос; "
+            f"суточная бесплатная норма ${FREE_DAILY_USD:.2f}"
+        )
+        if self.daily_remaining_usd is None:
+            return note + ", остаток источник не сообщил"
+        note += f", осталось ${self.daily_remaining_usd:.3f}"
+        if self.daily_remaining_calls is not None:
+            note += f" ({self.daily_remaining_calls} запросов)"
+        return note
 
     @staticmethod
     def _from_publication_date() -> str:
