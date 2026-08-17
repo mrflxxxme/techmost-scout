@@ -20,6 +20,8 @@ from __future__ import annotations
 import logging
 import re
 
+import pytest
+
 from app.metrics import (
     RELEVANCE_MIN,
     count_at_least_relevance,
@@ -139,15 +141,33 @@ def test_measures_are_none_when_model_scored_nothing():
     assert max_relevance([]) is None
 
 
-def test_max_relevance_matches_calibration_line(caplog):
+@pytest.mark.parametrize(
+    ("relevances", "expected_max"),
+    [
+        ([1, 0, 4, 2, 3], 4),
+        (_MODEL_TEN, 9),
+    ],
+    # Метки латиницей: кириллицу pytest печатает в отчёте \u-экранированной,
+    # и вместо «максимум ниже пятёрки» в выводе оказывается нечитаемое месиво.
+    ids=["model-max-below-neutral-five", "model-max-above-neutral-five"],
+)
+def test_max_relevance_matches_calibration_line(relevances, expected_max, caplog):
     """Критерий 3 Т-20: максимум измерителя равен максимуму строки калибровки.
 
     Число берётся не из соседней переменной теста, а разбирается из фактической
     записи журнала — той самой строки, по которой на воротах Э2-А читали
     «максимум по всей выдаче 4». Разойдись эти два пути, приёмка РЕШ-86 зависела
     бы от того, куда посмотрел проверяющий.
+
+    Разойтись они могут ровно одним способом — разной обработкой нейтральных
+    оценок (`metrics.model_relevance` против `stages._model_relevance`), а
+    нейтральная оценка равна пяти. Значит расхождение видно **только там, где
+    максимум оценок модели ниже пяти**: на наборе с максимумом 9 сверка зелена
+    при любой обработке нейтральных и не проверяет ничего. Поэтому первый случай
+    — агропром с ворот Э2-А (максимум 4), а набор с максимумом 9 оставлен вторым:
+    он держит обратную сторону — оценка модели выше пятёрки не должна теряться.
     """
-    scored = [_scored(number, relevance=value) for number, value in enumerate(_MODEL_TEN)]
+    scored = [_scored(number, relevance=value) for number, value in enumerate(relevances)]
     scored.extend(stages._neutral_scores([_candidate(100 + number) for number in range(10)]))
 
     with caplog.at_level(logging.INFO, logger="app.pipeline.stages"):
@@ -157,13 +177,20 @@ def test_max_relevance_matches_calibration_line(caplog):
     found = re.search(r"min/медиана/max по оценкам модели (\d+)/[\d.]+/(\d+)", line)
     assert found is not None, f"строка калибровки не разобралась: {line}"
 
-    assert max_relevance(_saved(scored)) == int(found.group(2))
+    from_calibration = int(found.group(2))
+    assert from_calibration == expected_max, f"строка калибровки посчитала максимум по-своему: {line}"
+    assert max_relevance(_saved(scored)) == from_calibration
 
 
 def test_silent_sources_share_counts_sources_that_returned_nothing():
-    """Доля источников с нулевой отдачей: спрошены четверо, ответили двое."""
-    asked = ["crossref", "cyberleninka", "rospatent", "yandex"]
-    hits = {"crossref": 7, "yandex": 3}
+    """Доля источников с нулевой отдачей: спрошены четверо, ответили двое.
+
+    Вокабуляр — метки контура, ключи `pipeline_logs.sources_hit`: у Яндекса их
+    две (`yandex-ru`, `yandex-com`) на один адаптер, и молчащий мировой контур
+    обязан считаться отдельно от работающего российского.
+    """
+    asked = ["crossref", "cyberleninka", "yandex-ru", "yandex-com"]
+    hits = {"crossref": 7, "yandex-ru": 3}
 
     assert silent_sources_share(asked, hits) == 0.5
 
