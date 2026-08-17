@@ -126,9 +126,15 @@ def _draft_brief(*, industry: str, constraints: list[str] | None = None) -> Brie
     )
 
 
-def _patch_llm_router(monkeypatch, settings, fake_provider_factory) -> None:
+def _patch_llm_router(monkeypatch, settings, fake_provider_factory) -> LLMRouter:
+    """Подменяет маршрутизатор моделей в CLI и отдаёт его тесту.
+
+    Экземпляр возвращается, чтобы тест мог смотреть на счётчик `router.cost`:
+    ноль вызовов модели — прямое доказательство нулевой траты (Т-31).
+    """
     router = _router(settings, fake_provider_factory)
     monkeypatch.setattr(cli, "LLMRouter", lambda _settings: router)
+    return router
 
 
 async def test_no_interactive_calls_run_intake_once_with_constraints(
@@ -528,21 +534,54 @@ async def test_unknown_plan_id_stops_run_before_any_paid_call(
 
     Отказ обязан случиться до интейка — он платный (маршрут `intake` уходит в
     модель), и половина оплаченного прогона по несуществующему плану никому не
-    нужна. Поэтому `run_intake` здесь настроен падать: любой его вызов роняет
-    тест. Ни один поисковый адаптер не вызван по построению — пайплайн вообще
-    не создаётся.
-    """
-    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+    нужна.
 
-    async def fail_run_intake(*args, **kwargs):
+    Т-31 (РЕШ-89), почему замок устроен именно так. Прежняя редакция ставила
+    заглушку интейка, бросающую `AssertionError`, и считала, что «любой вызов
+    роняет тест». Это было неправдой: широкий `except Exception` устойчивости
+    интейка (Т-2) глотает исключение любой заглушки, печатает предупреждение и
+    ведёт прогон дальше — до того же отказа чтения плана, с тем же кодом
+    возврата 2 и тем же текстом в консоли. Мутация «перенести чтение плана за
+    вызов `run_intake`» проходила замок молча, то есть денежная проверка не
+    измеряла ничего.
+
+    Поэтому признак вызова записывается ДО броска и проверяется ПОСЛЕ прогона:
+    запись в списке переживает проглатывание исключения, а код возврата и текст
+    отказа — нет. Отсутствие обращений к источникам и к модели проверяется
+    прямо, счётчиками подмен, а не выводится из пустого `captured`.
+    """
+    router = _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    intake_calls: list[str] = []
+
+    async def recording_run_intake(_router, task, *, industry_hint="не указана"):
+        intake_calls.append(task)
         raise AssertionError("интейк не должен вызываться: план не прочитан, тратить нечего")
 
-    monkeypatch.setattr("app.pipeline.stages.run_intake", fail_run_intake)
+    monkeypatch.setattr("app.pipeline.stages.run_intake", recording_run_intake)
+
+    adapter_builds: list[tuple] = []
+
+    def recording_build_adapters(*args, **kwargs):
+        adapter_builds.append(args)
+        return []
+
+    # Единственная точка создания поисковых адаптеров в прогоне — ленивая
+    # `ScoutPipeline._get_adapters`, а имя `build_adapters` связано в модуле
+    # оркестратора на импорте. Подмена именно там делает утверждение «ни один
+    # источник не тронут» прямым, а не выводимым из пустого `captured`.
+    monkeypatch.setattr("app.pipeline.orchestrator.build_adapters", recording_build_adapters)
 
     with pytest.raises(typer.Exit) as info:
         await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False, 4242)
 
     assert info.value.exit_code != 0, "нулевой код возврата выдал бы отказ за успешный прогон"
+    assert intake_calls == [], (
+        "интейк вызван до отказа по несуществующему плану: прогон платит за разбор задачи, "
+        "которая всё равно оборвётся. Проверка плана обязана стоять до вызова `run_intake`"
+    )
+    assert router.cost.calls == 0, "по несуществующему номеру плана не должно уйти ни одного вызова модели"
+    assert adapter_builds == [], "поисковые адаптеры не должны создаваться вовсе"
     assert _RecordingPipeline.captured == [], "пайплайн не должен создаваться вовсе"
 
     console_output = " ".join(capsys.readouterr().out.split())
