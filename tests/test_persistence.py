@@ -41,11 +41,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.export.markdown import render_markdown
 from app.llm import CostLimitExceededError, LLMRouter
-from app.llm.base import LLMError, LLMProvider, LLMResult, Message
+from app.llm.base import LLMError, LLMProvider, LLMResult, Message, Usage
+from app.metrics import max_relevance, share_at_least_relevance
 from app.models import Base, PipelineLog
+from app.models import Candidate as CandidateRow
 from app.models import Request as RequestRow
 from app.models import SearchPlan as SearchPlanRow
 from app.models import SolutionCard as SolutionCardRow
+from app.pipeline import stages
 from app.pipeline.orchestrator import ScoutPipeline
 from app.pipeline.persistence import PlanRecord, SearchPlanNotFoundError, load_search_plan, persist_run
 from app.schemas import (
@@ -803,6 +806,224 @@ async def test_load_search_plan_raises_without_factory():
     """Без фабрики сессий читать план неоткуда — отказ, а не молчаливый None."""
     with pytest.raises(SearchPlanNotFoundError):
         await load_search_plan(None, 1)
+
+
+# ── Т-20 (РЕШ-84): кандидаты с оценками в БД ────────────────────────────────
+#
+# До Т-20 таблица `candidates` была объявлена и не писалась ни одной строкой
+# кода: оценки скоринга жили в единственной строке журнала калибровки и умирали
+# вместе с прогоном. Числовой критерий приёмки подэтапа (РЕШ-86 — «максимум
+# `relevance` вырос с 4 до ≥6») подтверждать было нечем.
+
+
+class _ThreeHitsAdapter(SearchAdapter):
+    """Источник с тремя записями, две из которых — один и тот же DOI.
+
+    Дубль здесь не для проверки склейки: он нужен, чтобы «строк столько же,
+    сколько кандидатов» было отличимо от «строк столько же, сколько найдено».
+
+    Организация у всех одна: `group_for_cards` группирует по точной строке
+    `org`, и разные организации давали бы две карточки, собираемые параллельно,
+    — тогда порядок ответов провайдера-заглушки перестал бы быть определённым.
+    """
+
+    name = "crossref"
+    source_types = (SourceType.PUBLICATION,)
+
+    async def search(self, query, *, limit: int = 20) -> list[Candidate]:
+        common = {
+            "source_type": SourceType.PUBLICATION,
+            "provider": "crossref",
+            "year": 2025,
+            "org": "Институт катализа",
+        }
+        return [
+            Candidate(
+                title="Катализатор с присадками для сероустойчивости",
+                url="https://doi.org/10.1/test-candidates-a",
+                snippet="Испытан на действующей установке гидроочистки.",
+                raw_id="10.1/test-candidates-a",
+                **common,
+            ),
+            Candidate(
+                title="Тот же результат в сборнике конференции",
+                url="https://cyberleninka.ru/article/n/test-candidates-a",
+                snippet="Тот же DOI — обязан склеиться в одного кандидата.",
+                raw_id="10.1/test-candidates-a",
+                **common,
+            ),
+            Candidate(
+                title="Обзор методов регенерации катализаторов",
+                url="https://doi.org/10.1/test-candidates-b",
+                snippet="Обзорная работа без промышленной апробации.",
+                raw_id="10.1/test-candidates-b",
+                **common,
+            ),
+        ]
+
+
+class _ScorerFailsProvider(LLMProvider):
+    """Провайдер, отказывающий ровно на батче скоринга.
+
+    Так воспроизводится единственный путь появления нейтральных оценок:
+    `stages.score_candidates` ловит отказ батча и ставит пятёрки по всем шкалам
+    кодом. Отказ непереспрашиваемый — иначе роутер потратил бы прогон на
+    повторы, а тест — секунды на паузы между ними.
+    """
+
+    name = "deepseek"
+    price_in_rub_per_mtok = 10.0
+    price_out_rub_per_mtok = 20.0
+
+    def __init__(self, responses: list[str]) -> None:
+        self._responses = list(responses)
+        self.calls: list[list[Message]] = []
+
+    async def complete(
+        self,
+        messages: list[Message],
+        *,
+        model: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 4096,
+        json_mode: bool = False,
+    ) -> LLMResult:
+        self.calls.append(messages)
+        # Батч скоринга узнаётся по требованию вернуть оценки номерами — эту
+        # фразу собирает `stages.score_candidates` и никакая другая стадия.
+        if any("Верни ровно" in message.content for message in messages):
+            raise LLMError(self.name, "тестовый отказ батча скоринга", retryable=False)
+        text = self._responses.pop(0) if self._responses else "{}"
+        return LLMResult(
+            text=text,
+            usage=Usage(tokens_in=100, tokens_out=50, cost_rub=0.01, provider=self.name, model=model or "fake"),
+        )
+
+    async def health(self) -> tuple[bool, str]:
+        return True, "заглушка"
+
+
+_SCORE_TWO_JSON = json.dumps(
+    {
+        "scores": [
+            {"index": 0, "relevance": 8, "maturity": 6, "accessibility": 7, "freshness": 6, "completeness": 7},
+            {"index": 1, "relevance": 2, "maturity": 5, "accessibility": 5, "freshness": 5, "completeness": 5},
+        ]
+    }
+)
+
+
+async def test_run_persists_one_candidate_row_per_deduplicated_candidate(
+    settings, brief, fake_provider_factory, db_session_factory, monkeypatch
+):
+    """Критерий 1 Т-20: строк в `candidates` столько же, сколько кандидатов после
+    склейки дублей, и у каждой заполнены `score` и `status`.
+
+    Порог отбора поднят до рабочего значения (`RELEVANCE_MIN = 4`, РЕШ-74),
+    чтобы в выдаче оказались обе судьбы сразу: `status`, записанный всем как
+    `selected`, роняет этот тест. Без разделения таблица превращается в список
+    найденного и на вопрос «что отбор реально взял» не отвечает.
+    """
+    monkeypatch.setattr(stages, "get_settings", lambda: settings.model_copy(update={"relevance_min": 4}))
+    provider = fake_provider_factory("deepseek", [_PLAN_JSON, _SCORE_TWO_JSON, _CARD_JSON, _VERIFY_JSON, _SUMMARY_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(settings, provider, [_ThreeHitsAdapter(client)], session_factory=db_session_factory)
+        await pipeline.run(brief, request_id=1, raw_text="текст задачи с сохранением оценок")
+
+    async with db_session_factory() as session:
+        rows = (await session.execute(select(CandidateRow).order_by(CandidateRow.dedup_key))).scalars().all()
+        request_row = (await session.execute(select(RequestRow))).scalars().one()
+
+    assert len(rows) == 2, "строк должно быть столько же, сколько кандидатов после дедупликации, а не сколько найдено"
+    assert all(row.request_id == request_row.id for row in rows)
+    assert [row.dedup_key for row in rows] == ["10.1/test-candidates-a", "10.1/test-candidates-b"]
+    assert all(row.pass_no == 1 for row in rows), "до Т-21 весь поиск — первый проход"
+    assert all(row.source_type == "publication" and row.provider == "crossref" for row in rows)
+    assert all(row.url for row in rows)
+
+    selected_row, rejected_row = rows
+    assert selected_row.status == "selected"
+    assert rejected_row.status == "rejected", "все кандидаты записаны отобранными — судьба отбора потеряна"
+    assert selected_row.score == {
+        "relevance": 8,
+        "maturity": 6,
+        "accessibility": 7,
+        "freshness": 6,
+        "completeness": 7,
+        "total": pytest.approx(7.05),
+        "notes": "",
+        "neutral": False,
+    }
+    assert rejected_row.score["relevance"] == 2
+
+
+async def test_failed_scoring_batch_is_marked_neutral_in_saved_scores(
+    settings, brief, db_session_factory, monkeypatch, caplog
+):
+    """Оценки, проставленные кодом после отказа батча, отличимы в базе.
+
+    Без признака `neutral` нейтральная пятёрка неотличима от честной пятёрки
+    модели по самому числу — и прогон с полностью отказавшим скорингом показал
+    бы измерителям выдачу «сплошь выше порога». Здесь это проверяется тем же
+    путём, каким числа будут читаться на приёмке: измерителями по строкам БД.
+    """
+    provider = _ScorerFailsProvider([_PLAN_JSON, _CARD_JSON, _VERIFY_JSON, _SUMMARY_JSON])
+    with caplog.at_level(logging.WARNING):
+        async with httpx.AsyncClient() as client:
+            pipeline = _pipeline(settings, provider, [_ThreeHitsAdapter(client)], session_factory=db_session_factory)
+            await pipeline.run(brief, request_id=1, raw_text="текст задачи с отказавшим скорингом")
+
+    assert any("скоринг батча не удался" in record.message for record in caplog.records)
+
+    async with db_session_factory() as session:
+        rows = (await session.execute(select(CandidateRow))).scalars().all()
+
+    assert len(rows) == 2
+    assert all(row.score["neutral"] is True for row in rows), "след отказа батча неотличим от оценок модели"
+    assert all(row.score["relevance"] == 5 for row in rows)
+
+    saved = [row.score for row in rows]
+    assert max_relevance(saved) is None, "нейтральные пятёрки выданы за максимум выдачи"
+    assert share_at_least_relevance(saved) is None
+
+
+async def test_candidate_rows_survive_run_without_session_factory(settings, brief, fake_provider_factory, tmp_path):
+    """Без фабрики сессий прогон идёт как раньше: оценки собираются, но не пишутся.
+
+    Инвариант №5 в редакции РЕШ-43: запись вторична по отношению к отчёту.
+    """
+    provider = fake_provider_factory("deepseek", [_PLAN_JSON, _SCORE_TWO_JSON, _CARD_JSON, _VERIFY_JSON, _SUMMARY_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(settings, provider, [_ThreeHitsAdapter(client)])
+        report = await pipeline.run(brief, request_id=1, raw_text="текст задачи без записи оценок")
+
+    assert len(report.cards) >= 1
+    assert not (tmp_path / "persist-test.db").exists()
+
+
+async def test_failed_run_keeps_scores_collected_before_the_failure(
+    settings, brief, fake_provider_factory, db_session_factory
+):
+    """Прогон, упавший после скоринга, всё равно оставляет оценки в базе.
+
+    Оценки — самое дорогое, что есть в прогоне: они оплачены и бесплатно не
+    воспроизводятся. Терять их из-за стоп-крана на сборке карточек значило бы
+    платить за скоринг дважды. Лимит подобран как в тестах РЕШ-45 выше: план и
+    скоринг (0,02 ₽) укладываются в 0,025 ₽, сборка карточки — нет.
+    """
+    low_limit = settings.model_copy(update={"cost_limit_rub_per_request": 0.025})
+    provider = fake_provider_factory("deepseek", [_PLAN_JSON, _SCORE_TWO_JSON, _CARD_JSON, _VERIFY_JSON, _SUMMARY_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(low_limit, provider, [_ThreeHitsAdapter(client)], session_factory=db_session_factory)
+        with pytest.raises(CostLimitExceededError):
+            await pipeline.run(brief, request_id=1, raw_text="текст задачи, упавший после скоринга")
+
+    async with db_session_factory() as session:
+        requests = (await session.execute(select(RequestRow))).scalars().all()
+        rows = (await session.execute(select(CandidateRow))).scalars().all()
+
+    assert requests[0].status == "failed"
+    assert len(rows) == 2, "оплаченные оценки потеряны вместе с упавшим прогоном"
 
 
 async def test_load_search_plan_raises_when_database_is_broken():

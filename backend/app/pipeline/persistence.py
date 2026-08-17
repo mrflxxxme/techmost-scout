@@ -1,9 +1,15 @@
-"""Запись прогона в БД: запросы, план поиска, карточки, журнал стадий (Ф-8,
-РЕШ-40, РЕШ-83).
+"""Запись прогона в БД: запросы, план поиска, кандидаты с оценками, карточки,
+журнал стадий (Ф-8, РЕШ-40, РЕШ-83, РЕШ-84).
 
-Минимально достаточный набор — четыре таблицы из восьми существующих в
-`app.models`: `requests`, `search_plans`, `solution_cards`, `pipeline_logs`.
-Полная персистентность (брифы, кандидаты, вердикты, витрина) — задача этапа 3.
+Минимально достаточный набор — пять таблиц из восьми существующих в
+`app.models`: `requests`, `search_plans`, `candidates`, `solution_cards`,
+`pipeline_logs`. Полная персистентность (брифы, вердикты, витрина) — задача
+этапа 3.
+
+Кандидаты с оценками добавлены сюда в Т-20 (РЕШ-84): оценки скоринга жили
+только в строке журнала калибровки, то есть умирали вместе с прогоном, и
+числовой критерий приёмки подэтапа (РЕШ-86) подтвердить было нечем. Считают по
+этим строкам чистые функции `app.metrics`.
 
 План поиска добавлен сюда же (РЕШ-83): пока он строится моделью заново каждый
 раз, эффект правок поиска неотличим от разброса между прогонами. Обратная
@@ -35,11 +41,12 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models import Candidate as CandidateRow
 from app.models import PipelineLog as PipelineLogRow
 from app.models import Request as RequestRow
 from app.models import SearchPlan as SearchPlanRow
 from app.models import SolutionCard as SolutionCardRow
-from app.schemas import SearchPlan, SolutionCard
+from app.schemas import Candidate, SearchPlan, SolutionCard
 
 log = logging.getLogger(__name__)
 
@@ -82,6 +89,29 @@ class PlanRecord:
     """
 
     plan: SearchPlan
+    pass_no: int = 1
+
+
+@dataclass(slots=True)
+class CandidateRecord:
+    """Один кандидат прогона вместе с оценками и судьбой (РЕШ-84).
+
+    `score` — готовый словарь `app.metrics.score_payload`, а не пять отдельных
+    полей: формат оценок задаётся в одном месте вместе с признаком нейтральной
+    оценки, и измеритель читает ровно то, что записал прогон.
+
+    `status` — `selected` для тех, кого отбор довёл до карточек, `rejected` для
+    остальных. Разделение обязательно: без него по базе не отличить «кандидат
+    был плох» от «кандидат не дошёл из-за лимита на один источник», а вся
+    таблица превращается в список найденного.
+
+    `pass_no` — из какого прохода поиска пришёл кандидат (РЕШ-81); до Т-21
+    всегда единица.
+    """
+
+    candidate: Candidate
+    score: dict
+    status: str
     pass_no: int = 1
 
 
@@ -133,9 +163,10 @@ async def persist_run(
     cards: list[SolutionCard],
     stages: list[StageRecord],
     plans: list[PlanRecord] | None = None,
+    candidates: list[CandidateRecord] | None = None,
     error: str | None = None,
 ) -> int | None:
-    """Записать прогон одной транзакцией: запрос, карточки, журнал стадий.
+    """Записать прогон одной транзакцией: запрос, кандидаты, карточки, журнал стадий.
 
     Возвращает `requests.id` записанной строки — оркестратор ставит его в
     `Report.request_id`, и экспорт печатает «Запрос №N» вместо прочерка (Т-7).
@@ -160,6 +191,7 @@ async def persist_run(
                 cards=cards,
                 stages=stages,
                 plans=plans or [],
+                candidates=candidates or [],
                 error=error,
             )
     except Exception:
@@ -176,6 +208,7 @@ async def _write(
     cards: list[SolutionCard],
     stages: list[StageRecord],
     plans: list[PlanRecord],
+    candidates: list[CandidateRecord],
     error: str | None,
 ) -> int:
     request_row = RequestRow(raw_text=raw_text, status=status, cost_rub=cost_rub, error=error)
@@ -193,6 +226,29 @@ async def _write(
                 request_id=request_id,
                 pass_no=record.pass_no,
                 queries=record.plan.model_dump(mode="json"),
+            )
+        )
+
+    # Кандидаты с оценками — той же транзакцией (РЕШ-84). Пишутся все, кто дошёл
+    # до скоринга, а не только отобранные: сравнивать прогоны между собой можно
+    # лишь по полной выдаче, отобранные же и так видны в карточках.
+    for record in candidates:
+        session.add(
+            CandidateRow(
+                request_id=request_id,
+                pass_no=record.pass_no,
+                source_type=record.candidate.source_type.value,
+                provider=record.candidate.provider,
+                title=record.candidate.title,
+                url=str(record.candidate.url),
+                org=record.candidate.org,
+                authors=list(record.candidate.authors),
+                year=record.candidate.year,
+                snippet=record.candidate.snippet,
+                raw_id=record.candidate.raw_id,
+                dedup_key=record.candidate.dedup_key(),
+                score=dict(record.score),
+                status=record.status,
             )
         )
 
