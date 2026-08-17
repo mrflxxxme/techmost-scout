@@ -1,32 +1,38 @@
-"""OpenAlex — только обогащение по DOI, никогда не поиск.
+"""OpenAlex — русскоязычный научный поиск и обогащение метаданных по DOI.
 
 ИСТОЧНИК
     OpenAlex, открытый каталог научных работ, авторов и организаций.
     API: https://api.openalex.org/works
     Lookup по DOI: https://api.openalex.org/works/doi:10.1016/j.example.2024.01
-    Ключ: https://openalex.org/settings/api
 
-ЧТО ИЗМЕНИЛОСЬ В ФЕВРАЛЕ 2026 (главное, из-за чего адаптер не универсальный)
-    * Ключ стал ОБЯЗАТЕЛЕН — анонимных запросов больше нет.
-    * Polite pool и параметр mailto отменены; присылать mailto бессмысленно.
-    * Появилась тарификация: search — $1 за 1000 вызовов, list/filter — $0.10
-      за 1000 вызовов, бесплатно только $1 в сутки (то есть ~1000 полнотекстовых
-      поисков в месяц на всю систему — на пайплайн этого не хватит).
-    * Lookup одной работы по DOI остался БЕСПЛАТНЫМ и БЕЗЛИМИТНЫМ.
+У АДАПТЕРА ДВЕ РОЛИ, И ОНИ НЕ ПЕРЕСЕКАЮТСЯ
+    1. ПОИСК (Т-15, РЕШ-71) — `search`. Появился после того, как живой прогон
+       16 августа 2026 дал `cyberleninka: 0`: OAI-PMH КиберЛенинки в принципе не
+       поисковый интерфейс, и чинить его нечем
+       (`.planning/evidence/E2A-ru-science.md`, §1). OpenAlex на том же запросе
+       («гидроочистка дизельного топлива») с `filter=language:ru` находит русские
+       статьи по теме, включая попадание 2023 года с DOI и ссылкой на PDF.
+       Русскоязычный корпус — 3,4 млн работ, из них с 2021 года 420 тыс. с
+       рефератом и 481 тыс. с DOI. Ключа поиск не требует, `Disallow` у источника
+       нет; вежливый режим — параметр `mailto` с почтой владельца, как у Crossref.
+    2. ОБОГАЩЕНИЕ ПО DOI (Т-3, РЕШ-50) — `enrich_by_doi`. Список DOI приходит от
+       любого источника, а у OpenAlex добирается то, чего у него нет:
+       нормализованные организации (institutions с ROR), цитируемость,
+       ссылка на открытый полный текст.
 
-ОТСЮДА ПРАВИЛО
-    OpenAlex в этой системе — слой обогащения, а не поиска. Список DOI мы
-    получаем из Crossref (бесплатно и без лимита), а у OpenAlex добираем то,
-    чего у Crossref нет: нормализованные организации (institutions с ROR),
-    цитируемость (cited_by_count), ссылку на открытый полный текст.
-    Полнотекстовый поиск через OpenAlex не делать НИКОГДА — это платный вызов
-    search, который дублирует бесплатный Crossref (РЕШ-10).
+    Поведение обогащения задачей Т-15 НЕ МЕНЯЛОСЬ ни в одной строке, включая
+    требование ключа для lookup и заголовок `Authorization`. Поиск ходит своим
+    путём (`_fetch_search`), обогащение — своим (`_lookup`); общего у них только
+    троттлинг и разбор инвертированного индекса.
 
-    Отсюда же `enrich_only = True`: адаптер попадает в реестр источников, но
-    оркестратор не зовёт его `search` ни на одной формулировке. Без этого флага
-    источник обогащения оказался бы в `sources_unavailable` каждого отчёта —
-    `search` бросает `NotImplementedError`, и клиенту сообщалось бы о «не
-    ответившем» источнике, который никто и не спрашивал.
+ПОЧЕМУ ИСТОЧНИК БОЛЬШЕ НЕ `requires_key` И НЕ `enrich_only`
+    Прежняя редакция (РЕШ-10) запрещала поиск как платный и включала адаптер
+    только при заполненном `OPENALEX_API_KEY`. С обоими флагами поиск был
+    недостижим: `enrich_only` заставлял оркестратор пропускать источник, а
+    `requires_key` не давал ему попасть в сборку вовсе. РЕШ-71 отменяет запрет,
+    поэтому `requires_key = False` (поиск бесплатен), а `enrich_only` снят.
+    Ключ остался нужен обогащению — это проверяется внутри `enrich_by_doi`, и
+    без ключа оно просто пропускается, не задевая поиск.
 
 ЧТО ЗАБИРАЕТСЯ ИЗ ОТВЕТА (задача Т-3, РЕШ-50)
     * аннотация (`abstract_inverted_index`) → `Candidate.snippet`;
@@ -45,24 +51,43 @@
     аналитика по организациям РФ, а не точечное обогащение.
 
 НАСТРОЙКИ
-    settings.openalex_api_key — обязателен, без него обогащение пропускается
-    (requires_key = True, см. build_adapters в app/search/__init__.py).
+    settings.openalex_api_key — необязателен: без него работает поиск, а
+    обогащение по DOI пропускается с записью в лог.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
+from datetime import date
 from typing import Any
 
 import httpx
+from pydantic import HttpUrl, ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
 from app.search.base import SearchAdapter, SearchError
+from app.search.crossref import CONTACT_EMAIL
 
 log = logging.getLogger(__name__)
 
 API_URL = "https://api.openalex.org/works"
+#: Вежливый режим OpenAlex — та же почта владельца, что и у Crossref. Берётся
+#: импортом, а не второй копией строки: контакт владельца обязан быть один.
+USER_AGENT = f"TechMostScout/1.0 (mailto:{CONTACT_EMAIL})"
+#: Свежесть выдачи поиска. Пять лет — ровно та граница, на которой разведка
+#: проверила источник живьём (`from_publication_date:2021-01-01` в 2026 году).
+FRESHNESS_YEARS = 5
+#: Потолок `per-page` у OpenAlex
+MAX_PER_PAGE = 200
+#: select экономит трафик: без него на каждую работу приезжают десятки
+#: килобайт концептов, тем и списков цитирований, которые нам не нужны.
+SEARCH_SELECT_FIELDS = (
+    "id,display_name,publication_year,doi,type,primary_location,best_oa_location,abstract_inverted_index,authorships"
+)
+#: Сколько авторов забираем в карточку — столько же, сколько у Crossref
+MAX_AUTHORS = 12
 #: Сколько DOI обрабатывается между паузами. Lookup идёт по одному запросу на
 #: DOI (это бесплатный путь), батч — единица ритма, а не один общий запрос.
 BATCH_SIZE = 50
@@ -79,10 +104,8 @@ MIN_INTERVAL_SECONDS = 0.05
 #: Аннотация в OpenAlex лежит инвертированным индексом; собранный текст режем
 #: по той же границе, что и Crossref, — вход скоринга не резиновый.
 MAX_SNIPPET = 700
-#: Работа для пробы в `scout doctor`: широко известная и заведомо в каталоге.
-HEALTH_DOI = "10.1038/s41586-021-03819-2"
-
 _DOI_PREFIXES = ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "doi:")
+_WS = re.compile(r"\s+")
 
 
 def normalize_doi(value: Any) -> str:
@@ -103,16 +126,15 @@ def normalize_doi(value: Any) -> str:
 
 
 class OpenAlexAdapter(SearchAdapter):
-    """Обогащение метаданных по DOI. Поиск через этот источник запрещён."""
+    """Русскоязычный научный поиск плюс обогащение метаданных по DOI."""
 
     name = "openalex"
     source_types = (SourceType.PUBLICATION,)
-    #: С февраля 2026 ключ обязателен
-    requires_key = True
+    #: Поиск бесплатен и ключа не требует (РЕШ-71), поэтому источник включается
+    #: всегда. Ключ нужен только обогащению и проверяется в `enrich_by_doi`.
+    requires_key = False
     implemented = True
-    #: Источник только для обогащения: оркестратор не зовёт его `search`
-    enrich_only = True
-    #: Пауза между отдельными lookup — иначе `_throttle` ничего не делает
+    #: Пауза между отдельными запросами — иначе `_throttle` ничего не делает
     min_interval_seconds = MIN_INTERVAL_SECONDS
 
     def __init__(self, client: httpx.AsyncClient, *, api_key: str | None = None) -> None:
@@ -125,10 +147,110 @@ class OpenAlexAdapter(SearchAdapter):
         self.last_error: str | None = None
 
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
-        raise NotImplementedError(
-            "openalex: полнотекстовый поиск платный ($1/1000) и дублирует Crossref — "
-            "источник используется только для обогащения по DOI (РЕШ-10)"
-        )
+        """Найти работы по формулировке, отфильтровав их по языку и свежести.
+
+        Фильтр языка — существо задачи Т-15, а не украшение: без `language:ru`
+        взвешенный поиск OpenAlex отдаёт по русскому запросу преимущественно
+        англоязычные работы, и русскоязычной научной выдачи в отчёте снова не
+        появляется. Язык берётся из самой формулировки (`SearchQuery.lang`),
+        поэтому англоязычный запрос плана получит `language:en` — прибивать
+        фильтр к «ru» значило бы молча подменять то, что попросил план.
+
+        Ключ здесь не участвует: поиск бесплатен, вежливость обеспечивает
+        `mailto` с почтой владельца (и в параметрах, и в `User-Agent`, — часть
+        прокси срезает заголовок, как и у Crossref).
+
+        Транспортный отказ поднимается как `SearchError`: инвариант №5 в
+        редакции РЕШ-43. Пустая выдача при успешном ответе — обычный пустой
+        список, не отказ.
+        """
+        params = {
+            "search": query.text,
+            "filter": f"language:{query.lang},from_publication_date:{self._from_publication_date()}",
+            "per-page": str(max(1, min(limit, MAX_PER_PAGE))),
+            "select": SEARCH_SELECT_FIELDS,
+            "mailto": CONTACT_EMAIL,
+        }
+        payload = await self._fetch_search(params, query.text)
+        results = payload.get("results") if isinstance(payload, dict) else None
+        if not isinstance(results, list):
+            log.warning("openalex: ответ без поля results на «%s»", query.text)
+            return []
+
+        candidates: list[Candidate] = []
+        for work in results:
+            if not isinstance(work, dict):
+                continue
+            candidate = self._to_candidate(work)
+            if candidate is not None:
+                candidates.append(candidate)
+        return candidates[:limit]
+
+    async def _fetch_search(self, params: dict[str, str], text: str) -> dict | None:
+        """GET к поиску OpenAlex. Отдельно от `_lookup`, чтобы правка поиска
+        физически не могла задеть обогащение по DOI: у ролей разные адреса,
+        разные заголовки и разные условия отказа."""
+        await self._throttle()
+        try:
+            response = await self._client.get(
+                API_URL, params=params, headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise SearchError(f"openalex не ответил на поиск «{text}»: {exc}") from exc
+        return payload if isinstance(payload, dict) else None
+
+    @staticmethod
+    def _from_publication_date() -> str:
+        return f"{date.today().year - FRESHNESS_YEARS}-01-01"
+
+    def _to_candidate(self, work: dict[str, Any]) -> Candidate | None:
+        """Одна работа выдачи → кандидат. None — запись без названия или ссылки.
+
+        Ссылка обязательна: кандидат без неё нечем подтвердить в карточке.
+        Порядок предпочтения — DOI, посадочная страница издателя, постоянный
+        адрес самой работы в OpenAlex.
+        """
+        title = _text(work.get("display_name"))
+        if not title:
+            return None
+
+        doi = normalize_doi(work.get("doi"))
+        url = f"https://doi.org/{doi}" if doi else _landing_page(work) or _text(work.get("id"))
+        if not url:
+            return None
+
+        journal = _source_name(work.get("primary_location"))
+        abstract = _abstract_from_inverted_index(work.get("abstract_inverted_index"))
+        snippet = " — ".join(part for part in (journal, abstract) if part)[:MAX_SNIPPET]
+
+        try:
+            candidate = Candidate(
+                source_type=SourceType.PUBLICATION,
+                title=title,
+                url=url,
+                org=_first_institution(work.get("authorships")) or journal or None,
+                authors=_authors(work.get("authorships")),
+                year=_year(work.get("publication_year")),
+                snippet=snippet,
+                raw_id=doi or None,
+                provider=self.name,
+            )
+        except ValidationError as exc:
+            log.debug("openalex: запись отброшена (%s): %s", url, exc)
+            return None
+
+        # Негодная ссылка на полный текст отваливается в одиночку: терять из-за
+        # неё название, организацию и реферат — то же самое, что П-2 аудита
+        # запретил обогащению.
+        pdf_url = _pdf_url(work)
+        if pdf_url:
+            try:
+                return candidate.model_copy(update={"pdf_url": HttpUrl(pdf_url)})
+            except ValidationError:
+                log.info("openalex: поле pdf_url отброшено у «%s»: негодная ссылка", title)
+        return candidate
 
     async def enrich_by_doi(self, dois: list[str]) -> dict[str, dict[str, Any]]:
         """Добрать по списку DOI организацию, аннотацию, PDF и цитируемость.
@@ -212,17 +334,28 @@ class OpenAlexAdapter(SearchAdapter):
         return patches
 
     async def health(self) -> tuple[bool, str]:
-        """Проба для `scout doctor` — один бесплатный lookup, поиск не трогаем."""
-        if not self._api_key:
-            return False, "нет ключа OPENALEX_API_KEY"
+        """Проба для `scout doctor` — бесплатный поиск, роль которого работает
+        всегда.
+
+        Пробовать здесь lookup по DOI нельзя: он требует ключа, а источник
+        теперь включается и без него (РЕШ-71). Доктор докладывал бы «нет ключа»
+        про источник, который в этом же прогоне исправно ищет. Состояние
+        обогащения при этом не скрывается — оно уходит второй половиной строки.
+        """
+        probe = SearchQuery(
+            text="катализатор",
+            source_type=SourceType.PUBLICATION,
+            lang="ru",
+            rationale="проба доктора",
+        )
         try:
-            payload = await self._lookup(HEALTH_DOI)
+            found = await self.search(probe, limit=1)
         except SearchError as exc:
             return False, str(exc)
-        if payload is None:
-            # Ключ принят и источник ответил — пробной работы в каталоге нет.
-            return True, "ок, lookup по DOI отвечает (пробная работа не найдена)"
-        return True, "ок, lookup по DOI отвечает"
+        detail = f"ок, кандидатов в пробе: {len(found)}"
+        if not self._api_key:
+            detail += "; обогащение по DOI выключено: нет OPENALEX_API_KEY"
+        return True, detail
 
     async def _pause_between_batches(self) -> None:
         """Пауза между батчами. Отдельным методом — чтобы ритм обхода можно было
@@ -296,11 +429,67 @@ def _first_institution(authorships: Any) -> str:
     return ""
 
 
+def _text(value: Any) -> str:
+    """Строка источника в пригодном виде: без переносов и лишних пробелов."""
+    return _WS.sub(" ", value).strip() if isinstance(value, str) else ""
+
+
+def _landing_page(work: dict[str, Any]) -> str:
+    """Посадочная страница издателя — запасная ссылка для работы без DOI."""
+    location = work.get("primary_location")
+    if not isinstance(location, dict):
+        return ""
+    return _text(location.get("landing_page_url"))
+
+
+def _source_name(location: Any) -> str:
+    """Название журнала или репозитория из `primary_location.source`."""
+    if not isinstance(location, dict):
+        return ""
+    source = location.get("source")
+    return _text(source.get("display_name")) if isinstance(source, dict) else ""
+
+
+def _pdf_url(work: dict[str, Any]) -> str:
+    """Ссылка на открытый полный текст: сначала лучшая открытая копия, затем
+    основное размещение. Обе ссылки в OpenAlex необязательные."""
+    for key in ("best_oa_location", "primary_location"):
+        location = work.get(key)
+        if isinstance(location, dict) and (pdf_url := _text(location.get("pdf_url"))):
+            return pdf_url
+    return ""
+
+
+def _authors(authorships: Any) -> list[str]:
+    """Имена авторов в порядке выдачи источника."""
+    if not isinstance(authorships, list):
+        return []
+    names: list[str] = []
+    for authorship in authorships[:MAX_AUTHORS]:
+        if not isinstance(authorship, dict):
+            continue
+        author = authorship.get("author")
+        name = _text(author.get("display_name")) if isinstance(author, dict) else ""
+        if name:
+            names.append(name)
+    return names
+
+
+def _year(value: Any) -> int | None:
+    """`publication_year` приходит целым, но у части записей его нет вовсе."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
 def _abstract_from_inverted_index(value: Any) -> str:
     """Собрать аннотацию из инвертированного индекса OpenAlex.
 
     В ответе лежит {"слово": [позиции]} — прямого текста аннотации у источника
-    нет вовсе, издатели запрещают его отдавать целиком.
+    нет вовсе, издатели запрещают его отдавать целиком. Одно слово может стоять
+    в нескольких местах, поэтому пары «позиция → слово» раскладываются и
+    сортируются по позиции. Дыры в нумерации (издатель вырезал часть текста)
+    ничего не ломают: сортировка сохраняет порядок оставшихся слов.
     """
     if not isinstance(value, dict) or not value:
         return ""

@@ -62,7 +62,9 @@ ADAPTERS: dict[str, type[SearchAdapter]] = {
 
 #: Настройки, без которых источник с requires_key = True не включается
 REQUIRED_SETTINGS: dict[str, tuple[str, ...]] = {
-    "openalex": ("openalex_api_key",),
+    # OpenAlex здесь больше нет: поиск у него бесплатен и ключа не требует
+    # (Т-15, РЕШ-71). Ключ нужен только обогащению по DOI, и его отсутствие
+    # проверяет сам адаптер — выключать из-за этого поиск нельзя.
     "patents_view": ("patentsview_api_key",),
     # Яндексу нужны оба значения: ключ сервисного аккаунта и folder id
     "yandex_search": ("yandex_search_api_key", "yandex_catalog_id"),

@@ -1,0 +1,85 @@
+﻿=== Т-15 · OpenAlex как поисковый источник — фактический вывод проверок ===
+
+--- ДО правки: pytest tests/test_openalex.py -q  ->  40 passed in 21.44s ---
+
+--- pytest tests/test_openalex.py -v ---
+============================= test session starts =============================
+collecting ... collected 61 items
+
+tests/test_openalex.py::test_патч_несёт_организацию_аннотацию_pdf_и_цитируемость PASSED [  1%]
+tests/test_openalex.py::test_пустых_значений_в_патче_не_бывает PASSED    [  3%]
+tests/test_openalex.py::test_ключ_ответа_нормализован_независимо_от_написания_doi PASSED [  4%]
+tests/test_openalex.py::test_нормализация_doi[10.1234/Example-A-10.1234/example-a] PASSED [  6%]
+tests/test_openalex.py::test_нормализация_doi[https://doi.org/10.1234/example-a-10.1234/example-a] PASSED [  8%]
+tests/test_openalex.py::test_нормализация_doi[  doi:10.1234/example-a -10.1234/example-a] PASSED [  9%]
+tests/test_openalex.py::test_нормализация_doi[RU2799999-] PASSED         [ 11%]
+tests/test_openalex.py::test_нормализация_doi[None-] PASSED              [ 13%]
+tests/test_openalex.py::test_обход_идёт_батчами_по_50_с_паузой_между_ними PASSED [ 14%]
+tests/test_openalex.py::test_внутри_батча_запросы_идут_не_подряд PASSED  [ 16%]
+tests/test_openalex.py::test_без_ключа_пустой_словарь_и_ни_одного_обращения_в_сеть PASSED [ 18%]
+tests/test_openalex.py::test_транспортный_отказ_поднимается_как_search_error[429] PASSED [ 19%]
+tests/test_openalex.py::test_транспортный_отказ_поднимается_как_search_error[500] PASSED [ 21%]
+tests/test_openalex.py::test_нечитаемое_тело_ответа_тоже_отказ PASSED    [ 22%]
+tests/test_openalex.py::test_отказ_в_середине_обхода_не_стирает_собранное PASSED [ 24%]
+tests/test_openalex.py::test_отказ_на_первом_же_doi_остаётся_отказом PASSED [ 26%]
+tests/test_openalex.py::test_работы_нет_в_каталоге_это_не_отказ PASSED   [ 27%]
+tests/test_openalex.py::test_русская_выдача_разбирается_в_кандидатов PASSED [ 29%]
+tests/test_openalex.py::test_фильтр_языка_и_свежести_уходит_в_запрос PASSED [ 31%]
+tests/test_openalex.py::test_вежливый_режим_почта_владельца_в_параметре_и_в_заголовке PASSED [ 32%]
+tests/test_openalex.py::test_поиск_работает_и_без_ключа PASSED           [ 34%]
+tests/test_openalex.py::test_работа_без_doi_держится_на_посадочной_странице PASSED [ 36%]
+tests/test_openalex.py::test_запись_без_названия_и_без_ссылки_отбрасывается PASSED [ 37%]
+tests/test_openalex.py::test_негодная_ссылка_на_pdf_не_уносит_кандидата PASSED [ 39%]
+tests/test_openalex.py::test_пустая_выдача_это_не_отказ PASSED           [ 40%]
+tests/test_openalex.py::test_отказ_поиска_поднимается_как_search_error[429] PASSED [ 42%]
+tests/test_openalex.py::test_отказ_поиска_поднимается_как_search_error[500] PASSED [ 44%]
+tests/test_openalex.py::test_нечитаемый_ответ_поиска_тоже_отказ PASSED   [ 45%]
+tests/test_openalex.py::test_разворот_инвертированного_индекса[index0-\u041a\u0430\u0442\u0430\u043b\u0438\u0437\u0430\u0442\u043e\u0440 \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u0435\u0442 \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0441\u0442\u044c] PASSED [ 47%]
+tests/test_openalex.py::test_разворот_инвертированного_индекса[index1-] PASSED [ 49%]
+tests/test_openalex.py::test_разворот_инвертированного_индекса[None-] PASSED [ 50%]
+tests/test_openalex.py::test_разворот_инвертированного_индекса[\u0442\u0435\u043a\u0441\u0442 \u0440\u0435\u0444\u0435\u0440\u0430\u0442\u0430-] PASSED [ 52%]
+tests/test_openalex.py::test_разворот_инвертированного_индекса[index4-\u043a\u043e\u043a\u0441 \u0438 \u0441\u0435\u0440\u0430 \u0438 \u0430\u0437\u043e\u0442] PASSED [ 54%]
+tests/test_openalex.py::test_разворот_инвертированного_индекса[index5-\u043d\u0430\u0447\u0430\u043b\u043e \u043a\u043e\u043d\u0435\u0446] PASSED [ 55%]
+tests/test_openalex.py::test_разворот_инвертированного_индекса[index6-\u0445\u043e\u0440\u043e\u0448\u043e \u0442\u043e\u0436\u0435] PASSED [ 57%]
+tests/test_openalex.py::test_разворот_инвертированного_индекса[index7-] PASSED [ 59%]
+tests/test_openalex.py::test_реферат_режется_по_той_же_границе_что_у_crossref PASSED [ 60%]
+tests/test_openalex.py::test_оркестратор_спрашивает_openalex_поиском PASSED [ 62%]
+tests/test_openalex.py::test_отказ_поиска_доезжает_до_недоступных_источников PASSED [ 63%]
+tests/test_openalex.py::test_патч_заполняет_пустые_поля_и_отдаёт_цитируемость PASSED [ 65%]
+tests/test_openalex.py::test_непустые_поля_кандидата_не_перезаписываются PASSED [ 67%]
+tests/test_openalex.py::test_прогон_считает_скольким_кандидатам_заполнен_org PASSED [ 68%]
+tests/test_openalex.py::test_ноль_цитирований_закреплён_у_производителя_патча PASSED [ 70%]
+tests/test_openalex.py::test_негодное_поле_патча_не_уносит_годные PASSED [ 72%]
+tests/test_openalex.py::test_кандидат_без_doi_обогащение_не_запрашивает PASSED [ 73%]
+tests/test_openalex.py::test_отказ_обогащения_не_роняет_прогон PASSED    [ 75%]
+tests/test_openalex.py::test_отказ_обогащения_оставляет_строку_в_журнале_стадий PASSED [ 77%]
+tests/test_openalex.py::test_прерванный_обход_и_отброшенные_поля_тоже_попадают_в_журнал PASSED [ 78%]
+tests/test_openalex.py::test_успешное_обогащение_пишет_стадию_без_ошибки PASSED [ 80%]
+tests/test_openalex.py::test_обогащение_встроено_между_дедупликацией_и_скорингом PASSED [ 81%]
+tests/test_openalex.py::test_доктор_видит_все_источники_реестра PASSED   [ 83%]
+tests/test_openalex.py::test_openalex_включён_и_без_ключа_а_ключ_доезжает_до_обогащения PASSED [ 85%]
+tests/test_openalex.py::test_рабочий_набор_прежний_заготовок_в_нём_нет PASSED [ 86%]
+tests/test_openalex.py::test_доктор_спрашивает_здоровье_только_у_рабочих_источников PASSED [ 88%]
+tests/test_openalex.py::test_доктор_печатает_каждый_источник_с_его_статусом PASSED [ 90%]
+tests/test_openalex.py::test_доктор_переживает_упавшую_пробу_источника PASSED [ 91%]
+tests/test_openalex.py::test_здоровье_заготовок_не_падает PASSED         [ 93%]
+tests/test_openalex.py::test_здоровье_openalex_проверяется_бесплатным_поиском PASSED [ 95%]
+tests/test_openalex.py::test_здоровье_отличает_отказ_источника_от_пустой_пробы PASSED [ 96%]
+tests/test_openalex.py::test_таблица_ключей_доктора_знает_про_роспатент_и_patentsview PASSED [ 98%]
+tests/test_openalex.py::test_таблица_ключей_доктора_честна_про_закрытый_доступ_к_google PASSED [100%]
+
+============================= 61 passed in 36.17s =============================
+
+--- pytest tests/test_stage_token_budgets.py -q ---
+....                                                                     [100%]
+4 passed in 0.28s
+
+--- pytest -q (весь набор) ---
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+396 passed, 1 warning in 102.99s (0:01:42)
+
+--- ruff check . ---
+All checks passed!
+--- ruff format --check . ---
+85 files already formatted

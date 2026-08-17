@@ -1,8 +1,14 @@
-"""OpenAlex: обогащение по DOI, запрет поиска и полная таблица доктора (Т-3).
+"""OpenAlex: русскоязычный поиск (Т-15), обогащение по DOI и таблица доктора (Т-3).
 
 Сети здесь нет: ответы OpenAlex подменяются через respx (инвариант №7).
 Проверяется ровно то, что может сломаться молча: ритм обхода, отказ, который
-обязан быть виден, и правило «непустое поле кандидата не перезаписывается».
+обязан быть виден, правило «непустое поле кандидата не перезаписывается», а с
+Т-15 — ещё и фильтр языка, вежливый режим и разворот реферата из
+инвертированного индекса.
+
+У адаптера две роли на одном файле, поэтому тесты обогащения по DOI при
+подключении поиска не переписывались: их зелёный цвет — доказательство, что
+роль Т-3 не задета.
 """
 
 from __future__ import annotations
@@ -10,6 +16,7 @@ from __future__ import annotations
 import io
 import logging
 import time
+from datetime import date
 
 import httpx
 import pytest
@@ -25,7 +32,16 @@ from app.pipeline.persistence import StageRecord
 from app.schemas import Candidate, ReportSummary, SearchPlan, SearchQuery, SourceType
 from app.search import ADAPTERS, STATUS_NO_KEY, STATUS_STUB, adapter_status, build_adapters
 from app.search.base import SearchAdapter, SearchError
-from app.search.openalex import API_URL, BATCH_SIZE, OpenAlexAdapter, normalize_doi
+from app.search.crossref import CONTACT_EMAIL
+from app.search.openalex import (
+    API_URL,
+    BATCH_SIZE,
+    FRESHNESS_YEARS,
+    MAX_SNIPPET,
+    OpenAlexAdapter,
+    _abstract_from_inverted_index,
+    normalize_doi,
+)
 
 DOI = "10.1234/example-a"
 LOOKUP = f"{API_URL}/doi:"
@@ -60,6 +76,64 @@ def _work(
 
 def _adapter(client: httpx.AsyncClient, *, api_key: str | None = "test-key") -> OpenAlexAdapter:
     return OpenAlexAdapter(client, api_key=api_key)
+
+
+def _query(*, text: str = "гидроочистка дизельного топлива", lang: str = "ru") -> SearchQuery:
+    return SearchQuery(text=text, source_type=SourceType.PUBLICATION, lang=lang, rationale="тест")
+
+
+def _work_hit(
+    *,
+    display_name: str | None = "ОПТИМИЗАЦИИ УСТАНОВКИ ГИДРООЧИСТКИ ДИЗЕЛЬНОГО ТОПЛИВА ТОО «ПНХЗ»",
+    doi: str | None = "https://doi.org/10.48081/vgcj1519",
+    landing_page_url: str | None = "https://vestnik.example.kz/vgcj1519",
+    pdf_url: str | None = "https://example.org/vgcj1519.pdf",
+    work_id: str | None = "https://openalex.org/W4383",
+    abstract: bool = True,
+) -> dict:
+    """Одна работа поисковой выдачи в том виде, в каком её отдаёт `GET /works`.
+
+    Слепок сделан с живого ответа разведки (`.planning/evidence/E2A-ru-science.md`,
+    §2.1): та самая статья 2023 года, найденная на запросе, где КиберЛенинка
+    дала ноль.
+    """
+    work: dict = {
+        "display_name": display_name,
+        "publication_year": 2023,
+        "type": "article",
+        "authorships": [
+            {
+                "author": {"display_name": "Сериков Т. П."},
+                "institutions": [{"display_name": "Торайгыров университет", "ror": "https://ror.org/1"}],
+            }
+        ],
+    }
+    if work_id:
+        work["id"] = work_id
+    if doi:
+        work["doi"] = doi
+    location: dict = {"source": {"display_name": "Bulletin of Toraighyrov University Chemistry & Biology series"}}
+    if landing_page_url:
+        location["landing_page_url"] = landing_page_url
+    work["primary_location"] = location
+    if pdf_url:
+        work["best_oa_location"] = {"is_oa": True, "pdf_url": pdf_url}
+    if abstract:
+        # Прямого текста реферата у OpenAlex нет — только инвертированный индекс
+        work["abstract_inverted_index"] = {
+            "Рассмотрена": [0],
+            "оптимизация": [1],
+            "установки": [2],
+            "гидроочистки": [3],
+            "дизельного": [4],
+            "топлива": [5],
+        }
+    return work
+
+
+def _search_payload(*works: dict) -> dict:
+    hits = list(works) or [_work_hit()]
+    return {"meta": {"count": len(hits), "per_page": len(hits)}, "results": hits}
 
 
 def _candidate(*, raw_id: str | None = DOI, **fields) -> Candidate:
@@ -267,36 +341,240 @@ async def test_работы_нет_в_каталоге_это_не_отказ():
         assert await _adapter(client).enrich_by_doi([DOI]) == {}
 
 
-# ── Поиск запрещён ──────────────────────────────────────────────────────────
-async def test_поиск_через_openalex_запрещён():
-    """РЕШ-10: search платный и дублирует бесплатный Crossref."""
-    query = SearchQuery(text="катализатор", source_type=SourceType.PUBLICATION, lang="ru", rationale="тест")
+# ── Поиск (Т-15, РЕШ-71) ────────────────────────────────────────────────────
+@respx.mock
+async def test_русская_выдача_разбирается_в_кандидатов():
+    """Т-15 целиком на одной записи: русскоязычная работа обязана доехать до
+    кандидата со всем, что источник о ней сказал.
+
+    Это ровно тот материал, которого не хватило прогону 16 августа: там
+    единственный русскоязычный источник дал ноль (`cyberleninka: 0`), а на том
+    же запросе OpenAlex находит статьи по теме.
+    """
+    respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(200, json=_search_payload()))
 
     async with httpx.AsyncClient() as client:
-        with pytest.raises(NotImplementedError):
-            await _adapter(client).search(query, limit=5)
+        found = await _adapter(client).search(_query(), limit=8)
+
+    assert len(found) == 1
+    candidate = found[0]
+    assert candidate.title == "ОПТИМИЗАЦИИ УСТАНОВКИ ГИДРООЧИСТКИ ДИЗЕЛЬНОГО ТОПЛИВА ТОО «ПНХЗ»"
+    assert candidate.year == 2023
+    assert candidate.raw_id == "10.48081/vgcj1519"
+    assert str(candidate.url) == "https://doi.org/10.48081/vgcj1519"
+    assert str(candidate.pdf_url) == "https://example.org/vgcj1519.pdf"
+    assert candidate.org == "Торайгыров университет"
+    assert candidate.authors == ["Сериков Т. П."]
+    assert candidate.provider == "openalex"
+    assert candidate.source_type is SourceType.PUBLICATION
+    # Реферат — вход скоринга: без него кандидат нечем оценивать
+    assert "Рассмотрена оптимизация установки гидроочистки" in candidate.snippet
+    assert "Bulletin of Toraighyrov University" in candidate.snippet
 
 
 @respx.mock
-async def test_источник_обогащения_не_опрашивается_поиском(settings):
-    """Источник обогащения не попадает в `sources_unavailable`.
+async def test_фильтр_языка_и_свежести_уходит_в_запрос():
+    """Существо задачи: без `language:ru` взвешенный поиск отдаёт на русский
+    запрос преимущественно англоязычные работы, и русской науки в отчёте снова
+    нет. Язык берётся из формулировки плана, а не прибит к «ru»."""
+    route = respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(200, json=_search_payload()))
 
-    Без флага `enrich_only` оркестратор спросил бы у него `search`, получил
-    `NotImplementedError` и написал бы клиенту «не ответил openalex» — про
-    источник, который никто и не спрашивал.
-    """
-    route = respx.get(url__startswith=LOOKUP).mock(return_value=httpx.Response(200, json=_work()))
-    plan = SearchPlan(
-        queries=[SearchQuery(text="катализатор", source_type=SourceType.PUBLICATION, lang="ru", rationale="тест")]
+    async with httpx.AsyncClient() as client:
+        adapter = _adapter(client)
+        await adapter.search(_query(), limit=8)
+        await adapter.search(_query(lang="en"), limit=8)
+
+    russian = dict(route.calls[0].request.url.params)
+    assert russian["search"] == "гидроочистка дизельного топлива"
+    assert russian["filter"] == f"language:ru,from_publication_date:{date.today().year - FRESHNESS_YEARS}-01-01"
+    assert russian["per-page"] == "8"
+    assert "abstract_inverted_index" in russian["select"], "без реферата нечего показывать скорингу"
+
+    english = dict(route.calls[1].request.url.params)
+    assert english["filter"].startswith("language:en,"), "язык формулировки подменён на русский"
+
+
+@respx.mock
+async def test_вежливый_режим_почта_владельца_в_параметре_и_в_заголовке():
+    """Вежливый режим OpenAlex — `mailto`. Дублируется в `User-Agent` по той же
+    причине, что и у Crossref: часть прокси срезает заголовок."""
+    route = respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(200, json=_search_payload()))
+
+    async with httpx.AsyncClient() as client:
+        await _adapter(client).search(_query(), limit=5)
+
+    request = route.calls[0].request
+    assert dict(request.url.params)["mailto"] == CONTACT_EMAIL
+    assert CONTACT_EMAIL in request.headers["User-Agent"]
+    assert "Authorization" not in request.headers, "поиск бесплатен, ключ ему не нужен"
+
+
+@respx.mock
+async def test_поиск_работает_и_без_ключа():
+    """РЕШ-71: ключа поиск не требует. Пока источник был `requires_key = True`,
+    он не попадал в сборку вовсе — русской выдачи не появилось бы даже с
+    реализованным `search`."""
+    respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(200, json=_search_payload()))
+
+    async with httpx.AsyncClient() as client:
+        found = await _adapter(client, api_key=None).search(_query(), limit=5)
+
+    assert len(found) == 1
+
+
+@respx.mock
+async def test_работа_без_doi_держится_на_посадочной_странице():
+    """Часть русскоязычного корпуса приходит из репозиториев без DOI (у разведки
+    это записи DOAJ и вузовских архивов). Ссылка обязана найтись, иначе годная
+    работа выбрасывается."""
+    work = _work_hit(doi=None, landing_page_url="https://elib.example.ru/item/158931")
+    respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(200, json={"results": [work]}))
+
+    async with httpx.AsyncClient() as client:
+        found = await _adapter(client).search(_query(), limit=5)
+
+    assert str(found[0].url) == "https://elib.example.ru/item/158931"
+    assert found[0].raw_id is None
+
+
+@respx.mock
+async def test_запись_без_названия_и_без_ссылки_отбрасывается():
+    """Кандидат без названия или без ссылки бесполезен: карточку нечем
+    подтвердить. Отбрасывается запись, а не вся выдача."""
+    respx.get(url__startswith=API_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    _work_hit(display_name=""),
+                    _work_hit(doi=None, landing_page_url=None, work_id=None),
+                    _work_hit(),
+                ]
+            },
+        )
     )
+
+    async with httpx.AsyncClient() as client:
+        found = await _adapter(client).search(_query(), limit=5)
+
+    assert len(found) == 1, "негодная запись унесла с собой годную"
+
+
+@respx.mock
+async def test_негодная_ссылка_на_pdf_не_уносит_кандидата(caplog):
+    """Тот же принцип, что П-2 аудита завела для обогащения: отбрасывается
+    ПОЛЕ, а не вся находка."""
+    respx.get(url__startswith=API_URL).mock(
+        return_value=httpx.Response(200, json={"results": [_work_hit(pdf_url="не ссылка")]})
+    )
+
+    with caplog.at_level(logging.INFO):
+        async with httpx.AsyncClient() as client:
+            found = await _adapter(client).search(_query(), limit=5)
+
+    assert found[0].pdf_url is None
+    assert found[0].title, "кандидат выброшен вместе с кривой ссылкой"
+    assert any("поле pdf_url отброшено" in record.getMessage() for record in caplog.records)
+
+
+@respx.mock
+async def test_пустая_выдача_это_не_отказ():
+    """Инвариант №5: источник ответил и сказал «ничего нет» — обычный пустой
+    список. Превращать это в отказ значит врать в `sources_unavailable`."""
+    respx.get(url__startswith=API_URL).mock(
+        return_value=httpx.Response(200, json={"meta": {"count": 0}, "results": []})
+    )
+
+    async with httpx.AsyncClient() as client:
+        assert await _adapter(client).search(_query(), limit=5) == []
+
+
+@pytest.mark.parametrize("status", [429, 500])
+@respx.mock
+async def test_отказ_поиска_поднимается_как_search_error(status):
+    """Инвариант №5 в редакции РЕШ-43: транспортный отказ обязан дойти до
+    оркестратора отказом, а не пустым успехом."""
+    respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(status, json={"error": "нет"}))
+
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(SearchError):
+            await _adapter(client).search(_query(), limit=5)
+
+
+@respx.mock
+async def test_нечитаемый_ответ_поиска_тоже_отказ():
+    respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(200, text="не json"))
+
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(SearchError):
+            await _adapter(client).search(_query(), limit=5)
+
+
+# ── Инвертированный индекс реферата ─────────────────────────────────────────
+@pytest.mark.parametrize(
+    ("index", "expected"),
+    [
+        ({"Катализатор": [0], "сохраняет": [1], "активность": [2]}, "Катализатор сохраняет активность"),
+        # Пустой индекс и его отсутствие — не ошибка: реферата просто нет
+        ({}, ""),
+        (None, ""),
+        ("текст реферата", ""),
+        # Слово встречается дважды — обе позиции обязаны встать на свои места
+        ({"и": [1, 3], "кокс": [0], "сера": [2], "азот": [4]}, "кокс и сера и азот"),
+        # Дыры в нумерации: издатель вырезал часть текста, порядок оставшегося
+        # обязан сохраниться
+        ({"начало": [0], "конец": [17]}, "начало конец"),
+        # Позиции не числом — запись мусорная, слово в текст не идёт
+        ({"хорошо": [0], "плохо": "нет", "тоже": [None, 1]}, "хорошо тоже"),
+        # Ни одной годной позиции — реферата нет
+        ({"слово": []}, ""),
+    ],
+)
+def test_разворот_инвертированного_индекса(index, expected):
+    """Прямого текста реферата OpenAlex не отдаёт вовсе — только индекс
+    «слово → позиции». Разворот тихо не ломается: любая порча даёт пустой
+    реферат, а не мусор в карточке клиента."""
+    assert _abstract_from_inverted_index(index) == expected
+
+
+def test_реферат_режется_по_той_же_границе_что_у_crossref():
+    """Вход скоринга не резиновый: длинный реферат обязан быть обрезан."""
+    index = {f"слово{number}": [number] for number in range(500)}
+
+    assert len(_abstract_from_inverted_index(index)) == MAX_SNIPPET
+
+
+# ── Поиск в прогоне ─────────────────────────────────────────────────────────
+@respx.mock
+async def test_оркестратор_спрашивает_openalex_поиском(settings):
+    """Обратная сторона снятого `enrich_only`: источник теперь ОБЯЗАН быть
+    опрошен поиском. Адаптер, который ищет, но которого никто не зовёт, ничем
+    не отличается от отсутствующего."""
+    respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(200, json=_search_payload()))
+    plan = SearchPlan(queries=[_query()])
+
+    async with httpx.AsyncClient() as client:
+        pipeline = ScoutPipeline(settings=settings, router=LLMRouter(settings), adapters=[_adapter(client)])
+        outcome = await pipeline.gather_candidates(plan)
+
+    assert [candidate.provider for candidate in outcome.candidates] == ["openalex"]
+    assert outcome.unavailable == []
+    assert outcome.hits_by_provider == {"openalex": 1}
+
+
+@respx.mock
+async def test_отказ_поиска_доезжает_до_недоступных_источников(settings):
+    """Отказ поиска обязан быть виден клиенту в `sources_unavailable`, а не
+    выглядеть как «источник ничего не нашёл»."""
+    respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(500, json={"error": "нет"}))
+    plan = SearchPlan(queries=[_query()])
 
     async with httpx.AsyncClient() as client:
         pipeline = ScoutPipeline(settings=settings, router=LLMRouter(settings), adapters=[_adapter(client)])
         outcome = await pipeline.gather_candidates(plan)
 
     assert outcome.candidates == []
-    assert outcome.unavailable == [], "источник обогащения выдан за отказавший поиск"
-    assert route.call_count == 0
+    assert outcome.unavailable == ["openalex"]
 
 
 # ── Склейка патча с кандидатом (оркестратор) ────────────────────────────────
@@ -527,6 +805,11 @@ async def test_обогащение_встроено_между_дедуплик
     остающийся после прогона (П-5 аудита).
     """
     respx.get(url__startswith=LOOKUP).mock(return_value=httpx.Response(200, json=_work()))
+    # Поиск у того же источника теперь тоже спрашивается (Т-15): маршрут lookup
+    # зарегистрирован первым и потому забирает свои адреса себе, поиску
+    # достаётся всё остальное. Выдача пустая намеренно — здесь проверяется место
+    # обогащения в прогоне, и вторая находка только зашумила бы проверку.
+    respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(200, json={"meta": {}, "results": []}))
     captured: dict = {}
 
     async def spy_persist(session_factory, **kwargs) -> None:
@@ -578,18 +861,26 @@ async def test_доктор_видит_все_источники_реестра(
     assert statuses["crossref"] is None, "бесплатный рабочий источник статуса не имеет"
     assert statuses["rospatent"][0] == STATUS_STUB
     assert statuses["patents_view"][0] == STATUS_STUB
-    assert statuses["openalex"][0] == STATUS_NO_KEY
-    assert "OPENALEX_API_KEY" in statuses["openalex"][1]
-    assert "test" not in statuses["openalex"][1], "в пояснении не может быть значений ключей (инвариант №3)"
+    assert statuses["yandex_search"][0] == STATUS_NO_KEY
+    assert "YANDEX_SEARCH_API_KEY" in statuses["yandex_search"][1]
+    assert "test" not in statuses["yandex_search"][1], "в пояснении не может быть значений ключей (инвариант №3)"
 
 
-async def test_openalex_с_ключом_становится_рабочим_источником():
+async def test_openalex_включён_и_без_ключа_а_ключ_доезжает_до_обогащения():
+    """Т-15, РЕШ-71: поиск бесплатен, поэтому источник обязан быть в рабочем
+    наборе без всяких настроек. Прежняя редакция (`requires_key = True`) делала
+    поиск недостижимым: адаптер не попадал в сборку вовсе.
+
+    Вторая половина — та, которую легко потерять: ключ, если он задан, обязан
+    по-прежнему доехать до конструктора, иначе тихо отвалится обогащение по DOI.
+    """
     async with httpx.AsyncClient() as client:
-        adapters = build_adapters(client, {"openalex_api_key": "k"}, include_stubs=True)
-        working = build_adapters(client, {"openalex_api_key": "k"})
+        without_settings = build_adapters(client, None)
+        with_key = build_adapters(client, {"openalex_api_key": "k"})
 
-    assert adapter_status(next(a for a in adapters if a.name == "openalex")) is None
-    assert "openalex" in {a.name for a in working}, "с ключом источник обязан быть и в рабочем наборе"
+    assert "openalex" in {a.name for a in without_settings}, "без ключа источник обязан искать"
+    assert adapter_status(next(a for a in without_settings if a.name == "openalex")) is None
+    assert next(a for a in with_key if a.name == "openalex")._api_key == "k", "ключ не доехал до обогащения"
 
 
 async def test_рабочий_набор_прежний_заготовок_в_нём_нет():
@@ -599,7 +890,7 @@ async def test_рабочий_набор_прежний_заготовок_в_н
         names = {a.name for a in build_adapters(client, None)}
 
     assert "rospatent" not in names and "patents_view" not in names
-    assert "openalex" not in names, "без ключа обогащение не включается"
+    assert "yandex_search" not in names, "без ключа платный источник не включается"
     assert "crossref" in names
 
 
@@ -650,7 +941,7 @@ def _doctor_adapters() -> tuple[_DoctorAdapter, _DoctorAdapter, _DoctorAdapter]:
     return (
         _DoctorAdapter("crossref"),
         _DoctorAdapter("rospatent", (STATUS_STUB, "заготовка: источник ещё не подключён")),
-        _DoctorAdapter("openalex", (STATUS_NO_KEY, "не заполнено: OPENALEX_API_KEY")),
+        _DoctorAdapter("yandex_search", (STATUS_NO_KEY, "не заполнено: YANDEX_SEARCH_API_KEY")),
     )
 
 
@@ -682,8 +973,8 @@ async def test_доктор_печатает_каждый_источник_с_е
 
     assert "crossref" in text and "ок, проба выполнена" in text
     assert "rospatent" in text and STATUS_STUB in text
-    assert "openalex" in text and STATUS_NO_KEY in text
-    assert "OPENALEX_API_KEY" in text
+    assert "yandex_search" in text and STATUS_NO_KEY in text
+    assert "YANDEX_SEARCH_API_KEY" in text
 
 
 async def test_доктор_переживает_упавшую_пробу_источника(monkeypatch):
@@ -717,17 +1008,36 @@ async def test_здоровье_заготовок_не_падает():
 
 
 @respx.mock
-async def test_здоровье_openalex_проверяется_бесплатным_lookup():
-    route = respx.get(url__startswith=LOOKUP).mock(return_value=httpx.Response(200, json=_work()))
+async def test_здоровье_openalex_проверяется_бесплатным_поиском():
+    """Проба доктора обязана трогать ту роль, которая работает всегда.
+
+    Прежняя проба шла в lookup по DOI и без ключа возвращала False. Теперь
+    источник включается и без ключа (РЕШ-71), и такая проба докладывала бы «нет
+    ключа» про источник, который в этом же прогоне исправно ищет. Состояние
+    обогащения при этом не скрывается — оно уходит второй половиной строки.
+    """
+    route = respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(200, json=_search_payload()))
 
     async with httpx.AsyncClient() as client:
         ok, detail = await _adapter(client).health()
-        assert ok is True and "lookup" in detail
+        assert ok is True and "кандидатов в пробе: 1" in detail
+        assert "OPENALEX_API_KEY" not in detail, "ключ есть, жаловаться не на что"
 
         no_key_ok, no_key_detail = await _adapter(client, api_key=None).health()
 
-    assert no_key_ok is False and "OPENALEX_API_KEY" in no_key_detail
-    assert route.call_count == 1, "проба без ключа не должна ходить в сеть"
+    assert no_key_ok is True, "поиск ключа не требует, проба обязана проходить"
+    assert "OPENALEX_API_KEY" in no_key_detail, "выключенное обогащение обязано быть видно доктору"
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_здоровье_отличает_отказ_источника_от_пустой_пробы():
+    respx.get(url__startswith=API_URL).mock(return_value=httpx.Response(503, json={"error": "нет"}))
+
+    async with httpx.AsyncClient() as client:
+        ok, detail = await _adapter(client).health()
+
+    assert ok is False and "openalex" in detail
 
 
 def test_таблица_ключей_доктора_знает_про_роспатент_и_patentsview():
