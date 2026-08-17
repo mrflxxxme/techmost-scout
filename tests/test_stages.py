@@ -27,7 +27,16 @@ from app.pipeline.stages import (
     select_publishable_cards,
     select_top,
 )
-from app.schemas import Candidate, Evidence, ScoredCandidate, SearchPlan, SearchQuery, SolutionCard, SourceType
+from app.schemas import (
+    Candidate,
+    Evidence,
+    MaturityStage,
+    ScoredCandidate,
+    SearchPlan,
+    SearchQuery,
+    SolutionCard,
+    SourceType,
+)
 from app.search.base import SearchAdapter
 
 #: Ответ скоринга на одного кандидата — ровно по схеме `ScoreBatch`.
@@ -518,6 +527,178 @@ def test_select_publishable_cards_keeps_all_when_under_limit():
     published = select_publishable_cards(cards)
 
     assert len(published) == 3
+
+
+# ── Т-22: потолок зрелости конкурсной карточки и метрика покрытия ──────────
+
+
+def _contest_scored(
+    *,
+    title: str = "Решение команды на хакатоне",
+    url: str = "https://example.org/hack/1",
+    org: str | None = None,
+    snippet: str = "",
+) -> ScoredCandidate:
+    """Оценённый кандидат конкурсного класса: важен только `source_type` и текст,
+    по которому код узнаёт конкурс с многолетним циклом."""
+    return ScoredCandidate(
+        candidate=Candidate(
+            source_type=SourceType.CONTEST,
+            title=title,
+            url=url,
+            org=org,
+            snippet=snippet,
+            provider="yandex",
+        ),
+        relevance=7,
+        maturity=7,
+        accessibility=8,
+        freshness=8,
+        completeness=6,
+    )
+
+
+def _card_with_maturity(stage: MaturityStage) -> SolutionCard:
+    """Карточка, в которой модель заявила стадию `stage`."""
+    card = _card("Предиктивная диагностика оборудования")
+    card.maturity_stage = stage
+    return card
+
+
+@pytest.mark.parametrize("stage", [MaturityStage.SERIES, MaturityStage.PILOT])
+def test_contest_card_maturity_capped_at_prototype(stage: MaturityStage):
+    """Хакатонная карточка не выходит выше `prototype`, что бы ни написала модель
+    (РЕШ-79 п. 2, §2.2 разведки).
+
+    Оба входа обязательны. `series` — прямой критерий 2 задачи. `pilot` — тот
+    случай, ради которого потолок и заводился: описание хакатонного проекта
+    пишет сама команда, оно звучит как готовый продукт, и модель ставит именно
+    `pilot`, а не `series`. Потолок, срабатывающий только на `series`,
+    пропустил бы к клиенту ровно то завышение, которое ловит.
+    """
+    card = _card_with_maturity(stage)
+
+    capped = stages.cap_contest_maturity(card, [_contest_scored()])
+
+    assert capped.maturity_stage is MaturityStage.PROTOTYPE
+
+
+def test_contest_card_maturity_below_ceiling_is_not_raised():
+    """Понижение одностороннее: `lab` потолком до `prototype` не поднимается —
+    иначе код сам завышал бы зрелость там, где модель была честнее."""
+    card = _card_with_maturity(MaturityStage.LAB)
+
+    capped = stages.cap_contest_maturity(card, [_contest_scored()])
+
+    assert capped.maturity_stage is MaturityStage.LAB
+
+
+def test_contest_card_unknown_maturity_stays_unknown():
+    """`unknown` — не стадия, а отсутствие подтверждения (инвариант №1):
+    потолок не имеет права превратить его в `prototype`."""
+    card = _card_with_maturity(MaturityStage.UNKNOWN)
+
+    capped = stages.cap_contest_maturity(card, [_contest_scored()])
+
+    assert capped.maturity_stage is MaturityStage.UNKNOWN
+
+
+def test_long_cycle_contest_ceiling_is_pilot():
+    """У конкурса с многолетним циклом (XPRIZE, Up Great) есть натурные испытания
+    по регламенту организатора — потолок `pilot`, а `series` всё равно срезается."""
+    group = [_contest_scored(title="Финалист XPRIZE Carbon Removal", url="https://www.xprize.org/prizes/carbon")]
+
+    assert stages.contest_maturity_ceiling(group) is MaturityStage.PILOT
+    assert stages.cap_contest_maturity(_card_with_maturity(MaturityStage.SERIES), group).maturity_stage is (
+        MaturityStage.PILOT
+    )
+    assert stages.cap_contest_maturity(_card_with_maturity(MaturityStage.PILOT), group).maturity_stage is (
+        MaturityStage.PILOT
+    )
+
+
+def test_non_contest_card_maturity_untouched():
+    """Карточка по публикациям потолком не трогается: правило про конкурсы, а не
+    про зрелость вообще."""
+    group = [_scored(1, relevance=8)]  # source_type = publication
+
+    assert stages.contest_maturity_ceiling(group) is None
+    assert stages.cap_contest_maturity(_card_with_maturity(MaturityStage.SERIES), group).maturity_stage is (
+        MaturityStage.SERIES
+    )
+
+
+def test_mixed_group_with_contest_is_capped():
+    """Хватает одного конкурсного кандидата в группе: карточка всё равно опирается
+    на текст, который писала команда."""
+    group = [_scored(1, relevance=8), _contest_scored()]
+
+    capped = stages.cap_contest_maturity(_card_with_maturity(MaturityStage.SERIES), group)
+
+    assert capped.maturity_stage is MaturityStage.PROTOTYPE
+
+
+def test_contest_does_not_count_towards_source_type_coverage():
+    """Критерий 3: выдача из `publication`, `patent` и `contest` даёт покрытие 2,
+    а не 3 (РЕШ-85 п. 2). Иначе четвёртый тип метрики добирался бы конкурсами
+    вместо грантов и организаций."""
+    candidates = [
+        Candidate(source_type=SourceType.PUBLICATION, title="Статья", url="https://example.org/a", provider="crossref"),
+        Candidate(source_type=SourceType.PATENT, title="Патент", url="https://example.org/b", provider="rospatent"),
+        Candidate(source_type=SourceType.CONTEST, title="Хакатон", url="https://example.org/c", provider="yandex"),
+        Candidate(source_type=SourceType.CONTEST, title="Хакатон 2", url="https://example.org/d", provider="yandex"),
+    ]
+
+    assert stages.count_source_type_coverage(candidates) == 2
+
+
+def test_source_type_coverage_counts_distinct_countable_types():
+    """Прочие типы считаются как раньше: четыре разных типа — покрытие 4, дубли
+    одного типа счётчик не поднимают."""
+    candidates = [
+        Candidate(source_type=SourceType.PUBLICATION, title="A", url="https://example.org/a", provider="crossref"),
+        Candidate(source_type=SourceType.PUBLICATION, title="B", url="https://example.org/b", provider="crossref"),
+        Candidate(source_type=SourceType.PATENT, title="C", url="https://example.org/c", provider="rospatent"),
+        Candidate(source_type=SourceType.WEB, title="D", url="https://example.org/d", provider="yandex"),
+        Candidate(source_type=SourceType.SHOWCASE, title="E", url="https://example.org/e", provider="showcase"),
+    ]
+
+    assert stages.count_source_type_coverage(candidates) == 4
+
+
+async def test_author_card_applies_contest_ceiling_to_model_answer(settings, brief, fake_provider_factory):
+    """Потолок вшит в саму стадию, а не живёт отдельной функцией: модель на
+    конкурсной группе отвечает `series`, карточка выходит из `author_card` уже
+    с `prototype`. Без этой проверки правило зелёное в тестах и мёртвое в
+    пайплайне."""
+    card_json = json.dumps(
+        {
+            "title": "Система предиктивной диагностики",
+            "essence": "Модель предсказывает отказ узла по вибрации.",
+            "maturity_stage": "series",
+            "applicability": "Закрывает задачу простоев оборудования.",
+            "next_step": "Связаться с командой и запросить протокол испытаний.",
+            "evidence": [{"claim": "Решение победило на хакатоне", "url": "https://example.org/hack/1"}],
+        },
+        ensure_ascii=False,
+    )
+    provider = fake_provider_factory("deepseek", [card_json])
+    router = LLMRouter(settings, providers={"deepseek": provider})
+
+    card = await stages.author_card(router, brief, [_contest_scored()])
+
+    assert card.maturity_stage is MaturityStage.PROTOTYPE
+
+
+def test_source_type_coverage_of_contests_only_is_zero():
+    """Одни конкурсы — покрытие 0: метрика приёмки не должна проходить на классе,
+    который в неё не входит."""
+    candidates = [
+        Candidate(source_type=SourceType.CONTEST, title="A", url="https://example.org/a", provider="yandex"),
+        Candidate(source_type=SourceType.CONTEST, title="B", url="https://example.org/b", provider="yandex"),
+    ]
+
+    assert stages.count_source_type_coverage(candidates) == 0
 
 
 # ── Стадия extractor: нормализация сырой выдачи моделью (Э2-5) ──────────────

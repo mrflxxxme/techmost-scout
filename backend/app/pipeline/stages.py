@@ -16,6 +16,7 @@ import re
 import statistics
 import time
 from collections import defaultdict
+from collections.abc import Iterable, Sequence
 
 from pydantic import BaseModel, Field, HttpUrl, TypeAdapter, ValidationError, field_validator
 
@@ -477,6 +478,25 @@ def deduplicate(candidates: list[Candidate]) -> list[Candidate]:
     if removed:
         log.info("дедупликация убрала %s дублей из %s", removed, len(candidates))
     return list(best.values())
+
+
+# ── 3а. Покрытие типов источников ───────────────────────────────────────────
+#: Типы источников, которые НЕ засчитываются в метрику «покрытие типов
+#: источников ≥ 4 на запрос» (РЕШ-85 п. 2). Сегодня в наборе только `contest`:
+#: иначе четвёртый тип добирался бы конкурсами вместо грантов и организаций, и
+#: метрика приёмки тихо стала бы легче задуманного — ровно та подгонка порога
+#: под удобство, которую владелец отверг в РЕШ-76.
+COVERAGE_EXCLUDED_SOURCE_TYPES: frozenset[SourceType] = frozenset({SourceType.CONTEST})
+
+
+def count_source_type_coverage(candidates: Iterable[Candidate]) -> int:
+    """Сколько РАЗНЫХ типов источников дала выдача — по правилам метрики РЕШ-85.
+
+    Считаются только типы, засчитываемые метрикой: конкурсы (`contest`) в счёт
+    не идут, сколько бы их ни нашлось. Выдача из `publication`, `patent` и
+    `contest` даёт покрытие 2, а не 3.
+    """
+    return len({item.source_type for item in candidates} - COVERAGE_EXCLUDED_SOURCE_TYPES)
 
 
 # ── 4. Скоринг ──────────────────────────────────────────────────────────────
@@ -990,6 +1010,84 @@ async def author_card(router: LLMRouter, brief: Brief, group: list[ScoredCandida
     # переписывает с опечатками, а проверяющая стадия потом справедливо
     # жалуется, что кандидаты не переданы.
     card.candidate_urls = [item.candidate.url for item in group]
+    # Стадию зрелости конкурсной карточки правит код, а не модель: описание
+    # хакатонного проекта пишет сама команда, и оно всегда звучит как готовый
+    # продукт (см. cap_contest_maturity).
+    return cap_contest_maturity(card, group)
+
+
+#: Порядок стадий зрелости по возрастанию. `unknown` в него не входит: это не
+#: стадия, а честное «ни один признак источниками не подтверждён», и понижать
+#: его потолком некуда.
+_MATURITY_ORDER: tuple[MaturityStage, ...] = (
+    MaturityStage.LAB,
+    MaturityStage.PROTOTYPE,
+    MaturityStage.PILOT,
+    MaturityStage.SERIES,
+)
+
+#: Признаки конкурса с многолетним циклом (§2.2 разведки `contests-recon.md`):
+#: у XPRIZE и Up Great (НТИ) решения проходят натурные испытания по регламенту
+#: организатора с независимым замером, поэтому их потолок — `pilot`, а не
+#: `prototype`. Метки длинные намеренно: короткая вроде «нти» ловилась бы
+#: внутри посторонних слов («идентификация»).
+_LONG_CYCLE_CONTEST_MARKERS: tuple[str, ...] = (
+    "xprize",
+    "upgreat",
+    "up great",
+    "up-great",
+    "ап грейт",
+    "апгрейт",
+    "национальная технологическая инициатива",
+    "многолетн",
+)
+
+
+def contest_maturity_ceiling(group: Sequence[ScoredCandidate]) -> MaturityStage | None:
+    """Потолок зрелости, заданный конкурсными кандидатами группы.
+
+    `None` — конкурсных кандидатов в группе нет, и потолка тоже нет: обычная
+    карточка по публикациям и патентам этим правилом не трогается.
+    """
+    contests = [item.candidate for item in group if item.candidate.source_type is SourceType.CONTEST]
+    if not contests:
+        return None
+    if any(_is_long_cycle_contest(candidate) for candidate in contests):
+        return MaturityStage.PILOT
+    return MaturityStage.PROTOTYPE
+
+
+def _is_long_cycle_contest(candidate: Candidate) -> bool:
+    """Похож ли кандидат на конкурс с многолетним циклом — по названию, площадке и тексту."""
+    haystack = " ".join([candidate.title, candidate.org or "", str(candidate.url), candidate.snippet]).lower()
+    return any(marker in haystack for marker in _LONG_CYCLE_CONTEST_MARKERS)
+
+
+def cap_contest_maturity(card: SolutionCard, group: Sequence[ScoredCandidate]) -> SolutionCard:
+    """Понизить стадию зрелости карточки до потолка, заданного типом конкурса.
+
+    Правило владельца (РЕШ-79 п. 2) и вывод разведки §2.2: `maturity_stage`
+    решения конкурсного класса **никогда не выставляется моделью по тексту
+    описания**. Описание пишет сама команда, и оно звучит как готовый продукт
+    («система предиктивной диагностики для промышленных предприятий»), — модель,
+    читая такой текст, ставит `pilot` за 48 часов работы. Поэтому стадию правит
+    код по типу источника, как и `pdf_urls`: хакатон — не выше `prototype`,
+    конкурс с многолетним циклом — не выше `pilot`.
+
+    Понижение одностороннее: стадию ниже потолка функция не поднимает, а
+    `unknown` не трогает вовсе — это не завышение, а отсутствие подтверждения.
+    """
+    ceiling = contest_maturity_ceiling(group)
+    if ceiling is None or card.maturity_stage not in _MATURITY_ORDER:
+        return card
+    if _MATURITY_ORDER.index(card.maturity_stage) > _MATURITY_ORDER.index(ceiling):
+        log.info(
+            "конкурсная карточка «%s»: стадия %s понижена до потолка %s (РЕШ-79 п. 2)",
+            card.title,
+            card.maturity_stage.value,
+            ceiling.value,
+        )
+        card.maturity_stage = ceiling
     return card
 
 

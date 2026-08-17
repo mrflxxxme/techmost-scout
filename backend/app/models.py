@@ -145,6 +145,11 @@ class SolutionCard(Base):
     essence: Mapped[str] = mapped_column(Text)
     maturity_stage: Mapped[str] = mapped_column(String(32))
     trl_estimate: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Статус прав на решение (РЕШ-79 п. 1): `у команды`,
+    #: `передано организатору или заказчику` либо `не установлено`. По умолчанию
+    #: — «не установлено»: автоматически статус не определяется, и пустая строка
+    #: здесь читалась бы как «прав нет вопросов», чего разведка не подтверждает.
+    ip_status: Mapped[str] = mapped_column(String(64), default="не установлено")
     developer_org: Mapped[str | None] = mapped_column(String(512), nullable=True)
     developer_team: Mapped[str | None] = mapped_column(String(512), nullable=True)
     contact_leads: Mapped[list] = mapped_column(JSON, default=list)
