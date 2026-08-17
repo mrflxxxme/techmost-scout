@@ -1,0 +1,29 @@
+﻿........................................................................ [ 19%]
+.........................................................F.............. [ 38%]
+........................................................................ [ 57%]
+........................................................................ [ 76%]
+........................................................................ [ 95%]
+.................                                                        [100%]
+================================== FAILURES ===================================
+___________ test_каждый_тип_промпта_обслуживается_рабочим_адаптером ___________
+
+    def test_каждый_тип_промпта_обслуживается_рабочим_адаптером():
+        """Правило 1 не должно разрешать тип, для которого нет ни одного рабочего
+        адаптера, — иначе формулировка уходит в никуда (половина DLG-1)."""
+        prompt_types = _planner_allowed_types()
+        implemented_types = _implemented_adapter_source_types()
+        unreachable = prompt_types - implemented_types
+>       assert not unreachable, f"planner.md разрешает типы без рабочего адаптера: {sorted(unreachable)}"
+E       AssertionError: planner.md разрешает типы без рабочего адаптера: ['patent']
+E       assert not {'patent'}
+
+tests\test_plan_types.py:58: AssertionError
+============================== warnings summary ===============================
+..\..\..\.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\KUklonskiy\techmost-scout\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_plan_types.py::test_каждый_тип_промпта_обслуживается_рабочим_адаптером
+1 failed, 376 passed, 1 warning in 92.30s (0:01:32)
