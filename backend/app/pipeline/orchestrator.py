@@ -139,16 +139,22 @@ def candidate_records(
     по `id()` держалось бы на том, что отбор не пересобирает элементы.
 
     Признак нейтральной оценки спрашивается у стадии скоринга
-    (`stages._has_neutral_score`), а не вычисляется здесь заново: вторая копия
+    (`stages.has_neutral_score`), а не вычисляется здесь заново: вторая копия
     этого знания молча разошлась бы с первой, и в базе следы отказа батча стали
     бы неотличимы от оценок модели — ровно то, что ловит измеритель
     `app.metrics`.
+
+    Вызывать функцию нужно **отдельно на каждый проход** со своим `pass_no`, а
+    не на склеенном списке двух проходов (Т-21): судьба берётся по ключу
+    склейки, и общий для двух проходов ключ пометил бы `selected` обе строки,
+    хотя отбор взял одну. Внутри одного прохода список приходит из
+    `deduplicate`, поэтому там повтор ключа невозможен по построению.
     """
     picked = {item.candidate.dedup_key() for item in selected}
     return [
         CandidateRecord(
             candidate=item.candidate,
-            score=score_payload(item, neutral=stages._has_neutral_score(item)),
+            score=score_payload(item, neutral=stages.has_neutral_score(item)),
             status="selected" if item.candidate.dedup_key() in picked else "rejected",
             pass_no=pass_no,
         )
@@ -664,12 +670,33 @@ class ScoutPipeline:
                 cost_rub=stage_cost,
             )
         )
+        # Условный второй проход (РЕШ-81). Решение печатается ВСЕГДА, одной из
+        # двух дословных строк, в том числе при выключенном пороге: иначе
+        # «проход не сработал» неотличимо от «код до проверки не дошёл».
+        scored_second: list[ScoredCandidate] = []
+        if stages.needs_second_pass(scored, threshold=self._settings.second_pass_relevance_max):
+            scored_second, second_unavailable = await self._second_pass(
+                brief, plan, unique, scored, stage_log=stage_log, plan_log=plan_log
+            )
+            if second_unavailable:
+                # Источник, не ответивший хотя бы одному проходу, честно едет в
+                # отчёт: клиент читает список недоступных источников целиком по
+                # прогону, а не по его половине.
+                outcome.unavailable = sorted(set(outcome.unavailable) | set(second_unavailable))
+
         target = self._settings.target_cards
-        selected = stages.select_top(scored, limit=target * 2)
+        # Отбор идёт по обоим проходам сразу: второй проход затевался ради того,
+        # чтобы в карточки попало найденное им, а не ради отдельного списка.
+        selected = stages.select_top([*scored, *scored_second], limit=target * 2)
         # Оценки уезжают в БД сразу после отбора, а не в конце прогона: отказ
         # сборки карточек или сводки не должен уносить с собой единственное
         # числовое свидетельство того, что нашёл и как оценил этот прогон.
+        # Проходы записываются по отдельности, каждый со своим `pass_no`: судьба
+        # кандидата берётся по ключу склейки, и склеенный список пометил бы
+        # `selected` обе строки общего ключа (см. `candidate_records`).
         candidate_log.extend(candidate_records(scored, selected))
+        if scored_second:
+            candidate_log.extend(candidate_records(scored_second, selected, pass_no=2))
         groups = stages.group_for_cards(selected, target=target)
         await self._notify("scorer", f"Отобрано вариантов для карточек: {len(groups)}", 0.6)
 
@@ -729,6 +756,114 @@ class ScoutPipeline:
         )
         await self._notify("done", f"Отчёт готов. Стоимость запроса: {report.cost_rub:.2f} ₽", 1.0)
         return report
+
+    async def _second_pass(
+        self,
+        brief: Brief,
+        plan: SearchPlan,
+        first_pass: list[Candidate],
+        scored: list[ScoredCandidate],
+        *,
+        stage_log: list[StageRecord],
+        plan_log: list[PlanRecord],
+    ) -> tuple[list[ScoredCandidate], list[str]]:
+        """Второй проход поиска: новый план, повторный поиск, скоринг НОВЫХ кандидатов (РЕШ-81).
+
+        Возвращает пару «оценки второго прохода, источники, не ответившие во
+        втором проходе». Пустой первый элемент означает, что прохода фактически
+        не случилось — отказала стадия `replan` либо второй поиск не принёс ни
+        одного кандидата сверх первой выдачи.
+
+        Три решения, каждое из которых стоит денег или времени прогона:
+
+        * **Отказ `replan` прогон не роняет** (инвариант №5): отчёт собирается
+          по первой выдаче, а факт отказа виден в журнале стадий строкой с
+          непустым `error` — тем же способом, каким видно отказ сводки и
+          интейка. Молчаливый отказ был бы неотличим от «порог не сработал».
+          Стоп-кран по стоимости (РЕШ-45) при этом пробрасывается: исчерпанный
+          лимит — не отказ модели, а команда «стоп тратить».
+        * **В скоринг уходят только новые кандидаты.** Повторно оценивать уже
+          оценённых — платить второй раз за тот же ответ и удваивать 25–30 минут
+          прогона, не получив ни одного нового кандидата. Новизна считается по
+          ключу склейки через существующий `deduplicate`, которому отдаются обе
+          выдачи сразу: так же схлопываются и дубли внутри второго прохода.
+        * **Свои строки журнала стадий** — `replan`, вторые `search` и `scorer`:
+          трата второго прохода обязана быть видна отдельно, а не растворяться
+          в строках первого.
+        """
+        started = datetime.now(UTC)
+        cost_before = dict(self._router.cost.by_provider)
+        await self._notify("replan", "Выдача мимо задачи — перестраиваю план поиска", 0.55)
+        replan_error: str | None = None
+        new_plan: SearchPlan | None = None
+        try:
+            new_plan = await stages.replan_search(self._router, brief, plan, scored)
+        except CostLimitExceededError:
+            raise
+        except Exception as exc:
+            log.warning("стадия replan не удалась (%s), остаюсь на выдаче первого прохода", exc)
+            replan_error = f"стадия replan не удалась: {exc}"
+        stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_log.append(
+            StageRecord(
+                stage="replan",
+                started_at=started,
+                finished_at=datetime.now(UTC),
+                provider=provider,
+                cost_rub=stage_cost,
+                error=replan_error,
+            )
+        )
+        if new_plan is None:
+            return [], []
+
+        plan_log.append(PlanRecord(plan=new_plan, pass_no=2))
+        await self._notify("replan", f"Формулировок во втором плане: {len(new_plan.queries)}", 0.56)
+
+        started = datetime.now(UTC)
+        cost_before = dict(self._router.cost.by_provider)
+        outcome = await self.gather_candidates(new_plan, industry=brief.industry)
+        stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_log.append(
+            StageRecord(
+                stage="search",
+                started_at=started,
+                finished_at=datetime.now(UTC),
+                provider=provider,
+                cost_rub=stage_cost,
+                sources_hit=dict(outcome.hits_by_provider),
+                error="; ".join(outcome.problems) or None,
+            )
+        )
+
+        known = {candidate.dedup_key() for candidate in first_pass}
+        merged = stages.deduplicate([*first_pass, *outcome.candidates])
+        fresh = [candidate for candidate in merged if candidate.dedup_key() not in known]
+        await self._notify(
+            "search",
+            f"Второй проход: найдено {len(outcome.candidates)}, из них новых после склейки {len(fresh)}",
+            0.58,
+        )
+        if not fresh:
+            return [], outcome.unavailable
+
+        fresh, citations = await self.enrich_candidates(fresh, stage_log=stage_log)
+
+        await self._notify("scorer", f"Оцениваю новых кандидатов второго прохода: {len(fresh)}", 0.59)
+        started = datetime.now(UTC)
+        cost_before = dict(self._router.cost.by_provider)
+        scored_second = await stages.score_candidates(self._router, brief, fresh, citations=citations)
+        stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
+        stage_log.append(
+            StageRecord(
+                stage="scorer",
+                started_at=started,
+                finished_at=datetime.now(UTC),
+                provider=provider,
+                cost_rub=stage_cost,
+            )
+        )
+        return scored_second, outcome.unavailable
 
     async def _author_cards(self, brief: Brief, groups: list[list]) -> list[SolutionCard]:
         """Собрать и проверить карточки. Параллельно, но не более трёх сразу —

@@ -25,6 +25,10 @@ PLACEHOLDER = re.compile(r"\{\{([A-Z_]+)\}\}")
 EXPECTED_PLACEHOLDERS = {
     "intake": {"RAW_TASK_TEXT", "INDUSTRY_HINT"},
     "planner": {"BRIEF_JSON"},
+    # Т-21: стадия второго прохода. Прежние формулировки и первая выдача едут
+    # отдельными метками — модель обязана видеть, что уже спрашивали и что из
+    # этого вышло, иначе «уточнённый» план получается пересказом прежнего.
+    "replanner": {"BRIEF_JSON", "PREVIOUS_QUERIES", "FIRST_PASS_RESULTS"},
     "card_author": {"BRIEF_JSON", "GROUP_CANDIDATES_JSON", "GOV_SUPPORT_JSON"},
     "verifier": {"CARD_JSON", "GROUP_CANDIDATES_JSON"},
     "summary": {"BRIEF_JSON", "CARDS_JSON"},
@@ -150,7 +154,7 @@ def test_render_prompt_fails_loudly_on_missing_value():
         render_prompt("verifier", CARD_JSON="{}")
 
 
-@pytest.mark.parametrize("name", ["intake", "planner", "card_author", "verifier", "summary", "scorer"])
+@pytest.mark.parametrize("name", ["intake", "planner", "replanner", "card_author", "verifier", "summary", "scorer"])
 def test_prompt_has_error_section(name: str):
     """У каждого промпта есть раздел про ошибки: дешёвые модели без него врут."""
     text = load_prompt(name).lower()
