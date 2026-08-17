@@ -86,7 +86,7 @@ SECRET_CHECKS: tuple[tuple[str, str, str], ...] = (
     # (РЕШ-52.4), в таблице источников он виден выключенным.
     ("GOOGLE_API_KEY", "google_api_key", "не используется: доступ закрыт Google, API отключается 01.01.2027"),
     ("GOOGLE_CSE_ID", "google_cse_id", "не используется: шёл в паре с ключом Google, значение очищено"),
-    ("OPENALEX_API_KEY", "openalex_api_key", "обогащение по DOI (с 02.2026 ключ обязателен)"),
+    ("OPENALEX_API_KEY", "openalex_api_key", "необязателен: поиск работает без ключа, нужен обогащению по DOI"),
     ("SEMANTICSCHOLAR_API_KEY", "semanticscholar_api_key", "необязателен, повышает лимиты"),
     ("ROSPATENT_API_KEY", "rospatent_api_key", "поисковая платформа Роспатента (Э2-2)"),
     ("PATENTSVIEW_API_KEY", "patentsview_api_key", "патенты США, ключ обязателен с 05.2025"),
