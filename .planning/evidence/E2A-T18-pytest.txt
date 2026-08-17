@@ -11,3 +11,24 @@
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 416 passed, 1 warning in 135.33s (0:02:15)
+
+── Проверки Т-18 ────────────────────────────────────────────────────────────
+ruff check .        -> All checks passed!
+ruff format --check -> 86 files already formatted
+pytest -q           -> 416 passed (база session/E2A: 406)
+pytest tests/test_openalex.py -q -> 71 passed (было 61)
+
+── Мутации (копия вне репозитория, git archive + tar) ───────────────────────
+М1 (П-1) удалён заголовок Authorization из _lookup
+   -> 1 failed, 70 passed; FAILED test_ключ_обогащения_уходит_в_заголовок_запроса
+М2а (П-2) снята запись "rospatent" из REQUIRED_SETTINGS
+   -> 3 failed, 68 passed; FAILED test_платные_источники_реестра_согласованы_с_required_settings
+      (плюс два прежних теста доктора)
+М2б (П-2) возвращён requires_key = True у OpenAlex
+   -> 1 failed, 70 passed; FAILED test_платные_источники_реестра_согласованы_с_required_settings
+      (ловит ТОЛЬКО новый структурный тест — ровно то, что показал аудит)
+М4 (П-4) убрана оговорка про платность из строки счётчика
+   -> 2 failed, 69 passed; FAILED test_строка_счётчика_называет_платность_норму_и_остаток,
+      test_счётчик_поиска_виден_оператору_в_конце_прогона
+М5 (П-5) FRESHNESS_YEARS 5 -> 100
+   -> 1 failed, 70 passed; FAILED test_горизонт_свежести_закреплён_числом
