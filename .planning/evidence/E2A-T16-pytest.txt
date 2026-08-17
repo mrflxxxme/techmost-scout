@@ -1,0 +1,45 @@
+﻿=== Т-16 · КиберЛенинка: переход с OAI-PMH на поисковый API ===
+
+$ pytest tests/test_search_cyberleninka.py -v
+============================= test session starts =============================
+collecting ... collected 13 items
+
+tests/test_search_cyberleninka.py::test_ответ_api_разбирается_в_кандидата_с_рефератом PASSED [  7%]
+tests/test_search_cyberleninka.py::test_подсветка_снята_из_названия_и_реферата PASSED [ 15%]
+tests/test_search_cyberleninka.py::test_реферат_берётся_из_фрагментов_когда_annotation_пуст PASSED [ 23%]
+tests/test_search_cyberleninka.py::test_запись_без_ссылки_или_названия_отбрасывается PASSED [ 30%]
+tests/test_search_cyberleninka.py::test_запрос_уходит_в_поисковый_api_без_фильтра_по_дате PASSED [ 38%]
+tests/test_search_cyberleninka.py::test_user_agent_называет_нас_и_содержит_контакт PASSED [ 46%]
+tests/test_search_cyberleninka.py::test_пауза_между_запросами_соблюдается PASSED [ 53%]
+tests/test_search_cyberleninka.py::test_повторный_запрос_берётся_из_кэша PASSED [ 61%]
+tests/test_search_cyberleninka.py::test_отказ_источника_поднимает_searcherror PASSED [ 69%]
+tests/test_search_cyberleninka.py::test_429_поднимает_searcherror PASSED [ 76%]
+tests/test_search_cyberleninka.py::test_нечитаемое_тело_поднимает_searcherror PASSED [ 84%]
+tests/test_search_cyberleninka.py::test_пустая_выдача_не_поднимает_отказ PASSED [ 92%]
+tests/test_search_cyberleninka.py::test_реестр_включает_киберленинку_без_ключа PASSED [100%]
+
+============================= 13 passed in 10.51s =============================
+
+$ pytest -q
+........................................................................ [ 19%]
+........................................................................ [ 39%]
+........................................................................ [ 58%]
+........................................................................ [ 78%]
+........................................................................ [ 98%]
+.......                                                                  [100%]
+============================== warnings summary ===============================
+..\..\..\.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\KUklonskiy\techmost-scout\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+367 passed, 1 warning in 106.83s (0:01:46)
+
+$ pytest tests/test_stage_token_budgets.py -q
+....                                                                     [100%]
+4 passed in 0.28s
+
+$ ruff check .
+All checks passed!
+$ ruff format --check .
+85 files already formatted

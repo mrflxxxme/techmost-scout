@@ -14,11 +14,14 @@
 Здесь проверяется обратное: транспортный отказ поднимается как `SearchError`,
 а пустая выдача при УСПЕШНОМ ответе (`noRecordsMatch`, ноль совпадений, пустой
 `message.items`) как была результатом, так и осталась — без исключения. Заодно
-закрыты тестами `Candidate.pdf_url` (Semantic Scholar, arXiv) и передача `set`
-в запрос КиберЛенинки без предупреждения. Сети нет — все ответы подменены respx.
+закрыты тестами `Candidate.pdf_url` (Semantic Scholar, arXiv) и передача
+формулировки в тело запроса КиберЛенинки: с Т-16 (РЕШ-68) она ищет через
+`POST /api/search`, а не через OAI-PMH. Сети нет — все ответы подменены respx.
 """
 
 from __future__ import annotations
+
+import json
 
 import httpx
 import pytest
@@ -30,7 +33,7 @@ from app.search.arxiv import ArxivAdapter
 from app.search.base import SearchError
 from app.search.crossref import API_URL as CROSSREF_API_URL
 from app.search.crossref import CrossrefAdapter
-from app.search.cyberleninka import BASE_URL as CYBERLENINKA_BASE_URL
+from app.search.cyberleninka import API_URL as CYBERLENINKA_API_URL
 from app.search.cyberleninka import CyberLeninkaAdapter
 from app.search.semanticscholar import API_URL as S2_API_URL
 from app.search.semanticscholar import SemanticScholarAdapter
@@ -172,107 +175,60 @@ async def test_semanticscholar_без_openaccesspdf_pdf_url_пуст():
 
 
 # ── КиберЛенинка ────────────────────────────────────────────────────────
+#
+# Т-16 (РЕШ-68): источник ищет через POST /api/search, а не через OAI-PMH.
+# Проверки отказа остались те же по смыслу — сменился транспорт: XML на GET
+# стал JSON на POST, `noRecordsMatch` — ответом `found: 0` без `articles`.
 
-_OAI_NO_RECORDS_MATCH = (
-    '<?xml version="1.0" encoding="UTF-8"?>'
-    '<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/">'
-    "<responseDate>2026-08-12T00:00:00Z</responseDate>"
-    '<request verb="ListRecords">https://cyberleninka.ru/oai</request>'
-    '<error code="noRecordsMatch">Записей не найдено</error>'
-    "</OAI-PMH>"
-)
-
-
-def _oai_record(*, title: str = "Катализатор гидроочистки: обзор") -> str:
-    return (
-        "<record>"
-        "<header><identifier>oai:cyberleninka.ru:article/n/example</identifier>"
-        "<datestamp>2020-01-01</datestamp></header>"
-        "<metadata><oai_dc:dc "
-        'xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" '
-        'xmlns:dc="http://purl.org/dc/elements/1.1/">'
-        f"<dc:title>{title}</dc:title>"
-        "<dc:creator>Иванов И.И.</dc:creator>"
-        "<dc:publisher>Журнал химии</dc:publisher>"
-        "<dc:identifier>https://cyberleninka.ru/article/n/example</dc:identifier>"
-        "</oai_dc:dc></metadata>"
-        "</record>"
-    )
-
-
-def _oai_list_records(*records: str, resumption_token: str = "") -> str:
-    token = f"<resumptionToken>{resumption_token}</resumptionToken>" if resumption_token else ""
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/">'
-        "<responseDate>2026-08-12T00:00:00Z</responseDate>"
-        '<request verb="ListRecords">https://cyberleninka.ru/oai</request>'
-        f"<ListRecords>{''.join(records)}{token}</ListRecords>"
-        "</OAI-PMH>"
-    )
+_ARTICLE = {
+    "name": "Катализатор гидроочистки: обзор",
+    "annotation": "Обзор катализаторов гидроочистки.",
+    "link": "/article/n/example",
+    "authors": ["Иванов И.И."],
+    "year": 2020,
+    "journal": "Журнал химии",
+}
 
 
 @respx.mock
 async def test_cyberleninka_500_поднимает_searcherror(tmp_path):
-    respx.get(CYBERLENINKA_BASE_URL).mock(return_value=httpx.Response(500, text="internal error"))
+    respx.post(CYBERLENINKA_API_URL).mock(return_value=httpx.Response(500, text="internal error"))
     async with httpx.AsyncClient() as client:
-        adapter = CyberLeninkaAdapter(client, oai_set="cas", cache_dir=tmp_path)
+        adapter = CyberLeninkaAdapter(client, cache_dir=tmp_path)
         with pytest.raises(SearchError):
             await adapter.search(_query(text="катализатор гидроочистки", lang="ru"), limit=5)
 
 
 @respx.mock
-async def test_cyberleninka_norecordsmatch_даёт_пустой_список_без_исключения(tmp_path):
-    respx.get(CYBERLENINKA_BASE_URL).mock(return_value=httpx.Response(200, text=_OAI_NO_RECORDS_MATCH))
+async def test_cyberleninka_ноль_находок_даёт_пустой_список_без_исключения(tmp_path):
+    respx.post(CYBERLENINKA_API_URL).mock(return_value=httpx.Response(200, json={"found": 0}))
     async with httpx.AsyncClient() as client:
-        adapter = CyberLeninkaAdapter(client, oai_set="cas", cache_dir=tmp_path)
+        adapter = CyberLeninkaAdapter(client, cache_dir=tmp_path)
         found = await adapter.search(_query(text="катализатор гидроочистки", lang="ru"), limit=5)
     assert found == []
 
 
 @respx.mock
-async def test_cyberleninka_набор_уходит_в_запрос_и_предупреждения_нет(tmp_path, caplog):
-    route = respx.get(CYBERLENINKA_BASE_URL).mock(
-        return_value=httpx.Response(200, text=_oai_list_records(_oai_record()))
+async def test_cyberleninka_формулировка_уходит_в_тело_запроса(tmp_path):
+    route = respx.post(CYBERLENINKA_API_URL).mock(
+        return_value=httpx.Response(200, json={"found": 1, "articles": [_ARTICLE]})
     )
     async with httpx.AsyncClient() as client:
-        adapter = CyberLeninkaAdapter(client, oai_set="cas", cache_dir=tmp_path)
-        with caplog.at_level("WARNING", logger="app.search.cyberleninka"):
-            found = await adapter.search(_query(text="катализатор гидроочистки", lang="ru"), limit=5)
+        adapter = CyberLeninkaAdapter(client, cache_dir=tmp_path)
+        found = await adapter.search(_query(text="катализатор гидроочистки", lang="ru"), limit=5)
 
-    assert route.calls[0].request.url.params["set"] == "cas"
+    assert json.loads(route.calls[0].request.content.decode("utf-8"))["q"] == "катализатор гидроочистки"
     assert len(found) == 1
-    assert not any("набор (set) не задан" in record.message for record in caplog.records)
 
 
 @respx.mock
-async def test_cyberleninka_нечитаемое_тело_на_первой_странице_поднимает_searcherror(tmp_path):
-    """200, но тело не XML — тот же транспортный отказ, что и HTTP-ошибка;
-    накопленного ещё ничего нет, поэтому исключение пробрасывается наружу."""
-    respx.get(CYBERLENINKA_BASE_URL).mock(return_value=httpx.Response(200, text="<not-xml this is broken"))
+async def test_cyberleninka_нечитаемое_тело_поднимает_searcherror(tmp_path):
+    """200, но тело не JSON — тот же транспортный отказ, что и HTTP-ошибка."""
+    respx.post(CYBERLENINKA_API_URL).mock(return_value=httpx.Response(200, text="<html>не JSON</html>"))
     async with httpx.AsyncClient() as client:
-        adapter = CyberLeninkaAdapter(client, oai_set="cas", cache_dir=tmp_path)
+        adapter = CyberLeninkaAdapter(client, cache_dir=tmp_path)
         with pytest.raises(SearchError):
             await adapter.search(_query(text="катализатор гидроочистки", lang="ru"), limit=5)
-
-
-@respx.mock
-async def test_cyberleninka_отказ_на_второй_странице_сохраняет_кандидатов_первой(tmp_path):
-    """Регрессия пагинации: первая страница успешна и даёт resumptionToken,
-    вторая отвечает 500 — кандидат первой страницы не теряется, исключения
-    нет (частичный успех — результат, а не отказ, адаптер остаётся
-    доступным)."""
-    respx.get(CYBERLENINKA_BASE_URL).mock(
-        side_effect=[
-            httpx.Response(200, text=_oai_list_records(_oai_record(), resumption_token="tok1")),
-            httpx.Response(500, text="internal error"),
-        ]
-    )
-    async with httpx.AsyncClient() as client:
-        adapter = CyberLeninkaAdapter(client, oai_set="cas", cache_dir=tmp_path)
-        found = await adapter.search(_query(text="катализатор гидроочистки", lang="ru"), limit=20)
-
-    assert len(found) == 1
 
 
 # ── Crossref (РЕШ-45) ───────────────────────────────────────────────────
