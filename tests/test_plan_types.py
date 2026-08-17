@@ -17,25 +17,42 @@
 from __future__ import annotations
 
 import re
+import sys
 
-from app.config import get_settings
+import pytest
+from pydantic import SecretStr
+
+from app.config import Settings, get_settings
 from app.pipeline.stages import load_prompt
 from app.schemas import SourceType
 from app.search import ADAPTERS
 
-#: Строка правила 1 planner.md — единственное место, где типы объявлены как
-#: разрешённые значения `source_type`.
-_RULE_1_LINE = re.compile(r"^1\.\s*Типы источников.*$", re.MULTILINE)
+#: Предложение правила 1 planner.md — единственное место, где типы объявлены
+#: как разрешённые значения `source_type`. Ищется по нормализованному тексту
+#: (см. `_normalize`), поэтому перенос строки посреди перечисления границу не
+#: сдвигает. Конец — точка в конце перечисления: следующее предложение правила
+#: («Других значений в `source_type` не используй») называет имя поля, а не
+#: значение, и в набор типов попадать не должно.
+_RULE_1_SENTENCE = re.compile(r"(?:^|\s)1\.\s*Типы источников.*?\.(?=\s|$)")
 _BACKTICKED = re.compile(r"`(\w+)`")
 _CHANGELOG_ENTRY_VERSION = re.compile(r"^##\s*([\d.]+)\s", re.MULTILINE)
 _FILE_VERSION_LABEL = re.compile(r"<!--\s*версия\s*([\d.]+)\s*-->")
 
 
+def _normalize(text: str) -> str:
+    """Схлопнуть переносы строк и повторные пробелы в один пробел.
+
+    Долг ворот Э2-А: страж сверял правило посимвольно и был слеп к
+    переформатированию — перенос строки посреди перечисления уводил часть
+    типов из-под проверки, и правка промпта проходила мимо теста.
+    """
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def _planner_allowed_types() -> set[str]:
-    """Типы, разрешённые правилом 1 planner.md, по тексту самой строки правила."""
-    text = load_prompt("planner")
-    match = _RULE_1_LINE.search(text)
-    assert match, "planner.md: не найдена строка правила 1 с типами источников"
+    """Типы, разрешённые правилом 1 planner.md, по тексту самого правила."""
+    match = _RULE_1_SENTENCE.search(_normalize(load_prompt("planner")))
+    assert match, "planner.md: не найдено правило 1 с типами источников"
     return set(_BACKTICKED.findall(match.group(0)))
 
 
@@ -130,3 +147,65 @@ def test_версия_planner_совпадает_с_changelog():
         f"planner.md: версия в метке файла {file_version} не совпадает с версией последней записи "
         f"CHANGELOG.md {version_match.group(1)}"
     )
+
+
+# ── Проверка самой оснастки (Т-27) ─────────────────────────────────────────
+#
+# Тесты выше проверяют промпт. Два теста ниже проверяют то, чем он проверяется:
+# стража правила 1 и фикстуру `settings`. Оба долга ворот Э2-А закрываются в
+# границах Т-27 — `tests/conftest.py` и этот файл, — поэтому проверка фикстуры
+# живёт здесь же.
+
+#: Правило 1 с чужим типом, разорванное переносом строки ровно так, как это
+#: делает переформатирование промпта: перечисление продолжается на следующей
+#: строке, а имя поля `source_type` стоит отдельным предложением.
+_BROKEN_RULE_1_PROMPT = """## Правила
+
+1. Типы источников, для которых обязательно составить запросы: `publication`, `web`,
+   `showcase`, `dreamsource`.
+   Других значений в `source_type` не используй.
+2. На `publication` и `web` — ровно 2 запроса каждый: один русский, один английский.
+"""
+
+
+def test_страж_видит_правило_разорванное_переносом(monkeypatch: pytest.MonkeyPatch):
+    """Страж обязан читать правило целиком, а не первую его строку.
+
+    Подложен промпт, где перечисление типов перенесено на вторую строку и
+    содержит чужой тип `dreamsource`. Без нормализации пробелов страж видит
+    только `publication` и `web`, чужого типа не замечает и пропускает правку
+    промпта молча — ровно тот долг ворот Э2-А, ради которого заведена Т-27.
+    Проверка идёт в обе стороны: типы с перенесённой строки собраны, и на
+    чужом типе страж падает.
+    """
+    monkeypatch.setattr(sys.modules[__name__], "load_prompt", lambda name: _BROKEN_RULE_1_PROMPT)
+
+    assert _planner_allowed_types() == {"publication", "web", "showcase", "dreamsource"}, (
+        "страж не собрал типы с перенесённой строки правила 1"
+    )
+    with pytest.raises(AssertionError, match="dreamsource"):
+        test_типы_промпта_подмножество_source_type()
+
+
+def test_фикстура_settings_кладёт_ключи_через_окружение(settings: Settings):
+    """Значения фикстуры обязаны доходить до полей настроек (РЕШ-63).
+
+    `Settings(deepseek_api_key="sk-test")` при заданном `validation_alias` и
+    выключенном `populate_by_name` оставляет поле пустым, а `extra="ignore"`
+    глотает kwarg молча — обращения к фикстуре жили с пустыми ключами, и это
+    не показывал ни один тест. Значения заведомо фиктивные (инвариант №3).
+
+    Секреты сравниваются как `SecretStr`, а не как строки: при провале
+    сравнения pytest печатает обе стороны, и значение ключа из окружения
+    машины не должно попасть в вывод (инвариант №3).
+    """
+    assert settings.app_env == "test"
+    assert settings.deepseek_api_key == SecretStr("sk-test")
+    assert settings.gigachat_auth_key == SecretStr("dGVzdDp0ZXN0")
+    assert settings.yandex_api_key == SecretStr("test")
+    assert settings.yandex_catalog_id == "b1gtest"
+    assert settings.cost_limit_rub_per_request == 10.0
+    # Рабочий код берёт настройки через get_settings(); фикстура обязана
+    # действовать и на этом пути, иначе проверяется не то, что работает.
+    assert get_settings().deepseek_api_key == SecretStr("sk-test")
+    assert get_settings().database_url == "sqlite+aiosqlite:///:memory:"

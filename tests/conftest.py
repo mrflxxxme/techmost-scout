@@ -7,25 +7,49 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
 
-from app.config import Settings
+from app.config import Settings, get_settings
 from app.llm.base import LLMProvider, LLMResult, Message, Usage
 from app.schemas import Brief, Candidate, MaturityStage, SourceType
 
+#: Окружение тестового прогона. Имена — ровно те переменные, которые читает
+#: рабочий код (`validation_alias` в `app.config.Settings`); значения —
+#: заведомо фиктивные, настоящих ключей в наборе нет (инвариант №3).
+TEST_ENV: dict[str, str] = {
+    "APP_ENV": "test",
+    "DATABASE_URL": "sqlite+aiosqlite:///:memory:",
+    "GIGACHAT_AUTH_KEY": "dGVzdDp0ZXN0",  # base64("test:test")
+    "DEEPSEEK_API_KEY": "sk-test",
+    "YANDEX_API_KEY": "test",
+    "YANDEX_CATALOG_ID": "b1gtest",
+    "COST_LIMIT_RUB_PER_REQUEST": "10.0",
+}
+
 
 @pytest.fixture
-def settings() -> Settings:
-    """Настройки для тестов: ключи-заглушки, дешёвые лимиты."""
-    return Settings(
-        app_env="test",
-        database_url="sqlite+aiosqlite:///:memory:",
-        gigachat_auth_key="dGVzdDp0ZXN0",  # base64("test:test")
-        deepseek_api_key="sk-test",
-        yandex_api_key="test",
-        yandex_catalog_id="b1gtest",
-        cost_limit_rub_per_request=10.0,
-    )
+def settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[Settings]:
+    """Настройки для тестов: ключи-заглушки, дешёвые лимиты.
+
+    Значения кладутся в окружение, а не в конструктор по имени поля (РЕШ-63):
+    при заданном `validation_alias` и выключенном `populate_by_name` kwarg по
+    имени поля до значения не доходит, а `extra="ignore"` глотает его молча —
+    ключ остаётся пустым, и ни один тест этого не замечает. Через окружение
+    настройки читаются тем же путём, что в рабочем коде, и перекрывают `.env`
+    рядом с репозиторием.
+
+    Кэш `get_settings()` сбрасывается на входе и на выходе: код под тестом
+    берёт настройки через него, а тестовое окружение не должно пережить тест.
+    """
+    for name, value in TEST_ENV.items():
+        monkeypatch.setenv(name, value)
+    get_settings.cache_clear()
+    try:
+        yield Settings()
+    finally:
+        get_settings.cache_clear()
 
 
 class FakeProvider(LLMProvider):
