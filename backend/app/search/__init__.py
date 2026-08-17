@@ -63,6 +63,9 @@ ADAPTERS: dict[str, type[SearchAdapter]] = {
 #: Настройки, без которых источник с requires_key = True не включается
 REQUIRED_SETTINGS: dict[str, tuple[str, ...]] = {
     "openalex": ("openalex_api_key",),
+    # Поисковая платформа ФИПС работает только по ключу; режима «без ключа»
+    # у адаптера нет, поэтому без настройки источник не включается вовсе.
+    "rospatent": ("rospatent_api_key",),
     "patents_view": ("patentsview_api_key",),
     # Яндексу нужны оба значения: ключ сервисного аккаунта и folder id
     "yandex_search": ("yandex_search_api_key", "yandex_catalog_id"),
@@ -81,7 +84,12 @@ CONSTRUCTOR_SETTINGS: dict[str, dict[str, tuple[str, ...]]] = {
     "semanticscholar": {
         "api_key": ("semantic_scholar_api_key", "semanticscholar_api_key"),
     },
-    "rospatent": {"api_key": ("rospatent_api_key",)},
+    "rospatent": {
+        "api_key": ("rospatent_api_key",),
+        # Контакт владельца в User-Agent. Отдельной настройки под Роспатент
+        # нет — почта в проекте одна, и заведена она как `crossref_mailto`.
+        "contact_email": ("rospatent_mailto", "crossref_mailto"),
+    },
     "openalex": {"api_key": ("openalex_api_key",)},
     "patents_view": {"api_key": ("patentsview_api_key",)},
     "yandex_search": {

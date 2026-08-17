@@ -1,73 +1,270 @@
-"""Роспатент — ЗАГОТОВКА. Патенты и полезные модели РФ.
+"""Роспатент — поисковая платформа ФИПС. Патенты и полезные модели.
 
 ЗАЧЕМ ЭТОТ ИСТОЧНИК
     Патент — самое сильное подтверждение, что разработка существует и у неё
     есть конкретный правообладатель (то есть с кем разговаривать заказчику).
-    Плюс по патенту видно, кто в РФ уже занимается задачей.
+    Заявитель патента приходит прямо полем `applicant` — это и есть `org`
+    кандидата, не догадка по домену и не аффилиация первого автора.
 
 ДВА РАЗНЫХ ДОСТУПА, НЕ ПУТАТЬ
     1. Открытые данные Роспатента — https://rospatent.gov.ru/opendata
-       Бесплатно, БЕЗ регистрации и без ключа. Наборы выкладываются файлами
-       (XML/CSV/JSON по разделам: изобретения, полезные модели, промышленные
-       образцы, товарные знаки). Это то, с чего начинаем.
+       Бесплатно, без ключа, но наборы выкладываются файлами: своя выкачка,
+       свой локальный индекс, десятки гигабайт. Это отдельная задача, кода
+       здесь нет.
     2. Поисковая платформа — https://searchplatform.rospatent.gov.ru
-       Полнотекстовый поиск и семантический поиск «по описанию задачи»,
-       REST API, но ТРЕБУЕТ ключ (заявка через личный кабинет ФИПС).
-       Ключ — опционально: без него адаптер работает по открытым данным.
+       Полнотекстовый и семантический поиск, REST API, ключ по заявке через
+       личный кабинет ФИПС. Ключ у проекта есть (РЕШ-69), поэтому адаптер
+       работает именно через платформу.
 
-НАСТРОЙКИ
-    settings.rospatent_api_key — необязательный. requires_key = False, потому
-    что базовый режим (открытые данные) ключа не требует.
+    Отсюда `requires_key = True`: без ключа адаптер не собирается вовсе, как
+    и остальные платные источники. Половинчатый режим «без ключа ищем по
+    открытым данным» не реализован, и притворяться работающим он не должен.
 
-ЧТО СДЕЛАТЬ (этап 2)
-    1. Разобраться с индексом открытых данных: скачать перечень наборов со
-       страницы opendata, выбрать разделы «Изобретения» и «Полезные модели»,
-       сложить в out/cache/rospatent/ (как сделано для КиберЛенинки — файлы
-       большие, TTL кэша порядка 30 дней).
-    2. Построить локальный индекс по названию и реферату (МПК-класс + текст).
-       Полнотекстовый поиск по произвольной фразе делать локально, как в
-       cyberleninka.py: нормализованные слова + совпадение по основам.
-    3. Из записи вытаскивать: номер публикации → raw_id, название → title,
-       ссылку на карточку в реестре ФИПС → url (например
-       https://fips.ru/registers-doc-view/fips_servlet?...), патентообладателя
-       → org, авторов → authors, дату публикации → year, реферат → snippet.
-    4. source_type = SourceType.PATENT, provider = "rospatent".
-    5. Если settings.rospatent_api_key задан — переключаться на поисковую
-       платформу: POST /patsearch/v0.2/search с телом запроса (qn — текст
-       запроса, filter по стране RU, limit). Ответ в JSON, разбирать так же.
-    6. Троттлинг: у поисковой платформы лимит на ключ, начать с
-       min_interval_seconds = 1.0 и уточнить по документации к ключу.
-    7. Ни один сбой не роняет пайплайн: нет данных — пустой список и
-       предупреждение в лог.
+ФОРМА ОТВЕТА (снята с живого вызова, а не с документации)
+    POST /patsearch/v0.2/search, тело {"qn": <текст>, "limit": <сколько>},
+    заголовок Authorization: Bearer <ключ>. Ответ:
+
+        {"available":…, "total":…, "timings":…,
+         "hits": [{"id": "WO2020130881A1_20200625",
+                   "common": {"publishing_office": "WO",
+                              "document_number": "2020130881",
+                              "kind": "A1",
+                              "publication_date": "2020.06.25",
+                              "classification": {"ipc": [{"fullname": …}]}},
+                   "biblio": {"ru": {"title":…, "applicant":[{"name":…}],
+                                     "inventor":[{"name":…}]},
+                              "en": {…}},
+                   "snippet": {"title":…, "description":…, "lang":…,
+                               "applicant":…}}]}
+
+    В `snippet` совпадения подсвечены тегами <em>: в текст доказательства они
+    попасть не должны — карточку читает человек, а не браузер.
+
+ССЫЛКА НА ДОКУМЕНТ
+    Платформа отдаёт метаданные, а не адрес читаемой человеком карточки.
+    Ссылка собирается на Google Patents по номеру публикации
+    (`WO2020130881A1`, `RU2799999C1`): тот же выбор уже сделан для патентов
+    США в `patents_view.py` — реестр ФИПС по прямой ссылке открывается через
+    сессию поиска, а Google Patents открывается всегда и всеми. Домен
+    `patents.google.com` вдобавок значится в списке допустимых для типа
+    `patent` в `prompts/verifier.md`.
+
+ТЕМП
+    Лимит на ключ платформой не опубликован, поэтому берём осторожно:
+    не чаще одного запроса в секунду, как у OAI КиберЛенинки.
 """
 
 from __future__ import annotations
 
+import html
+import logging
+import re
+from typing import Any
+
 import httpx
+from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
-from app.search.base import SearchAdapter
+from app.search.base import SearchAdapter, SearchError
+
+log = logging.getLogger(__name__)
 
 OPENDATA_URL = "https://rospatent.gov.ru/opendata"
 SEARCH_PLATFORM_URL = "https://searchplatform.rospatent.gov.ru/patsearch/v0.2/search"
+#: Читаемая человеком карточка документа по номеру публикации
+DOCUMENT_URL = "https://patents.google.com/patent/{number}"
+#: Почта владельца на случай, если настройки не переданы: адаптер обязан
+#: представляться контактом в любом запуске, а не только в полном пайплайне.
+CONTACT_EMAIL = "uklonskiy.k@gmail.com"
+#: Больше платформа за один запрос всё равно не отдаёт
+MAX_LIMIT = 100
+MAX_SNIPPET = 700
+MAX_AUTHORS = 12
+
+#: Подсветка совпадений в snippet и прочая разметка
+_TAG = re.compile(r"<[^>]+>")
+_WS = re.compile(r"\s+")
+_YEAR = re.compile(r"(19|20)\d{2}")
 
 
 class RospatentAdapter(SearchAdapter):
-    """Патенты РФ: открытые данные, при наличии ключа — поисковая платформа."""
+    """Патенты РФ и мировые публикации через поисковую платформу ФИПС."""
 
     name = "rospatent"
     source_types = (SourceType.PATENT,)
-    #: Открытые данные доступны без ключа, ключ только расширяет возможности
-    requires_key = False
-    #: Флаг для реестра: адаптер в build_adapters не попадает
-    implemented = False
+    #: Поисковая платформа работает только по ключу
+    requires_key = True
+    #: Адаптер рабочий: build_adapters включает его при заполненном ключе
+    implemented = True
+    #: Лимит на ключ не опубликован — держим один запрос в секунду
+    min_interval_seconds = 1.0
+    #: Ответ структурирован, разбирается кодом: нормализовать моделью нечего
+    needs_extraction = False
 
-    def __init__(self, client: httpx.AsyncClient, *, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        api_key: str | None = None,
+        contact_email: str | None = None,
+    ) -> None:
         super().__init__(client)
         self._api_key = api_key or None
+        self._contact_email = contact_email or CONTACT_EMAIL
+
+    @property
+    def user_agent(self) -> str:
+        """Честное представление источнику: кто стучится и куда писать."""
+        return f"TechMostScout/1.0 (mailto:{self._contact_email})"
 
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
-        raise NotImplementedError("rospatent: не реализовано, этап 2")
+        if not self._api_key:
+            log.warning("rospatent: нет ROSPATENT_API_KEY — источник пропущен")
+            return []
+
+        wanted = max(1, min(limit, MAX_LIMIT))
+        payload = await self._request(query.text, limit=wanted)
+        hits = payload.get("hits")
+        if not isinstance(hits, list):
+            # Ответ разобран, записей нет — это пустой результат, а не отказ
+            log.warning("rospatent: ответ без hits по запросу «%s»", query.text)
+            return []
+
+        candidates: list[Candidate] = []
+        for hit in hits:
+            if not isinstance(hit, dict):
+                continue
+            candidate = self._to_candidate(hit)
+            if candidate is not None:
+                candidates.append(candidate)
+        return candidates[:wanted]
 
     async def health(self) -> tuple[bool, str]:
-        return False, "не реализовано, этап 2"
+        if not self._api_key:
+            return False, "не заполнено: ROSPATENT_API_KEY"
+        return await super().health()
+
+    async def _request(self, text: str, *, limit: int) -> dict[str, Any]:
+        """POST к поисковой платформе.
+
+        Транспортный отказ, 401 и 429 поднимаются как `SearchError` — его ловит
+        `_safe_search` оркестратора и честно помечает источник недоступным
+        (инвариант №5 в редакции РЕШ-43). Тихий пустой список здесь недопустим:
+        мёртвый ключ выглядел бы как «патентов по задаче нет».
+        """
+        await self._throttle()
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": self.user_agent,
+        }
+        try:
+            response = await self._client.post(SEARCH_PLATFORM_URL, json={"qn": text, "limit": limit}, headers=headers)
+            # Значение ключа в сообщение не попадает (инвариант №3) — только
+            # имя переменной окружения, по которому его чинить.
+            if response.status_code in (401, 403):
+                raise SearchError(f"rospatent: ключ не принят ({response.status_code}), проверьте ROSPATENT_API_KEY")
+            if response.status_code == 429:
+                raise SearchError("rospatent: превышен лимит запросов на ключ (429)")
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise SearchError(f"rospatent не ответил на «{text}»: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise SearchError(f"rospatent: ответ не разобран как объект JSON по запросу «{text}»")
+        return payload
+
+    def _to_candidate(self, hit: dict[str, Any]) -> Candidate | None:
+        common = _mapping(hit.get("common"))
+        biblio = _mapping(hit.get("biblio"))
+        ru = _mapping(biblio.get("ru"))
+        en = _mapping(biblio.get("en"))
+        snippet = _mapping(hit.get("snippet"))
+
+        # Русское название важнее английского: отчёт читает русскоязычный
+        # заказчик. Подсвеченный snippet — только как последняя подстраховка.
+        title = _clean(ru.get("title")) or _clean(en.get("title")) or _strip_markup(snippet.get("title"))
+        number = _document_number(common) or _clean(hit.get("id")).split("_")[0]
+        if not title or not number:
+            log.debug("rospatent: запись без названия или номера отброшена")
+            return None
+
+        # Заявитель — прямое поле правообладателя, ради него источник и нужен
+        org = _first_name(ru.get("applicant")) or _first_name(en.get("applicant")) or _clean(snippet.get("applicant"))
+
+        try:
+            return Candidate(
+                source_type=SourceType.PATENT,
+                title=title,
+                url=DOCUMENT_URL.format(number=number),
+                org=org or None,
+                authors=_names(ru.get("inventor")) or _names(en.get("inventor")),
+                year=_year(common.get("publication_date")),
+                # Фрагмент описания без подсветки — это и есть текст, которым
+                # карточка потом подтверждает утверждения
+                snippet=_strip_markup(snippet.get("description"))[:MAX_SNIPPET],
+                raw_id=number,
+                provider=self.name,
+            )
+        except ValidationError as exc:
+            log.debug("rospatent: запись %s отброшена: %s", number, exc)
+            return None
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _clean(value: Any) -> str:
+    return _WS.sub(" ", str(value)).strip() if isinstance(value, str) else ""
+
+
+def _strip_markup(value: Any) -> str:
+    """Снять подсветку <em> и прочие теги, развернуть HTML-сущности."""
+    raw = value if isinstance(value, str) else ""
+    if not raw:
+        return ""
+    return _WS.sub(" ", html.unescape(_TAG.sub(" ", raw))).strip()
+
+
+def _document_number(common: dict[str, Any]) -> str:
+    """Номер публикации целиком: страна + номер + вид документа.
+
+    Одного `document_number` мало: номер уникален внутри ведомства, и без
+    префикса страны заявка WO склеилась бы с чужой RU в `dedup_key`.
+    """
+    office = _clean(common.get("publishing_office"))
+    number = _clean(common.get("document_number")).replace(" ", "")
+    if not number:
+        return ""
+    kind = _clean(common.get("kind"))
+    return f"{office}{number}{kind}"
+
+
+def _first_name(value: Any) -> str:
+    """Первый заявитель (или автор) списка — тот, с кем и разговаривать."""
+    if not isinstance(value, list):
+        return ""
+    for element in value:
+        name = _clean(element.get("name")) if isinstance(element, dict) else _clean(element)
+        if name:
+            return name
+    return ""
+
+
+def _names(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    names: list[str] = []
+    for element in value[:MAX_AUTHORS]:
+        name = _clean(element.get("name")) if isinstance(element, dict) else _clean(element)
+        if name:
+            names.append(name)
+    return names
+
+
+def _year(value: Any) -> int | None:
+    """Дата публикации приходит как «2020.06.25» — нужен только год."""
+    match = _YEAR.search(_clean(value))
+    return int(match.group(0)) if match else None

@@ -576,7 +576,10 @@ async def test_доктор_видит_все_источники_реестра(
     assert [a.name for a in adapters] == list(ADAPTERS), "таблица доктора обязана показывать весь реестр"
     statuses = {a.name: adapter_status(a) for a in adapters}
     assert statuses["crossref"] is None, "бесплатный рабочий источник статуса не имеет"
-    assert statuses["rospatent"][0] == STATUS_STUB
+    # Роспатент с Т-14 — рабочий адаптер поисковой платформы, и без ключа он
+    # выключается по той же причине, что openalex, а не как заготовка
+    assert statuses["rospatent"][0] == STATUS_NO_KEY
+    assert "ROSPATENT_API_KEY" in statuses["rospatent"][1]
     assert statuses["patents_view"][0] == STATUS_STUB
     assert statuses["openalex"][0] == STATUS_NO_KEY
     assert "OPENALEX_API_KEY" in statuses["openalex"][1]
