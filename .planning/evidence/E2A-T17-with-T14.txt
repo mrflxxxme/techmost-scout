@@ -1,0 +1,9 @@
+﻿rospatent.implemented = True
+типы промпта      : ['patent', 'publication', 'showcase', 'web']
+типы адаптеров    : ['patent', 'publication', 'showcase', 'web']
+PASSED test_каждый_тип_промпта_обслуживается_рабочим_адаптером
+PASSED test_каждый_рабочий_адаптер_достижим_типом_из_промпта
+PASSED test_типы_промпта_подмножество_source_type
+PASSED test_патентный_запрос_один_и_на_русском
+PASSED test_патент_достижим_обоими_патентными_адаптерами
+PASSED test_версия_planner_совпадает_с_changelog

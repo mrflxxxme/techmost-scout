@@ -1,4 +1,5 @@
-﻿........................................................................ [ 19%]
+﻿=== pytest -q (полный набор, дерево от session/E2A) ===
+........................................................................ [ 19%]
 .........................................................F.............. [ 38%]
 ........................................................................ [ 57%]
 ........................................................................ [ 76%]
@@ -26,4 +27,76 @@ tests\test_plan_types.py:58: AssertionError
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 =========================== short test summary info ===========================
 FAILED tests/test_plan_types.py::test_каждый_тип_промпта_обслуживается_рабочим_адаптером
-1 failed, 376 passed, 1 warning in 92.30s (0:01:32)
+1 failed, 376 passed, 1 warning in 105.65s (0:01:45)
+
+=== pytest tests/test_plan_types.py tests/test_prompts.py -v ===
+============================= test session starts =============================
+collecting ... collected 45 items
+
+tests/test_plan_types.py::test_каждый_тип_промпта_обслуживается_рабочим_адаптером FAILED [  2%]
+tests/test_plan_types.py::test_каждый_рабочий_адаптер_достижим_типом_из_промпта PASSED [  4%]
+tests/test_plan_types.py::test_типы_промпта_подмножество_source_type PASSED [  6%]
+tests/test_plan_types.py::test_патентный_запрос_один_и_на_русском PASSED [  8%]
+tests/test_plan_types.py::test_патент_достижим_обоими_патентными_адаптерами PASSED [ 11%]
+tests/test_plan_types.py::test_версия_planner_совпадает_с_changelog PASSED [ 13%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[card_author] PASSED [ 15%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[extractor] PASSED [ 17%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[intake] PASSED [ 20%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[planner] PASSED [ 22%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[scorer] PASSED [ 24%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[summary] PASSED [ 26%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[verifier] PASSED [ 28%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[card_author] PASSED [ 31%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[extractor] PASSED [ 33%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[intake] PASSED [ 35%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[planner] PASSED [ 37%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[scorer] PASSED [ 40%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[summary] PASSED [ 42%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[verifier] PASSED [ 44%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[card_author] PASSED [ 46%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[extractor] PASSED [ 48%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[intake] PASSED [ 51%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[planner] PASSED [ 53%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[summary] PASSED [ 55%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[verifier] PASSED [ 57%]
+tests/test_prompts.py::test_render_prompt_fails_loudly_on_missing_value PASSED [ 60%]
+tests/test_prompts.py::test_prompt_has_error_section[intake] PASSED      [ 62%]
+tests/test_prompts.py::test_prompt_has_error_section[planner] PASSED     [ 64%]
+tests/test_prompts.py::test_prompt_has_error_section[card_author] PASSED [ 66%]
+tests/test_prompts.py::test_prompt_has_error_section[verifier] PASSED    [ 68%]
+tests/test_prompts.py::test_prompt_has_error_section[summary] PASSED     [ 71%]
+tests/test_prompts.py::test_prompt_has_error_section[scorer] PASSED      [ 73%]
+tests/test_prompts.py::test_gov_support_reference_is_loadable PASSED     [ 75%]
+tests/test_prompts.py::test_card_author_does_not_default_to_lab_without_signs PASSED [ 77%]
+tests/test_prompts.py::test_card_author_response_format_has_requirement_checks PASSED [ 80%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[card_author] PASSED [ 82%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[extractor] PASSED [ 84%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[intake] PASSED [ 86%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[planner] PASSED [ 88%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[scorer] PASSED [ 91%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[summary] PASSED [ 93%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[verifier] PASSED [ 95%]
+tests/test_prompts.py::test_intake_empty_questions_requires_all_four_conditions PASSED [ 97%]
+tests/test_prompts.py::test_candidates_to_json_keeps_url_and_trims_snippet PASSED [100%]
+
+================================== FAILURES ===================================
+___________ test_каждый_тип_промпта_обслуживается_рабочим_адаптером ___________
+
+    def test_каждый_тип_промпта_обслуживается_рабочим_адаптером():
+        """Правило 1 не должно разрешать тип, для которого нет ни одного рабочего
+        адаптера, — иначе формулировка уходит в никуда (половина DLG-1)."""
+        prompt_types = _planner_allowed_types()
+        implemented_types = _implemented_adapter_source_types()
+        unreachable = prompt_types - implemented_types
+>       assert not unreachable, f"planner.md разрешает типы без рабочего адаптера: {sorted(unreachable)}"
+E       AssertionError: planner.md разрешает типы без рабочего адаптера: ['patent']
+E       assert not {'patent'}
+
+tests\test_plan_types.py:58: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_plan_types.py::test_каждый_тип_промпта_обслуживается_рабочим_адаптером
+======================== 1 failed, 44 passed in 0.40s =========================
+
+=== ruff check . / ruff format --check . ===
+All checks passed!
+85 files already formatted
