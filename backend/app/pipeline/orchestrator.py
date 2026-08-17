@@ -24,7 +24,7 @@ from pydantic import ValidationError
 from app.config import Settings, get_settings
 from app.llm import CostLimitExceededError, LLMRouter
 from app.pipeline import stages
-from app.pipeline.persistence import SessionFactory, StageRecord, persist_run
+from app.pipeline.persistence import PlanRecord, SessionFactory, StageRecord, persist_run
 from app.schemas import Brief, Candidate, Report, SearchPlan, SolutionCard
 from app.search import build_adapters, normalize_doi
 from app.search.base import SearchAdapter
@@ -156,11 +156,18 @@ class ScoutPipeline:
         adapters: list[SearchAdapter] | None = None,
         progress: ProgressHook | None = None,
         session_factory: SessionFactory | None = None,
+        preset_plan: SearchPlan | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         self._router = router or LLMRouter(self._settings)
         self._adapters = adapters
         self._progress = progress
+        #: Готовый план поиска (РЕШ-83, `scout run --plan-id N`): при нём стадия
+        #: планировщика не обращается к модели вовсе, и её строка в журнале
+        #: стоит с нулевой стоимостью. Читает план из БД вызывающий код —
+        #: оркестратор получает уже разобранную схему, чтобы отказ чтения
+        #: случался до первого платного запроса, а не посреди прогона.
+        self._preset_plan = preset_plan
         #: Фабрика сессий БД (Ф-8, РЕШ-40) — не передана, значит запись в БД
         #: не выполняется вовсе (тесты, веб до Э3): прогон не меняется ни на шаг.
         self._session_factory = session_factory
@@ -480,8 +487,13 @@ class ScoutPipeline:
         печатается экспортом в блоке «Ограничения этого поиска».
         """
         stage_log: list[StageRecord] = list(initial_stage_log or [])
+        #: Планы проходов этого прогона (РЕШ-83): собираются по ходу стадий и
+        #: пишутся в `search_plans` той же транзакцией, что и строка запроса.
+        #: Отдельным списком, а не полем отчёта: клиенту план не показывают,
+        #: он нужен для повторяемого прогона и сравнения выдачи.
+        plan_log: list[PlanRecord] = []
         try:
-            report = await self._run_stages(brief, request_id, stage_log)
+            report = await self._run_stages(brief, request_id, stage_log, plan_log)
         except Exception as exc:
             await persist_run(
                 self._session_factory,
@@ -490,6 +502,7 @@ class ScoutPipeline:
                 cost_rub=round(self._router.cost.spent_rub, 4),
                 cards=[],
                 stages=stage_log,
+                plans=plan_log,
                 error=str(exc),
             )
             raise
@@ -504,6 +517,7 @@ class ScoutPipeline:
             cost_rub=report.cost_rub,
             cards=report.cards,
             stages=stage_log,
+            plans=plan_log,
             error=None,
         )
         if persisted_id is not None:
@@ -517,13 +531,29 @@ class ScoutPipeline:
             report.request_id = persisted_id
         return report
 
-    async def _run_stages(self, brief: Brief, request_id: int, stage_log: list[StageRecord]) -> Report:
-        """Прежнее тело `run` — прогон стадий, теперь ещё собирает `stage_log`."""
-        await self._notify("planner", "Составляю план поиска", 0.05)
+    async def _run_stages(
+        self, brief: Brief, request_id: int, stage_log: list[StageRecord], plan_log: list[PlanRecord] | None = None
+    ) -> Report:
+        """Прежнее тело `run` — прогон стадий, теперь ещё собирает `stage_log`
+        и планы проходов в `plan_log` (РЕШ-83).
+
+        `plan_log` необязателен: стадии прогона он не меняет, а вызовам из
+        тестов, которым нужен только журнал стадий, незачем заводить пустой
+        список ради записи в БД.
+        """
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
-        plan = await stages.plan_search(self._router, brief)
-        stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
+        if self._preset_plan is not None:
+            # Прогон по сохранённому плану: модель не спрашиваем вовсе, значит
+            # и снимок счётчика вокруг стадии брать не у чего — стоимость
+            # планировщика ровно ноль, и это видно в журнале стадий.
+            await self._notify("planner", "Беру сохранённый план поиска, планировщик не вызывается", 0.05)
+            plan = self._preset_plan
+            stage_cost, provider = 0.0, None
+        else:
+            await self._notify("planner", "Составляю план поиска", 0.05)
+            plan = await stages.plan_search(self._router, brief)
+            stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
                 stage="planner",
@@ -533,6 +563,11 @@ class ScoutPipeline:
                 cost_rub=stage_cost,
             )
         )
+        # План прогона сохраняется независимо от того, построен он моделью или
+        # взят из базы: прогон по чужому плану — тоже прогон, и восстановить
+        # его формулировки потом больше неоткуда.
+        if plan_log is not None:
+            plan_log.append(PlanRecord(plan=plan, pass_no=1))
         await self._notify("planner", f"Формулировок в плане: {len(plan.queries)}", 0.1)
 
         await self._notify("search", "Опрашиваю источники", 0.15)

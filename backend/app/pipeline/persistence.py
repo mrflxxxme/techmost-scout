@@ -1,8 +1,14 @@
-"""Запись прогона в БД: запросы, карточки, журнал стадий (Ф-8, РЕШ-40).
+"""Запись прогона в БД: запросы, план поиска, карточки, журнал стадий (Ф-8,
+РЕШ-40, РЕШ-83).
 
-Минимально достаточный набор — три таблицы из семи существующих в
-`app.models`: `requests`, `solution_cards`, `pipeline_logs`. Полная
-персистентность (брифы, кандидаты, вердикты, витрина) — задача этапа 3.
+Минимально достаточный набор — четыре таблицы из восьми существующих в
+`app.models`: `requests`, `search_plans`, `solution_cards`, `pipeline_logs`.
+Полная персистентность (брифы, кандидаты, вердикты, витрина) — задача этапа 3.
+
+План поиска добавлен сюда же (РЕШ-83): пока он строится моделью заново каждый
+раз, эффект правок поиска неотличим от разброса между прогонами. Обратная
+операция — `load_search_plan`: прогон по сохранённому плану (`scout run
+--plan-id N`) не зовёт планировщик вовсе.
 
 Работа с базой живёт вне стадий (CLAUDE.md, `docs/team/CONVENTIONS.md`):
 стадии остаются чистыми функциями, а запись вызывает только оркестратор через
@@ -25,12 +31,15 @@ from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import PipelineLog as PipelineLogRow
 from app.models import Request as RequestRow
+from app.models import SearchPlan as SearchPlanRow
 from app.models import SolutionCard as SolutionCardRow
-from app.schemas import SolutionCard
+from app.schemas import SearchPlan, SolutionCard
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +71,59 @@ class StageRecord:
     error: str | None = None
 
 
+@dataclass(slots=True)
+class PlanRecord:
+    """План одного прохода поиска — что именно спрашивали у источников (РЕШ-83).
+
+    `pass_no` едет рядом с планом, а не выводится из порядка записей: второй
+    проход (РЕШ-81) появится в Т-21, и до него в списке всегда ровно одна
+    запись с единицей. Порядковый номер в списке молча превратил бы повтор
+    первого прохода во «второй».
+    """
+
+    plan: SearchPlan
+    pass_no: int = 1
+
+
+class SearchPlanNotFoundError(Exception):
+    """Сохранённого плана нет, он не читается схемой или база недоступна.
+
+    Отдельный тип, а не общий `Exception`: прогон по сохранённому плану обязан
+    отказать понятно и ДО первого платного запроса, а не наполовину. Текст
+    исключения печатается оператору как есть, поэтому он на русском и называет
+    причину.
+    """
+
+
+async def load_search_plan(session_factory: SessionFactory | None, plan_id: int) -> SearchPlan:
+    """Прочитать сохранённый план по номеру строки `search_plans`.
+
+    В отличие от записи, чтение отказ НЕ гасит: запись вторична по отношению к
+    отчёту (инвариант №5 в редакции РЕШ-43), а вот прогон по несуществующему
+    плану продолжать нечем — источники опрашивать не по чему. Любая причина
+    (нет базы, нет строки, битый JSON) превращается в `SearchPlanNotFoundError` с
+    человекочитаемой причиной, и решение о коде возврата принимает CLI.
+    """
+    if session_factory is None:
+        raise SearchPlanNotFoundError(
+            f"база недоступна, прочитать план №{plan_id} нечем — прогон по сохранённому плану невозможен"
+        )
+    try:
+        async with session_factory() as session:
+            found = await session.execute(select(SearchPlanRow).where(SearchPlanRow.id == plan_id))
+            row = found.scalars().one_or_none()
+            stored = dict(row.queries or {}) if row is not None else None
+    except Exception as exc:
+        raise SearchPlanNotFoundError(f"план №{plan_id} не удалось прочитать из базы: {exc}") from exc
+
+    if stored is None:
+        raise SearchPlanNotFoundError(f"плана №{plan_id} нет в базе — проверьте номер в таблице search_plans")
+    try:
+        return SearchPlan.model_validate(stored)
+    except ValidationError as exc:
+        raise SearchPlanNotFoundError(f"план №{plan_id} в базе не читается схемой SearchPlan: {exc}") from exc
+
+
 async def persist_run(
     session_factory: SessionFactory | None,
     *,
@@ -70,6 +132,7 @@ async def persist_run(
     cost_rub: float,
     cards: list[SolutionCard],
     stages: list[StageRecord],
+    plans: list[PlanRecord] | None = None,
     error: str | None = None,
 ) -> int | None:
     """Записать прогон одной транзакцией: запрос, карточки, журнал стадий.
@@ -90,7 +153,14 @@ async def persist_run(
     try:
         async with session_factory() as session:
             return await _write(
-                session, raw_text=raw_text, status=status, cost_rub=cost_rub, cards=cards, stages=stages, error=error
+                session,
+                raw_text=raw_text,
+                status=status,
+                cost_rub=cost_rub,
+                cards=cards,
+                stages=stages,
+                plans=plans or [],
+                error=error,
             )
     except Exception:
         log.warning("запись прогона в БД не удалась — отчёт сохранён без неё", exc_info=True)
@@ -105,6 +175,7 @@ async def _write(
     cost_rub: float,
     cards: list[SolutionCard],
     stages: list[StageRecord],
+    plans: list[PlanRecord],
     error: str | None,
 ) -> int:
     request_row = RequestRow(raw_text=raw_text, status=status, cost_rub=cost_rub, error=error)
@@ -113,6 +184,17 @@ async def _write(
     # Снимаем номер сразу значением: после выхода из `session_scope` сессия
     # закрыта, и обращение к атрибуту ORM-объекта уже полезло бы в базу.
     request_id = int(request_row.id)
+
+    # План поиска — в той же транзакции, что и строка запроса (РЕШ-83): план,
+    # записанный отдельно от прогона, не с чем сопоставить.
+    for record in plans:
+        session.add(
+            SearchPlanRow(
+                request_id=request_id,
+                pass_no=record.pass_no,
+                queries=record.plan.model_dump(mode="json"),
+            )
+        )
 
     for position, card in enumerate(cards):
         session.add(

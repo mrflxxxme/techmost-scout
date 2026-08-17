@@ -44,10 +44,21 @@ from app.llm import CostLimitExceededError, LLMRouter
 from app.llm.base import LLMError, LLMProvider, LLMResult, Message
 from app.models import Base, PipelineLog
 from app.models import Request as RequestRow
+from app.models import SearchPlan as SearchPlanRow
 from app.models import SolutionCard as SolutionCardRow
 from app.pipeline.orchestrator import ScoutPipeline
-from app.pipeline.persistence import persist_run
-from app.schemas import Candidate, Confidence, Evidence, MaturityStage, RequirementCheck, SolutionCard, SourceType
+from app.pipeline.persistence import PlanRecord, SearchPlanNotFoundError, load_search_plan, persist_run
+from app.schemas import (
+    Candidate,
+    Confidence,
+    Evidence,
+    MaturityStage,
+    RequirementCheck,
+    SearchPlan,
+    SearchQuery,
+    SolutionCard,
+    SourceType,
+)
 from app.search.base import SearchAdapter
 
 
@@ -177,9 +188,22 @@ async def db_session_factory(tmp_path: Path):
     await engine.dispose()
 
 
-def _pipeline(settings, provider: LLMProvider, adapters: list[SearchAdapter], *, session_factory=None) -> ScoutPipeline:
+def _pipeline(
+    settings,
+    provider: LLMProvider,
+    adapters: list[SearchAdapter],
+    *,
+    session_factory=None,
+    preset_plan: SearchPlan | None = None,
+) -> ScoutPipeline:
     router = LLMRouter(settings, providers={"deepseek": provider})
-    return ScoutPipeline(settings=settings, router=router, adapters=adapters, session_factory=session_factory)
+    return ScoutPipeline(
+        settings=settings,
+        router=router,
+        adapters=adapters,
+        session_factory=session_factory,
+        preset_plan=preset_plan,
+    )
 
 
 # ── Критерий 1: успешный прогон пишет requests, solution_cards, pipeline_logs
@@ -559,3 +583,240 @@ async def test_cost_limit_exceeded_during_summary_raises_and_persists_failed(
         assert len(requests) == 1
         assert requests[0].status == "failed"
         assert "лимит" in requests[0].error
+
+
+# ── Т-19 (РЕШ-83): план поиска в БД и прогон по сохранённому плану ───────────
+#
+# Пока план строится моделью заново каждый раз, эффект правок поиска
+# неотличим от разброса между прогонами: один и тот же запрос агропрома дал
+# 92 и 72 кандидата в двух прогонах Э2-А. Здесь проверяется, что план
+# доезжает до `search_plans` без потерь и что прогон по сохранённому плану не
+# зовёт планировщик вовсе.
+
+
+class _QueryRecordingAdapter(SearchAdapter):
+    """Источник, запоминающий текст каждой формулировки, с которой его позвали.
+
+    Нужен ровно для одного утверждения: формулировки прогона по сохранённому
+    плану — это формулировки из базы, а не заново придуманные моделью.
+    """
+
+    name = "crossref"
+    source_types = (SourceType.PUBLICATION,)
+
+    def __init__(self, client) -> None:
+        super().__init__(client)
+        self.seen: list[str] = []
+
+    async def search(self, query, *, limit: int = 20) -> list[Candidate]:
+        self.seen.append(query.text)
+        return [
+            Candidate(
+                source_type=SourceType.PUBLICATION,
+                title="Катализатор с присадками для сероустойчивости",
+                url="https://doi.org/10.1/test-preset-plan",
+                org="Институт катализа",
+                year=2025,
+                snippet="Испытан на действующей установке гидроочистки.",
+                raw_id="10.1/test-preset-plan",
+                provider="crossref",
+            )
+        ]
+
+
+def _plan(text: str = "катализатор гидроочистки серостойкий") -> SearchPlan:
+    """Минимальный план из одной формулировки под публикации."""
+    return SearchPlan(
+        queries=[
+            SearchQuery(
+                text=text,
+                source_type=SourceType.PUBLICATION,
+                lang="ru",
+                rationale="прямой поиск по задаче",
+            )
+        ]
+    )
+
+
+async def test_search_plan_round_trips_through_db_without_loss(db_session_factory):
+    """Круговой перегон `SearchPlan → БД → SearchPlan`: `model_dump()` совпадает.
+
+    Сравнение целиком, а не по отдельным полям: план сохраняется дампом схемы,
+    и молча потерянное поле (`rationale`, `lang`) всплыло бы только на платном
+    прогоне по сохранённому плану.
+    """
+    plan = _plan()
+
+    await persist_run(
+        db_session_factory,
+        raw_text="текст задачи, у которой план поиска обязан сохраниться",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[_card()],
+        stages=[],
+        plans=[PlanRecord(plan=plan)],
+    )
+
+    async with db_session_factory() as session:
+        row = (await session.execute(select(SearchPlanRow))).scalars().one()
+        request_row = (await session.execute(select(RequestRow))).scalars().one()
+
+    assert row.request_id == request_row.id, "план обязан быть привязан к своему прогону"
+    assert row.pass_no == 1
+    assert row.created_at is not None
+    assert SearchPlan.model_validate(row.queries).model_dump() == plan.model_dump()
+
+
+async def test_successful_run_persists_exactly_one_plan_row(settings, brief, fake_provider_factory, db_session_factory):
+    """Обычный прогон кладёт в `search_plans` ровно одну строку — план, по
+    которому опрашивались источники, с `pass_no = 1`."""
+    provider = fake_provider_factory("deepseek", [_PLAN_JSON, _SCORE_JSON, _CARD_JSON, _VERIFY_JSON, _SUMMARY_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(settings, provider, [_OneHitAdapter(client)], session_factory=db_session_factory)
+        await pipeline.run(brief, request_id=1, raw_text="текст задачи с сохранением плана")
+
+    async with db_session_factory() as session:
+        rows = (await session.execute(select(SearchPlanRow))).scalars().all()
+
+    assert len(rows) == 1, "один проход — одна строка плана"
+    assert rows[0].pass_no == 1
+    saved = SearchPlan.model_validate(rows[0].queries)
+    assert [query.text for query in saved.queries] == ["катализатор гидроочистки серостойкий"]
+
+
+async def test_two_passes_persist_two_rows_with_their_own_pass_no(db_session_factory):
+    """Два прохода одного прогона дают две строки со своими номерами.
+
+    Замок для Т-21 (второй проход, РЕШ-81) ставится здесь, пока схема ещё
+    заводится: `pass_no`, всегда записанный единицей, роняет этот тест — иначе
+    второй проход было бы нечем отличить от первого, а `create_all` не
+    добавляет колонки в уже существующую таблицу.
+    """
+    first = _plan("катализатор гидроочистки серостойкий")
+    second = _plan("присадка против отравления катализатора серой")
+
+    await persist_run(
+        db_session_factory,
+        raw_text="текст задачи с двумя проходами поиска",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[_card()],
+        stages=[],
+        plans=[PlanRecord(plan=first, pass_no=1), PlanRecord(plan=second, pass_no=2)],
+    )
+
+    async with db_session_factory() as session:
+        rows = (await session.execute(select(SearchPlanRow).order_by(SearchPlanRow.pass_no))).scalars().all()
+
+    assert [row.pass_no for row in rows] == [1, 2]
+    assert SearchPlan.model_validate(rows[0].queries).model_dump() == first.model_dump()
+    assert SearchPlan.model_validate(rows[1].queries).model_dump() == second.model_dump()
+
+
+async def test_run_with_preset_plan_does_not_call_planner_and_logs_zero_cost(
+    settings, brief, fake_provider_factory, db_session_factory
+):
+    """Прогон по сохранённому плану: стадия `planner` к модели не обращается.
+
+    Проверяется тремя способами сразу, потому что каждый по отдельности
+    мутанта пропускает: (1) провайдеру отдан набор ответов БЕЗ плана, и лишний
+    вызов увёл бы разбор оценок в сборку карточки; (2) в источник ушла ровно
+    та формулировка, что лежала в плане; (3) строка `planner` журнала стадий
+    стоит с нулевой стоимостью — иначе «план из базы» списывал бы деньги.
+    """
+    plan = _plan("формулировка из сохранённого плана")
+    provider = fake_provider_factory("deepseek", [_SCORE_JSON, _CARD_JSON, _VERIFY_JSON, _SUMMARY_JSON])
+    async with httpx.AsyncClient() as client:
+        adapter = _QueryRecordingAdapter(client)
+        pipeline = _pipeline(settings, provider, [adapter], session_factory=db_session_factory, preset_plan=plan)
+        report = await pipeline.run(brief, request_id=1, raw_text="текст задачи по сохранённому плану")
+
+    assert len(report.cards) == 1
+    assert len(provider.calls) == 4, "вызовов модели ровно четыре: скоринг, карточка, проверка, сводка"
+    assert adapter.seen == ["формулировка из сохранённого плана"]
+
+    async with db_session_factory() as session:
+        found = await session.execute(select(PipelineLog).where(PipelineLog.stage == "planner"))
+        planner_logs = found.scalars().all()
+        plan_rows = (await session.execute(select(SearchPlanRow))).scalars().all()
+
+    assert len(planner_logs) == 1
+    assert planner_logs[0].cost_rub == 0.0
+    assert planner_logs[0].provider is None
+    # Прогон по чужому плану — тоже прогон: его формулировки обязаны
+    # сохраниться, иначе восстановить их потом неоткуда.
+    assert len(plan_rows) == 1
+    assert SearchPlan.model_validate(plan_rows[0].queries).model_dump() == plan.model_dump()
+
+
+async def test_load_search_plan_returns_saved_plan(db_session_factory):
+    """`load_search_plan` отдаёт ровно тот план, который записали."""
+    plan = _plan()
+    await persist_run(
+        db_session_factory,
+        raw_text="текст задачи для чтения плана обратно",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[],
+        stages=[],
+        plans=[PlanRecord(plan=plan)],
+    )
+
+    async with db_session_factory() as session:
+        row = (await session.execute(select(SearchPlanRow))).scalars().one()
+
+    assert (await load_search_plan(db_session_factory, row.id)).model_dump() == plan.model_dump()
+
+
+async def test_load_search_plan_raises_on_unknown_id(db_session_factory):
+    """Несуществующий номер — понятный отказ с номером в тексте, а не None."""
+    with pytest.raises(SearchPlanNotFoundError) as info:
+        await load_search_plan(db_session_factory, 4242)
+
+    assert "4242" in str(info.value)
+    assert "search_plans" in str(info.value)
+
+
+async def test_load_search_plan_raises_on_unreadable_row(db_session_factory):
+    """Битая строка отказывает до первого платного запроса, а не даёт пустой план.
+
+    В базе может лежать что угодно (правка руками, план от несовместимой
+    версии схемы). Пустой `SearchPlan` из такой строки означал бы прогон без
+    единой формулировки — половина прогона впустую и оплаченный интейк.
+    """
+    async with db_session_factory() as session:
+        request_row = RequestRow(raw_text="прогон с испорченным планом", status="drafted", cost_rub=0.0)
+        session.add(request_row)
+        await session.flush()
+        session.add(SearchPlanRow(request_id=request_row.id, pass_no=1, queries={"queries": []}))
+
+    async with db_session_factory() as session:
+        row = (await session.execute(select(SearchPlanRow))).scalars().one()
+
+    with pytest.raises(SearchPlanNotFoundError) as info:
+        await load_search_plan(db_session_factory, row.id)
+
+    assert "SearchPlan" in str(info.value)
+
+
+async def test_load_search_plan_raises_without_factory():
+    """Без фабрики сессий читать план неоткуда — отказ, а не молчаливый None."""
+    with pytest.raises(SearchPlanNotFoundError):
+        await load_search_plan(None, 1)
+
+
+async def test_load_search_plan_raises_when_database_is_broken():
+    """Отказ самой базы тоже становится понятным отказом чтения плана.
+
+    Читать план — не то же самое, что писать прогон: запись гасится и уходит в
+    лог (инвариант №5 в редакции РЕШ-43), потому что отчёт первичен, а вот
+    прогон по непрочитанному плану продолжать нечем.
+    """
+
+    def broken_factory():
+        raise RuntimeError("база залокирована другим процессом")
+
+    with pytest.raises(SearchPlanNotFoundError) as info:
+        await load_search_plan(broken_factory, 1)
+
+    assert "залокирована" in str(info.value)

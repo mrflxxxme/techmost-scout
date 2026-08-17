@@ -18,24 +18,44 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 import pytest
+import typer
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import app.cli as cli
 import app.pipeline as pipeline_pkg
 from app.llm.router import LLMRouter
+from app.models import Base
+from app.models import SearchPlan as SearchPlanRow
+from app.pipeline.persistence import PlanRecord, persist_run
 from app.pipeline.stages import render_prompt
-from app.schemas import Brief, IntakeQuestion, IntakeResult, Report, ReportSummary
+from app.schemas import (
+    Brief,
+    IntakeQuestion,
+    IntakeResult,
+    Report,
+    ReportSummary,
+    SearchPlan,
+    SearchQuery,
+    SourceType,
+)
 
 
 class _RecordingPipeline:
     """Пайплайн-заглушка: не ходит ни в источники, ни в модель — только
     запоминает бриф, с которым его вызвали, и отдаёт минимальный отчёт."""
 
-    def __init__(self, *, settings=None, router=None, adapters=None, progress=None, session_factory=None) -> None:
+    def __init__(
+        self, *, settings=None, router=None, adapters=None, progress=None, session_factory=None, preset_plan=None
+    ) -> None:
         del settings, router, adapters, progress
         _RecordingPipeline.session_factories.append(session_factory)
+        _RecordingPipeline.preset_plans.append(preset_plan)
 
     async def run(
         self,
@@ -66,6 +86,7 @@ def _patch_pipeline(monkeypatch):
     """Подменяет тяжёлый пайплайн на запись брифа: тест проверяет только интейк."""
     _RecordingPipeline.captured = []
     _RecordingPipeline.session_factories = []
+    _RecordingPipeline.preset_plans = []
     _RecordingPipeline.initial_stage_logs = []
     _RecordingPipeline.initial_caveats = []
     monkeypatch.setattr(pipeline_pkg, "ScoutPipeline", _RecordingPipeline)
@@ -405,3 +426,126 @@ async def test_empty_raw_text_falls_back_to_placeholder_summary(
     await cli._run(raw_text, None, None, tmp_path / "report.md", False)
 
     assert _RecordingPipeline.captured[0].task_summary == "не указано"
+
+
+# ── Т-19 (РЕШ-83): прогон по сохранённому плану ──────────────────────────────
+#
+# База — временный файл SQLite вместо боевого `data/scout.db`: `_run` берёт
+# фабрику сессий из `app.db.session_scope`, и подмена этого имени изолирует
+# тест от рабочей копии так же, как заглушка `init_db` выше. Сеть не
+# используется: пайплайн подменён `_RecordingPipeline`, интейк — заглушкой.
+
+
+@pytest.fixture
+async def temp_db(monkeypatch, tmp_path):
+    """Фабрика сессий на временной базе, подставленная вместо `session_scope`."""
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'cli-plan-test.db'}", future=True)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+    @asynccontextmanager
+    async def factory() -> AsyncIterator[AsyncSession]:
+        async with session_maker() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    monkeypatch.setattr("app.db.session_scope", factory)
+    yield factory
+    await engine.dispose()
+
+
+def _saved_plan() -> SearchPlan:
+    return SearchPlan(
+        queries=[
+            SearchQuery(
+                text="катализатор гидроочистки серостойкий",
+                source_type=SourceType.PUBLICATION,
+                lang="ru",
+                rationale="сохранённая формулировка",
+            )
+        ]
+    )
+
+
+async def test_plan_id_hands_saved_plan_to_pipeline(monkeypatch, settings, fake_provider_factory, tmp_path, temp_db):
+    """`--plan-id N` отдаёт пайплайну план из базы — планировщику работы не остаётся.
+
+    Пайплайн здесь подменён, поэтому проверяется граница CLI: план прочитан,
+    разобран схемой `SearchPlan` и доехал до конструктора пайплайна ровно тем
+    же, каким лежал в базе. Отсутствие вызова модели на стадии `planner`
+    проверяется на своей границе — в tests/test_persistence.py.
+    """
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return IntakeResult(questions=[], draft_brief=_draft_brief(industry="нефтепереработка"))
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+
+    plan = _saved_plan()
+    await persist_run(
+        temp_db,
+        raw_text="прошлый прогон, у которого взят план",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[],
+        stages=[],
+        plans=[PlanRecord(plan=plan)],
+    )
+    async with temp_db() as session:
+        plan_id = (await session.execute(select(SearchPlanRow))).scalars().one().id
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False, plan_id)
+
+    assert _RecordingPipeline.preset_plans[-1] is not None, "пайплайн обязан получить план из базы"
+    assert _RecordingPipeline.preset_plans[-1].model_dump() == plan.model_dump()
+
+
+async def test_run_without_plan_id_builds_plan_as_before(monkeypatch, settings, fake_provider_factory, tmp_path):
+    """Обратная сторона: без `--plan-id` пайплайн получает `preset_plan=None` и
+    строит план сам — прогон по сохранённому плану не должен стать умолчанием."""
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return IntakeResult(questions=[], draft_brief=_draft_brief(industry="нефтепереработка"))
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False)
+
+    assert _RecordingPipeline.preset_plans[-1] is None
+
+
+async def test_unknown_plan_id_stops_run_before_any_paid_call(
+    monkeypatch, settings, fake_provider_factory, tmp_path, temp_db, capsys
+):
+    """Несуществующий `--plan-id`: понятный отказ, ненулевой код возврата, ноль трат.
+
+    Отказ обязан случиться до интейка — он платный (маршрут `intake` уходит в
+    модель), и половина оплаченного прогона по несуществующему плану никому не
+    нужна. Поэтому `run_intake` здесь настроен падать: любой его вызов роняет
+    тест. Ни один поисковый адаптер не вызван по построению — пайплайн вообще
+    не создаётся.
+    """
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def fail_run_intake(*args, **kwargs):
+        raise AssertionError("интейк не должен вызываться: план не прочитан, тратить нечего")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fail_run_intake)
+
+    with pytest.raises(typer.Exit) as info:
+        await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False, 4242)
+
+    assert info.value.exit_code != 0, "нулевой код возврата выдал бы отказ за успешный прогон"
+    assert _RecordingPipeline.captured == [], "пайплайн не должен создаваться вовсе"
+
+    console_output = " ".join(capsys.readouterr().out.split())
+    assert "4242" in console_output, "оператор обязан увидеть, какой именно номер не найден"
+    assert "search_plans" in console_output, "в отказе названа причина и где искать номер"
+    assert not (tmp_path / "report.md").exists(), "отчёта у несостоявшегося прогона быть не должно"

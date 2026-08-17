@@ -538,8 +538,13 @@ class _RecordingIntakePipeline:
     """Пайплайн-заглушка для проверок `cli._run`: не ходит ни в источники, ни
     в модель — только запоминает бриф и переданный `initial_stage_log`."""
 
-    def __init__(self, *, settings=None, router=None, adapters=None, progress=None, session_factory=None) -> None:
-        del settings, router, adapters, progress, session_factory
+    def __init__(
+        self, *, settings=None, router=None, adapters=None, progress=None, session_factory=None, preset_plan=None
+    ) -> None:
+        # `preset_plan` (Т-19, РЕШ-83) заглушке не нужен, но конструктор обязан
+        # его принимать: `cli._run` передаёт его всегда, а проверки этого файла
+        # про интейк, не про план поиска.
+        del settings, router, adapters, progress, session_factory, preset_plan
 
     async def run(
         self,
