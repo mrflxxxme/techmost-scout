@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
@@ -137,12 +137,51 @@ def _patch_llm_router(monkeypatch, settings, fake_provider_factory) -> LLMRouter
     return router
 
 
+def _refine_brief_tripwire(calls: list[object], message: str) -> Callable[..., Awaitable[Brief]]:
+    """Заглушка `refine_brief`, которая записывает факт вызова ДО броска.
+
+    Т-32 (РЕШ-90), почему замки устроены именно так. Прежняя редакция трёх
+    проверок ниже ставила заглушку, которая просто бросала `AssertionError`, и
+    считала любой вызов пойманным. Это было неправдой: обе площадки устойчивости
+    интейка (Т-2) ловят `except Exception`, а `AssertionError` — тоже
+    `Exception`. Проглоченный бросок превращался в предупреждение оператору,
+    прогон шёл дальше и заканчивался ровно тем же отчётом, поэтому тест
+    оставался зелёным при сломанном коде. Замерено на мутациях продуктового
+    кода: `elif interactive:` → `elif True:` вместе с `if answers:` → `if True:`
+    проходило замок немого режима молча, а мутация в одну лексему
+    `if answers:` → `if True:` — весь файл целиком.
+
+    Поэтому признак вызова записывается ДО броска и проверяется ПОСЛЕ прогона —
+    тем же приёмом, что `intake_calls` в
+    `test_unknown_plan_id_stops_run_before_any_paid_call`. Запись в списке
+    переживает проглатывание исключения; сам бросок оставлен, чтобы заглушка не
+    подсовывала коду правдоподобный бриф вместо отказа и не уводила прогон в
+    ветку, которой в проверяемом сценарии быть не должно.
+
+    Форма вызова не фиксируется (`*args`, `**kwargs`): регрессия может позвать
+    уточнение и позиционно, и по ключу, а замок обязан поймать оба случая.
+    Записываются переданные ответы — по ним видно, из какой именно ветки пришёл
+    лишний вызов.
+    """
+
+    async def stub(*args: object, **kwargs: object) -> Brief:
+        calls.append(kwargs.get("answers", args[2] if len(args) > 2 else None))
+        raise AssertionError(message)
+
+    return stub
+
+
 async def test_no_interactive_calls_run_intake_once_with_constraints(
     monkeypatch, settings, fake_provider_factory, tmp_path
 ):
-    """Немой режим: `run_intake` вызывается ровно один раз, `constraints` из разбора доходят до брифа."""
+    """Немой режим: `run_intake` вызывается ровно один раз, `constraints` из разбора доходят до брифа.
+
+    Заодно замок на уточняющий диалог: в немом режиме его быть не должно вовсе.
+    Признак вызова записывается заглушкой и проверяется после прогона — почему
+    так, а не броском, разобрано в `_refine_brief_tripwire`."""
     _patch_llm_router(monkeypatch, settings, fake_provider_factory)
     calls = []
+    refine_calls: list[object] = []
 
     async def fake_run_intake(router, task, *, industry_hint="не указана"):
         calls.append((task, industry_hint))
@@ -151,15 +190,20 @@ async def test_no_interactive_calls_run_intake_once_with_constraints(
             draft_brief=_draft_brief(industry="нефтепереработка", constraints=["работа при 340 °C"]),
         )
 
-    async def fail_refine_brief(*args, **kwargs):
-        raise AssertionError("refine_brief не должен вызываться в немом режиме")
-
     monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
-    monkeypatch.setattr("app.pipeline.stages.refine_brief", fail_refine_brief)
+    monkeypatch.setattr(
+        "app.pipeline.stages.refine_brief",
+        _refine_brief_tripwire(refine_calls, "refine_brief не должен вызываться в немом режиме"),
+    )
 
     await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False)
 
     assert len(calls) == 1, "run_intake обязан вызываться ровно один раз в немом режиме"
+    assert refine_calls == [], (
+        "в немом режиме вызвано уточнение брифа: площадка диалога обязана оставаться за флагом "
+        "`interactive`, иначе `scout run --no-interactive` платит за стадию, результат которой "
+        "спрашивать не у кого"
+    )
     assert len(_RecordingPipeline.captured) == 1
     assert _RecordingPipeline.captured[0].constraints == ["работа при 340 °C"]
 
@@ -209,20 +253,30 @@ async def test_interactive_calls_refine_brief_when_questions_present(
 
 
 async def test_interactive_skips_refine_brief_when_no_questions(monkeypatch, settings, fake_provider_factory, tmp_path):
-    """Пустой список вопросов — интерактивная ветка не вызывает `refine_brief`, берёт черновик как есть."""
+    """Пустой список вопросов — интерактивная ветка не вызывает `refine_brief`, берёт черновик как есть.
+
+    Вопросов нет — значит, нет и ответов, а уточнять постановку пустым словарём
+    незачем: это оплаченный вызов модели, который ничего не добавляет. Замок
+    держится записью факта вызова, а не броском (см. `_refine_brief_tripwire`):
+    именно здесь мутация в одну лексему `if answers:` → `if True:` проходила
+    весь файл молча."""
     _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+    refine_calls: list[object] = []
 
     async def fake_run_intake(router, task, *, industry_hint="не указана"):
         return IntakeResult(questions=[], draft_brief=_draft_brief(industry="нефтепереработка"))
 
-    async def fail_refine_brief(*args, **kwargs):
-        raise AssertionError("refine_brief не должен вызываться при пустом списке вопросов")
-
     monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
-    monkeypatch.setattr("app.pipeline.stages.refine_brief", fail_refine_brief)
+    monkeypatch.setattr(
+        "app.pipeline.stages.refine_brief",
+        _refine_brief_tripwire(refine_calls, "refine_brief не должен вызываться при пустом списке вопросов"),
+    )
 
     await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", True)
 
+    assert refine_calls == [], (
+        "уточнение брифа вызвано без единого ответа владельца: сводить в постановку нечего, а стадия платная"
+    )
     assert _RecordingPipeline.captured[0].industry == "нефтепереработка"
 
 
@@ -261,21 +315,32 @@ async def test_run_intake_failure_falls_back_to_brief_from_raw_text_and_warns(
     """`run_intake` бросает исключение → прогон всё равно доходит до отчёта,
     бриф собирается кодом из сырого текста задачи (без вызова модели), а
     оператор видит предупреждение в консоли. `refine_brief` в этом сценарии
-    вызываться не должен — черновика для диалога нет."""
+    вызываться не должен — черновика для диалога нет.
+
+    Регрессия, от которой стоит замок на уточнение: запасной бриф пробуют
+    «дотянуть» моделью в той же ветке, а отказ прячут под таким же широким
+    `except`. Прежняя редакция замка (заглушка, которая просто бросает) такую
+    правку пропускала молча — бросок съедался тем же `except Exception`.
+    Поэтому здесь тот же приём записи факта вызова, что и выше."""
     _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+    refine_calls: list[object] = []
 
     async def broken_run_intake(router, task, *, industry_hint="не указана"):
         raise RuntimeError("модель недоступна")
 
-    async def fail_refine_brief(*args, **kwargs):
-        raise AssertionError("refine_brief не должен вызываться, если run_intake отказал")
-
     monkeypatch.setattr("app.pipeline.stages.run_intake", broken_run_intake)
-    monkeypatch.setattr("app.pipeline.stages.refine_brief", fail_refine_brief)
+    monkeypatch.setattr(
+        "app.pipeline.stages.refine_brief",
+        _refine_brief_tripwire(refine_calls, "refine_brief не должен вызываться, если run_intake отказал"),
+    )
 
     report_path = tmp_path / "report.md"
     await cli._run("сырой текст задачи про катализатор", None, None, report_path, False)
 
+    assert refine_calls == [], (
+        "после отказа интейка вызвано уточнение брифа: черновика для диалога нет и ответов "
+        "владельца нет, уточнять нечего — это лишний платный вызов на уже отказавшем прогоне"
+    )
     assert len(_RecordingPipeline.captured) == 1
     brief = _RecordingPipeline.captured[0]
     assert brief.task_summary == "сырой текст задачи про катализатор"
@@ -580,6 +645,23 @@ async def test_unknown_plan_id_stops_run_before_any_paid_call(
         "интейк вызван до отказа по несуществующему плану: прогон платит за разбор задачи, "
         "которая всё равно оборвётся. Проверка плана обязана стоять до вызова `run_intake`"
     )
+    # Т-32, честная оценка двух проверок ниже: обе — страховка, а не ловушка.
+    # Под мутацией «перенести чтение плана за вызов `run_intake`» ловит регрессию
+    # `intake_calls` выше, а эти две остаются зелёными и в сломанном коде:
+    #
+    #   • `router.cost.calls` — заглушка интейка бросает, не дойдя до модели,
+    #     поэтому счётчик нулевой при любом порядке блоков. Сделать проверку
+    #     работающей можно только отказавшись от подмены `run_intake` (тогда
+    #     реальный интейк дошёл бы до поддельного провайдера и счётчик вырос) —
+    #     но это выкинуло бы работающий замок Т-31 ради неработающего;
+    #   • `adapter_builds` — `_patch_pipeline` подменяет `ScoutPipeline` на
+    #     `_RecordingPipeline`, а он `build_adapters` не зовёт вовсе; сам `_run`
+    #     это имя не импортирует (единственная точка — ленивая
+    #     `ScoutPipeline._get_adapters`).
+    #
+    # Обе оставлены сознательно: они удерживают намерение «прогон стоит ноль и
+    # ни один источник не тронут» и сработают, если подмена пайплайна отсюда
+    # уйдёт. Фактическую поимку обеспечивают `intake_calls` и `captured`.
     assert router.cost.calls == 0, "по несуществующему номеру плана не должно уйти ни одного вызова модели"
     assert adapter_builds == [], "поисковые адаптеры не должны создаваться вовсе"
     assert _RecordingPipeline.captured == [], "пайплайн не должен создаваться вовсе"
