@@ -151,6 +151,8 @@ async def _persist_intake_stop(
         status="failed",
         cost_rub=round(router.cost.spent_rub, 4),
         cards=[],
+        # Прогон оборвался на интейке — карточек нет ни в одной секции.
+        contest_cards=[],
         stages=stage_log,
         error=str(error),
     )

@@ -291,6 +291,7 @@ async def test_new_card_fields_persist_without_loss(db_session_factory):
         status="drafted",
         cost_rub=0.0,
         cards=[card],
+        contest_cards=[],
         stages=[],
     )
 
@@ -330,6 +331,7 @@ async def test_card_without_new_fields_persists_empty_lists_not_null(db_session_
         status="drafted",
         cost_rub=0.0,
         cards=[_card()],
+        contest_cards=[],
         stages=[],
     )
 
@@ -409,6 +411,7 @@ async def test_persist_run_returns_id_of_written_request(db_session_factory):
         status="drafted",
         cost_rub=0.0,
         cards=[_card()],
+        contest_cards=[],
         stages=[],
     )
 
@@ -440,6 +443,7 @@ async def test_persist_run_returns_none_when_write_fails(caplog):
             status="drafted",
             cost_rub=0.0,
             cards=[_card()],
+            contest_cards=[],
             stages=[],
         )
 
@@ -457,6 +461,7 @@ async def test_persist_run_returns_none_without_factory():
             status="drafted",
             cost_rub=0.0,
             cards=[_card()],
+            contest_cards=[],
             stages=[],
         )
         is None
@@ -667,6 +672,7 @@ async def test_search_plan_round_trips_through_db_without_loss(db_session_factor
         status="drafted",
         cost_rub=0.0,
         cards=[_card()],
+        contest_cards=[],
         stages=[],
         plans=[PlanRecord(plan=plan)],
     )
@@ -715,6 +721,7 @@ async def test_two_passes_persist_two_rows_with_their_own_pass_no(db_session_fac
         status="drafted",
         cost_rub=0.0,
         cards=[_card()],
+        contest_cards=[],
         stages=[],
         plans=[PlanRecord(plan=first, pass_no=1), PlanRecord(plan=second, pass_no=2)],
     )
@@ -772,6 +779,7 @@ async def test_load_search_plan_returns_saved_plan(db_session_factory):
         status="drafted",
         cost_rub=0.0,
         cards=[],
+        contest_cards=[],
         stages=[],
         plans=[PlanRecord(plan=plan)],
     )

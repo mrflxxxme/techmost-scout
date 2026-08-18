@@ -258,9 +258,9 @@ def test_contest_section_does_not_change_main_section_count(brief):
     """
     main = [_make_card(title=f"Решение №{n}") for n in range(1, 7)]
     contest = [_contest_card(1), _contest_card(2)]
-    report = _make_report(main, brief=brief)
+    report = _make_report(main, brief=brief, contest_cards=contest)
 
-    text = render_markdown(report, contest_cards=contest)
+    text = render_markdown(report)
 
     assert _CONTEST_HEADING in text.split("\n")
     assert len(_section_card_titles(text, _MAIN_HEADING)) == 6
@@ -269,9 +269,9 @@ def test_contest_section_does_not_change_main_section_count(brief):
 
 def test_contest_section_goes_after_main_section(brief):
     """Секция стоит после основных карточек, а не вместо них (РЕШ-85 п. 1)."""
-    report = _make_report([_make_card()], brief=brief)
+    report = _make_report([_make_card()], brief=brief, contest_cards=[_contest_card(1)])
 
-    lines = render_markdown(report, contest_cards=[_contest_card(1)]).split("\n")
+    lines = render_markdown(report).split("\n")
 
     assert lines.index(_MAIN_HEADING) < lines.index(_CONTEST_HEADING)
 
@@ -279,10 +279,8 @@ def test_contest_section_goes_after_main_section(brief):
 def test_contest_section_absent_without_contest_cards(brief):
     """Критерий 2: пустая секция не печатается вовсе — заголовок без карточек
     есть обещание, которого отчёт не выполняет."""
-    report = _make_report([_make_card()], brief=brief)
-
-    assert _CONTEST_HEADING not in render_markdown(report)
-    assert _CONTEST_HEADING not in render_markdown(report, contest_cards=[])
+    assert _CONTEST_HEADING not in render_markdown(_make_report([_make_card()], brief=brief))
+    assert _CONTEST_HEADING not in render_markdown(_make_report([_make_card()], brief=brief, contest_cards=[]))
 
 
 def test_ip_status_line_printed_in_every_contest_card(brief):
@@ -290,9 +288,9 @@ def test_ip_status_line_printed_in_every_contest_card(brief):
     числе когда площадка неизвестна (РЕШ-79 п. 1)."""
     with_platform = _contest_card(1, candidate_urls=["https://hacks-ai.ru/event/12"])
     without_platform = _contest_card(2, candidate_urls=[])
-    report = _make_report([_make_card()], brief=brief)
+    report = _make_report([_make_card()], brief=brief, contest_cards=[with_platform, without_platform])
 
-    text = render_markdown(report, contest_cards=[with_platform, without_platform])
+    text = render_markdown(report)
     section = text.split(_CONTEST_HEADING, 1)[1]
 
     assert section.count("**Статус прав:**") == 2
@@ -314,9 +312,9 @@ def test_contest_card_without_evidence_hides_maturity_and_trl(brief):
     """Критерий 4, двойник проверки инварианта №1 для новой секции: карточка с
     пустым evidence не печатает ни стадии зрелости, ни TRL и в этой секции."""
     contest = _contest_card(1, maturity_stage=MaturityStage.PROTOTYPE, trl_estimate=4, evidence=[])
-    report = _make_report([_make_card()], brief=brief)
+    report = _make_report([_make_card()], brief=brief, contest_cards=[contest])
 
-    text = render_markdown(report, contest_cards=[contest])
+    text = render_markdown(report)
     section = text.split(_CONTEST_HEADING, 1)[1]
 
     assert "Стадия зрелости" not in section
@@ -332,9 +330,9 @@ def test_contest_card_with_evidence_still_shows_maturity(brief):
         trl_estimate=4,
         evidence=[Evidence(claim="Победитель хакатона", url="https://hacks-ai.ru/w")],
     )
-    report = _make_report([_make_card()], brief=brief)
+    report = _make_report([_make_card()], brief=brief, contest_cards=[contest])
 
-    text = render_markdown(report, contest_cards=[contest])
+    text = render_markdown(report)
     section = text.split(_CONTEST_HEADING, 1)[1]
 
     assert "**Стадия зрелости:** есть опытный образец (TRL ≈ 4)" in section
@@ -342,8 +340,8 @@ def test_contest_card_with_evidence_still_shows_maturity(brief):
 
 def test_draft_header_untouched_by_contest_section(brief):
     """Инвариант №2: шапка «ЧЕРНОВИК» остаётся на месте и с новой секцией."""
-    report = _make_report([_make_card()], brief=brief)
+    report = _make_report([_make_card()], brief=brief, contest_cards=[_contest_card(1)])
 
-    text = render_markdown(report, contest_cards=[_contest_card(1)])
+    text = render_markdown(report)
 
     assert "**ЧЕРНОВИК — не проверено экспертом.**" in text

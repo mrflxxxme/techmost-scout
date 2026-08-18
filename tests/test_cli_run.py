@@ -565,6 +565,7 @@ async def test_plan_id_hands_saved_plan_to_pipeline(monkeypatch, settings, fake_
         status="drafted",
         cost_rub=0.0,
         cards=[],
+        contest_cards=[],
         stages=[],
         plans=[PlanRecord(plan=plan)],
     )
