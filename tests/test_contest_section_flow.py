@@ -183,7 +183,15 @@ async def db_session_factory(tmp_path: Path):
     await engine.dispose()
 
 
-async def _run(settings, fake_provider_factory, brief: Brief, *, with_contest: bool = True, session_factory=None):
+async def _run(
+    settings,
+    fake_provider_factory,
+    brief: Brief,
+    *,
+    with_contest: bool = True,
+    session_factory=None,
+    progress=None,
+):
     """Полный проход на подменённых стадиях и одном поддельном источнике."""
     router = LLMRouter(settings, providers={"deepseek": fake_provider_factory("deepseek")})
     async with httpx.AsyncClient() as client:
@@ -192,6 +200,7 @@ async def _run(settings, fake_provider_factory, brief: Brief, *, with_contest: b
             router=router,
             adapters=[_MixedAdapter(client, with_contest=with_contest)],
             session_factory=session_factory,
+            progress=progress,
         )
         return await pipeline.run(brief, request_id=1, raw_text="текст задачи про катализатор")
 
@@ -345,6 +354,147 @@ async def test_конкурсный_кандидат_не_попавший_в_с
     # Ни один ключ склейки не помечен отобранным дважды.
     selected_keys = [row.dedup_key for row in rows if row.status == "selected"]
     assert len(selected_keys) == len(set(selected_keys))
+
+
+# ── Инвариант №1 в конкурсной секции: пустая карточка до клиента не доходит ──
+async def test_конкурсная_карточка_без_подтверждений_не_доходит_ни_до_отчёта_ни_до_базы(
+    settings, brief, fake_provider_factory, stub_stages, db_session_factory, monkeypatch
+):
+    """Отсев пустых карточек работает и в новой секции (инвариант №1).
+
+    Три заготовки конкурсного класса дают три разных исхода: карточку без
+    единого подтверждения, заглушку «не найдено» (формат ошибки 1 из
+    `prompts/card_author.md`) и честную карточку. До отчёта, до клиента и до
+    базы доходит только третья.
+
+    Сценарий не выдуман под тест: `author_card` возвращает оба вида брака и
+    сегодня, а у конкурсного класса источники слабее публикаций — вероятность
+    выше, чем в основной выдаче. Цена регрессии названа в колонке «как
+    проверять» инварианта №1: в отчёте не должно быть строки «Подтверждений не
+    приложено», а экспортёр печатает её для карточки с пустым `evidence`.
+    """
+
+    async def author_with_broken_contest(router, brief_: Brief, group: list[ScoredCandidate]) -> SolutionCard:
+        candidate = group[0].candidate
+        if candidate.source_type is not SourceType.CONTEST:
+            return SolutionCard(
+                title=candidate.title,
+                essence="Суть решения одной строкой.",
+                applicability="Закрывает задачу продления цикла.",
+                next_step="Связаться с разработчиком.",
+                evidence=[Evidence(claim="Подтверждение из источника", url=candidate.url)],
+                candidate_urls=[candidate.url],
+            )
+        if candidate.title.endswith("№1"):
+            # Ни одного подтверждения: экспортёр напечатал бы «Подтверждений не
+            # приложено», то есть ровно то, что запрещает инвариант №1.
+            return SolutionCard(
+                title=candidate.title,
+                essence="Команда собрала прототип за 48 часов.",
+                applicability="Закрывает ту же задачу дешевле.",
+                next_step="Связаться с капитаном команды.",
+                evidence=[],
+                candidate_urls=[candidate.url],
+            )
+        if candidate.title.endswith("№2"):
+            # Заглушка «не найдено» — группа без источников.
+            return SolutionCard(
+                title="не найдено",
+                essence="не найдено",
+                applicability="не найдено",
+                next_step="не найдено",
+                evidence=[Evidence(claim="Формальная ссылка заглушки", url=candidate.url)],
+                candidate_urls=[candidate.url],
+            )
+        return SolutionCard(
+            title=candidate.title,
+            essence="Команда собрала работающий прототип.",
+            applicability="Закрывает ту же задачу дешевле.",
+            next_step="Связаться с капитаном команды.",
+            evidence=[Evidence(claim="Победитель хакатона", url=candidate.url)],
+            candidate_urls=[candidate.url],
+        )
+
+    monkeypatch.setattr(stages, "author_card", author_with_broken_contest)
+
+    events: list[tuple[str, str, float]] = []
+
+    async def progress(stage: str, message: str, fraction: float) -> None:
+        events.append((stage, message, fraction))
+
+    report = await _run(settings, fake_provider_factory, brief, session_factory=db_session_factory, progress=progress)
+
+    # В отчёт дошла одна конкурсная карточка из трёх заготовок.
+    assert [card.title for card in report.contest_cards] == ["Хакатонный прототип №3"]
+    assert len(report.cards) == MAIN_COUNT, "основная секция от брака в конкурсной не пострадала"
+
+    # Инвариант №1 дословно по колонке «как проверять»: строки в отчёте нет.
+    text = render_markdown(report)
+    assert "Подтверждений не приложено" not in text
+    assert "не найдено" not in _section_titles(text, CONTEST_SECTION_HEADING)[0]
+    assert len(_section_titles(text, CONTEST_SECTION_HEADING)) == 1
+
+    # В базу брак тоже не попал: карточка в БД не «увереннее» отчёта.
+    async with db_session_factory() as session:
+        rows = (await session.execute(select(SolutionCardRow))).scalars().all()
+    contest_rows = [row for row in rows if row.is_contest]
+    assert [row.title for row in contest_rows] == ["Хакатонный прототип №3"]
+    assert all(row.evidence for row in rows), "карточка без подтверждений не имеет права лежать в базе"
+
+    # Отброшенное видно оператору числом, а не только отсутствием карточек.
+    card_messages = [message for stage, message, _ in events if stage == "cards"]
+    assert any("Карточек конкурсного класса: 1, отброшено пустых: 2" in message for message in card_messages)
+
+
+# ── Строка прогресса конкурсного класса печатается всегда (совет 3 ревью) ────
+async def test_строка_прогресса_конкурсного_класса_печатается_с_фактическими_числами(
+    settings, brief, fake_provider_factory, stub_stages
+):
+    """Замок на строку, которой оркестратор отчитывается о конкурсном классе.
+
+    Образец — та же проверка основной секции
+    (`test_progress_reports_published_and_dropped_card_counts`): числа в строке
+    сверяются дословно, иначе испорченный текст или подменённое число проходят
+    молча — ровно это ревьюер и показал мутацией.
+    """
+    events: list[tuple[str, str, float]] = []
+
+    async def progress(stage: str, message: str, fraction: float) -> None:
+        events.append((stage, message, fraction))
+
+    await _run(settings, fake_provider_factory, brief, progress=progress)
+
+    messages = [message for _, message, _ in events]
+    assert any(
+        f"Конкурсный класс: кандидатов {CONTEST_COUNT}, заготовок карточек {CONTEST_CARDS_TARGET} "
+        "(секция вне лимита 5–7)" == message
+        for message in messages
+    ), messages
+    assert any(
+        f"Карточек конкурсного класса: {CONTEST_CARDS_TARGET}, отброшено пустых: 0" == message for message in messages
+    )
+
+
+async def test_строка_прогресса_конкурсного_класса_печатается_и_при_нулях(
+    settings, brief, fake_provider_factory, stub_stages
+):
+    """Нули печатаются наравне с числами.
+
+    На этом держится отличие «конкурсных кандидатов не было» от «конкурсные
+    были и до карточек не дошли»: молчание сделало бы события неотличимыми, а
+    неинтерпретируемый ноль этот проект уже разбирал (урок Э1-2).
+    """
+    events: list[tuple[str, str, float]] = []
+
+    async def progress(stage: str, message: str, fraction: float) -> None:
+        events.append((stage, message, fraction))
+
+    report = await _run(settings, fake_provider_factory, brief, with_contest=False, progress=progress)
+
+    assert report.contest_cards == []
+    messages = [message for _, message, _ in events]
+    assert "Конкурсный класс: кандидатов 0, заготовок карточек 0 (секция вне лимита 5–7)" in messages
+    assert "Карточек конкурсного класса: 0, отброшено пустых: 0" in messages
 
 
 # ── Экспорт берёт карточки только из отчёта ─────────────────────────────────
