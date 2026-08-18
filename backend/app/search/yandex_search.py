@@ -91,12 +91,42 @@ GRANT_SITES = ("rscf.ru", "fasie.ru")
 #: задачи Ф-3 (`.planning/PLAN.md`).
 GRANT_INTENT_MARKERS = ("грант", "поддержанн", "фонд содействия", "рнф", "конкурс")
 
+#: Площадки конкурсов и хакатонов (РЕШ-79 п. 3, РЕШ-87). Своего адаптера под
+#: конкурсы нет и не будет: российские площадки либо не отвечают снаружи
+#: (`hacks-ai.ru` — 504, `leaders-of-digital.ru` — таймаут, `all-cups.ru` —
+#: ошибка TLS), либо закрыли свой API для роботов (`codenrock.com`), поэтому
+#: единственный доступный путь к ним — чужой поисковый индекс
+#: (`.planning/evidence/contests-recon.md` §1.5).
+#:
+#: `devpost.com` стоит здесь ТОЛЬКО как строка `site:devpost.com` внутри
+#: поисковой формулировки Яндекса. Прямое обращение к `devpost.com/api/*`
+#: запрещено (РЕШ-87), хотя эндпоинт открыт и отвечает без ключа: мы читаем
+#: чужой поисковый индекс, а не роботим их сайт.
+#:
+#: Сужение обязательное, а не по маркерам в тексте (в отличие от грантов):
+#: конкурсной формулировку делает именно список площадок, без него запрос
+#: вырождается в обычный веб-поиск и тратит тот же платный лимит впустую.
+CONTEST_SITES = (
+    "hacks-ai.ru",
+    "leaders-of-digital.ru",
+    "all-cups.ru",
+    "codenrock.com",
+    "upgreat.one",
+    "sk.ru",
+    "devpost.com",
+)
+
 
 class YandexSearchAdapter(SearchAdapter):
     """Поиск по открытому вебу: российский и мировой контуры одним ключом."""
 
     name = "yandex_search"
-    source_types = (SourceType.WEB,)
+    #: `CONTEST` здесь не украшение: оркестратор отдаёт адаптеру только те
+    #: формулировки, чей тип перечислен в `source_types`, и без этой строки
+    #: конкурсный запрос молча не доходил бы ни до одного источника
+    #: (урок `JOURNAL.md:177`). Своего адаптера под конкурсы нет — площадки
+    #: читаются через тот же контур Яндекса сужением `site:` (РЕШ-79 п. 3).
+    source_types = (SourceType.WEB, SourceType.CONTEST)
     #: Бесплатного тарифа нет — без ключа и каталога адаптер не включается
     requires_key = True
     #: Запросы платные и асинхронные; частота ограничена не жёстко
@@ -157,7 +187,16 @@ class YandexSearchAdapter(SearchAdapter):
         root = self._root(raw)
         if root is None:
             return [], []
-        return self._to_candidates(root, limit=limit), _raw_records(root, limit=limit)
+        # Тип кандидата — тип формулировки, а не «веб» навсегда: конкурсный
+        # запрос обязан вернуть кандидатов `CONTEST`, иначе потолок зрелости
+        # (Т-22) и отдельная секция отчёта (Т-24) их не увидят. Стадия
+        # extractor размечает свою выдачу тем же `query.source_type`
+        # (`extract_candidates`), поэтому разбор адаптера и разбор модели дают
+        # одинаковый тип, а не расходятся на откате.
+        return (
+            self._to_candidates(root, limit=limit, source_type=query.source_type),
+            _raw_records(root, limit=limit),
+        )
 
     @staticmethod
     def _search_type(query: SearchQuery) -> str:
@@ -278,11 +317,11 @@ class YandexSearchAdapter(SearchAdapter):
             raise SearchError(f"yandex_search: отказ поиска, код {error.get('code')}: {(error.text or '')[:200]}")
         return root
 
-    def _to_candidates(self, root: Any, *, limit: int) -> list[Candidate]:
+    def _to_candidates(self, root: Any, *, limit: int, source_type: SourceType = SourceType.WEB) -> list[Candidate]:
         candidates: list[Candidate] = []
         seen: set[str] = set()
         for doc in root.findall(".//doc"):
-            candidate = self._to_candidate(doc)
+            candidate = self._to_candidate(doc, source_type)
             if candidate is None or candidate.raw_id in seen:
                 continue
             seen.add(candidate.raw_id or "")
@@ -291,7 +330,7 @@ class YandexSearchAdapter(SearchAdapter):
                 break
         return candidates
 
-    def _to_candidate(self, doc: Any) -> Candidate | None:
+    def _to_candidate(self, doc: Any, source_type: SourceType = SourceType.WEB) -> Candidate | None:
         url = (doc.findtext("url") or "").strip()
         title = _text_of(doc.find("title"))
         if not url or not title:
@@ -302,7 +341,7 @@ class YandexSearchAdapter(SearchAdapter):
 
         try:
             return Candidate(
-                source_type=SourceType.WEB,
+                source_type=source_type,
                 title=title,
                 url=url,
                 # Домен — самая честная догадка о том, чья это разработка:
@@ -355,16 +394,32 @@ def _raw_records(root: Any, *, limit: int) -> list[dict]:
 def _with_site_filter(query: SearchQuery, search_type: str) -> str:
     """Добавить операторы `site:` там, где это осмысленно.
 
-    Только российский контур и только web-формулировки с грантовым
-    намерением: реестры РНФ и Фонда содействия инновациям иначе не достать.
+    Сужений два, и они разведены по типу формулировки, а не свалены в одно
+    условие:
+
+    * `contest` — всегда по списку конкурсных площадок (`CONTEST_SITES`).
+      Признак берётся из типа запроса, а не из слов в тексте: конкурсная
+      формулировка без площадок не отличается от обычной веб-строки;
+    * `web` — по реестрам грантовых фондов (`GRANT_SITES`), и только в
+      российском контуре и только при грантовом намерении в тексте
+      (`GRANT_INTENT_MARKERS`, РЕШ-41). Конкурсные площадки сюда не попадают:
+      слово «конкурс» есть и среди грантовых маркеров, и подмешивание площадок
+      увело бы грантовый запрос из реестров РНФ и Фонда содействия.
+
     Для всего остального ограничение по сайтам убило бы смысл открытого веба.
     """
+    if query.source_type is SourceType.CONTEST:
+        return _narrowed(query.text, CONTEST_SITES)
     if search_type != "SEARCH_TYPE_RU" or query.source_type is not SourceType.WEB:
         return query.text
     if not any(marker in query.text.lower() for marker in GRANT_INTENT_MARKERS):
         return query.text
-    sites = " | ".join(f"site:{site}" for site in GRANT_SITES)
-    return f"{query.text} ({sites})"
+    return _narrowed(query.text, GRANT_SITES)
+
+
+def _narrowed(text: str, sites: tuple[str, ...]) -> str:
+    """Формулировка, суженная до перечисленных площадок оператором `site:`."""
+    return f"{text} ({' | '.join(f'site:{site}' for site in sites)})"
 
 
 def _text_of(node: Any) -> str:

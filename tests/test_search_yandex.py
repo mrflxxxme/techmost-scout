@@ -9,15 +9,19 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
+from pathlib import Path
 
 import httpx
 import pytest
 import respx
 
-from app.schemas import SearchQuery, SourceType
+from app.llm import LLMRouter
+from app.pipeline.orchestrator import ScoutPipeline
+from app.schemas import SearchPlan, SearchQuery, SourceType
 from app.search import build_adapters
-from app.search.base import SearchError
-from app.search.yandex_search import OPERATION_URL, SEARCH_ASYNC_URL, YandexSearchAdapter
+from app.search.base import SearchAdapter, SearchError
+from app.search.yandex_search import CONTEST_SITES, GRANT_SITES, OPERATION_URL, SEARCH_ASYNC_URL, YandexSearchAdapter
 
 
 def _xml(*docs: str) -> str:
@@ -302,3 +306,170 @@ async def test_страница_из_двух_поисковиков_склеи�
 
     assert from_yandex[0].raw_id == from_google[0].raw_id
     assert from_yandex[0].dedup_key() == from_google[0].dedup_key()
+
+
+# ── Т-23: конкурсные формулировки через контур Яндекса ─────────────────────
+#
+# Своего адаптера под конкурсы нет и не будет (РЕШ-79 п. 3, РЕШ-88): площадки
+# читаются сужением `site:` в том же платном контуре. Ни один тест ниже не
+# регистрирует маршрута на `devpost.com` — обращение к `devpost.com/api/*`
+# запрещено (РЕШ-87), и в сеть здесь уходит только поисковый URL Яндекса.
+
+
+def _contest_query(text: str = "хакатон решение команды катализатор") -> SearchQuery:
+    return _query(text=text, lang="ru", source_type=SourceType.CONTEST)
+
+
+@respx.mock
+async def test_конкурсная_формулировка_доходит_до_адаптера_и_сужается_до_площадок(
+    make_adapter, settings, fake_provider_factory
+):
+    """Критерий 1: тип `contest` доходит до платного контура, а не отсеивается.
+
+    Проверяется именно ДОСТАВКА, а не сборка строки: план идёт через
+    `gather_candidates`, где оркестратор отдаёт адаптеру только формулировки с
+    типом из `source_types` (`orchestrator.py`). Убери `CONTEST` из
+    `YandexSearchAdapter.source_types` — запрос не уйдёт вовсе, и тест упадёт
+    на числе вызовов, а не на содержимом строки.
+    """
+    route = respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
+    respx.get(url__startswith=OPERATION_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json=_operation_done(_xml(_doc("https://devpost.com/software/team-solution", domain="devpost.com"))),
+        )
+    )
+    plan = SearchPlan(queries=[_contest_query()])
+    async with httpx.AsyncClient() as client:
+        adapter = make_adapter(client)
+        # Стадия extractor (Э2-5) к задаче не относится и требует модели:
+        # проверяем разбор самого адаптера, а не нормализацию выдачи.
+        adapter.needs_extraction = False
+        router = LLMRouter(settings, providers={"fake": fake_provider_factory("fake")})
+        adapters: list[SearchAdapter] = [adapter]
+        outcome = await ScoutPipeline(settings=settings, router=router, adapters=adapters).gather_candidates(plan)
+
+    assert route.call_count == 1, "конкурсная формулировка не дошла до адаптера — оркестратор отсеял её по типу"
+    sent = json.loads(route.calls[0].request.content)["query"]["queryText"]
+    assert "site:devpost.com" in sent
+    assert "site:hacks-ai.ru" in sent, "нет ни одной российской площадки — сужение собрано не по CONTEST_SITES"
+    assert outcome.hits_by_name == {"yandex_search": 1}
+    # Тип кандидата — тип формулировки: иначе потолок зрелости (Т-22) и
+    # отдельная секция отчёта (Т-24) конкурсных кандидатов не увидят.
+    assert outcome.candidates[0].source_type is SourceType.CONTEST
+
+
+@respx.mock
+async def test_конкурсное_сужение_перечисляет_все_площадки(make_adapter):
+    """Список площадок берётся целиком: пропавшая площадка — потерянная выдача."""
+    route = respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
+    respx.get(url__startswith=OPERATION_URL).mock(
+        return_value=httpx.Response(200, json=_operation_done(_xml(_doc("https://all-cups.ru/champ/1"))))
+    )
+    async with httpx.AsyncClient() as client:
+        await make_adapter(client).search(_contest_query(), limit=5)
+
+    sent = json.loads(route.calls[0].request.content)["query"]["queryText"]
+    for site in CONTEST_SITES:
+        assert f"site:{site}" in sent, f"площадка {site} выпала из конкурсного сужения"
+    # Текст формулировки сохраняется: сужение добавляется к нему, а не заменяет
+    assert sent.startswith("хакатон решение команды катализатор")
+
+
+@respx.mock
+async def test_грантовая_формулировка_не_получает_конкурсных_площадок(make_adapter):
+    """Критерий 2: гранты остаются в реестрах РНФ и Фонда содействия.
+
+    Слово «конкурс» есть и среди грантовых маркеров (`GRANT_INTENT_MARKERS`), и
+    в конкурсных формулировках — если подмешать площадки грантовому запросу,
+    он уедет из реестров поддержанных проектов на хакатоны.
+    """
+    route = respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
+    respx.get(url__startswith=OPERATION_URL).mock(
+        return_value=httpx.Response(200, json=_operation_done(_xml(_doc("https://rscf.ru/project/1"))))
+    )
+    async with httpx.AsyncClient() as client:
+        adapter = make_adapter(client)
+        await adapter.search(
+            _query(text="конкурс поддержанные проекты РНФ катализатор", lang="ru", source_type=SourceType.WEB),
+            limit=5,
+        )
+
+    sent = json.loads(route.calls[0].request.content)["query"]["queryText"]
+    for site in GRANT_SITES:
+        assert f"site:{site}" in sent
+    for site in CONTEST_SITES:
+        assert f"site:{site}" not in sent, f"грантовая формулировка увела выдачу на конкурсную площадку {site}"
+
+
+@respx.mock
+async def test_конкурсная_формулировка_не_получает_грантовых_реестров(make_adapter):
+    """Обратное направление того же критерия: у конкурсов свои площадки.
+
+    Реестры РНФ и Фонда содействия перечисляют поддержанные ПРОЕКТЫ, а не
+    решения команд, — подмешивать их к конкурсному запросу значит тратить тот
+    же платный лимит на чужую выдачу.
+    """
+    route = respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
+    respx.get(url__startswith=OPERATION_URL).mock(
+        return_value=httpx.Response(200, json=_operation_done(_xml(_doc("https://codenrock.com/champ/2"))))
+    )
+    async with httpx.AsyncClient() as client:
+        await make_adapter(client).search(_contest_query("конкурс грант хакатон катализатор"), limit=5)
+
+    sent = json.loads(route.calls[0].request.content)["query"]["queryText"]
+    for site in GRANT_SITES:
+        assert f"site:{site}" not in sent, "конкурсная формулировка получила грантовые реестры"
+
+
+@respx.mock
+async def test_конкурсные_формулировки_не_поднимают_предел_платных_запросов(make_adapter, caplog):
+    """Критерий 4: предел прогона прежний — шесть запросов ПО УМОЛЧАНИЮ.
+
+    `max_queries` здесь не задаётся нарочно: тест обязан падать, если предел
+    подняли в самом адаптере. Рост предела умножается на второй проход и на
+    потолок 110 ₽, поэтому конкурсные формулировки конкурируют за тот же лимит.
+    """
+    route = respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
+    respx.get(url__startswith=OPERATION_URL).mock(
+        return_value=httpx.Response(200, json=_operation_done(_xml(_doc("https://sk.ru/news/1"))))
+    )
+    async with httpx.AsyncClient() as client:
+        adapter = make_adapter(client)
+        with caplog.at_level(logging.WARNING, logger="app.search.yandex_search"):
+            for _ in range(6):
+                await adapter.search(_contest_query(), limit=5)
+            seventh = await adapter.search(_contest_query("седьмая конкурсная формулировка"), limit=5)
+
+    assert route.call_count == 6, "предел платных запросов на прогон изменился"
+    assert adapter.queries_used == 6
+    assert seventh == []
+    assert any("предел 6 платных запросов на прогон исчерпан" in record.getMessage() for record in caplog.records), (
+        "исчерпание предела не попало в лог — расход платного источника снова невидим"
+    )
+
+
+def test_в_коде_нет_прямого_обращения_к_api_devpost():
+    """Критерий 3: Devpost читается только через чужой поисковый индекс.
+
+    `devpost.com/api/hackathons` отвечает 200 и JSON без ключа, но их условия
+    запрещают роботить сайт (РЕШ-87): границу владелец провёл по строке
+    `site:devpost.com` внутри поисковой формулировки. Машинная проверка — по
+    исходникам, а не по обещанию в ревью.
+    """
+    backend = Path(__file__).resolve().parents[1] / "backend"
+    sources = list(backend.rglob("*.py"))
+    assert sources, "не найдено ни одного файла backend/ — проверка ничего не проверяет"
+    for path in sources:
+        # Комментарии из проверки исключены: запрет положено объяснять там, где
+        # он действует, и слова «обращение к `devpost.com/api/*` запрещено»
+        # рядом со списком площадок — это причина, а не нарушение.
+        code = "\n".join(
+            line for line in path.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith("#")
+        )
+        assert "devpost.com/api" not in code, f"{path}: прямое обращение к API Devpost запрещено (РЕШ-87)"
+        # Адрес с путём или со схемой — это уже обращение к их сайту, а не
+        # строка сужения: в коде Devpost имеет право быть только именем
+        # площадки в списке CONTEST_SITES.
+        assert "devpost.com/" not in code, f"{path}: адрес devpost.com с путём — обращение к сайту площадки"
+        assert "//devpost.com" not in code, f"{path}: адрес devpost.com со схемой — обращение к сайту площадки"
