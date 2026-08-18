@@ -172,6 +172,14 @@ def candidate_records(
 #: — про объём работы эксперта, а не про обещанные клиенту 5–7 вариантов.
 CONTEST_CARDS_TARGET = 3
 
+#: Номер прохода у стадий условного второго поиска (РЕШ-81, РЕШ-82). Именованная
+#: величина, а не литерал в каждой записи: `replan`, вторые `search`, `enrich` и
+#: `scorer` обязаны получить одну и ту же двойку, а пропущенная в одном месте
+#: пометка хуже отсутствующего поля — доклад владельцу о расходе второго прохода
+#: строится фильтром `pass_no == 2` и припишет трату второго прохода первому
+#: (Ц-2 пост-аудита Э2-Б).
+SECOND_PASS_NO = 2
+
 
 def split_contest_candidates(
     scored: list[ScoredCandidate],
@@ -293,6 +301,12 @@ class ScoutPipeline:
         разных формулировок (РЕШ-31). `sources_unavailable` при этом остаётся
         по имени адаптера — этот список печатается в клиентском отчёте, и его
         состав задачей учёта не меняется.
+
+        `SearchOutcome.problems` собирает всё, что прошло тихо: деградации
+        стадии extractor (`_extract`) и формулировки, не отправленные из-за
+        исчерпанного платного предела источника. Оттуда список уезжает в
+        `error` записи стадии `search` — без него оба события в журнале прогона
+        неотличимы от «источник ответил и ничего не нашёл».
         """
         adapters = await self._get_adapters()
         tasks: list[tuple[str, str, asyncio.Task[list[Candidate]]]] = []
@@ -311,6 +325,27 @@ class ScoutPipeline:
                         tasks.append((adapter.name, adapter.contour_label(query), task))
         except BaseExceptionGroup as wrapped:
             raise _unwrap_group(wrapped) from wrapped
+
+        # Пропуски по исчерпанному платному пределу забираются у источников
+        # здесь, а не внутри `_safe_search`: предел кончается в самом адаптере,
+        # до обращения к источнику, и о пропущенной формулировке знает только
+        # он. Первый цикл правок завёл у Яндекса `drain_limit_problems`, но не
+        # позвал его ни разу — записи оставались в адаптере, и исчерпанный
+        # платный предел в отчёте по-прежнему выглядел как «источник ответил и
+        # ничего не нашёл» (Ц-1 пост-аудита Э2-Б, второй цикл).
+        #
+        # Метод спрашивается у объекта, а не объявлен в `SearchAdapter`: платный
+        # предел на прогон есть ровно у одного источника, и общий контракт под
+        # частный случай не расширяется — так же оркестратор находит
+        # `enrich_by_doi`.
+        #
+        # Забирается ровно один раз на проход: `problems` живёт внутри
+        # `gather_candidates`, и записи первого прохода, приехавшие во второй,
+        # читались бы как удвоенный недобор.
+        for adapter in adapters:
+            drain = getattr(adapter, "drain_limit_problems", None)
+            if drain is not None:
+                problems.extend(drain())
 
         candidates: list[Candidate] = []
         hits_by_label: dict[str, int] = {}
@@ -338,7 +373,7 @@ class ScoutPipeline:
 
     # ── Обогащение по DOI ───────────────────────────────────────────────────
     async def enrich_candidates(
-        self, candidates: list[Candidate], *, stage_log: list[StageRecord] | None = None
+        self, candidates: list[Candidate], *, stage_log: list[StageRecord] | None = None, pass_no: int = 1
     ) -> tuple[list[Candidate], dict[str, int]]:
         """Добрать метаданные по DOI у источника обогащения (РЕШ-52.3).
 
@@ -359,6 +394,10 @@ class ScoutPipeline:
         неотличимо от работающего. Поэтому стадия пишет `StageRecord` с
         непустым `error` — тем же способом, каким Т-2 завела запись об отказе
         интейка.
+
+        `pass_no` — проход, которому принадлежит запись: обогащение зовётся и во
+        втором проходе (РЕШ-81), и без явного номера его строка приписалась бы
+        первому (Ц-2 пост-аудита Э2-Б).
         """
         adapters = await self._get_adapters()
         # Источник обогащения узнаётся по методу, а не по имени класса:
@@ -381,7 +420,13 @@ class ScoutPipeline:
             """Строка журнала стадии обогащения; `problem` — что именно деградировало."""
             if stage_log is not None:
                 stage_log.append(
-                    StageRecord(stage="enrich", started_at=started, finished_at=datetime.now(UTC), error=problem)
+                    StageRecord(
+                        stage="enrich",
+                        started_at=started,
+                        finished_at=datetime.now(UTC),
+                        pass_no=pass_no,
+                        error=problem,
+                    )
                 )
 
         try:
@@ -902,9 +947,14 @@ class ScoutPipeline:
           прогона, не получив ни одного нового кандидата. Новизна считается по
           ключу склейки через существующий `deduplicate`, которому отдаются обе
           выдачи сразу: так же схлопываются и дубли внутри второго прохода.
-        * **Свои строки журнала стадий** — `replan`, вторые `search` и `scorer`:
-          трата второго прохода обязана быть видна отдельно, а не растворяться
-          в строках первого.
+        * **Свои строки журнала стадий** — `replan`, вторые `search`, `enrich` и
+          `scorer`: трата второго прохода обязана быть видна отдельно, а не
+          растворяться в строках первого. Отдельность даёт поле `pass_no`
+          (`SECOND_PASS_NO`), а не порядок записей: доклад о расходе (РЕШ-82)
+          строится фильтром по полю. Первый цикл правок завёл поле, но ни одной
+          двойки в него не положил — заполненное единицей, оно отвечало на
+          вопрос «сколько стоил второй проход» нулём и приписывало его трату
+          первому проходу (Ц-2 пост-аудита Э2-Б).
         """
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
@@ -924,6 +974,7 @@ class ScoutPipeline:
                 stage="replan",
                 started_at=started,
                 finished_at=datetime.now(UTC),
+                pass_no=SECOND_PASS_NO,
                 provider=provider,
                 cost_rub=stage_cost,
                 error=replan_error,
@@ -944,6 +995,7 @@ class ScoutPipeline:
                 stage="search",
                 started_at=started,
                 finished_at=datetime.now(UTC),
+                pass_no=SECOND_PASS_NO,
                 provider=provider,
                 cost_rub=stage_cost,
                 sources_hit=dict(outcome.hits_by_provider),
@@ -962,7 +1014,7 @@ class ScoutPipeline:
         if not fresh:
             return [], outcome.unavailable
 
-        fresh, citations = await self.enrich_candidates(fresh, stage_log=stage_log)
+        fresh, citations = await self.enrich_candidates(fresh, stage_log=stage_log, pass_no=SECOND_PASS_NO)
 
         await self._notify("scorer", f"Оцениваю новых кандидатов второго прохода: {len(fresh)}", 0.59)
         started = datetime.now(UTC)
@@ -974,6 +1026,7 @@ class ScoutPipeline:
                 stage="scorer",
                 started_at=started,
                 finished_at=datetime.now(UTC),
+                pass_no=SECOND_PASS_NO,
                 provider=provider,
                 cost_rub=stage_cost,
             )
