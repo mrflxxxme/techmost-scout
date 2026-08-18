@@ -65,11 +65,21 @@ class StageRecord:
     заполняются оркестратором приблизительно, по снимкам счётчика до и после
     вызова стадии; `sources_hit` — только для стадии поиска, из
     `SearchOutcome.hits_by_provider`.
+
+    `pass_no` — проход поиска, к которому относится стадия (РЕШ-81). Едет рядом
+    со стадией по тому же доводу, что у планов (Т-19) и кандидатов (Т-20):
+    второй проход повторяет стадии `search` и `scorer` под теми же именами, и
+    без поля расход второго прохода (доклад по РЕШ-82) отделялся бы только
+    порядком строк — упорядочить по времени и отсечь всё после `replan`.
+    Умолчание — единица: однопроходных стадий большинство (интейк, карточки,
+    проверка, сводка), и требовать от каждого места записи явной единицы значило
+    бы завести источник расхождений на ровном месте.
     """
 
     stage: str
     started_at: datetime
     finished_at: datetime
+    pass_no: int = 1
     provider: str | None = None
     tokens_in: int = 0
     tokens_out: int = 0
@@ -278,6 +288,7 @@ async def _write(
         session.add(
             PipelineLogRow(
                 request_id=request_id,
+                pass_no=record.pass_no,
                 stage=record.stage,
                 started_at=record.started_at,
                 finished_at=record.finished_at,
