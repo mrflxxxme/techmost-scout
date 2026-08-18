@@ -26,7 +26,7 @@ from app.llm import CostLimitExceededError, LLMRouter
 from app.metrics import score_payload
 from app.pipeline import stages
 from app.pipeline.persistence import CandidateRecord, PlanRecord, SessionFactory, StageRecord, persist_run
-from app.schemas import Brief, Candidate, Report, ScoredCandidate, SearchPlan, SolutionCard
+from app.schemas import Brief, Candidate, Report, ScoredCandidate, SearchPlan, SolutionCard, SourceType
 from app.search import build_adapters, normalize_doi
 from app.search.base import SearchAdapter
 
@@ -160,6 +160,44 @@ def candidate_records(
         )
         for item in scored
     ]
+
+
+#: Сколько карточек собирается для секции «Ранние разработки и команды»
+#: (РЕШ-85 п. 1). Лимит 5–7 (FR-9) секции не касается — это её собственная
+#: верхняя граница, и она нужна по двум причинам. Первая: каждая карточка стоит
+#: отдельного вызова модели, а конкурсных кандидатов платный контур Яндекса
+#: может принести десятками. Вторая: секция дополнительная, её читает эксперт
+#: поверх основной выдачи, и десять ранних прототипов в довесок к семи решениям
+#: он разбирать не станет. Число не выводится из `target_cards`: оно про другое
+#: — про объём работы эксперта, а не про обещанные клиенту 5–7 вариантов.
+CONTEST_CARDS_TARGET = 3
+
+
+def split_contest_candidates(
+    scored: list[ScoredCandidate],
+) -> tuple[list[ScoredCandidate], list[ScoredCandidate]]:
+    """Разделить оценённых кандидатов на обычных и конкурсных (РЕШ-92).
+
+    Возвращает пару «обычные, конкурсные». Деление идёт по `source_type`
+    кандидата, а не по площадке в адресе: тип проставляет адаптер по типу
+    формулировки плана (Т-23), и он же управляет потолком зрелости (Т-22) — два
+    разных способа опознать конкурсный класс молча разошлись бы.
+
+    Смысл разделения — в арифметике весов (РЕШ-85): хакатонный прототип с
+    потолком зрелости `prototype` проигрывает статье с промышленной апробацией
+    0,8–1,0 балла **только на зрелости**. В общем `select_top` он почти никогда
+    не попал бы в выдачу, а попав — вытеснил бы зрелое решение из обещанных
+    клиенту 5–7. Поэтому конкурсные кандидаты не участвуют в общем отборе
+    вовсе, а их карточки печатаются отдельной секцией вне лимита.
+    """
+    main: list[ScoredCandidate] = []
+    contest: list[ScoredCandidate] = []
+    for item in scored:
+        if item.candidate.source_type is SourceType.CONTEST:
+            contest.append(item)
+        else:
+            main.append(item)
+    return main, contest
 
 
 @dataclass(slots=True)
@@ -525,6 +563,7 @@ class ScoutPipeline:
                 status="failed",
                 cost_rub=round(self._router.cost.spent_rub, 4),
                 cards=[],
+                contest_cards=[],
                 stages=stage_log,
                 plans=plan_log,
                 candidates=candidate_log,
@@ -541,6 +580,9 @@ class ScoutPipeline:
             status="drafted",
             cost_rub=report.cost_rub,
             cards=report.cards,
+            # Обе секции пишутся из отчёта, а не из локальных списков стадии:
+            # источник карточек один и тот же для клиента и для базы (РЕШ-92).
+            contest_cards=report.contest_cards,
             stages=stage_log,
             plans=plan_log,
             candidates=candidate_log,
@@ -673,23 +715,55 @@ class ScoutPipeline:
         target = self._settings.target_cards
         # Отбор идёт по обоим проходам сразу: второй проход затевался ради того,
         # чтобы в карточки попало найденное им, а не ради отдельного списка.
-        selected = stages.select_top([*scored, *scored_second], limit=target * 2)
+        # Но конкурсные кандидаты в общий отбор не идут (РЕШ-85 п. 1, РЕШ-92):
+        # они не конкурируют с публикациями по общему скорингу и никого из
+        # обещанных клиенту 5–7 вариантов не вытесняют.
+        main_scored, contest_scored = split_contest_candidates([*scored, *scored_second])
+        selected = stages.select_top(main_scored, limit=target * 2)
+        # Своя очередь конкурсного класса: группировка по организации та же, но
+        # с собственной верхней границей, и `select_top` здесь не зовётся —
+        # иначе прогон печатал бы вторую строку калибровки `relevance` по
+        # десятку конкурсных кандидатов, а её читают как строку всего прогона
+        # (воротной критерий 3 подэтапа Э2-А).
+        contest_groups = stages.group_for_cards(contest_scored, target=CONTEST_CARDS_TARGET)
+        contest_picked = [item for group in contest_groups for item in group]
         # Оценки уезжают в БД сразу после отбора, а не в конце прогона: отказ
         # сборки карточек или сводки не должен уносить с собой единственное
         # числовое свидетельство того, что нашёл и как оценил этот прогон.
         # Проходы записываются по отдельности, каждый со своим `pass_no`: судьба
         # кандидата берётся по ключу склейки, и склеенный список пометил бы
         # `selected` обе строки общего ключа (см. `candidate_records`).
-        candidate_log.extend(candidate_records(scored, selected))
+        #
+        # Судьба конкурсного кандидата считается по его собственной очереди:
+        # `selected` для него означает «дошёл до своей секции». Списки не
+        # пересекаются по построению — кандидат либо конкурсный, либо нет, —
+        # поэтому дважды `selected` он не получит, а конкурсный, не попавший в
+        # свою секцию, останется `rejected` (предупреждение ревью Т-20).
+        picked = [*selected, *contest_picked]
+        candidate_log.extend(candidate_records(scored, picked))
         if scored_second:
-            candidate_log.extend(candidate_records(scored_second, selected, pass_no=2))
+            candidate_log.extend(candidate_records(scored_second, picked, pass_no=2))
         groups = stages.group_for_cards(selected, target=target)
         await self._notify("scorer", f"Отобрано вариантов для карточек: {len(groups)}", 0.6)
+        # Строка печатается ВСЕГДА, в том числе с нулями: «конкурсных кандидатов
+        # не было» и «конкурсные были, но до карточек не дошли» — разные события,
+        # и молчание сделало бы их неотличимыми. Именно на этом «подключили и не
+        # заметили» держался дефект, ради которого заведена Т-33.
+        await self._notify(
+            "scorer",
+            f"Конкурсный класс: кандидатов {len(contest_scored)}, "
+            f"заготовок карточек {len(contest_groups)} (секция вне лимита 5–7)",
+            0.62,
+        )
 
         await self._notify("cards", "Собираю карточки решений", 0.65)
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
         cards = await self._author_cards(brief, groups)
+        # Карточки конкурсной секции собираются тем же способом и в той же
+        # строке журнала стадий: это одна стадия «cards» с одной ценой, делить
+        # её на две значило бы обещать точность, которой у снимков счётчика нет.
+        contest_authored = await self._author_cards(brief, contest_groups)
         stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
@@ -698,7 +772,17 @@ class ScoutPipeline:
         )
         published = stages.select_publishable_cards(cards)
         dropped = len(cards) - len(published)
+        # Тот же отсев пустых карточек (инвариант №1: без подтверждений карточка
+        # клиенту не показывается), но со своей верхней границей — лимит 5–7 к
+        # этой секции не применяется ни в какую сторону.
+        contest_published = stages.select_publishable_cards(contest_authored, limit=CONTEST_CARDS_TARGET)
         await self._notify("cards", f"Готово карточек: {len(published)}, отброшено пустых: {dropped}", 0.85)
+        await self._notify(
+            "cards",
+            f"Карточек конкурсного класса: {len(contest_published)}, "
+            f"отброшено пустых: {len(contest_authored) - len(contest_published)}",
+            0.86,
+        )
 
         await self._notify("summary", "Составляю сводку и рекомендацию", 0.9)
         started = datetime.now(UTC)
@@ -735,6 +819,10 @@ class ScoutPipeline:
             request_id=request_id,
             brief=brief,
             cards=published,
+            # Сводка и сравнение вариантов остаются по основной выдаче: рекомендация
+            # клиенту — про решения, прошедшие общий отбор, а конкурсная секция
+            # идёт к ней приложением со своим предупреждением о статусе прав.
+            contest_cards=contest_published,
             summary=summary,
             sources_unavailable=outcome.unavailable,
             generated_at=datetime.now(UTC),

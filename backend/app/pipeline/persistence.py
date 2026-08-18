@@ -165,6 +165,7 @@ async def persist_run(
     status: str,
     cost_rub: float,
     cards: list[SolutionCard],
+    contest_cards: list[SolutionCard],
     stages: list[StageRecord],
     plans: list[PlanRecord] | None = None,
     candidates: list[CandidateRecord] | None = None,
@@ -176,6 +177,12 @@ async def persist_run(
     `Report.request_id`, и экспорт печатает «Запрос №N» вместо прочерка (Т-7).
     До этого номер прогона существовал только в БД, и связать выданный клиенту
     отчёт со строкой журнала было нечем.
+
+    `contest_cards` — карточки секции «Ранние разработки и команды» (РЕШ-85
+    п. 1). Аргумент **обязательный**, без умолчания, по тому же уроку, что и
+    журналы проходов (РЕШ-89): умолчание сделало бы потерю целой секции
+    незаметной для тестов, а это ровно тот класс дефекта, ради которого
+    заведена Т-33. В базе секции различаются колонкой `solution_cards.is_contest`.
 
     Фабрика не передана (тесты, веб до Э3) — запись не выполняется, прогон не
     меняется ни на шаг, номера нет: возвращается `None`. Любой отказ самой
@@ -193,6 +200,7 @@ async def persist_run(
                 status=status,
                 cost_rub=cost_rub,
                 cards=cards,
+                contest_cards=contest_cards,
                 stages=stages,
                 plans=plans or [],
                 candidates=candidates or [],
@@ -210,6 +218,7 @@ async def _write(
     status: str,
     cost_rub: float,
     cards: list[SolutionCard],
+    contest_cards: list[SolutionCard],
     stages: list[StageRecord],
     plans: list[PlanRecord],
     candidates: list[CandidateRecord],
@@ -256,32 +265,14 @@ async def _write(
             )
         )
 
+    # Обе секции отчёта ложатся в одну таблицу и различаются колонкой
+    # `is_contest` (РЕШ-92, критерий 3). Нумерация позиций своя у каждой секции:
+    # `position` повторяет порядковый номер карточки в отчёте, а конкурсные там
+    # нумеруются заново, с единицы.
     for position, card in enumerate(cards):
-        session.add(
-            SolutionCardRow(
-                request_id=request_id,
-                position=position,
-                title=card.title,
-                essence=card.essence,
-                maturity_stage=card.maturity_stage.value,
-                trl_estimate=card.trl_estimate,
-                ip_status=card.ip_status.value,
-                developer_org=card.developer_org,
-                developer_team=card.developer_team,
-                contact_leads=list(card.contact_leads),
-                evidence=[item.model_dump(mode="json") for item in card.evidence],
-                applicability=card.applicability,
-                risks=list(card.risks),
-                gov_support=[item.model_dump(mode="json") for item in card.gov_support],
-                next_step=card.next_step,
-                confidence=card.confidence.value,
-                confidence_note=card.confidence_note,
-                candidate_urls=[str(url) for url in card.candidate_urls],
-                requirement_checks=[check.model_dump(mode="json") for check in card.requirement_checks],
-                unsourced_claims=list(card.unsourced_claims),
-                pdf_urls=[str(url) for url in card.pdf_urls],
-            )
-        )
+        session.add(_card_row(request_id, position, card, is_contest=False))
+    for position, card in enumerate(contest_cards):
+        session.add(_card_row(request_id, position, card, is_contest=True))
 
     for record in stages:
         session.add(
@@ -300,3 +291,37 @@ async def _write(
         )
 
     return request_id
+
+
+def _card_row(request_id: int, position: int, card: SolutionCard, *, is_contest: bool) -> SolutionCardRow:
+    """Строка `solution_cards` из карточки. Тело общее для обеих секций.
+
+    Общее сознательно: отдельная сборка строки для конкурсной секции — тот
+    самый путь, которым однажды разошлись бы состав полей отчёта и состав полей
+    базы, и карточка в базе снова стала бы «увереннее» своей markdown-версии
+    (урок Т-5). Секция задаётся одним флагом, а не своим набором полей.
+    """
+    return SolutionCardRow(
+        request_id=request_id,
+        position=position,
+        is_contest=is_contest,
+        title=card.title,
+        essence=card.essence,
+        maturity_stage=card.maturity_stage.value,
+        trl_estimate=card.trl_estimate,
+        ip_status=card.ip_status.value,
+        developer_org=card.developer_org,
+        developer_team=card.developer_team,
+        contact_leads=list(card.contact_leads),
+        evidence=[item.model_dump(mode="json") for item in card.evidence],
+        applicability=card.applicability,
+        risks=list(card.risks),
+        gov_support=[item.model_dump(mode="json") for item in card.gov_support],
+        next_step=card.next_step,
+        confidence=card.confidence.value,
+        confidence_note=card.confidence_note,
+        candidate_urls=[str(url) for url in card.candidate_urls],
+        requirement_checks=[check.model_dump(mode="json") for check in card.requirement_checks],
+        unsourced_claims=list(card.unsourced_claims),
+        pdf_urls=[str(url) for url in card.pdf_urls],
+    )

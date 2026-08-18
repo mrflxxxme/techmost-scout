@@ -284,6 +284,12 @@ class Report(BaseModel):
     request_id: int
     brief: Brief
     cards: list[SolutionCard]
+    #: Карточки конкурсного класса (РЕШ-85 п. 1) — отдельная секция отчёта
+    #: «Ранние разработки и команды», **вне лимита 5–7** (FR-9). Отдельным
+    #: полем, а не аргументом экспортёра: карточки, живущие только в аргументе
+    #: функции, не доехали бы до базы — `persist_run` пишет то, что лежит в
+    #: отчёте. Один путь на отчёт, базу и будущий веб (РЕШ-92).
+    contest_cards: list[SolutionCard] = Field(default_factory=list)
     summary: ReportSummary
     sources_unavailable: list[str] = Field(
         default_factory=list, description="Источники, которые не ответили — честно пишем в отчёт"

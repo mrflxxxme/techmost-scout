@@ -10,8 +10,6 @@ git и из него без потерь собираются PDF и DOCX на �
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from app.schemas import Confidence, MaturityStage, Report, SolutionCard
 
 MATURITY_RU: dict[MaturityStage, str] = {
@@ -43,19 +41,18 @@ CONTEST_SECTION_HEADING = "## Ранние разработки и команд�
 IP_STATUS_NOTICE = "статус прав не подтверждён, требует выяснения у команды"
 
 
-def render_markdown(
-    report: Report,
-    *,
-    validated: bool = False,
-    reviewer: str = "",
-    contest_cards: Sequence[SolutionCard] = (),
-) -> str:
+def render_markdown(report: Report, *, validated: bool = False, reviewer: str = "") -> str:
     """Собрать отчёт. До валидации экспертом на нём стоит пометка «черновик».
 
-    `contest_cards` — карточки, собранные из кандидатов типа `CONTEST`. Они
-    печатаются отдельной секцией «Ранние разработки и команды» и в лимит 5–7
-    основной выдачи не входят (РЕШ-85 п. 1). Список пуст — секции нет вовсе:
-    заголовок без карточек есть обещание, которого отчёт не выполняет.
+    Карточки конкурсного класса берутся из `report.contest_cards` (РЕШ-92).
+    Они печатаются отдельной секцией «Ранние разработки и команды» и в лимит
+    5–7 основной выдачи не входят (РЕШ-85 п. 1). Список пуст — секции нет
+    вовсе: заголовок без карточек есть обещание, которого отчёт не выполняет.
+
+    Отдельного параметра `contest_cards` у функции нет сознательно (Т-33):
+    пока он был, `render_markdown(report)` печатал отчёт без секции молча —
+    два способа передать одно и то же, и умолчание побеждало. Единственный
+    источник карточек обеих секций — сам отчёт.
     """
     lines: list[str] = []
     brief = report.brief
@@ -106,10 +103,10 @@ def render_markdown(
 
     # Секция вне лимита 5–7 (РЕШ-85 п. 1). Печатается только при непустом
     # списке: пустой заголовок клиент читает как недосказанность.
-    if contest_cards:
+    if report.contest_cards:
         lines.append(CONTEST_SECTION_HEADING)
         lines.append("")
-        for index, card in enumerate(contest_cards, start=1):
+        for index, card in enumerate(report.contest_cards, start=1):
             lines.extend(_render_card(card, index, contest=True))
 
     # Заголовок раздела печатается, если есть хоть что-то из двух: недоступные

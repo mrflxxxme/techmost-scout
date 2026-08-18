@@ -141,6 +141,13 @@ class SolutionCard(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), index=True)
     position: Mapped[int] = mapped_column(Integer, default=0)
+    #: Секция отчёта, в которую попала карточка (РЕШ-85 п. 1, РЕШ-92): `False` —
+    #: «Варианты решений» (лимит 5–7, FR-9), `True` — «Ранние разработки и
+    #: команды», вне лимита. Отдельная колонка, а не догадка по `position` или
+    #: по типу источника связанных кандидатов: карточки обеих секций лежат в
+    #: одной таблице, и без признака в базе не отличить решение, прошедшее общий
+    #: отбор, от конкурсного, который в общем отборе не участвовал вовсе.
+    is_contest: Mapped[bool] = mapped_column(default=False, index=True)
     title: Mapped[str] = mapped_column(Text)
     essence: Mapped[str] = mapped_column(Text)
     maturity_stage: Mapped[str] = mapped_column(String(32))
