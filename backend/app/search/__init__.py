@@ -83,7 +83,7 @@ CONSTRUCTOR_SETTINGS: dict[str, dict[str, tuple[str, ...]]] = {
     "showcase": {"session_factory": ("showcase_session_factory", "session_factory")},
     # Набора OAI у КиберЛенинки больше нет: с Т-16 (РЕШ-68) она ищет через
     # собственный поисковый API, у которого наборов не существует. Настройка
-    # CYBERLENINKA_OAI_SET осталась в config.py и больше ни на что не влияет.
+    # набора убрана из config.py вместе с этим путём (Т-25).
     "cyberleninka": {
         "cache_dir": ("cyberleninka_cache_dir",),
     },
@@ -136,7 +136,6 @@ def build_adapters(
     settings: Any = None,
     *,
     include_stubs: bool = False,
-    industry: str | None = None,
 ) -> list[SearchAdapter]:
     """Собрать адаптеры, которые реально могут работать в этом запуске.
 
@@ -149,14 +148,10 @@ def build_adapters(
     исключения из списка. Этот режим — для доктора; пайплайн зовёт функцию без
     него и получает только то, что действительно работает.
 
-    `industry` — отрасль брифа этого прогона (Т-4, РЕШ-51). Это не настройка:
-    значение приходит из запроса, а не из окружения, поэтому и передаётся
-    отдельным аргументом, а не через `CONSTRUCTOR_SETTINGS`. Получают его
-    только те адаптеры, чей конструктор такой аргумент принимает. Сейчас таких
-    нет: единственным потребителем была КиберЛенинка, выбиравшая по отрасли
-    набор OAI, а с Т-16 (РЕШ-68) наборов у неё не осталось. Путь передачи
-    сохранён — он ничего не стоит и нужен следующему источнику, которому
-    отрасль понадобится.
+    Отрасли прогона здесь больше нет (Т-25): единственным её потребителем была
+    КиберЛенинка, выбиравшая по отрасли набор OAI, а с Т-16 (РЕШ-68) наборов у
+    неё не осталось — путь передачи вёл в никуда. Понадобится источнику отрасль
+    снова — аргумент возвращается вместе с тем, кто его читает.
     """
     adapters: list[SearchAdapter] = []
     for name, cls in ADAPTERS.items():
@@ -170,7 +165,7 @@ def build_adapters(
             log.info("источник %s выключен: нет настроек %s", name, ", ".join(missing))
             continue
         try:
-            adapter = _instantiate(name, cls, client, settings, industry=industry)
+            adapter = _instantiate(name, cls, client, settings)
         except Exception as exc:
             log.warning("источник %s не собрался: %s", name, exc)
             continue
@@ -196,8 +191,6 @@ def _instantiate(
     cls: type[SearchAdapter],
     client: httpx.AsyncClient,
     settings: Any,
-    *,
-    industry: str | None = None,
 ) -> SearchAdapter:
     """Передать в конструктор только те аргументы, которые он принимает."""
     accepted = inspect.signature(cls.__init__).parameters
@@ -209,10 +202,6 @@ def _instantiate(
             if (value := _setting(settings, key)) is not None:
                 kwargs[argument] = value
                 break
-    # Отрасль — не настройка, а данные прогона, поэтому идёт мимо
-    # CONSTRUCTOR_SETTINGS и достаётся только тем, кто её принимает.
-    if industry and "industry" in accepted:
-        kwargs["industry"] = industry
     return cls(client, **kwargs)
 
 

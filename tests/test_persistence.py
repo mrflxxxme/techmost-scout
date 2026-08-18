@@ -11,7 +11,10 @@
 `requirement_checks`, `unsourced_claims`, `pdf_urls` — до правки в БД не
 попадали, и карточка в базе выходила «увереннее» своей markdown-версии
 (инвариант №1). Здесь проверяется, что они доезжают до `solution_cards` без
-потерь и что карточка без них даёт пустые списки, а не NULL.
+потерь и что карточка без них даёт пустые списки, а не NULL. Тем же тестом
+закрыт статус прав `ip_status` (Т-22, РЕШ-79 п. 1): поле уходит клиенту в
+отчёте, а его запись до Т-25 не проверялась ничем — удаление строки записи
+проходило весь набор молча.
 
 Отдельно (РЕШ-45, пост-аудит фазы): исчерпание лимита стоимости запроса
 (`CostLimitExceededError`) — не отказ модели, а команда «стоп тратить», и до
@@ -55,6 +58,7 @@ from app.schemas import (
     Candidate,
     Confidence,
     Evidence,
+    IPStatus,
     MaturityStage,
     RequirementCheck,
     SearchPlan,
@@ -278,6 +282,7 @@ async def test_new_card_fields_persist_without_loss(db_session_factory):
         ],
         unsourced_claims=["Снижение затрат на 30% источником не подтверждено"],
         pdf_urls=["https://arxiv.org/pdf/2501.00001"],
+        ip_status=IPStatus.TEAM,
     )
 
     await persist_run(
@@ -308,6 +313,12 @@ async def test_new_card_fields_persist_without_loss(db_session_factory):
     ]
     assert row.unsourced_claims == ["Снижение затрат на 30% источником не подтверждено"]
     assert row.pdf_urls == ["https://arxiv.org/pdf/2501.00001"]
+    # Статус прав (Т-22, РЕШ-79 п. 1) печатается клиенту и обязан доехать до базы
+    # ровно тем, что стоит в карточке.
+    assert row.ip_status == IPStatus.TEAM.value
+    # Значение проверки нарочно отличается от умолчания колонки: совпади они —
+    # пропавшая строка записи выглядела бы успешной, и тест ничего не ловил бы.
+    assert SolutionCardRow.__table__.c.ip_status.default.arg == IPStatus.UNKNOWN.value
 
 
 async def test_card_without_new_fields_persists_empty_lists_not_null(db_session_factory):
