@@ -9,6 +9,7 @@ from app.schemas import (
     Candidate,
     Confidence,
     Evidence,
+    IPStatus,
     MaturityStage,
     RequirementCheck,
     ScoredCandidate,
@@ -243,3 +244,62 @@ def test_candidate_pdf_url_defaults_to_none_and_accepts_value():
         provider="semanticscholar",
     )
     assert str(with_pdf.pdf_url) == "https://example.org/a.pdf"
+
+
+# ── Т-22: SourceType.CONTEST и статус прав ИС ──────────────────────────────
+
+
+def test_source_type_contest_parses_from_string():
+    """Тип конкурсного класса разбирается из строки `contest` (РЕШ-85 п. 2):
+    значение уезжает в базу и обратно текстом, поэтому проверяется именно
+    разбор строки, а не наличие члена перечисления."""
+    assert SourceType("contest") is SourceType.CONTEST
+    assert SourceType.CONTEST.value == "contest"
+
+
+def test_candidate_accepts_contest_source_type():
+    """Кандидат конкурсного класса собирается обычной схемой, без особого пути."""
+    candidate = Candidate(
+        source_type="contest",
+        title="Решение команды на хакатоне «Цифровой прорыв»",
+        url="https://example.org/hack/1",
+        provider="yandex",
+    )
+    assert candidate.source_type is SourceType.CONTEST
+
+
+def test_card_ip_status_defaults_to_not_established():
+    """Статус прав по умолчанию — «не установлено», а не пустая строка и не
+    догадка: правило живёт в положении конкретного конкурса и автоматически не
+    определяется (РЕШ-79 п. 1, инвариант №1)."""
+    card = SolutionCard(
+        title="Решение",
+        essence="Суть",
+        applicability="Закрывает задачу",
+        next_step="Запросить протокол испытаний",
+    )
+    assert card.ip_status is IPStatus.UNKNOWN
+    assert card.ip_status.value == "не установлено"
+
+
+def test_ip_status_has_exactly_three_values_from_recon():
+    """Три значения из разведки §2.1 — и ни одного четвёртого: «уточняется» или
+    «частично» вернули бы карточке право на догадку."""
+    assert {status.value for status in IPStatus} == {
+        "у команды",
+        "передано организатору или заказчику",
+        "не установлено",
+    }
+
+
+def test_ip_status_rejects_value_outside_three():
+    """Свободный текст в статусе прав запрещён: клиент читает его как решённый
+    юридический вопрос."""
+    with pytest.raises(ValidationError):
+        SolutionCard(
+            title="Решение",
+            essence="Суть",
+            applicability="Закрывает задачу",
+            next_step="Запросить протокол испытаний",
+            ip_status="скорее всего у команды",
+        )

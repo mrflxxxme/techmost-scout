@@ -265,6 +265,7 @@ async def _write(
                 essence=card.essence,
                 maturity_stage=card.maturity_stage.value,
                 trl_estimate=card.trl_estimate,
+                ip_status=card.ip_status.value,
                 developer_org=card.developer_org,
                 developer_team=card.developer_team,
                 contact_leads=list(card.contact_leads),
