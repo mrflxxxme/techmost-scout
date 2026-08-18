@@ -702,7 +702,16 @@ class ScoutPipeline:
         # двух дословных строк, в том числе при выключенном пороге: иначе
         # «проход не сработал» неотличимо от «код до проверки не дошёл».
         scored_second: list[ScoredCandidate] = []
-        if stages.needs_second_pass(scored, threshold=self._settings.second_pass_relevance_max):
+        # Решение принимается по ОСНОВНОЙ выдаче — той, что идёт клиенту (Т-34,
+        # находка К-1 пост-аудита Э2-Б). `needs_second_pass` берёт максимум
+        # `relevance`, а конкурсный класс выведен из общего отбора (РЕШ-92): его
+        # кандидат в обещанные клиенту 5–7 карточек не попадает по построению, и
+        # его высокая оценка ничего не говорит о том, закрыта ли задача. Пока
+        # гейт смотрел на весь список, один хакатонный прототип с relevance 9
+        # гасил проход на выдаче из двоек и троек — ровно на той задаче, ради
+        # которой проход затеян (РЕШ-81).
+        main_first_pass, _ = split_contest_candidates(scored)
+        if stages.needs_second_pass(main_first_pass, threshold=self._settings.second_pass_relevance_max):
             scored_second, second_unavailable = await self._second_pass(
                 brief, plan, unique, scored, stage_log=stage_log, plan_log=plan_log
             )
@@ -725,7 +734,15 @@ class ScoutPipeline:
         # иначе прогон печатал бы вторую строку калибровки `relevance` по
         # десятку конкурсных кандидатов, а её читают как строку всего прогона
         # (воротной критерий 3 подэтапа Э2-А).
-        contest_groups = stages.group_for_cards(contest_scored, target=CONTEST_CARDS_TARGET)
+        #
+        # Отсечка по предметному соответствию (РЕШ-48) при этом обязана работать
+        # и здесь: `select_top` фильтрует внутри себя, `group_for_cards` не
+        # фильтрует ничем, и конкурсный кандидат с `relevance` 1 доезжал до
+        # карточки и до клиента (Т-34, находка К-2 пост-аудита Э2-Б). Берётся
+        # ровно отсечка, а не весь `select_top`, — вторая строка калибровки
+        # осталась бы тем же испорченным воротным критерием.
+        contest_eligible = self._cut_by_relevance(contest_scored)
+        contest_groups = stages.group_for_cards(contest_eligible, target=CONTEST_CARDS_TARGET)
         contest_picked = [item for group in contest_groups for item in group]
         # Оценки уезжают в БД сразу после отбора, а не в конце прогона: отказ
         # сборки карточек или сводки не должен уносить с собой единственное
@@ -760,10 +777,6 @@ class ScoutPipeline:
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
         cards = await self._author_cards(brief, groups)
-        # Карточки конкурсной секции собираются тем же способом и в той же
-        # строке журнала стадий: это одна стадия «cards» с одной ценой, делить
-        # её на две значило бы обещать точность, которой у снимков счётчика нет.
-        contest_authored = await self._author_cards(brief, contest_groups)
         stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
@@ -772,19 +785,9 @@ class ScoutPipeline:
         )
         published = stages.select_publishable_cards(cards)
         dropped = len(cards) - len(published)
-        # Тот же отсев пустых карточек (инвариант №1: без подтверждений карточка
-        # клиенту не показывается), но со своей верхней границей — лимит 5–7 к
-        # этой секции не применяется ни в какую сторону.
-        contest_published = stages.select_publishable_cards(contest_authored, limit=CONTEST_CARDS_TARGET)
-        await self._notify("cards", f"Готово карточек: {len(published)}, отброшено пустых: {dropped}", 0.85)
-        await self._notify(
-            "cards",
-            f"Карточек конкурсного класса: {len(contest_published)}, "
-            f"отброшено пустых: {len(contest_authored) - len(contest_published)}",
-            0.86,
-        )
+        await self._notify("cards", f"Готово карточек: {len(published)}, отброшено пустых: {dropped}", 0.8)
 
-        await self._notify("summary", "Составляю сводку и рекомендацию", 0.9)
+        await self._notify("summary", "Составляю сводку и рекомендацию", 0.85)
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
         summary_error: str | None = None
@@ -813,6 +816,44 @@ class ScoutPipeline:
                 cost_rub=stage_cost,
                 error=summary_error,
             )
+        )
+
+        # Конкурсная секция собирается ПОСЛЕДНЕЙ — после основных карточек и
+        # сводки (РЕШ-93). Порядок не косметический: секция — приложение к
+        # отчёту, а `CostLimitExceededError` из сборки карточек пробрасывается
+        # по РЕШ-45 и роняет прогон. Стоя перед сводкой, приложение из трёх
+        # карточек распоряжалось судьбой основной выдачи, за которую уже
+        # заплачено. Отдельного стоп-крана на секцию при этом не заводится —
+        # владелец отверг ещё один рычаг в конфигурации.
+        contest_authored: list[SolutionCard] = []
+        contest_published: list[SolutionCard] = []
+        if contest_groups:
+            # Своя строка журнала стадий и своё имя: разделённые сводкой снимки
+            # счётчика в одну строку не складываются, а одинаковое имя оставило
+            # бы трату приложения отличимой только по порядку записей — ровно то,
+            # на что аудит указал у второго прохода (Ц-2).
+            started = datetime.now(UTC)
+            cost_before = dict(self._router.cost.by_provider)
+            contest_authored = await self._author_cards(brief, contest_groups)
+            stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
+            stage_log.append(
+                StageRecord(
+                    stage="contest_cards",
+                    started_at=started,
+                    finished_at=datetime.now(UTC),
+                    provider=provider,
+                    cost_rub=stage_cost,
+                )
+            )
+            # Тот же отсев пустых карточек (инвариант №1: без подтверждений
+            # карточка клиенту не показывается), но со своей верхней границей —
+            # лимит 5–7 к этой секции не применяется ни в какую сторону.
+            contest_published = stages.select_publishable_cards(contest_authored, limit=CONTEST_CARDS_TARGET)
+        await self._notify(
+            "cards",
+            f"Карточек конкурсного класса: {len(contest_published)}, "
+            f"отброшено пустых: {len(contest_authored) - len(contest_published)}",
+            0.95,
         )
 
         report = Report(
@@ -938,6 +979,19 @@ class ScoutPipeline:
             )
         )
         return scored_second, outcome.unavailable
+
+    def _cut_by_relevance(self, scored: list[ScoredCandidate]) -> list[ScoredCandidate]:
+        """Отсечка по предметному соответствию (РЕШ-48) вне `select_top`.
+
+        Нужна очереди конкурсного класса: `group_for_cards` не фильтрует ничем,
+        и кандидат с `relevance` ниже порога доезжал до карточки и до клиента
+        (Т-34, находка К-2 пост-аудита Э2-Б). Правило то же, что внутри
+        `select_top`, включая исключение для нейтральных оценок: их проставил
+        код после отказа батча скоринга, и один такой отказ иначе тихо выкосил
+        бы всю секцию, а причина была бы неотличима от «все нерелевантны».
+        """
+        threshold = self._settings.relevance_min
+        return [item for item in scored if stages.has_neutral_score(item) or item.relevance >= threshold]
 
     async def _author_cards(self, brief: Brief, groups: list[list]) -> list[SolutionCard]:
         """Собрать и проверить карточки. Параллельно, но не более трёх сразу —
