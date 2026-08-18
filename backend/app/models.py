@@ -222,6 +222,15 @@ class PipelineLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), index=True)
+    #: 1 — первый проход поиска, 2 — второй (условный второй проход, РЕШ-81).
+    #: Заведена по тому же доводу, что `search_plans.pass_no` (Т-19) и
+    #: `candidates.pass_no` (Т-20): второй проход даёт вторую строку `search` и
+    #: вторую `scorer` с теми же именами стадий, и без этого поля расход второго
+    #: прохода (доклад по РЕШ-82) отделялся бы упорядочиванием строк по времени
+    #: с отсечкой по `replan` — выводом из порядка записей, а не из данных.
+    #: Индекс заводится сразу: `init_db` — это `create_all`, а он не добавляет
+    #: ни колонок, ни индексов в уже существующую таблицу (грабля Э2-А).
+    pass_no: Mapped[int] = mapped_column(Integer, default=1, index=True)
     stage: Mapped[str] = mapped_column(String(64))
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
