@@ -216,13 +216,10 @@ class ScoutPipeline:
         if asyncio.iscoroutine(result):
             await result
 
-    async def _get_adapters(self, industry: str | None = None) -> list[SearchAdapter]:
-        """Адаптеры прогона. `industry` — отрасль брифа (Т-4, РЕШ-51): по ней
-        КиберЛенинка выбирает набор OAI.
-
-        Список собирается один раз и кэшируется, поэтому отрасль важна на
-        первом вызове — а он всегда идёт из поиска (`gather_candidates`),
-        обогащение работает уже на готовом списке.
+    async def _get_adapters(self) -> list[SearchAdapter]:
+        """Адаптеры прогона. Список собирается один раз и кэшируется: первым
+        его просит поиск (`gather_candidates`), обогащение работает уже на
+        готовом списке.
         """
         if self._adapters is not None:
             return self._adapters
@@ -231,7 +228,7 @@ class ScoutPipeline:
             headers={"User-Agent": f"TechMostScout/1.0 (mailto:{self._settings.crossref_mailto})"},
             follow_redirects=True,
         )
-        self._adapters = build_adapters(self._client, self._settings, industry=industry)
+        self._adapters = build_adapters(self._client, self._settings)
         log.info("подключено источников: %s", ", ".join(a.name for a in self._adapters))
         return self._adapters
 
@@ -250,7 +247,7 @@ class ScoutPipeline:
             self._client = None
 
     # ── Поиск по всем источникам ────────────────────────────────────────────
-    async def gather_candidates(self, plan: SearchPlan, *, industry: str | None = None) -> SearchOutcome:
+    async def gather_candidates(self, plan: SearchPlan) -> SearchOutcome:
         """Опросить источники параллельно, каждому — только подходящие запросы.
 
         Счётчик `hits_by_provider` ключуется меткой контура (`contour_label`),
@@ -258,25 +255,14 @@ class ScoutPipeline:
         разных формулировок (РЕШ-31). `sources_unavailable` при этом остаётся
         по имени адаптера — этот список печатается в клиентском отчёте, и его
         состав задачей учёта не меняется.
-
-        `industry` — отрасль брифа, её подставляет `_run_stages`. Она едет
-        отдельным аргументом, а не полем `SearchPlan`: общий контракт данных
-        (`schemas.py`) задача Т-4 не расширяет, меняется только внутренний
-        контракт сборки адаптеров.
         """
-        adapters = await self._get_adapters(industry)
+        adapters = await self._get_adapters()
         tasks: list[tuple[str, str, asyncio.Task[list[Candidate]]]] = []
         problems: list[str] = []
 
         try:
             async with asyncio.TaskGroup() as group:
                 for adapter in adapters:
-                    if getattr(adapter, "enrich_only", False):
-                        # Источник обогащения (OpenAlex): поиска у него нет вовсе.
-                        # Спросить его — значит получить NotImplementedError и
-                        # записать в отчёт «не ответил» источник, который никто не
-                        # спрашивал. Обогащение вызывается отдельно, после дедупа.
-                        continue
                     for query in plan.queries:
                         if adapter.source_types and query.source_type not in adapter.source_types:
                             continue
@@ -625,7 +611,7 @@ class ScoutPipeline:
         # Стадия extractor сделала поиск платным — трата обязана быть видна в
         # журнале стадий тем же способом, что у остальных стадий (П-2 аудита).
         cost_before = dict(self._router.cost.by_provider)
-        outcome = await self.gather_candidates(plan, industry=brief.industry)
+        outcome = await self.gather_candidates(plan)
         stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
@@ -822,7 +808,7 @@ class ScoutPipeline:
 
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
-        outcome = await self.gather_candidates(new_plan, industry=brief.industry)
+        outcome = await self.gather_candidates(new_plan)
         stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
