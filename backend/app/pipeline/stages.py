@@ -1026,20 +1026,35 @@ _MATURITY_ORDER: tuple[MaturityStage, ...] = (
     MaturityStage.SERIES,
 )
 
-#: Признаки конкурса с многолетним циклом (§2.2 разведки `contests-recon.md`):
-#: у XPRIZE и Up Great (НТИ) решения проходят натурные испытания по регламенту
-#: организатора с независимым замером, поэтому их потолок — `pilot`, а не
-#: `prototype`. Метки длинные намеренно: короткая вроде «нти» ловилась бы
-#: внутри посторонних слов («идентификация»).
-_LONG_CYCLE_CONTEST_MARKERS: tuple[str, ...] = (
+#: Площадки конкурсов с многолетним циклом (§2.2 разведки `contests-recon.md`):
+#: только у XPRIZE и Up Great решения проходят натурные испытания по регламенту
+#: организатора с независимым замером — поэтому их потолок `pilot`, а не
+#: `prototype`. Опознаём по УЗЛУ адреса кандидата: домен нельзя случайно
+#: получить из чужой аннотации, в отличие от слова в тексте.
+LONG_CYCLE_CONTEST_DOMAINS: tuple[str, ...] = (
+    "xprize.org",
+    "upgreat.one",
+)
+
+#: Имена тех же конкурсов — на случай, когда решение лежит не на сайте
+#: организатора (новость вуза, страница команды). Ищутся ТОЛЬКО в названии и
+#: организации кандидата, но не в `snippet`: сниппет — произвольный текст чужой
+#: поисковой выдачи.
+#:
+#: Здесь не осталось ни «многолетн», ни «национальная технологическая
+#: инициатива», и обе метки убраны по одной причине — они мерили не то. Первая
+#: поднимала потолок обычному хакатону на любом «многолетнем опыте команды» в
+#: аннотации, то есть давала ровно то завышение, ради запрета которого потолок и
+#: писался (РЕШ-79 п. 2: хакатон — не выше прототипа). Вторая в живом тексте
+#: почти не срабатывала: «при поддержке Национальной технологической
+#: инициативы» стоит в родительном падеже и с подстрокой не совпадает.
+LONG_CYCLE_CONTEST_NAMES: tuple[str, ...] = (
     "xprize",
     "upgreat",
     "up great",
     "up-great",
     "ап грейт",
     "апгрейт",
-    "национальная технологическая инициатива",
-    "многолетн",
 )
 
 
@@ -1058,9 +1073,19 @@ def contest_maturity_ceiling(group: Sequence[ScoredCandidate]) -> MaturityStage 
 
 
 def _is_long_cycle_contest(candidate: Candidate) -> bool:
-    """Похож ли кандидат на конкурс с многолетним циклом — по названию, площадке и тексту."""
-    haystack = " ".join([candidate.title, candidate.org or "", str(candidate.url), candidate.snippet]).lower()
-    return any(marker in haystack for marker in _LONG_CYCLE_CONTEST_MARKERS)
+    """Конкурс ли это с многолетним циклом — по узлу адреса и по имени конкурса.
+
+    Свободный текст выдачи (`snippet`) не смотрится вовсе: там «многолетний
+    опыт команды» встречается сплошь и рядом, и слово в аннотации поднимало бы
+    потолок обычному хакатону. Домен сверяется по узлу целиком, а не подстрокой:
+    иначе `xprize.org.example.com` выдавал бы себя за площадку XPRIZE, и признак
+    «домен» оказался бы не надёжнее слова в тексте.
+    """
+    host = (candidate.url.host or "").lower()
+    if any(host == domain or host.endswith(f".{domain}") for domain in LONG_CYCLE_CONTEST_DOMAINS):
+        return True
+    named = f"{candidate.title} {candidate.org or ''}".lower()
+    return any(name in named for name in LONG_CYCLE_CONTEST_NAMES)
 
 
 def cap_contest_maturity(card: SolutionCard, group: Sequence[ScoredCandidate]) -> SolutionCard:

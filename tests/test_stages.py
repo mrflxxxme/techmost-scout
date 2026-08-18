@@ -617,6 +617,69 @@ def test_long_cycle_contest_ceiling_is_pilot():
     )
 
 
+@pytest.mark.parametrize("domain", stages.LONG_CYCLE_CONTEST_DOMAINS)
+def test_every_long_cycle_domain_raises_ceiling_to_pilot(domain: str):
+    """На каждый домен из списка — своя проверка: список признаков, закреплённый
+    одним примером из восьми, проверен на одну восьмую (инвариант №8).
+
+    Домен берётся из адреса кандидата: его нельзя случайно получить из чужой
+    аннотации, в отличие от слова в тексте.
+    """
+    group = [_contest_scored(url=f"https://www.{domain}/prizes/example")]
+
+    assert stages.contest_maturity_ceiling(group) is MaturityStage.PILOT
+
+
+@pytest.mark.parametrize("name", stages.LONG_CYCLE_CONTEST_NAMES)
+def test_every_long_cycle_name_raises_ceiling_to_pilot(name: str):
+    """То же для имён конкурсов: каждое имя из списка обязано срабатывать —
+    и именно в названии кандидата, а не в произвольном тексте выдачи."""
+    group = [_contest_scored(title=f"Решение команды — финалист {name} 2026")]
+
+    assert stages.contest_maturity_ceiling(group) is MaturityStage.PILOT
+
+
+@pytest.mark.parametrize(
+    ("field", "text"),
+    [
+        ("snippet", "Команда с многолетним опытом промышленной автоматизации собрала решение за 48 часов"),
+        ("org", "Клуб многолетнего партнёрства"),
+        ("snippet", "Проект вырос из многолетних исследований лаборатории"),
+        ("snippet", "Хакатон прошёл при поддержке Национальной технологической инициативы"),
+    ],
+)
+def test_free_text_about_long_years_does_not_raise_ceiling(field: str, text: str):
+    """Ловушка на дефект цикла 1 ревью: слово в свободном тексте не имеет права
+    поднимать потолок обычного хакатона до `pilot`.
+
+    `snippet` и `org` приходят из чужой поисковой выдачи, и «многолетний опыт»,
+    «многолетнее партнёрство», «многолетние исследования» встречаются там сплошь.
+    Разведка (`contests-recon.md` §2.2) оправдывает `pilot` только для XPRIZE и
+    Up Great — по регламенту с натурными испытаниями, а не по слову в аннотации.
+    Поле уходит клиенту (`markdown.py`), поэтому завышение здесь дороже пропуска.
+    """
+    group = [_contest_scored(**{field: text})]
+
+    assert stages.contest_maturity_ceiling(group) is MaturityStage.PROTOTYPE
+    assert stages.cap_contest_maturity(_card_with_maturity(MaturityStage.SERIES), group).maturity_stage is (
+        MaturityStage.PROTOTYPE
+    )
+
+
+def test_long_cycle_domain_is_matched_by_host_not_by_substring():
+    """Домен опознаётся по узлу адреса, а не подстрокой: чужой сайт с адресом
+    вида `xprize.org.example.com` или со словом в пути потолок не поднимает —
+    иначе признак «домен» ничем не надёжнее слова в тексте."""
+    impostor = [_contest_scored(url="https://xprize.org.example.com/hack/1")]
+    in_path = [_contest_scored(url="https://example.org/news/xprize.org/hack")]
+
+    assert stages.contest_maturity_ceiling(impostor) is MaturityStage.PROTOTYPE
+    assert stages.contest_maturity_ceiling(in_path) is MaturityStage.PROTOTYPE
+
+    subdomain = [_contest_scored(url="https://www.upgreat.one/track/example")]
+    assert stages.contest_maturity_ceiling(subdomain) is MaturityStage.PILOT
+
+
 def test_non_contest_card_maturity_untouched():
     """Карточка по публикациям потолком не трогается: правило про конкурсы, а не
     про зрелость вообще."""
