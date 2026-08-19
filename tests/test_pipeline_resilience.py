@@ -903,12 +903,18 @@ async def test_cost_limit_on_refine_brief_leaves_failed_run_with_actual_cost(
 
 
 async def test_cost_limit_exceeded_during_intake_propagates_and_run_fails(
-    monkeypatch, settings, fake_provider_factory, tmp_path
+    monkeypatch, settings, fake_provider_factory, db_session_factory, tmp_path
 ):
     """РЕШ-45: `CostLimitExceededError` на интейке — команда «стоп тратить»,
     не отказ модели. `cli._run` обязан пробросить исключение, а не подменить
-    бриф запасным и продолжить прогон."""
+    бриф запасным и продолжить прогон.
+
+    Изоляция от боевого `.env` (З-1): без подмены `app.db.session_scope`
+    запись об отказавшем прогоне ушла бы через реальный `session_scope`, то
+    есть мимо тестовой базы — образец соседних тестов выше
+    (`test_cost_limit_on_intake_leaves_failed_run_with_actual_cost`)."""
     _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
+    monkeypatch.setattr("app.db.session_scope", db_session_factory)
 
     async def broken_run_intake(router, task, *, industry_hint="не указана"):
         raise CostLimitExceededError("запрос израсходовал 10.00 ₽ при лимите 10.00 ₽")
@@ -920,15 +926,25 @@ async def test_cost_limit_exceeded_during_intake_propagates_and_run_fails(
 
     assert _RecordingIntakePipeline.captured == []
 
+    async with db_session_factory() as session:
+        requests = (await session.execute(select(RequestRow))).scalars().all()
+        assert len(requests) == 1, "оборванный стоп-краном прогон обязан оставить строку в тестовой базе"
+        assert requests[0].status == "failed"
+        assert requests[0].error
+
 
 async def test_cost_limit_exceeded_during_refine_brief_propagates_and_run_fails(
-    monkeypatch, settings, fake_provider_factory, tmp_path
+    monkeypatch, settings, fake_provider_factory, db_session_factory, tmp_path
 ):
     """Зеркало предыдущего теста для второго места вызова: лимит стоимости
     выбран уже на уточнении брифа. Ветка `refine_brief` обязана вести себя так
     же, как `run_intake` (РЕШ-45): пробросить `CostLimitExceededError`, а не
-    подменить её на черновик интейка с ответами владельца и пойти дальше."""
+    подменить её на черновик интейка с ответами владельца и пойти дальше.
+
+    Изоляция от боевого `.env` (З-1): подмена `app.db.session_scope`, как у
+    соседних тестов, — без неё запись легла бы мимо тестовой базы."""
     _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory)
+    monkeypatch.setattr("app.db.session_scope", db_session_factory)
     draft = Brief(industry="нефтепереработка", task_summary="Катализатор гидроочистки теряет активность раньше срока.")
 
     async def fake_run_intake(router, task, *, industry_hint="не указана"):
@@ -948,3 +964,9 @@ async def test_cost_limit_exceeded_during_refine_brief_propagates_and_run_fails(
         await cli._run("текст, который упрётся в лимит на уточнении", None, None, tmp_path / "report.md", True)
 
     assert _RecordingIntakePipeline.captured == []
+
+    async with db_session_factory() as session:
+        requests = (await session.execute(select(RequestRow))).scalars().all()
+        assert len(requests) == 1, "оборванный стоп-краном прогон обязан оставить строку в тестовой базе"
+        assert requests[0].status == "failed"
+        assert requests[0].error

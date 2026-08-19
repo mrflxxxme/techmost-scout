@@ -1,0 +1,60 @@
+================ З-1, цикл 2: мутация «б» — узкий прогон, до и после ================
+Находка ревью: страж test_db_engine_uses_in_memory_sqlite ловил мутацию
+«установка TEST_ENV перенесена из импорта в фикстуру» только под полным
+pytest -q — благодаря побочному импорту app.main в tests/test_web_auth.py.
+Узкий pytest tests/test_env_isolation.py -v мутацию не ловил.
+
+Мутация воспроизведена буквально: os.environ.update(TEST_ENV) убран из
+импорта conftest.py и перенесён в автоиспользуемую фикстуру (код
+по-прежнему выполняется, но после сбора тестов, при подготовке каждого
+теста).
+
+---------------------------- ДО ПРАВКИ ----------------------------
+Команда: python -m pytest tests/test_env_isolation.py -v
+
+test_settings_model_config_has_no_env_file PASSED [ 33%]
+test_db_engine_uses_in_memory_sqlite PASSED [ 66%]
+test_settings_fields_trace_to_default_or_test_env PASSED [100%]
+3 passed in 0.68s
+
+Мутация НЕ поймана — страж «б» импортировал app.db внутри тела теста,
+которое выполняется уже ПОСЛЕ автофикстуры, поэтому видел уже подменённое
+окружение и не отличал мутанта от нормы.
+
+--------------------------- ПОСЛЕ ПРАВКИ ---------------------------
+Правка: в tests/test_env_isolation.py импорт `from app.db import engine`
+перенесён на уровень модуля (вместе с остальными импортами файла) — он
+срабатывает на этапе сбора тестов pytest, до того как успела бы отработать
+любая фикстура, включая ту, куда мутация переносит установку TEST_ENV.
+Заодно уточнена докстрока стража «в»: гарантия — про файл `.env`, не про
+произвольное окружение процесса.
+
+Команда: python -m pytest tests/test_env_isolation.py -v
+
+test_settings_model_config_has_no_env_file PASSED [ 33%]
+test_db_engine_uses_in_memory_sqlite FAILED [ 66%]
+test_settings_fields_trace_to_default_or_test_env FAILED [100%]
+
+FAILED test_db_engine_uses_in_memory_sqlite
+  AssertionError: движок базы тестов должен быть sqlite в памяти
+  assert ':memory:' in 'sqlite+aiosqlite:///...\E2V-Z1\data\scout.db'
+
+FAILED test_settings_fields_trace_to_default_or_test_env
+  AssertionError: поля вне умолчания и TEST_ENV:
+  ['app_env', 'database_url', 'gigachat_auth_key', 'deepseek_api_key',
+   'yandex_api_key', 'yandex_catalog_id', 'cost_limit_rub_per_request']
+  (get_settings() закэшировал настройки на этапе сбора тестов, когда
+  TEST_ENV ещё не был применён автофикстурой, — модульный импорт app.db
+  вскрыл и это дополнительно)
+
+2 failed, 1 passed in 0.40s
+
+Мутация поймана. Дерево после отката мутации чисто (git status --short
+пуст по tests/conftest.py).
+
+------------------------- Итоговые проверки цикла 2 -------------------------
+pytest tests/test_env_isolation.py -v (без мутации): 3 passed in 0.29s
+pytest -q (полный набор): 580 passed, 1 warning in 195.81s
+ruff check .: All checks passed!
+ruff format --check .: 98 files already formatted
+git diff --stat: только tests/test_env_isolation.py

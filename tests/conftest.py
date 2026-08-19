@@ -3,17 +3,19 @@
 Правило тестов: ни одного обращения в сеть. Провайдеры моделей подменяются
 поддельными, HTTP-ответы источников — через respx. Поэтому набор проходит
 на машине без ключей и без интернета.
+
+Изоляция от боевого `.env` (РЕШ-97, РЕШ-113, РЕШ-120). Движок базы создаётся
+на импорте модуля `backend/app/db.py` (`_settings = get_settings()` на
+верхнем уровне), поэтому никакая фикстура опоздать не может по построению —
+до первого импорта `app.db` любым тестовым модулем окружение обязано быть
+подменено. Правки изоляции — только здесь: `backend/app/db.py` и
+`backend/app/config.py` не трогаются (граница задачи З-1).
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
-
-import pytest
-
-from app.config import Settings, get_settings
-from app.llm.base import LLMProvider, LLMResult, Message, Usage
-from app.schemas import Brief, Candidate, MaturityStage, SourceType
 
 #: Окружение тестового прогона. Имена — ровно те переменные, которые читает
 #: рабочий код (`validation_alias` в `app.config.Settings`); значения —
@@ -27,6 +29,28 @@ TEST_ENV: dict[str, str] = {
     "YANDEX_CATALOG_ID": "b1gtest",
     "COST_LIMIT_RUB_PER_REQUEST": "10.0",
 }
+
+# Перекрытие (не setdefault!) окружения — на импорте этого файла, до первого
+# импорта `app.config` и тем более `app.db` в этом процессе. Боевой `.env`
+# рядом с рабочим деревом не должен долетать ни до одной переменной, включая
+# ещё не перечисленные здесь (РЕШ-97, РЕШ-120).
+os.environ.update(TEST_ENV)
+
+import pytest  # noqa: E402
+
+from app.config import Settings, get_settings  # noqa: E402
+
+# Вторая половина изоляции: даже поля, которых нет в TEST_ENV (например
+# `RELEVANCE_MIN`, `SECOND_PASS_RELEVANCE_MAX`), не должны читаться из
+# боевого файла `.env`. Переменные окружения и без этой строки перекрывают
+# одноимённые значения `.env` по приоритету pydantic-settings, но без неё
+# «не перечисленные» переменные всё равно текли бы из файла — обнуление
+# `env_file` закрывает и этот путь.
+Settings.model_config["env_file"] = None
+get_settings.cache_clear()
+
+from app.llm.base import LLMProvider, LLMResult, Message, Usage  # noqa: E402
+from app.schemas import Brief, Candidate, MaturityStage, SourceType  # noqa: E402
 
 
 @pytest.fixture
