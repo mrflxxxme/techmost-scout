@@ -1,0 +1,74 @@
+=== git diff --stat docs/SPEC.md ===
+ docs/SPEC.md | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+=== git diff docs/SPEC.md ===
+diff --git a/docs/SPEC.md b/docs/SPEC.md
+index 4f758d5..7327b85 100644
+--- a/docs/SPEC.md
++++ b/docs/SPEC.md
+@@ -200,9 +200,9 @@ DeepSeek + бесплатные источники. Claude — инструме
+ 
+ - **FR-1.** Ввод запроса свободным текстом, поле до 10 000 знаков.
+ - **FR-2.** 3–5 уточняющих вопросов одним экраном; ответ «не знаю» допустим.
+-- **FR-3.** Структурированный бриф (отрасль, суть, ограничения, целевая
+-  зрелость, география, бюджет/сроки) показывается на подтверждение и правку
+-  до запуска поиска.
++- **FR-3.** Структурированный бриф (отрасль, суть, ограничения и измеримые
++  требования (РЕШ-116), целевая зрелость, география, бюджет/сроки)
++  показывается на подтверждение и правку до запуска поиска.
+ - **FR-4.** Проверка обезличенности: предупреждение при похожих на названия
+   компаний сущностях, без блокирующего запрета.
+ - **FR-5.** Поиск минимум по типам: публикации, патенты, гранты/проекты,
+
+=== git diff --stat (весь рабочий каталог — должен быть только docs/SPEC.md) ===
+ docs/SPEC.md | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+=== pytest tests/test_team_docs.py -v ===
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 35 items
+
+tests/test_team_docs.py::test_all_roles_present PASSED                   [  2%]
+tests/test_team_docs.py::test_role_frontmatter[auditor] PASSED           [  5%]
+tests/test_team_docs.py::test_role_frontmatter[implementer] PASSED       [  8%]
+tests/test_team_docs.py::test_role_frontmatter[interviewer] PASSED       [ 11%]
+tests/test_team_docs.py::test_role_frontmatter[planner] PASSED           [ 14%]
+tests/test_team_docs.py::test_role_frontmatter[reviewer] PASSED          [ 17%]
+tests/test_team_docs.py::test_role_frontmatter[verifier] PASSED          [ 20%]
+tests/test_team_docs.py::test_checking_roles_cannot_write[auditor] PASSED [ 22%]
+tests/test_team_docs.py::test_checking_roles_cannot_write[reviewer] PASSED [ 25%]
+tests/test_team_docs.py::test_checking_roles_cannot_write[verifier] PASSED [ 28%]
+tests/test_team_docs.py::test_role_declares_boundaries[auditor] PASSED   [ 31%]
+tests/test_team_docs.py::test_role_declares_boundaries[implementer] PASSED [ 34%]
+tests/test_team_docs.py::test_role_declares_boundaries[interviewer] PASSED [ 37%]
+tests/test_team_docs.py::test_role_declares_boundaries[planner] PASSED   [ 40%]
+tests/test_team_docs.py::test_role_declares_boundaries[reviewer] PASSED  [ 42%]
+tests/test_team_docs.py::test_role_declares_boundaries[verifier] PASSED  [ 45%]
+tests/test_team_docs.py::test_planner_checklist_covers_measurable_event_reachability PASSED [ 48%]
+tests/test_team_docs.py::test_all_commands_present PASSED                [ 51%]
+tests/test_team_docs.py::test_command_frontmatter[team-build] PASSED     [ 54%]
+tests/test_team_docs.py::test_command_frontmatter[team-gate] PASSED      [ 57%]
+tests/test_team_docs.py::test_command_frontmatter[team-grill] PASSED     [ 60%]
+tests/test_team_docs.py::test_command_frontmatter[team-plan] PASSED      [ 62%]
+tests/test_team_docs.py::test_command_frontmatter[team-start] PASSED     [ 65%]
+tests/test_team_docs.py::test_command_frontmatter[team-status] PASSED    [ 68%]
+tests/test_team_docs.py::test_internal_links_resolve[CLAUDE.md] PASSED   [ 71%]
+tests/test_team_docs.py::test_internal_links_resolve[README.md] PASSED   [ 74%]
+tests/test_team_docs.py::test_internal_links_resolve[CONVENTIONS.md] PASSED [ 77%]
+tests/test_team_docs.py::test_internal_links_resolve[INVARIANTS.md] PASSED [ 80%]
+tests/test_team_docs.py::test_state_files_exist_and_are_filled PASSED    [ 82%]
+tests/test_team_docs.py::test_state_stays_short PASSED                   [ 85%]
+tests/test_team_docs.py::test_invariants_have_verification_column PASSED [ 88%]
+tests/test_team_docs.py::test_invariant_verification_files_exist[1] PASSED [ 91%]
+tests/test_team_docs.py::test_invariant_verification_files_exist[5] PASSED [ 94%]
+tests/test_team_docs.py::test_no_byte_order_mark PASSED                  [ 97%]
+tests/test_team_docs.py::test_settings_json_is_valid PASSED              [100%]
+
+============================= 35 passed in 0.13s ==============================
