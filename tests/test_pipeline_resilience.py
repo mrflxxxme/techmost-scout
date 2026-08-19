@@ -554,7 +554,9 @@ class _RecordingIntakePipeline:
         raw_text: str = "",
         initial_stage_log=None,
         initial_caveats=None,
+        constraints_unresolved: bool = False,
     ) -> Report:
+        del constraints_unresolved
         _RecordingIntakePipeline.captured.append(brief)
         _RecordingIntakePipeline.stage_logs.append(initial_stage_log)
         _RecordingIntakePipeline.caveats.append(initial_caveats)

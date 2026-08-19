@@ -569,6 +569,7 @@ class ScoutPipeline:
         raw_text: str = "",
         initial_stage_log: list[StageRecord] | None = None,
         initial_caveats: list[str] | None = None,
+        constraints_unresolved: bool = False,
     ) -> Report:
         """Бриф → отчёт. Интейк выполняется отдельно, до этого вызова.
 
@@ -588,6 +589,13 @@ class ScoutPipeline:
         отчёт: оговорка встаёт в начало `ReportSummary.caveats` — туда же,
         куда `fallback_summary` кладёт оговорку об отказе сводки, — и
         печатается экспортом в блоке «Ограничения этого поиска».
+
+        `constraints_unresolved` — тем же путём, что и `initial_caveats`
+        (РЕШ-115): ограничения задачи не собрались даже после повторного
+        адресного вызова интейка в `cli._run`. Флаг ложится в `Report` здесь,
+        а не в `_run_stages`: стадии карточек к этому моменту уже отработали
+        по тому `brief`, что был передан на вход, — флаг только про то, что
+        клиент увидит в отчёте.
         """
         stage_log: list[StageRecord] = list(initial_stage_log or [])
         #: Планы проходов этого прогона (РЕШ-83): собираются по ходу стадий и
@@ -619,6 +627,7 @@ class ScoutPipeline:
             # В начало: оговорка о том, из чего собран бриф, объясняет качество
             # всей выдачи, а оговорки стадий — только своей части.
             report.summary.caveats = [*initial_caveats, *report.summary.caveats]
+        report.constraints_unresolved = constraints_unresolved
         persisted_id = await persist_run(
             self._session_factory,
             raw_text=raw_text,

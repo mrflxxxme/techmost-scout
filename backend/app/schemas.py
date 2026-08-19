@@ -93,7 +93,10 @@ class Brief(BaseModel):
 
     industry: str = Field(description="Отрасль заказчика, например «нефтепереработка»")
     task_summary: str = Field(description="Суть технологической задачи, 1-3 предложения")
-    constraints: list[str] = Field(default_factory=list, description="Ограничения: среда, ГОСТ, габариты, температура")
+    constraints: list[str] = Field(
+        default_factory=list,
+        description="Ограничения и измеримые требования: среда, ГОСТ, габариты, температура, целевые показатели",
+    )
     owner_answers: list[OwnerAnswer] = Field(
         default_factory=list,
         description="Ответы владельца на уточняющие вопросы — контекст постановки, не ограничения задачи",
@@ -294,5 +297,10 @@ class Report(BaseModel):
     sources_unavailable: list[str] = Field(
         default_factory=list, description="Источники, которые не ответили — честно пишем в отчёт"
     )
+    #: РЕШ-115: и после повторного адресного вызова интейка ограничения задачи
+    #: собрать не удалось - клиент видит явную строку в двух местах отчёта
+    #: (markdown.CONSTRAINTS_UNRESOLVED_NOTICE), а не молчаливо пустой блок
+    #: сверки. Выставляет `cli._run`, пробрасывает `ScoutPipeline.run`.
+    constraints_unresolved: bool = False
     generated_at: datetime
     cost_rub: float = 0.0

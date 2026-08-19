@@ -8,7 +8,7 @@ from datetime import datetime
 
 import pytest
 
-from app.export.markdown import render_markdown
+from app.export.markdown import CONSTRAINTS_UNRESOLVED_NOTICE, render_markdown
 from app.schemas import (
     Evidence,
     MaturityStage,
@@ -345,3 +345,96 @@ def test_draft_header_untouched_by_contest_section(brief):
     text = render_markdown(report)
 
     assert "**ЧЕРНОВИК — не проверено экспертом.**" in text
+
+
+# --- З-2: подпись поля и клиентская строка при нерешённых ограничениях ------
+
+
+def test_requirement_signature_uses_new_label(brief):
+    """Критерий 5: подпись поля сменилась на «Требования и ограничения»,
+    старая формулировка «Ограничения:» не встречается."""
+    report = _make_report([_make_card()], brief=brief)
+
+    text = render_markdown(report)
+
+    assert "**Требования и ограничения:**" in text
+    assert "**Ограничения:**" not in text
+
+
+def test_constraints_signature_absent_when_brief_constraints_empty(brief):
+    """Обратная сторона критерия 5: пустой `constraints` - строки нет вовсе."""
+    empty_brief = brief.model_copy(update={"constraints": []})
+    report = _make_report([_make_card()], brief=empty_brief)
+
+    text = render_markdown(report)
+
+    assert "Требования и ограничения" not in text
+
+
+def test_constraints_unresolved_notice_printed_twice(brief):
+    """Критерий 4 (РЕШ-115, РЕШ-123): вторая ветка инварианта - обе печати
+    берут одну константу, подстрока встречается в «Задаче» и в «Ограничениях
+    этого поиска»."""
+    unresolved_brief = brief.model_copy(update={"constraints": []})
+    report = _make_report(
+        [_make_card(requirement_checks=[])],
+        brief=unresolved_brief,
+        constraints_unresolved=True,
+        summary=ReportSummary(recommendation="Начать с варианта №1.", caveats=[CONSTRAINTS_UNRESOLVED_NOTICE]),
+    )
+
+    text = render_markdown(report)
+
+    assert text.count("Требования задачи не выделены из постановки") == 2
+    lines = text.split("\n")
+    task_heading = lines.index("## Задача")
+    limitations_heading = lines.index("## Ограничения этого поиска")
+    assert any(CONSTRAINTS_UNRESOLVED_NOTICE in line for line in lines[task_heading:limitations_heading]), (
+        "строка обязана стоять в разделе «Задача»"
+    )
+    assert any(line == f"- {CONSTRAINTS_UNRESOLVED_NOTICE}" for line in lines[limitations_heading:]), (
+        "строка обязана дублироваться в «Ограничения этого поиска» существующим механизмом оговорок"
+    )
+
+
+def test_constraints_unresolved_flag_drives_notice_not_caveat_substring(brief):
+    """Мутация (ж): опознание оговорки по подстроке текста в экспортёре
+    запрещено - печать в «Задаче» обязана идти по флагу `constraints_unresolved`,
+    даже если сам текст оговорки в caveats не совпадает дословно."""
+    unresolved_brief = brief.model_copy(update={"constraints": []})
+    report = _make_report(
+        [_make_card(requirement_checks=[])],
+        brief=unresolved_brief,
+        constraints_unresolved=True,
+        summary=ReportSummary(recommendation="Начать с варианта №1.", caveats=["другая оговорка, не про требования"]),
+    )
+
+    text = render_markdown(report)
+
+    assert CONSTRAINTS_UNRESOLVED_NOTICE in text
+
+
+def test_constraints_unresolved_notice_absent_when_flag_false(brief):
+    """Обратная сторона: флаг по умолчанию `False` - строки в «Задаче» нет."""
+    report = _make_report([_make_card()], brief=brief)
+
+    text = render_markdown(report)
+
+    assert CONSTRAINTS_UNRESOLVED_NOTICE not in text
+
+
+def test_requirement_checks_heading_present_in_each_of_three_cards(brief):
+    """Критерий 6 (вторая половина): блок сверки есть у КАЖДОЙ из трёх
+    карточек отчёта, даже когда все три собраны страховкой `not_confirmed`."""
+    cards = [
+        _make_card(
+            title=f"Решение №{n}",
+            requirement_checks=[RequirementCheck(requirement="точность 95-98%", status="not_confirmed")],
+        )
+        for n in range(1, 4)
+    ]
+    report = _make_report(cards, brief=brief)
+
+    text = render_markdown(report)
+
+    assert text.count("**Сверка с требованиями задачи:**") == 3

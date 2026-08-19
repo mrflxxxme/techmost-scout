@@ -1,0 +1,56 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 18 items
+
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_farma_text_with_percent_and_trl PASSED [  5%]
+tests/test_constraints_guard.py::test_has_requirement_signs_false_without_any_sign PASSED [ 11%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043f\u0440\u043e\u0446\u0435\u043d\u0442] FAILED [ 16%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[trl] PASSED [ 22%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u043c\u0435\u043d\u0435\u0435] PASSED [ 27%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u0431\u043e\u043b\u0435\u0435] PASSED [ 33%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0433\u043e\u0441\u0442] PASSED [ 38%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0447\u0438\u0441\u043b\u043e-\u0441-\u0435\u0434\u0438\u043d\u0438\u0446\u0435\u0439] PASSED [ 44%]
+tests/test_constraints_guard.py::test_retry_constraints_fills_only_constraints_field PASSED [ 50%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_without_requirement_signs PASSED [ 55%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_when_constraints_already_present PASSED [ 61%]
+tests/test_constraints_guard.py::test_retry_constraints_empty_second_answer_marks_unresolved PASSED [ 66%]
+tests/test_constraints_guard.py::test_retry_constraints_llm_error_does_not_raise_run_continues PASSED [ 72%]
+tests/test_constraints_guard.py::test_retry_constraints_cost_limit_propagates PASSED [ 77%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_backfills_not_confirmed_per_requirement PASSED [ 83%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_leaves_existing_checks_untouched PASSED [ 88%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_noop_without_brief_constraints PASSED [ 94%]
+tests/test_constraints_guard.py::test_author_card_backfills_requirement_checks_when_model_omits_them PASSED [100%]
+
+================================== FAILURES ===================================
+_ test_has_requirement_signs_true_on_each_sign_in_isolation[\u043f\u0440\u043e\u0446\u0435\u043d\u0442] _
+
+text = 'Требуется КПД около 92% в среднем режиме эксплуатации установки.'
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Требуется КПД около 92% в среднем режиме эксплуатации установки.",
+            "Продукт должен достичь заявленного уровня TRL в финале проекта.",
+            "Прочность материала не менее нормативной для данного класса изделий.",
+            "Срок службы не более нормативного для данного класса оборудования.",
+            "Изделие обязано соответствовать требованиям ГОСТ по безопасности.",
+            "Рабочая температура достигает 850°C в пиковом режиме эксплуатации.",
+        ],
+        ids=["процент", "trl", "не-менее", "не-более", "гост", "число-с-единицей"],
+    )
+    def test_has_requirement_signs_true_on_each_sign_in_isolation(text: str):
+        """Мутация (а): детектор обязан ловить КАЖДЫЙ признак по отдельности -
+        иначе «перестать видеть %/TRL» проходит незамеченным ни одним тестом."""
+>       assert has_requirement_signs(text) is True
+E       AssertionError: assert False is True
+E        +  where False = has_requirement_signs('Требуется КПД около 92% в среднем режиме эксплуатации установки.')
+
+tests\test_constraints_guard.py:101: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043f\u0440\u043e\u0446\u0435\u043d\u0442]
+======================== 1 failed, 17 passed in 0.47s =========================

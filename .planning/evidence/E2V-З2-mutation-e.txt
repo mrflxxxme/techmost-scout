@@ -1,0 +1,63 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 18 items
+
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_farma_text_with_percent_and_trl PASSED [  5%]
+tests/test_constraints_guard.py::test_has_requirement_signs_false_without_any_sign PASSED [ 11%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043f\u0440\u043e\u0446\u0435\u043d\u0442] PASSED [ 16%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[trl] PASSED [ 22%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u043c\u0435\u043d\u0435\u0435] PASSED [ 27%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u0431\u043e\u043b\u0435\u0435] PASSED [ 33%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0433\u043e\u0441\u0442] PASSED [ 38%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0447\u0438\u0441\u043b\u043e-\u0441-\u0435\u0434\u0438\u043d\u0438\u0446\u0435\u0439] PASSED [ 44%]
+tests/test_constraints_guard.py::test_retry_constraints_fills_only_constraints_field PASSED [ 50%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_without_requirement_signs PASSED [ 55%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_when_constraints_already_present PASSED [ 61%]
+tests/test_constraints_guard.py::test_retry_constraints_empty_second_answer_marks_unresolved PASSED [ 66%]
+tests/test_constraints_guard.py::test_retry_constraints_llm_error_does_not_raise_run_continues PASSED [ 72%]
+tests/test_constraints_guard.py::test_retry_constraints_cost_limit_propagates PASSED [ 77%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_backfills_not_confirmed_per_requirement PASSED [ 83%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_leaves_existing_checks_untouched PASSED [ 88%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_noop_without_brief_constraints PASSED [ 94%]
+tests/test_constraints_guard.py::test_author_card_backfills_requirement_checks_when_model_omits_them FAILED [100%]
+
+================================== FAILURES ===================================
+_____ test_author_card_backfills_requirement_checks_when_model_omits_them _____
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=0, second_pass_relevance_max=0)
+fake_provider_factory = <class 'conftest.FakeProvider'>
+
+    async def test_author_card_backfills_requirement_checks_when_model_omits_them(settings, fake_provider_factory):
+        """Мутация (е): страховка обязана быть ВЫЗВАНА стадией `author_card`, а не
+        только существовать как отдельная функция - сквозной прогон через стадию."""
+        card_json = json.dumps(
+            {
+                "title": "Катализатор с присадками",
+                "essence": "Присадка продлевает срок службы катализатора.",
+                "applicability": "Закрывает задачу продления межрегенерационного цикла.",
+                "next_step": "Запросить протокол испытаний.",
+                "evidence": [{"claim": "Испытан на установке", "url": "https://doi.org/10.1/x"}],
+                "requirement_checks": [],
+            },
+            ensure_ascii=False,
+        )
+        provider = fake_provider_factory("deepseek", [card_json])
+        router = LLMRouter(settings, providers={"deepseek": provider})
+        brief = _brief(constraints=["точность 95-98%", "TRL 6-9"])
+    
+        card = await stages.author_card(router, brief, [_scored_publication()])
+    
+>       assert len(card.requirement_checks) == 2
+E       AssertionError: assert 0 == 2
+E        +  where 0 = len([])
+E        +    where [] = SolutionCard(title='Катализатор с присадками', essence='Присадка продлевает срок службы катализатора.', maturity_stage=<MaturityStage.UNKNOWN: 'unknown'>, trl_estimate=None, ip_status=<IPStatus.UNKNOWN: 'не установлено'>, developer_org=None, developer_team=None, contact_leads=[], evidence=[Evidence(claim='Испытан на установке', url=HttpUrl('https://doi.org/10.1/x'))], applicability='Закрывает задачу продления межрегенерационного цикла.', risks=[], gov_support=[], next_step='Запросить протокол испытаний.', confidence=<Confidence.MEDIUM: 'medium'>, confidence_note='', candidate_urls=[HttpUrl('https://doi.org/10.1/x')], requirement_checks=[], unsourced_claims=[], pdf_urls=[]).requirement_checks
+
+tests\test_constraints_guard.py:344: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_constraints_guard.py::test_author_card_backfills_requirement_checks_when_model_omits_them
+======================== 1 failed, 17 passed in 0.64s =========================

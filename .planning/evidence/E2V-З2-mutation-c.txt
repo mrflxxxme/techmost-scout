@@ -1,0 +1,70 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 18 items
+
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_farma_text_with_percent_and_trl PASSED [  5%]
+tests/test_constraints_guard.py::test_has_requirement_signs_false_without_any_sign PASSED [ 11%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043f\u0440\u043e\u0446\u0435\u043d\u0442] PASSED [ 16%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[trl] PASSED [ 22%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u043c\u0435\u043d\u0435\u0435] PASSED [ 27%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u0431\u043e\u043b\u0435\u0435] PASSED [ 33%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0433\u043e\u0441\u0442] PASSED [ 38%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0447\u0438\u0441\u043b\u043e-\u0441-\u0435\u0434\u0438\u043d\u0438\u0446\u0435\u0439] PASSED [ 44%]
+tests/test_constraints_guard.py::test_retry_constraints_fills_only_constraints_field FAILED [ 50%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_without_requirement_signs PASSED [ 55%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_when_constraints_already_present PASSED [ 61%]
+tests/test_constraints_guard.py::test_retry_constraints_empty_second_answer_marks_unresolved PASSED [ 66%]
+tests/test_constraints_guard.py::test_retry_constraints_llm_error_does_not_raise_run_continues PASSED [ 72%]
+tests/test_constraints_guard.py::test_retry_constraints_cost_limit_propagates PASSED [ 77%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_backfills_not_confirmed_per_requirement PASSED [ 83%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_leaves_existing_checks_untouched PASSED [ 88%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_noop_without_brief_constraints PASSED [ 94%]
+tests/test_constraints_guard.py::test_author_card_backfills_requirement_checks_when_model_omits_them PASSED [100%]
+
+================================== FAILURES ===================================
+_____________ test_retry_constraints_fills_only_constraints_field _____________
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=0, second_pass_relevance_max=0)
+fake_provider_factory = <class 'conftest.FakeProvider'>
+
+    async def test_retry_constraints_fills_only_constraints_field(settings, fake_provider_factory):
+        """Критерий 2: при пустом `constraints` и признаках требований интейк
+        зовётся ровно один лишний раз, а ответ пополняет только `constraints`."""
+        first = _intake_response(industry="фарма", task_summary="Суть задачи из первого разбора.", constraints=[])
+        second = _intake_response(
+            industry="подменённая отрасль - не должна попасть в бриф",
+            task_summary="подменённая суть - не должна попасть в бриф",
+            constraints=["точность 95-98%", "TRL 6-9"],
+        )
+        provider = fake_provider_factory("gigachat", [first, second])
+        router = LLMRouter(settings, providers={"gigachat": provider})
+    
+        intake = await stages.run_intake(router, _FARMA_TEXT)
+        assert router.cost.calls == 1, "база отсчёта: один вызов на сам run_intake"
+    
+        stage_log: list = []
+        updated_brief, unresolved = await retry_constraints_if_missing(
+            router, intake.draft_brief, _FARMA_TEXT, industry_hint="фарма", stage_log=stage_log
+        )
+    
+        assert router.cost.calls == 2, "повторный вызов обязан состояться ровно один раз - на одно обращение больше базы"
+        assert unresolved is False
+        assert updated_brief.constraints == ["точность 95-98%", "TRL 6-9"]
+>       assert updated_brief.task_summary == intake.draft_brief.task_summary, (
+            "второй вызов вызван за одним полем - task_summary переписывать не должен"
+        )
+E       AssertionError: второй вызов вызван за одним полем - task_summary переписывать не должен
+E       assert 'подменённая ...опасть в бриф' == 'Суть задачи ...вого разбора.'
+E         
+E         - Суть задачи из первого разбора.
+E         + подменённая суть - не должна попасть в бриф
+
+tests\test_constraints_guard.py:130: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_constraints_guard.py::test_retry_constraints_fills_only_constraints_field
+======================== 1 failed, 17 passed in 0.63s =========================
