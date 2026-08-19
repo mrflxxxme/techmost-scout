@@ -1,0 +1,17 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items
+
+tests/test_probe.py::test_help_код_возврата_ноль_и_называет_оба_режима PASSED [ 16%]
+tests/test_probe.py::test_импорт_не_делает_сетевых_вызовов PASSED        [ 33%]
+tests/test_probe.py::test_режим_поиска_печатает_суженный_запрос_для_конкурса PASSED [ 50%]
+tests/test_probe.py::test_режим_поиска_без_сужения_для_web_без_грантовых_маркеров PASSED [ 66%]
+tests/test_probe.py::test_режим_поиска_без_ключа_не_падает_и_сообщает_причину PASSED [ 83%]
+tests/test_probe.py::test_продукт_не_ссылается_на_скрипт_пробы PASSED    [100%]
+
+============================== 6 passed in 2.25s ==============================

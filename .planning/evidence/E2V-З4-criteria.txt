@@ -1,0 +1,25 @@
+=== Критерий 4: grep -rn "scripts/probe|probe" backend/app ===
+Буквальный шаблон цепляет посторонние совпадения — переменные rationale="health probe",
+существовавшие в backend/app/search/{base,yandex_search,openalex,google_search}.py и
+backend/app/llm/deepseek.py ДО этой задачи (health-check запрос, а не отсылка к скрипту).
+Фактический вывод:
+C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45\backend\app\llm\deepseek.py:142: probe = [Message(role="user", content="Ответь одним словом: работает")]
+C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45\backend\app\llm\deepseek.py:143: result = await self.complete(probe, max_tokens=512)
+C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45\backend\app\search\base.py:99: probe = SearchQuery(
+C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45\backend\app\search\base.py:103: rationale="health probe",
+C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45\backend\app\search\base.py:105: found = await self.search(probe, limit=1)
+C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45\backend\app\search\google_search.py:192: probe = SearchQuery(
+C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45\backend\app\search\google_search.py:196: rationale="health probe",
+C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45\backend\app\search\google_search.py:200: found = await self.search(probe, limit=1)
+C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45\backend\app\search\openalex.py:432: probe = SearchQuery(
+C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45\backend\app\search\openalex.py:439: found = await self.search(probe, limit=1)
+C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45\backend\app\search\yandex_search.py:277: probe = SearchQuery(
+C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45\backend\app\search\yandex_search.py:281: rationale="health probe",
+C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45\backend\app\search\yandex_search.py:284: found = await self.search(probe, limit=3)
+
+Узкая проверка (реальный предмет критерия — знает ли продукт о САМОМ СКРИПТЕ):
+grep -rn "scripts/probe|scripts\\probe|probe.py|scout probe" backend/app
+(пусто)
+
+=== Критерий 5: grep -rE "sk-|Api-Key|Bearer " scripts/probe.py ===
+(пусто)

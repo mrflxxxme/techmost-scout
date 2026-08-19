@@ -1,0 +1,144 @@
+=== Мутация (а): печать до сужения (narrowed = query.text) ===
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items / 5 deselected / 1 selected
+
+tests/test_probe.py::test_режим_поиска_печатает_суженный_запрос_для_конкурса FAILED [100%]
+
+================================== FAILURES ===================================
+___________ test_режим_поиска_печатает_суженный_запрос_для_конкурса ___________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000201394A02B0>
+capsys = <_pytest.capture.CaptureFixture object at 0x000002013922DA90>
+
+    @respx.mock
+    async def test_режим_поиска_печатает_суженный_запрос_для_конкурса(
+        monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("YANDEX_SEARCH_API_KEY", "unit-test-key")
+        get_settings.cache_clear()
+        _mock_search_ok()
+    
+        module = _load_probe()
+        code = await module.probe_query("инновационный конкурс сенсоры износа", "contest", "ru")
+    
+        out = capsys.readouterr().out
+        get_settings.cache_clear()
+    
+        assert code == 0
+        assert "итоговый запрос после сужения" in out
+>       assert "site:" in out
+E       AssertionError: assert 'site:' in 'итоговый запрос после сужения: инновационный конкурс сенсоры износа\nкандидатов: 1\n  - Заголовок — https://a.example.org/p\nплатных запросов израсходовано: 1\n'
+
+tests\test_probe.py:120: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_probe.py::test_режим_поиска_печатает_суженный_запрос_для_конкурса
+======================= 1 failed, 5 deselected in 0.73s =======================
+
+=== Мутация (б): собственный httpx-вызов в обход app.search ===
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z45
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items / 5 deselected / 1 selected
+
+tests/test_probe.py::test_режим_поиска_печатает_суженный_запрос_для_конкурса FAILED [100%]
+
+================================== FAILURES ===================================
+___________ test_режим_поиска_печатает_суженный_запрос_для_конкурса ___________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001E8F6FF42B0>
+capsys = <_pytest.capture.CaptureFixture object at 0x000001E8F6D6DA90>
+
+    @respx.mock
+    async def test_режим_поиска_печатает_суженный_запрос_для_конкурса(
+        monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("YANDEX_SEARCH_API_KEY", "unit-test-key")
+        get_settings.cache_clear()
+        _mock_search_ok()
+    
+        module = _load_probe()
+>       code = await module.probe_query("инновационный конкурс сенсоры износа", "contest", "ru")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_probe.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+scripts\probe.py:140: in probe_query
+    await client.get("https://mimo-app-search.example.net/direct")  # МУТАЦИЯ (б)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\.venv\Lib\site-packages\httpx\_client.py:1768: in get
+    return await self.request(
+..\..\..\.venv\Lib\site-packages\httpx\_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\.venv\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+..\..\..\.venv\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+..\..\..\.venv\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\.venv\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\.venv\Lib\site-packages\httpx\_transports\default.py:394: in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\.venv\Lib\site-packages\respx\mocks.py:190: in amock
+    response = await cls._send_async_request(
+..\..\..\.venv\Lib\site-packages\respx\mocks.py:224: in _send_async_request
+    httpx_response = await cls.async_handler(httpx_request)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\.venv\Lib\site-packages\respx\mocks.py:136: in async_handler
+    raise assertion_error
+..\..\..\.venv\Lib\site-packages\respx\mocks.py:129: in async_handler
+    httpx_response = await router.async_handler(httpx_request)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\.venv\Lib\site-packages\respx\router.py:318: in async_handler
+    resolved = await self.aresolve(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\.venv\Lib\site-packages\respx\router.py:291: in aresolve
+    with self.resolver(request) as resolved:
+         ^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\..\AppData\Local\Programs\Python\Python313\Lib\contextlib.py:148: in __exit__
+    next(self.gen)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <respx.router.MockRouter object at 0x000001E8F6798050>
+request = <Request('GET', 'https://mimo-app-search.example.net/direct')>
+
+    @contextmanager
+    def resolver(self, request: httpx.Request) -> Generator[ResolvedRoute, None, None]:
+        resolved = ResolvedRoute()
+    
+        try:
+            yield resolved
+    
+            if resolved.route is None:
+                # Assert we always get a route match, if check is enabled
+                if self._assert_all_mocked:
+>                   raise AllMockedAssertionError(f"RESPX: {request!r} not mocked!")
+E                   respx.models.AllMockedAssertionError: RESPX: <Request('GET', 'https://mimo-app-search.example.net/direct')> not mocked!
+
+..\..\..\.venv\Lib\site-packages\respx\router.py:250: AllMockedAssertionError
+---------------------------- Captured stdout call -----------------------------
+итоговый запрос после сужения: инновационный конкурс сенсоры износа (site:hacks-ai.ru | site:leaders-of-digital.ru | site:all-cups.ru | site:codenrock.com | site:upgreat.one | site:sk.ru | site:devpost.com)
+=========================== short test summary info ===========================
+FAILED tests/test_probe.py::test_режим_поиска_печатает_суженный_запрос_для_конкурса
+======================= 1 failed, 5 deselected in 0.76s =======================
+
+=== Мутация (в): ключ печатается в отладочном выводе ===
+grep -E "sk-|Api-Key|Bearer " scripts/probe.py
+
+scripts\probe.py:117:    print(f"debug Api-Key: {settings.yandex_search_api_key.get_secret_value()}")  # МУТАЦИЯ (в)
+
+
