@@ -1,0 +1,34 @@
+=================== З-1: pytest с подложным .env в корне дерева ===================
+Команда: python -m pytest -q  (эталонный интерпретатор .venv)
+Рабочее дерево: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z1
+Подложный .env создан исполнителем с заведомо ложными значениями (РЕШ-113,
+инвариант №3 — боевой .env НЕ читался и НЕ копировался):
+  RELEVANCE_MIN=9
+  SECOND_PASS_RELEVANCE_MAX=9
+  DATABASE_URL=sqlite+aiosqlite:///./data/should-not-be-touched.db
+  DEEPSEEK_API_KEY=sk-fake-not-a-secret
+Файл удалён сразу после проверки, в коммит не входит (.env в .gitignore).
+
+........................................................................ [ 12%]
+........................................................................ [ 24%]
+........................................................................ [ 37%]
+........................................................................ [ 49%]
+........................................................................ [ 62%]
+........................................................................ [ 74%]
+........................................................................ [ 86%]
+........................................................................ [ 99%]
+....                                                                     [100%]
+============================== warnings summary ===============================
+..\..\..\.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\KUklonskiy\techmost-scout\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+580 passed, 1 warning in 134.43s (0:02:14)
+
+Сравнение с п.1 (E2V-З1-pytest.txt): 580 passed в обоих случаях, 0 failed —
+результат идентичен. Подложный .env до тестов не долетел.
+
+Проверка п.3:
+  Test-Path data\should-not-be-touched.db  -> False (файл не создан)
+  git status --porcelain -- data/          -> пусто
