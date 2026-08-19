@@ -130,7 +130,7 @@ async def _persist_intake_stop(
     raw_text: str,
     router: LLMRouter,
     stage_log: list[StageRecord],
-    record: StageRecord,
+    record: StageRecord | None,
     error: BaseException,
 ) -> None:
     """Записать прогон, оборванный стоп-краном (РЕШ-45) на стадии интейка.
@@ -141,10 +141,16 @@ async def _persist_intake_stop(
     вызовет никто: `requests` не получал даже строки `failed`, и трата
     исчезала. Тот же `CostLimitExceededError` внутри `pipeline.run` пишется со
     статусом `failed` и фактической стоимостью — здесь ровно та же запись.
+
+    `record=None` — вызывающий уже дописал свою строку в `stage_log` сам (так
+    делает `retry_constraints_if_missing`, у которого свой снимок счётчика
+    стоимости вокруг вызова): повторный `append` завёл бы дубль записи об
+    одном и том же отказе (ревью, цикл 1, совет 2).
     """
     from app.pipeline.persistence import persist_run
 
-    stage_log.append(record)
+    if record is not None:
+        stage_log.append(record)
     await persist_run(
         session_factory,
         raw_text=raw_text,
@@ -294,7 +300,9 @@ async def _run(
     plan_id: int | None = None,
 ) -> None:
     from app.db import init_db, session_scope
+    from app.export.markdown import CONSTRAINTS_UNRESOLVED_NOTICE
     from app.pipeline import ScoutPipeline
+    from app.pipeline.constraints_guard import retry_constraints_if_missing
     from app.pipeline.stages import brief_from_raw_text, neutralize_placeholders, refine_brief, run_intake
 
     settings = get_settings()
@@ -457,6 +465,31 @@ async def _run(
         # есть из разбора текста.
         brief = intake.draft_brief
 
+    # РЕШ-115: непустой текст задачи с признаками требований влечёт непустой
+    # constraints либо явную строку клиенту - молчаливого третьего исхода нет.
+    # Единственный лишний вызов за прогон, и только если все пути выше
+    # оставили constraints пустым (проверка - внутри retry_constraints_if_missing).
+    constraints_unresolved = False
+    try:
+        brief, constraints_unresolved = await retry_constraints_if_missing(
+            router, brief, task, industry_hint=industry_hint, stage_log=intake_stage_log
+        )
+    except CostLimitExceededError as exc:
+        # record=None: строка журнала уже дописана внутри
+        # retry_constraints_if_missing своим снимком счётчика стоимости -
+        # повторный append завёл бы дубль (ревью, цикл 1, совет 2).
+        await _persist_intake_stop(
+            db_session_factory,
+            raw_text=task,
+            router=router,
+            stage_log=intake_stage_log,
+            record=None,
+            error=exc,
+        )
+        raise
+    if constraints_unresolved:
+        intake_caveats.append(CONSTRAINTS_UNRESOLVED_NOTICE)
+
     # Явно заданный флаг перекрывает то, что определила модель при разборе.
     # Значение флага — сырой ввод оператора и перекрывает в том числе уже
     # обезвреженную отрасль запасного брифа, поэтому метки `{{...}}` снимаются
@@ -480,7 +513,11 @@ async def _run(
     )
     try:
         report = await pipeline.run(
-            brief, raw_text=task, initial_stage_log=intake_stage_log, initial_caveats=intake_caveats
+            brief,
+            raw_text=task,
+            initial_stage_log=intake_stage_log,
+            initial_caveats=intake_caveats,
+            constraints_unresolved=constraints_unresolved,
         )
     finally:
         await pipeline.aclose()

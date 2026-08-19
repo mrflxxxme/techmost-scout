@@ -1,0 +1,112 @@
+................F.F..................................................... [ 11%]
+........................................................................ [ 23%]
+........................................................................ [ 35%]
+........................................................................ [ 47%]
+........................................................................ [ 59%]
+........................................................................ [ 70%]
+........................................................................ [ 82%]
+........................................................................ [ 94%]
+.................................                                        [100%]
+================================== FAILURES ===================================
+______________ test_constraints_unresolved_caveat_reaches_report ______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000010B74B4F8C0>
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=0, second_pass_relevance_max=0)
+fake_provider_factory = <class 'conftest.FakeProvider'>
+tmp_path = WindowsPath('C:/Users/KUklonskiy/AppData/Local/Temp/pytest-of-kauklonskiy/pytest-1011/test_constraints_unresolved_ca0')
+
+    async def test_constraints_unresolved_caveat_reaches_report(monkeypatch, settings, fake_provider_factory, tmp_path):
+        """Мутация ревьюера №1: замена `if constraints_unresolved:` на
+        `if False and constraints_unresolved:` обязана ронять именно этот тест.
+    
+        retry_constraints_if_missing замокан на `unresolved=True` - проверяется
+        не логика самой функции (она проверена в test_constraints_guard.py), а
+        то, что cli._run кладёт CONSTRAINTS_UNRESOLVED_NOTICE в intake_caveats
+        и они доезжают до аргумента initial_caveats пайплайна."""
+        _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+        retry_calls: list[tuple] = []
+    
+        async def fake_run_intake(router, task, *, industry_hint="не указана"):
+            return IntakeResult(questions=[], draft_brief=_draft_brief(industry="фарма"))
+    
+        async def fake_retry_constraints(router, brief, raw_text, *, industry_hint, stage_log):
+            retry_calls.append((raw_text, industry_hint))
+            return brief, True
+    
+        monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+        monkeypatch.setattr("app.pipeline.constraints_guard.retry_constraints_if_missing", fake_retry_constraints)
+    
+        await cli._run("Требуемая точность 95-98%, TRL 6-9", None, None, tmp_path / "report.md", False)
+    
+>       assert len(retry_calls) == 1, "проводка обязана звать retry_constraints_if_missing ровно один раз"
+E       AssertionError: проводка обязана звать retry_constraints_if_missing ровно один раз
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests\test_cli_run.py:717: AssertionError
+---------------------------- Captured stdout call -----------------------------
+
+Бриф: Катализатор гидроочистки теряет активность раньше срока. (фарма)
+
+
+Отчёт сохранён: 
+C:\Users\KUklonskiy\AppData\Local\Temp\pytest-of-kauklonskiy\pytest-1011\test_c
+onstraints_unresolved_ca0\report.md
+Стоимость запроса: 0.00 ₽; вызовов модели 0, из них с кэшем префикса 0 (кэш 
+считается только у DeepSeek; у остальных провайдеров всегда 0)
+______ test_constraints_retry_cost_limit_propagates_and_persists_failed _______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000010B74D1EE40>
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=0, second_pass_relevance_max=0)
+fake_provider_factory = <class 'conftest.FakeProvider'>
+tmp_path = WindowsPath('C:/Users/KUklonskiy/AppData/Local/Temp/pytest-of-kauklonskiy/pytest-1011/test_constraints_retry_cost_li0')
+temp_db = <function temp_db.<locals>.factory at 0x0000010B74D8A980>
+
+    async def test_constraints_retry_cost_limit_propagates_and_persists_failed(
+        monkeypatch, settings, fake_provider_factory, tmp_path, temp_db
+    ):
+        """Мутация ревьюера №2: удаление всего блока вызова
+        retry_constraints_if_missing вместе с обработкой CostLimitExceededError
+        обязана ронять именно этот тест.
+    
+        РЕШ-45: стоп-кран - команда «стоп тратить», не отказ модели. Образец -
+        tests/test_pipeline_resilience.py:907-935
+        (test_cost_limit_exceeded_during_intake_propagates_and_run_fails):
+        исключение обязано выйти наружу, а `requests` обязан получить строку
+        status="failed", а не молча потерять оборванный прогон."""
+        _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+    
+        async def fake_run_intake(router, task, *, industry_hint="не указана"):
+            return IntakeResult(questions=[], draft_brief=_draft_brief(industry="фарма"))
+    
+        async def broken_retry_constraints(router, brief, raw_text, *, industry_hint, stage_log):
+            raise CostLimitExceededError("запрос израсходовал 10.00 ₽ при лимите 10.00 ₽")
+    
+        monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+        monkeypatch.setattr("app.pipeline.constraints_guard.retry_constraints_if_missing", broken_retry_constraints)
+    
+>       with pytest.raises(CostLimitExceededError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE CostLimitExceededError
+
+tests\test_cli_run.py:768: Failed
+---------------------------- Captured stdout call -----------------------------
+
+Бриф: Катализатор гидроочистки теряет активность раньше срока. (фарма)
+
+
+Отчёт сохранён: 
+C:\Users\KUklonskiy\AppData\Local\Temp\pytest-of-kauklonskiy\pytest-1011\test_c
+onstraints_retry_cost_li0\report.md
+Стоимость запроса: 0.00 ₽; вызовов модели 0, из них с кэшем префикса 0 (кэш 
+считается только у DeepSeek; у остальных провайдеров всегда 0)
+============================== warnings summary ===============================
+..\..\..\.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\KUklonskiy\techmost-scout\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_cli_run.py::test_constraints_unresolved_caveat_reaches_report
+FAILED tests/test_cli_run.py::test_constraints_retry_cost_limit_propagates_and_persists_failed
+2 failed, 607 passed, 1 warning in 187.09s (0:03:07)

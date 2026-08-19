@@ -1,0 +1,119 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 18 items
+
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_farma_text_with_percent_and_trl PASSED [  5%]
+tests/test_constraints_guard.py::test_has_requirement_signs_false_without_any_sign PASSED [ 11%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043f\u0440\u043e\u0446\u0435\u043d\u0442] PASSED [ 16%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[trl] PASSED [ 22%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u043c\u0435\u043d\u0435\u0435] PASSED [ 27%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u0431\u043e\u043b\u0435\u0435] PASSED [ 33%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0433\u043e\u0441\u0442] PASSED [ 38%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0447\u0438\u0441\u043b\u043e-\u0441-\u0435\u0434\u0438\u043d\u0438\u0446\u0435\u0439] PASSED [ 44%]
+tests/test_constraints_guard.py::test_retry_constraints_fills_only_constraints_field PASSED [ 50%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_without_requirement_signs PASSED [ 55%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_when_constraints_already_present PASSED [ 61%]
+tests/test_constraints_guard.py::test_retry_constraints_empty_second_answer_marks_unresolved PASSED [ 66%]
+tests/test_constraints_guard.py::test_retry_constraints_llm_error_does_not_raise_run_continues FAILED [ 72%]
+tests/test_constraints_guard.py::test_retry_constraints_cost_limit_propagates PASSED [ 77%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_backfills_not_confirmed_per_requirement PASSED [ 83%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_leaves_existing_checks_untouched PASSED [ 88%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_noop_without_brief_constraints PASSED [ 94%]
+tests/test_constraints_guard.py::test_author_card_backfills_requirement_checks_when_model_omits_them PASSED [100%]
+
+================================== FAILURES ===================================
+________ test_retry_constraints_llm_error_does_not_raise_run_continues ________
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=0, second_pass_relevance_max=0)
+
+    async def test_retry_constraints_llm_error_does_not_raise_run_continues(settings):
+        """Отказ повторного вызова не роняет прогон (инвариант №5): предупреждение
+        в лог, своя строка журнала стадий, `constraints_unresolved=True`."""
+        router = LLMRouter(settings, providers={"gigachat": _AlwaysFailsProvider()})
+        brief = _brief(constraints=[])
+        stage_log: list = []
+    
+>       updated_brief, unresolved = await retry_constraints_if_missing(
+            router, brief, _FARMA_TEXT, industry_hint="фарма", stage_log=stage_log
+        )
+
+tests\test_constraints_guard.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backend\app\pipeline\constraints_guard.py:139: in retry_constraints_if_missing
+    result = await router.complete_json(
+backend\app\llm\router.py:195: in complete_json
+    result = await self.complete(stage, messages, temperature=temperature, max_tokens=max_tokens, json_mode=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <app.llm.router.LLMRouter object at 0x000001CE2CBB5810>, stage = 'intake'
+messages = [Message(role='system', content='# Назначение\n\nИз сырого текста технологической задачи промышленного заказчика получ...асль из текста.\n\n<!-- версия 1.3 -->\n'), Message(role='user', content='Выдели ограничения и требуемые показатели.')]
+temperature = 0.1, max_tokens = 8000, json_mode = True
+attempts_per_provider = 2
+
+    async def complete(
+        self,
+        stage: str,
+        messages: list[Message],
+        *,
+        temperature: float = 0.2,
+        max_tokens: int = 4096,
+        json_mode: bool = False,
+        attempts_per_provider: int = 2,
+    ) -> LLMResult:
+        """Выполнить вызов, перебирая провайдеров по цепочке стадии."""
+        chain = self.chain_for(stage)
+        if not chain:
+            raise LLMError("router", f"для стадии {stage} не настроен ни один провайдер", retryable=False)
+    
+        last_error: LLMError | None = None
+        for provider_name in chain:
+            provider = self._providers[provider_name]
+            for attempt in range(1, attempts_per_provider + 1):
+                try:
+                    result = await provider.complete(
+                        messages, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode
+                    )
+                except LLMError as exc:
+                    last_error = exc
+                    if not exc.retryable:
+                        log.warning("стадия %s: %s не подходит (%s), перехожу к резерву", stage, provider_name, exc)
+                        break
+                    if attempt < attempts_per_provider:
+                        pause = 2**attempt
+                        log.info("стадия %s: %s ошибка (%s), повтор через %s с", stage, provider_name, exc, pause)
+                        await asyncio.sleep(pause)
+                    continue
+                else:
+                    self.cost.add(result.usage)
+                    if provider_name != chain[0]:
+                        log.warning("стадия %s выполнена резервным провайдером %s", stage, provider_name)
+                    return result
+>       raise LLMError("router", f"все провайдеры отказали на стадии {stage}: {last_error}", retryable=False)
+E       app.llm.base.LLMError: router: все провайдеры отказали на стадии intake: gigachat: недоступен
+
+backend\app\llm\router.py:173: LLMError
+------------------------------ Captured log call ------------------------------
+WARNING  app.llm.router:router.py:161 стадия intake: gigachat не подходит (gigachat: недоступен), перехожу к резерву
+WARNING  app.pipeline.constraints_guard:constraints_guard.py:157 повторный вызов интейка за ограничениями не удался
+Traceback (most recent call last):
+  File "C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2\backend\app\pipeline\constraints_guard.py", line 139, in retry_constraints_if_missing
+    result = await router.complete_json(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<12 lines>...
+    )
+    ^
+  File "C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2\backend\app\llm\router.py", line 195, in complete_json
+    result = await self.complete(stage, messages, temperature=temperature, max_tokens=max_tokens, json_mode=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2\backend\app\llm\router.py", line 173, in complete
+    raise LLMError("router", f"все провайдеры отказали на стадии {stage}: {last_error}", retryable=False)
+app.llm.base.LLMError: router: все провайдеры отказали на стадии intake: gigachat: недоступен
+=========================== short test summary info ===========================
+FAILED tests/test_constraints_guard.py::test_retry_constraints_llm_error_does_not_raise_run_continues
+======================== 1 failed, 17 passed in 0.66s =========================

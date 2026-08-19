@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field, HttpUrl, TypeAdapter, ValidationError, fi
 
 from app.config import get_settings
 from app.llm import CostLimitExceededError, LLMRouter, Message
+from app.pipeline.constraints_guard import ensure_requirement_checks
 from app.schemas import (
     Brief,
     Candidate,
@@ -1013,7 +1014,8 @@ async def author_card(router: LLMRouter, brief: Brief, group: list[ScoredCandida
     # Стадию зрелости конкурсной карточки правит код, а не модель: описание
     # хакатонного проекта пишет сама команда, и оно всегда звучит как готовый
     # продукт (см. cap_contest_maturity).
-    return cap_contest_maturity(card, group)
+    card = cap_contest_maturity(card, group)
+    return ensure_requirement_checks(card, brief)
 
 
 #: Порядок стадий зрелости по возрастанию. `unknown` в него не входит: это не

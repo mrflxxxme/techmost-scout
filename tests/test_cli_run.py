@@ -29,8 +29,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 import app.cli as cli
 import app.pipeline as pipeline_pkg
+from app.export.markdown import CONSTRAINTS_UNRESOLVED_NOTICE
+from app.llm import CostLimitExceededError
 from app.llm.router import LLMRouter
-from app.models import Base
+from app.models import Base, PipelineLog
+from app.models import Request as RequestRow
 from app.models import SearchPlan as SearchPlanRow
 from app.pipeline.persistence import PlanRecord, persist_run
 from app.pipeline.stages import render_prompt
@@ -65,7 +68,9 @@ class _RecordingPipeline:
         raw_text: str = "",
         initial_stage_log: list | None = None,
         initial_caveats: list | None = None,
+        constraints_unresolved: bool = False,
     ) -> Report:
+        del constraints_unresolved
         _RecordingPipeline.captured.append(brief)
         _RecordingPipeline.initial_stage_logs.append(initial_stage_log)
         _RecordingPipeline.initial_caveats.append(initial_caveats)
@@ -671,3 +676,111 @@ async def test_unknown_plan_id_stops_run_before_any_paid_call(
     assert "4242" in console_output, "оператор обязан увидеть, какой именно номер не найден"
     assert "search_plans" in console_output, "в отказе названа причина и где искать номер"
     assert not (tmp_path / "report.md").exists(), "отчёта у несостоявшегося прогона быть не должно"
+
+
+# --- Цикл 2 ревью З-2: главный инвариант РЕШ-115 на уровне cli._run --------
+#
+# Находка 1 ревью (цикл 1): вся проводка retry_constraints_if_missing внутри
+# cli._run (строки ~468-495) была покрыта тестами только на уровне модуля
+# constraints_guard, а не на уровне сборки прогона. Ревьюер поставил две
+# мутации, обе прошли pytest -q без единого падения:
+#   - "if False and constraints_unresolved:" вместо "if constraints_unresolved:"
+#   - удаление всего блока вызова retry_constraints_if_missing целиком
+# Тесты ниже мокают саму функцию retry_constraints_if_missing (тем же
+# приёмом, что run_intake/refine_brief выше в этом файле) и проверяют
+# именно ПРОВОДКУ cli.py, а не повторно поведение constraints_guard.
+
+
+async def test_constraints_unresolved_caveat_reaches_report(monkeypatch, settings, fake_provider_factory, tmp_path):
+    """Мутация ревьюера №1: замена `if constraints_unresolved:` на
+    `if False and constraints_unresolved:` обязана ронять именно этот тест.
+
+    retry_constraints_if_missing замокан на `unresolved=True` - проверяется
+    не логика самой функции (она проверена в test_constraints_guard.py), а
+    то, что cli._run кладёт CONSTRAINTS_UNRESOLVED_NOTICE в intake_caveats
+    и они доезжают до аргумента initial_caveats пайплайна."""
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+    retry_calls: list[tuple] = []
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return IntakeResult(questions=[], draft_brief=_draft_brief(industry="фарма"))
+
+    async def fake_retry_constraints(router, brief, raw_text, *, industry_hint, stage_log):
+        retry_calls.append((raw_text, industry_hint))
+        return brief, True
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+    monkeypatch.setattr("app.pipeline.constraints_guard.retry_constraints_if_missing", fake_retry_constraints)
+
+    await cli._run("Требуемая точность 95-98%, TRL 6-9", None, None, tmp_path / "report.md", False)
+
+    assert len(retry_calls) == 1, "проводка обязана звать retry_constraints_if_missing ровно один раз"
+    assert CONSTRAINTS_UNRESOLVED_NOTICE in _RecordingPipeline.initial_caveats[-1], (
+        "unresolved=True обязан довести клиентскую оговорку до отчёта - "
+        "именно эта строка кода и есть непокрытая проводка находки 1 ревью"
+    )
+
+
+async def test_constraints_unresolved_false_adds_no_caveat(monkeypatch, settings, fake_provider_factory, tmp_path):
+    """Обратная сторона предыдущего теста: unresolved=False - оговорки нет.
+
+    Без этого теста мутация «звать intake_caveats.append всегда» осталась бы
+    незамеченной - тест выше проверяет только положительную ветку."""
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return IntakeResult(questions=[], draft_brief=_draft_brief(industry="фарма", constraints=["уже есть"]))
+
+    async def fake_retry_constraints(router, brief, raw_text, *, industry_hint, stage_log):
+        return brief, False
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+    monkeypatch.setattr("app.pipeline.constraints_guard.retry_constraints_if_missing", fake_retry_constraints)
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False)
+
+    assert CONSTRAINTS_UNRESOLVED_NOTICE not in _RecordingPipeline.initial_caveats[-1]
+
+
+async def test_constraints_retry_cost_limit_propagates_and_persists_failed(
+    monkeypatch, settings, fake_provider_factory, tmp_path, temp_db
+):
+    """Мутация ревьюера №2: удаление всего блока вызова
+    retry_constraints_if_missing вместе с обработкой CostLimitExceededError
+    обязана ронять именно этот тест.
+
+    РЕШ-45: стоп-кран - команда «стоп тратить», не отказ модели. Образец -
+    tests/test_pipeline_resilience.py:907-935
+    (test_cost_limit_exceeded_during_intake_propagates_and_run_fails):
+    исключение обязано выйти наружу, а `requests` обязан получить строку
+    status="failed", а не молча потерять оборванный прогон."""
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return IntakeResult(questions=[], draft_brief=_draft_brief(industry="фарма"))
+
+    async def broken_retry_constraints(router, brief, raw_text, *, industry_hint, stage_log):
+        raise CostLimitExceededError("запрос израсходовал 10.00 ₽ при лимите 10.00 ₽")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+    monkeypatch.setattr("app.pipeline.constraints_guard.retry_constraints_if_missing", broken_retry_constraints)
+
+    with pytest.raises(CostLimitExceededError):
+        await cli._run("Требуемая точность 95-98%, TRL 6-9", None, None, tmp_path / "report.md", False)
+
+    assert _RecordingPipeline.captured == [], "пайплайн не должен создаваться - прогон оборвался до него"
+
+    async with temp_db() as session:
+        requests = (await session.execute(select(RequestRow))).scalars().all()
+        assert len(requests) == 1, "оборванный стоп-краном прогон обязан оставить строку в базе"
+        assert requests[0].status == "failed"
+        assert requests[0].error
+
+        # intake_stage_log в этом сценарии пуст: run_intake отработал успешно
+        # (успешная стадия своей строки журнала в cli._run не пишет - это
+        # делает оркестратор внутри пайплайна, которого здесь нет), а
+        # retry_constraints_if_missing замокан целиком и своей строки не
+        # оставил - проверка PipelineLog не про содержимое журнала, а про то,
+        # что запись requests вообще состоялась.
+        logs = (await session.execute(select(PipelineLog))).scalars().all()
+        assert logs == []

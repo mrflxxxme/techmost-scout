@@ -1,0 +1,163 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 18 items
+
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_farma_text_with_percent_and_trl PASSED [  5%]
+tests/test_constraints_guard.py::test_has_requirement_signs_false_without_any_sign PASSED [ 11%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043f\u0440\u043e\u0446\u0435\u043d\u0442] PASSED [ 16%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[trl] PASSED [ 22%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u043c\u0435\u043d\u0435\u0435] PASSED [ 27%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u0431\u043e\u043b\u0435\u0435] PASSED [ 33%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0433\u043e\u0441\u0442] PASSED [ 38%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0447\u0438\u0441\u043b\u043e-\u0441-\u0435\u0434\u0438\u043d\u0438\u0446\u0435\u0439] PASSED [ 44%]
+tests/test_constraints_guard.py::test_retry_constraints_fills_only_constraints_field PASSED [ 50%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_without_requirement_signs FAILED [ 55%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_when_constraints_already_present FAILED [ 61%]
+tests/test_constraints_guard.py::test_retry_constraints_empty_second_answer_marks_unresolved PASSED [ 66%]
+tests/test_constraints_guard.py::test_retry_constraints_llm_error_does_not_raise_run_continues PASSED [ 72%]
+tests/test_constraints_guard.py::test_retry_constraints_cost_limit_propagates PASSED [ 77%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_backfills_not_confirmed_per_requirement PASSED [ 83%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_leaves_existing_checks_untouched PASSED [ 88%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_noop_without_brief_constraints PASSED [ 94%]
+tests/test_constraints_guard.py::test_author_card_backfills_requirement_checks_when_model_omits_them PASSED [100%]
+
+================================== FAILURES ===================================
+__________ test_retry_constraints_skipped_without_requirement_signs ___________
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=0, second_pass_relevance_max=0)
+fake_provider_factory = <class 'conftest.FakeProvider'>
+
+    async def test_retry_constraints_skipped_without_requirement_signs(settings, fake_provider_factory):
+        """Критерий 3: пустой `constraints`, но признаков требований нет -
+        повторного вызова быть не должно."""
+        provider = fake_provider_factory("gigachat", ["{}"])
+        router = LLMRouter(settings, providers={"gigachat": provider})
+        brief = _brief(constraints=[])
+        stage_log: list = []
+    
+        updated_brief, unresolved = await retry_constraints_if_missing(
+            router, brief, _NO_SIGNS_TEXT, industry_hint="не указана", stage_log=stage_log
+        )
+    
+>       assert router.cost.calls == 0, "без признаков требований в тексте лишнего вызова быть не должно"
+E       AssertionError: без признаков требований в тексте лишнего вызова быть не должно
+E       assert 2 == 0
+E        +  where 2 = CostTracker(limit_rub=10.0, spent_rub=0.02, by_provider={'gigachat': 0.02}, calls=2, cached_calls=0).calls
+E        +    where CostTracker(limit_rub=10.0, spent_rub=0.02, by_provider={'gigachat': 0.02}, calls=2, cached_calls=0) = <app.llm.router.LLMRouter object at 0x000001B94F9F2490>.cost
+
+tests\test_constraints_guard.py:152: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  app.pipeline.constraints_guard:constraints_guard.py:157 повторный вызов интейка за ограничениями не удался
+Traceback (most recent call last):
+  File "C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2\backend\app\llm\router.py", line 201, in complete_json
+    return _validate_first_fitting(payload_text, schema)
+  File "C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2\backend\app\llm\router.py", line 62, in _validate_first_fitting
+    raise last_error
+  File "C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2\backend\app\llm\router.py", line 58, in _validate_first_fitting
+    return schema.model_validate(payload)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\KUklonskiy\techmost-scout\.venv\Lib\site-packages\pydantic\main.py", line 732, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        obj,
+        ^^^^
+    ...<5 lines>...
+        by_name=by_name,
+        ^^^^^^^^^^^^^^^^
+    )
+    ^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for IntakeResult
+draft_brief
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2\backend\app\pipeline\constraints_guard.py", line 139, in retry_constraints_if_missing
+    result = await router.complete_json(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<12 lines>...
+    )
+    ^
+  File "C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2\backend\app\llm\router.py", line 204, in complete_json
+    raise LLMError(
+    ...<3 lines>...
+    ) from exc
+app.llm.base.LLMError: router: стадия intake: ответ не сходится со схемой IntakeResult: 1 validation error for IntakeResult
+draft_brief
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+_______ test_retry_constraints_skipped_when_constraints_already_present _______
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=0, second_pass_relevance_max=0)
+fake_provider_factory = <class 'conftest.FakeProvider'>
+
+    async def test_retry_constraints_skipped_when_constraints_already_present(settings, fake_provider_factory):
+        """Обратная сторона критерия 2: `constraints` уже заполнен - вызова нет
+        независимо от признаков в тексте (мутация (б): вызов делается всегда)."""
+        provider = fake_provider_factory("gigachat", ["{}"])
+        router = LLMRouter(settings, providers={"gigachat": provider})
+        brief = _brief(constraints=["уже есть ограничение"])
+    
+        updated_brief, unresolved = await retry_constraints_if_missing(
+            router, brief, _FARMA_TEXT, industry_hint="фарма", stage_log=[]
+        )
+    
+>       assert router.cost.calls == 0
+E       AssertionError: assert 2 == 0
+E        +  where 2 = CostTracker(limit_rub=10.0, spent_rub=0.02, by_provider={'gigachat': 0.02}, calls=2, cached_calls=0).calls
+E        +    where CostTracker(limit_rub=10.0, spent_rub=0.02, by_provider={'gigachat': 0.02}, calls=2, cached_calls=0) = <app.llm.router.LLMRouter object at 0x000001B94F9F2850>.cost
+
+tests\test_constraints_guard.py:169: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  app.pipeline.constraints_guard:constraints_guard.py:157 повторный вызов интейка за ограничениями не удался
+Traceback (most recent call last):
+  File "C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2\backend\app\llm\router.py", line 201, in complete_json
+    return _validate_first_fitting(payload_text, schema)
+  File "C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2\backend\app\llm\router.py", line 62, in _validate_first_fitting
+    raise last_error
+  File "C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2\backend\app\llm\router.py", line 58, in _validate_first_fitting
+    return schema.model_validate(payload)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\KUklonskiy\techmost-scout\.venv\Lib\site-packages\pydantic\main.py", line 732, in model_validate
+    return cls.__pydantic_validator__.validate_python(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        obj,
+        ^^^^
+    ...<5 lines>...
+        by_name=by_name,
+        ^^^^^^^^^^^^^^^^
+    )
+    ^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for IntakeResult
+draft_brief
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2\backend\app\pipeline\constraints_guard.py", line 139, in retry_constraints_if_missing
+    result = await router.complete_json(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<12 lines>...
+    )
+    ^
+  File "C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2\backend\app\llm\router.py", line 204, in complete_json
+    raise LLMError(
+    ...<3 lines>...
+    ) from exc
+app.llm.base.LLMError: router: стадия intake: ответ не сходится со схемой IntakeResult: 1 validation error for IntakeResult
+draft_brief
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+=========================== short test summary info ===========================
+FAILED tests/test_constraints_guard.py::test_retry_constraints_skipped_without_requirement_signs
+FAILED tests/test_constraints_guard.py::test_retry_constraints_skipped_when_constraints_already_present
+======================== 2 failed, 16 passed in 0.61s =========================

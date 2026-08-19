@@ -1,0 +1,161 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 18 items
+
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_farma_text_with_percent_and_trl PASSED [  5%]
+tests/test_constraints_guard.py::test_has_requirement_signs_false_without_any_sign PASSED [ 11%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043f\u0440\u043e\u0446\u0435\u043d\u0442] PASSED [ 16%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[trl] PASSED [ 22%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u043c\u0435\u043d\u0435\u0435] PASSED [ 27%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u0431\u043e\u043b\u0435\u0435] PASSED [ 33%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0433\u043e\u0441\u0442] PASSED [ 38%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0447\u0438\u0441\u043b\u043e-\u0441-\u0435\u0434\u0438\u043d\u0438\u0446\u0435\u0439] PASSED [ 44%]
+tests/test_constraints_guard.py::test_retry_constraints_fills_only_constraints_field FAILED [ 50%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_without_requirement_signs PASSED [ 55%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_when_constraints_already_present PASSED [ 61%]
+tests/test_constraints_guard.py::test_retry_constraints_empty_second_answer_marks_unresolved PASSED [ 66%]
+tests/test_constraints_guard.py::test_retry_constraints_llm_error_does_not_raise_run_continues PASSED [ 72%]
+tests/test_constraints_guard.py::test_retry_constraints_cost_limit_propagates PASSED [ 77%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_backfills_not_confirmed_per_requirement PASSED [ 83%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_leaves_existing_checks_untouched PASSED [ 88%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_noop_without_brief_constraints PASSED [ 94%]
+tests/test_constraints_guard.py::test_author_card_backfills_requirement_checks_when_model_omits_them PASSED [100%]
+
+================================== FAILURES ===================================
+_____________ test_retry_constraints_fills_only_constraints_field _____________
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=0, second_pass_relevance_max=0)
+fake_provider_factory = <class 'conftest.FakeProvider'>
+
+    async def test_retry_constraints_fills_only_constraints_field(settings, fake_provider_factory):
+        """Критерий 2: при пустом `constraints` и признаках требований интейк
+        зовётся ровно один лишний раз, а ответ пополняет только `constraints`."""
+        first = _intake_response(industry="фарма", task_summary="Суть задачи из первого разбора.", constraints=[])
+        second = _intake_response(
+            industry="подменённая отрасль - не должна попасть в бриф",
+            task_summary="подменённая суть - не должна попасть в бриф",
+            constraints=["точность 95-98%", "TRL 6-9"],
+        )
+        provider = fake_provider_factory("gigachat", [first, second])
+        router = LLMRouter(settings, providers={"gigachat": provider})
+    
+        intake = await stages.run_intake(router, _FARMA_TEXT)
+        assert router.cost.calls == 1, "база отсчёта: один вызов на сам run_intake"
+    
+        stage_log: list = []
+        updated_brief, unresolved = await retry_constraints_if_missing(
+            router, intake.draft_brief, _FARMA_TEXT, industry_hint="фарма", stage_log=stage_log
+        )
+    
+>       assert router.cost.calls == 2, "повторный вызов обязан состояться ровно один раз - на одно обращение больше базы"
+E       AssertionError: повторный вызов обязан состояться ровно один раз - на одно обращение больше базы
+E       assert 3 == 2
+E        +  where 3 = CostTracker(limit_rub=10.0, spent_rub=0.03, by_provider={'gigachat': 0.03}, calls=3, cached_calls=0).calls
+E        +    where CostTracker(limit_rub=10.0, spent_rub=0.03, by_provider={'gigachat': 0.03}, calls=3, cached_calls=0) = <app.llm.router.LLMRouter object at 0x000001707E760C20>.cost
+
+tests\test_constraints_guard.py:127: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_constraints_guard.py::test_retry_constraints_fills_only_constraints_field
+======================== 1 failed, 17 passed in 0.92s =========================
+
+
+=== мутация (д): строка только в Ограничениях этого поиска ===
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 33 items
+
+tests/test_export_markdown.py::test_card_without_evidence_hides_maturity_and_trl PASSED [  3%]
+tests/test_export_markdown.py::test_unknown_stage_prints_stage_not_defined PASSED [  6%]
+tests/test_export_markdown.py::test_maturity_still_printed_when_evidence_present PASSED [  9%]
+tests/test_export_markdown.py::test_requirement_checks_printed_one_per_line PASSED [ 12%]
+tests/test_export_markdown.py::test_requirement_checks_block_absent_when_empty PASSED [ 15%]
+tests/test_export_markdown.py::test_unsourced_claims_visible_near_card PASSED [ 18%]
+tests/test_export_markdown.py::test_unsourced_claims_block_absent_when_empty PASSED [ 21%]
+tests/test_export_markdown.py::test_pdf_urls_printed_as_full_text_link PASSED [ 24%]
+tests/test_export_markdown.py::test_pdf_urls_absent_when_empty PASSED    [ 27%]
+tests/test_export_markdown.py::test_sources_unavailable_line_not_broken PASSED [ 30%]
+tests/test_export_markdown.py::test_limitations_heading_printed_whenever_section_has_content[\u0442\u043e\u043b\u044c\u043a\u043e-\u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438] PASSED [ 33%]
+tests/test_export_markdown.py::test_limitations_heading_printed_whenever_section_has_content[\u0442\u043e\u043b\u044c\u043a\u043e-\u043e\u0433\u043e\u0432\u043e\u0440\u043a\u0438] PASSED [ 36%]
+tests/test_export_markdown.py::test_limitations_heading_printed_whenever_section_has_content[\u0438-\u0442\u043e-\u0438-\u0434\u0440\u0443\u0433\u043e\u0435] PASSED [ 39%]
+tests/test_export_markdown.py::test_limitations_heading_absent_when_nothing_to_say PASSED [ 42%]
+tests/test_export_markdown.py::test_all_maturity_stages_have_russian_label[lab] PASSED [ 45%]
+tests/test_export_markdown.py::test_all_maturity_stages_have_russian_label[prototype] PASSED [ 48%]
+tests/test_export_markdown.py::test_all_maturity_stages_have_russian_label[pilot] PASSED [ 51%]
+tests/test_export_markdown.py::test_all_maturity_stages_have_russian_label[series] PASSED [ 54%]
+tests/test_export_markdown.py::test_all_maturity_stages_have_russian_label[unknown] PASSED [ 57%]
+tests/test_export_markdown.py::test_contest_section_does_not_change_main_section_count PASSED [ 60%]
+tests/test_export_markdown.py::test_contest_section_goes_after_main_section PASSED [ 63%]
+tests/test_export_markdown.py::test_contest_section_absent_without_contest_cards PASSED [ 66%]
+tests/test_export_markdown.py::test_ip_status_line_printed_in_every_contest_card PASSED [ 69%]
+tests/test_export_markdown.py::test_ip_status_line_absent_in_main_section PASSED [ 72%]
+tests/test_export_markdown.py::test_contest_card_without_evidence_hides_maturity_and_trl PASSED [ 75%]
+tests/test_export_markdown.py::test_contest_card_with_evidence_still_shows_maturity PASSED [ 78%]
+tests/test_export_markdown.py::test_draft_header_untouched_by_contest_section PASSED [ 81%]
+tests/test_export_markdown.py::test_requirement_signature_uses_new_label PASSED [ 84%]
+tests/test_export_markdown.py::test_constraints_signature_absent_when_brief_constraints_empty PASSED [ 87%]
+tests/test_export_markdown.py::test_constraints_unresolved_notice_printed_twice FAILED [ 90%]
+tests/test_export_markdown.py::test_constraints_unresolved_flag_drives_notice_not_caveat_substring FAILED [ 93%]
+tests/test_export_markdown.py::test_constraints_unresolved_notice_absent_when_flag_false PASSED [ 96%]
+tests/test_export_markdown.py::test_requirement_checks_heading_present_in_each_of_three_cards PASSED [100%]
+
+================================== FAILURES ===================================
+______________ test_constraints_unresolved_notice_printed_twice _______________
+
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+
+    def test_constraints_unresolved_notice_printed_twice(brief):
+        """Критерий 4 (РЕШ-115, РЕШ-123): вторая ветка инварианта - обе печати
+        берут одну константу, подстрока встречается в «Задаче» и в «Ограничениях
+        этого поиска»."""
+        unresolved_brief = brief.model_copy(update={"constraints": []})
+        report = _make_report(
+            [_make_card(requirement_checks=[])],
+            brief=unresolved_brief,
+            constraints_unresolved=True,
+            summary=ReportSummary(recommendation="Начать с варианта №1.", caveats=[CONSTRAINTS_UNRESOLVED_NOTICE]),
+        )
+    
+        text = render_markdown(report)
+    
+>       assert text.count("Требования задачи не выделены из постановки") == 2
+E       AssertionError: assert 1 == 2
+E        +  where 1 = <built-in method count of str object at 0x000001F1D8D3ADC0>('Требования задачи не выделены из постановки')
+E        +    where <built-in method count of str object at 0x000001F1D8D3ADC0> = '# Подбор научно-технических решений\n\n> **ЧЕРНОВИК — не проверено экспертом.** Не отправлять клиенту до научной валидации.\n\n## Задача\n\n**Отрасль:** нефтепереработка\n\nКатализатор гидроочистки теряет активность за 8 месяцев вместо 24. Замена стоит около 40 млн рублей и трёх суток простоя.\n\n**Требуемая готовность:** прошла пилот на объекте\n\n## Рекомендация\n\nНачать с варианта №1.\n\n## Варианты решений\n\n### 1. Регенерация катализатора добавками молибдена\n\nПродление срока службы катализатора за счёт присадки.\n\n**Разработчик:** не найдено\n\n**Применимость к задаче:** Закрывает задачу продления межрегенерационного цикла.\n\n**Следующий шаг:** Запросить образец у разработчика.\n\n**Уверенность:** средняя\n\n**Чем подтверждено:**\n\n- _Подтверждений не приложено — карточку нельзя показывать клиенту._\n\n## Ограничения этого поиска\n\n- Требования задачи не выделены из постановки — построчная сверка карточек не проводилась.\n\n---\n\n*Запрос №1 · 12.08.2026 10:00 · стоимость машинной обработки 0.00 ₽*\n\n*Кирилл Уклонский · uklonskiy.k@gmail.com*'.count
+
+tests\test_export_markdown.py:388: AssertionError
+_____ test_constraints_unresolved_flag_drives_notice_not_caveat_substring _____
+
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+
+    def test_constraints_unresolved_flag_drives_notice_not_caveat_substring(brief):
+        """Мутация (ж): опознание оговорки по подстроке текста в экспортёре
+        запрещено - печать в «Задаче» обязана идти по флагу `constraints_unresolved`,
+        даже если сам текст оговорки в caveats не совпадает дословно."""
+        unresolved_brief = brief.model_copy(update={"constraints": []})
+        report = _make_report(
+            [_make_card(requirement_checks=[])],
+            brief=unresolved_brief,
+            constraints_unresolved=True,
+            summary=ReportSummary(recommendation="Начать с варианта №1.", caveats=["другая оговорка, не про требования"]),
+        )
+    
+        text = render_markdown(report)
+    
+>       assert CONSTRAINTS_UNRESOLVED_NOTICE in text
+E       AssertionError: assert 'Требования задачи не выделены из постановки — построчная сверка карточек не проводилась.' in '# Подбор научно-технических решений\n\n> **ЧЕРНОВИК — не проверено экспертом.** Не отправлять клиенту до научной валидации.\n\n## Задача\n\n**Отрасль:** нефтепереработка\n\nКатализатор гидроочистки теряет активность за 8 месяцев вместо 24. Замена стоит около 40 млн рублей и трёх суток простоя.\n\n**Требуемая готовность:** прошла пилот на объекте\n\n## Рекомендация\n\nНачать с варианта №1.\n\n## Варианты решений\n\n### 1. Регенерация катализатора добавками молибдена\n\nПродление срока службы катализатора за счёт присадки.\n\n**Разработчик:** не найдено\n\n**Применимость к задаче:** Закрывает задачу продления межрегенерационного цикла.\n\n**Следующий шаг:** Запросить образец у разработчика.\n\n**Уверенность:** средняя\n\n**Чем подтверждено:**\n\n- _Подтверждений не приложено — карточку нельзя показывать клиенту._\n\n## Ограничения этого поиска\n\n- другая оговорка, не про требования\n\n---\n\n*Запрос №1 · 12.08.2026 10:00 · стоимость машинной обработки 0.00 ₽*\n\n*Кирилл Уклонский · uklonskiy.k@gmail.com*'
+
+tests\test_export_markdown.py:414: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_export_markdown.py::test_constraints_unresolved_notice_printed_twice
+FAILED tests/test_export_markdown.py::test_constraints_unresolved_flag_drives_notice_not_caveat_substring
+======================== 2 failed, 31 passed in 0.17s =========================

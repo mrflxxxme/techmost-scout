@@ -40,6 +40,18 @@ CONTEST_SECTION_HEADING = "## Ранние разработки и команд�
 #: решение владельца, а не правка исполнителя.
 IP_STATUS_NOTICE = "статус прав не подтверждён, требует выяснения у команды"
 
+#: Оговорка клиенту, когда ограничения задачи не выделены из постановки даже
+#: после повторного адресного вызова интейка (РЕШ-115, РЕШ-123). Текст идёт
+#: клиенту дословно, поэтому в коде не переписывается. Печатается в двух
+#: местах одной константой (не подстрокой): в разделе "Задача" по флагу
+#: `Report.constraints_unresolved` и в "Ограничения этого поиска" тем же
+#: механизмом оговорок, что и прочие caveats (`cli.py`, `orchestrator.py`).
+#: Опознание оговорки по подстроке текста в экспортёре запрещено (постановка
+#: задачи, мутация ж) - текст поменяется, и проверка молча исчезнет.
+CONSTRAINTS_UNRESOLVED_NOTICE = (
+    "Требования задачи не выделены из постановки — построчная сверка карточек не проводилась."
+)
+
 
 def render_markdown(report: Report, *, validated: bool = False, reviewer: str = "") -> str:
     """Собрать отчёт. До валидации экспертом на нём стоит пометка «черновик».
@@ -71,8 +83,11 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
     lines.append("")
     lines.append(brief.task_summary)
     lines.append("")
+    if report.constraints_unresolved:
+        lines.append(CONSTRAINTS_UNRESOLVED_NOTICE)
+        lines.append("")
     if brief.constraints:
-        lines.append("**Ограничения:** " + "; ".join(brief.constraints))
+        lines.append("**Требования и ограничения:** " + "; ".join(brief.constraints))
         lines.append("")
     if brief.target_maturity:
         lines.append(f"**Требуемая готовность:** {MATURITY_RU[brief.target_maturity]}")
