@@ -1,0 +1,57 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z2
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 20 items
+
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_farma_text_with_percent_and_trl PASSED [  5%]
+tests/test_constraints_guard.py::test_has_requirement_signs_false_without_any_sign PASSED [ 10%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043f\u0440\u043e\u0446\u0435\u043d\u0442] PASSED [ 15%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[trl] PASSED [ 20%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u043c\u0435\u043d\u0435\u0435] PASSED [ 25%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u0431\u043e\u043b\u0435\u0435] PASSED [ 30%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0433\u043e\u0441\u0442] PASSED [ 35%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0447\u0438\u0441\u043b\u043e-\u0441-\u0435\u0434\u0438\u043d\u0438\u0446\u0435\u0439] PASSED [ 40%]
+tests/test_constraints_guard.py::test_retry_constraints_fills_only_constraints_field PASSED [ 45%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_without_requirement_signs PASSED [ 50%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_when_constraints_already_present PASSED [ 55%]
+tests/test_constraints_guard.py::test_retry_constraints_empty_second_answer_marks_unresolved PASSED [ 60%]
+tests/test_constraints_guard.py::test_retry_constraints_llm_error_does_not_raise_run_continues PASSED [ 65%]
+tests/test_constraints_guard.py::test_retry_constraints_cost_limit_propagates PASSED [ 70%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_backfills_not_confirmed_per_requirement PASSED [ 75%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_leaves_existing_checks_untouched PASSED [ 80%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_noop_without_brief_constraints PASSED [ 85%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_logs_on_backfill FAILED [ 90%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_does_not_log_when_not_triggered PASSED [ 95%]
+tests/test_constraints_guard.py::test_author_card_backfills_requirement_checks_when_model_omits_them PASSED [100%]
+
+================================== FAILURES ===================================
+_______________ test_ensure_requirement_checks_logs_on_backfill _______________
+
+caplog = <_pytest.logging.LogCaptureFixture object at 0x000002792FC34830>
+
+    def test_ensure_requirement_checks_logs_on_backfill(caplog):
+        """РЕШ-122: страховка обязана печатать строку лога именно при срабатывании
+        подстановки, а не всегда - иначе частота срабатывания невидима, и
+        обещание "число, которое можно предъявить" непроверяемо (ревью, цикл 1,
+        находка 2)."""
+        brief = _brief(constraints=["точность 95-98%", "TRL 6-9"])
+        card = _card(requirement_checks=[])
+    
+        with caplog.at_level(logging.INFO, logger="app.pipeline.constraints_guard"):
+            ensure_requirement_checks(card, brief)
+    
+>       assert any("страховка requirement_checks сработала" in record.message for record in caplog.records), (
+            "срабатывание страховки обязано оставить строку лога"
+        )
+E       AssertionError: срабатывание страховки обязано оставить строку лога
+E       assert False
+E        +  where False = any(<generator object test_ensure_requirement_checks_logs_on_backfill.<locals>.<genexpr> at 0x000002792FC7FAC0>)
+
+tests\test_constraints_guard.py:322: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_constraints_guard.py::test_ensure_requirement_checks_logs_on_backfill
+======================== 1 failed, 19 passed in 0.46s =========================

@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import pytest
 
@@ -305,6 +306,37 @@ def test_ensure_requirement_checks_noop_without_brief_constraints():
     result = ensure_requirement_checks(card, brief)
 
     assert result.requirement_checks == []
+
+
+def test_ensure_requirement_checks_logs_on_backfill(caplog):
+    """РЕШ-122: страховка обязана печатать строку лога именно при срабатывании
+    подстановки, а не всегда - иначе частота срабатывания невидима, и
+    обещание "число, которое можно предъявить" непроверяемо (ревью, цикл 1,
+    находка 2)."""
+    brief = _brief(constraints=["точность 95-98%", "TRL 6-9"])
+    card = _card(requirement_checks=[])
+
+    with caplog.at_level(logging.INFO, logger="app.pipeline.constraints_guard"):
+        ensure_requirement_checks(card, brief)
+
+    assert any("страховка requirement_checks сработала" in record.message for record in caplog.records), (
+        "срабатывание страховки обязано оставить строку лога"
+    )
+
+
+def test_ensure_requirement_checks_does_not_log_when_not_triggered(caplog):
+    """Обратная сторона: модель уже вернула сверку - строки лога быть не
+    должно, иначе частота срабатывания страховки станет непоказательной."""
+    brief = _brief(constraints=["точность 95-98%"])
+    existing = [RequirementCheck(requirement="точность 95-98%", status="confirmed")]
+    card = _card(requirement_checks=existing)
+
+    with caplog.at_level(logging.INFO, logger="app.pipeline.constraints_guard"):
+        ensure_requirement_checks(card, brief)
+
+    assert not any("страховка requirement_checks сработала" in record.message for record in caplog.records), (
+        "страховка не срабатывала - строки лога быть не должно"
+    )
 
 
 def _scored_publication() -> ScoredCandidate:

@@ -130,7 +130,7 @@ async def _persist_intake_stop(
     raw_text: str,
     router: LLMRouter,
     stage_log: list[StageRecord],
-    record: StageRecord,
+    record: StageRecord | None,
     error: BaseException,
 ) -> None:
     """Записать прогон, оборванный стоп-краном (РЕШ-45) на стадии интейка.
@@ -141,10 +141,16 @@ async def _persist_intake_stop(
     вызовет никто: `requests` не получал даже строки `failed`, и трата
     исчезала. Тот же `CostLimitExceededError` внутри `pipeline.run` пишется со
     статусом `failed` и фактической стоимостью — здесь ровно та же запись.
+
+    `record=None` — вызывающий уже дописал свою строку в `stage_log` сам (так
+    делает `retry_constraints_if_missing`, у которого свой снимок счётчика
+    стоимости вокруг вызова): повторный `append` завёл бы дубль записи об
+    одном и том же отказе (ревью, цикл 1, совет 2).
     """
     from app.pipeline.persistence import persist_run
 
-    stage_log.append(record)
+    if record is not None:
+        stage_log.append(record)
     await persist_run(
         session_factory,
         raw_text=raw_text,
@@ -469,19 +475,16 @@ async def _run(
             router, brief, task, industry_hint=industry_hint, stage_log=intake_stage_log
         )
     except CostLimitExceededError as exc:
-        from app.pipeline.persistence import persist_run
-
-        # Строка журнала уже дописана внутри retry_constraints_if_missing -
-        # здесь только останов и запись прогона (образец cli.py, ветка run_intake).
-        await persist_run(
+        # record=None: строка журнала уже дописана внутри
+        # retry_constraints_if_missing своим снимком счётчика стоимости -
+        # повторный append завёл бы дубль (ревью, цикл 1, совет 2).
+        await _persist_intake_stop(
             db_session_factory,
             raw_text=task,
-            status="failed",
-            cost_rub=round(router.cost.spent_rub, 4),
-            cards=[],
-            contest_cards=[],
-            stages=intake_stage_log,
-            error=str(exc),
+            router=router,
+            stage_log=intake_stage_log,
+            record=None,
+            error=exc,
         )
         raise
     if constraints_unresolved:
