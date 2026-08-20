@@ -10,11 +10,13 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 
-from app.config import get_settings
 from app.pipeline.scoring import _has_neutral_score, log_relevance_calibration
 from app.schemas import ScoredCandidate, SolutionCard
 
-log = logging.getLogger(__name__)
+#: Имя логгера намеренно не `__name__` — см. пояснение в `scoring.py`: код
+#: до дробления жил в `app.pipeline.stages`, и тесты фильтруют `caplog` по
+#: этой строке.
+log = logging.getLogger("app.pipeline.stages")
 
 
 def select_top(scored: list[ScoredCandidate], *, limit: int, relevance_min: int | None = None) -> list[ScoredCandidate]:
@@ -36,6 +38,14 @@ def select_top(scored: list[ScoredCandidate], *, limit: int, relevance_min: int 
     нерелевантны».
     """
     if relevance_min is None:
+        # Отложенный импорт: тесты подменяют настройки через
+        # `monkeypatch.setattr(stages, "get_settings", …)` — до дробления
+        # `select_top` жил в `stages.py` и читал `get_settings` из
+        # собственного модуля, подмена попадала напрямую. Импорт из
+        # `app.config` в лоб больше не увидел бы подмену на фасаде; импорт
+        # здесь и только здесь развязывает цикл `stages` ⇄ `selection`.
+        from app.pipeline.stages import get_settings
+
         relevance_min = get_settings().relevance_min
     eligible = [item for item in scored if _has_neutral_score(item) or item.relevance >= relevance_min]
     picked = _pick_top(eligible, limit=limit)

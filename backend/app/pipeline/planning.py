@@ -20,7 +20,10 @@ from app.pipeline.scoring import has_neutral_score
 from app.schemas import Brief, ScoredCandidate, SearchPlan, SearchQuery, SourceType
 from app.search.yandex_search import has_contest_outcome_marker
 
-log = logging.getLogger(__name__)
+#: Имя логгера намеренно не `__name__` — см. пояснение в `scoring.py`: код
+#: до дробления жил в `app.pipeline.stages`, и тесты фильтруют `caplog` по
+#: этой строке.
+log = logging.getLogger("app.pipeline.stages")
 
 
 # ── 2. План поиска ──────────────────────────────────────────────────────────

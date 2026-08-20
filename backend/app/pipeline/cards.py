@@ -16,7 +16,10 @@ from app.pipeline.constraints_guard import ensure_requirement_checks
 from app.pipeline.prompting import _GO, candidates_to_json, load_gov_support, render_prompt
 from app.schemas import Brief, Candidate, Confidence, MaturityStage, ScoredCandidate, SolutionCard, SourceType
 
-log = logging.getLogger(__name__)
+#: Имя логгера намеренно не `__name__` — см. пояснение в `scoring.py`: код
+#: до дробления жил в `app.pipeline.stages`, и тесты фильтруют `caplog` по
+#: этой строке.
+log = logging.getLogger("app.pipeline.stages")
 
 
 class VerifyResult(BaseModel):

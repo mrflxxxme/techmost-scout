@@ -20,7 +20,10 @@ from app.pipeline.prompting import _GO, neutralize_placeholders, render_prompt
 from app.schemas import Candidate, SourceType
 from app.search.base import normalize_url
 
-log = logging.getLogger(__name__)
+#: Имя логгера намеренно не `__name__` — см. пояснение в `scoring.py`: код
+#: до дробления жил в `app.pipeline.stages`, и тесты фильтруют `caplog` по
+#: этой строке.
+log = logging.getLogger("app.pipeline.stages")
 
 
 # ── 2а. Разбор сырой выдачи моделью (extractor) ─────────────────────────────

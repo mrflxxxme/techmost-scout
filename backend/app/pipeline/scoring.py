@@ -19,7 +19,11 @@ from app.llm import CostLimitExceededError, LLMRouter, Message
 from app.pipeline.prompting import candidates_listing, load_prompt, owner_answers_block
 from app.schemas import Brief, Candidate, ScoredCandidate
 
-log = logging.getLogger(__name__)
+#: Имя логгера намеренно не `__name__`: до дробления (РЕШ-94) весь этот код
+#: жил в одном модуле `app.pipeline.stages`, и тесты фильтруют `caplog` по
+#: этой строке (`caplog.at_level(..., logger="app.pipeline.stages")`). Смена
+#: имени логгера при переносе — наблюдаемая правка поведения, а не мелочь.
+log = logging.getLogger("app.pipeline.stages")
 
 
 class CandidateScore(BaseModel):
