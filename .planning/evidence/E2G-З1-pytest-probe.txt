@@ -1,0 +1,24 @@
+Задача: Э2-Г / З-1 — режим пробы --contest
+Команда: .venv\Scripts\python.exe -m pytest tests\test_probe.py -v
+Дата: 2026-08-21
+
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\agent-a332bc699b13ba44e
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 9 items
+
+tests/test_probe.py::test_help_код_возврата_ноль_и_называет_оба_режима PASSED [ 11%]
+tests/test_probe.py::test_импорт_не_делает_сетевых_вызовов PASSED        [ 22%]
+tests/test_probe.py::test_режим_поиска_печатает_суженный_запрос_для_конкурса PASSED [ 33%]
+tests/test_probe.py::test_режим_поиска_без_сужения_для_web_без_грантовых_маркеров PASSED [ 44%]
+tests/test_probe.py::test_режим_поиска_без_ключа_не_падает_и_сообщает_причину PASSED [ 55%]
+tests/test_probe.py::test_режим_контеста_печатает_пять_оценок_notes_и_сводку PASSED [ 66%]
+tests/test_probe.py::test_режим_контеста_сводка_всегда_печатается_для_пустой_выдачи PASSED [ 77%]
+tests/test_probe.py::test_режим_контеста_сводка_при_отказавшем_скоринге PASSED [ 88%]
+tests/test_probe.py::test_продукт_не_ссылается_на_скрипт_пробы PASSED    [100%]
+
+============================== 9 passed in 4.26s ==============================
