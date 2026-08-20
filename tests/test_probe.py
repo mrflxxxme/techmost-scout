@@ -351,6 +351,60 @@ async def test_режим_контеста_сводка_при_отказавш�
     assert "кандидатов после нормализации: 1" in out
     assert "сводка:" in out
     assert "нет данных (скоринг отказал)" in out
+    assert "стоимость вызовов" in out
+    assert "unit-test-key" not in out
+
+
+async def test_режим_контеста_отказ_extractor_не_роняет_пробу_и_печатает_расход(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Живой прогон на боевых ключах (цикл 2 верификации З-1) уронил пробу
+    целиком, когда модель вернула пустой список вместо `ExtractedBatch`:
+    `app.llm.base.LLMError`. Продукт (`orchestrator.ScoutPipeline._extract`)
+    такой отказ переживает — берёт разбор адаптера и продолжает. Проба обязана
+    вести себя так же: явная строка о деградации, работа на кандидатах адаптера,
+    и расход обязан быть напечатан даже на отказавшем прогоне (РЕШ-82)."""
+    monkeypatch.setenv("YANDEX_SEARCH_API_KEY", "unit-test-key")
+    get_settings.cache_clear()
+
+    async def _extract_fails(*args: object, **kwargs: object):
+        from app.llm.base import LLMError
+
+        raise LLMError("router", "ответ не сходится со схемой ExtractedBatch: input_type=list", retryable=False)
+
+    async def _score_neutral(router, brief, candidates, **kwargs):
+        from app.schemas import ScoredCandidate
+
+        return [
+            ScoredCandidate(
+                candidate=c,
+                relevance=5,
+                maturity=5,
+                accessibility=5,
+                freshness=5,
+                completeness=5,
+                notes="скоринг подменён — предмет теста не он",
+            )
+            for c in candidates
+        ]
+
+    monkeypatch.setattr("app.pipeline.stages.extract_candidates", _extract_fails)
+    monkeypatch.setattr("app.pipeline.stages.score_candidates", _score_neutral)
+
+    with respx.mock:
+        _mock_search_ok(url="https://university.example.org/news/winners", title="Заметка об итогах хакатона")
+
+        module = _load_probe()
+        code = await module.probe_contest("формулировка")
+
+    out = capsys.readouterr().out
+    get_settings.cache_clear()
+
+    assert code == 0
+    assert "extractor: стадия не удалась" in out
+    assert "беру разбор адаптера" in out
+    assert "кандидатов после нормализации: 1" in out
+    assert "стоимость вызовов" in out
     assert "unit-test-key" not in out
 
 

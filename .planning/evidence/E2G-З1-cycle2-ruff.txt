@@ -1,0 +1,10 @@
+Задача: Э2-Г / З-1, цикл 2 — фикс живого дефекта extractor
+Команда 1: .venv\Scripts\ruff.exe check .
+Команда 2: .venv\Scripts\ruff.exe format --check .
+Дата: 2026-08-21
+
+$ ruff check .
+All checks passed!
+
+$ ruff format --check .
+113 files already formatted

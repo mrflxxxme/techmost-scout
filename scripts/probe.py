@@ -224,6 +224,20 @@ async def probe_contest(text: str, lang: str = "ru") -> int:
     вызова интейка: сама проба — это проверка `--contest`, а не проверка
     интейка (для неё есть отдельный режим `--intake`), и лишний платный вызов
     не отвечал бы на вопрос, ради которого проба заводится.
+
+    Отказ стадии extractor проба переживает ровно так же, как продукт
+    (`orchestrator.ScoutPipeline._extract`): исчерпанный лимит расхода
+    (`CostLimitExceededError`) — команда «стоп тратить», уходит наружу; любая
+    другая ошибка модели (в том числе `LLMError`, когда ответ не сходится со
+    схемой `ExtractedBatch`) — деградация стадии, а не отказ пробы целиком:
+    берём разбор адаптера и печатаем причину. Живой прогон на боевых ключах
+    (цикл 2 верификации) уронил пробу целиком там, где продукт устоял бы, —
+    это и есть дефект, который правит эта ветка.
+
+    Стоимость вызовов печатается в `finally` (РЕШ-82): расход называется
+    после КАЖДОГО запуска, включая испорченный любым исключением, а не только
+    из счастливой ветки — иначе учёт стирается вместе с прогоном ровно там,
+    где он нужнее всего.
     """
     import httpx
 
@@ -243,55 +257,63 @@ async def probe_contest(text: str, lang: str = "ru") -> int:
         rationale="проба scripts/probe.py --contest",
     )
 
-    async with httpx.AsyncClient(
-        timeout=settings.search_timeout_seconds,
-        headers={"User-Agent": f"TechMostScout/1.0 (mailto:{settings.crossref_mailto})"},
-        follow_redirects=True,
-    ) as client:
-        adapters = build_adapters(client, settings)
-        adapter = next((a for a in adapters if isinstance(a, YandexSearchAdapter)), None)
-        if adapter is None:
-            print("yandex_search недоступен: нет ключа YANDEX_SEARCH_API_KEY или каталога YANDEX_CATALOG_ID")
-            _print_contest_summary([], None)
-            print(f"стоимость вызовов: {router.cost.spent_rub:.4f} ₽")
-            return 1
-
-        found, raw = await adapter.search_raw(query, limit=20)
-
-    if raw:
-        # Сырая выдача уже оплачена этим же вызовом; extractor нормализует её
-        # моделью (Э2-5) — второй раз к Яндексу проба не ходит (Р-8 плана).
-        found = await extract_candidates(SourceType.CONTEST, adapter.name, raw, router)
-
-    print(f"кандидатов после нормализации: {len(found)}")
-
-    if not found:
-        _print_contest_summary([], None)
-        print(f"стоимость вызовов: {router.cost.spent_rub:.4f} ₽")
-        return 0
-
-    brief = Brief(industry="проба scripts/probe.py --contest", task_summary=text)
     try:
-        scored = await score_candidates(router, brief, found)
-    except CostLimitExceededError as exc:
-        print(f"скоринг остановлен стоп-краном по расходу: {exc}")
-        _print_contest_summary(found, None)
-        print(f"стоимость вызовов: {router.cost.spent_rub:.4f} ₽")
+        async with httpx.AsyncClient(
+            timeout=settings.search_timeout_seconds,
+            headers={"User-Agent": f"TechMostScout/1.0 (mailto:{settings.crossref_mailto})"},
+            follow_redirects=True,
+        ) as client:
+            adapters = build_adapters(client, settings)
+            adapter = next((a for a in adapters if isinstance(a, YandexSearchAdapter)), None)
+            if adapter is None:
+                print("yandex_search недоступен: нет ключа YANDEX_SEARCH_API_KEY или каталога YANDEX_CATALOG_ID")
+                _print_contest_summary([], None)
+                return 1
+
+            found, raw = await adapter.search_raw(query, limit=20)
+
+        if raw:
+            # Сырая выдача уже оплачена этим же вызовом; extractor нормализует
+            # её моделью (Э2-5) — второй раз к Яндексу проба не ходит (Р-8
+            # плана). Разбор адаптера сохраняется как откат: та же деградация,
+            # что и в `orchestrator._extract`.
+            parsed = found
+            try:
+                found = await extract_candidates(SourceType.CONTEST, adapter.name, raw, router)
+            except CostLimitExceededError:
+                raise
+            except Exception as exc:
+                print(f"extractor: стадия не удалась ({exc}) — беру разбор адаптера, кандидатов {len(parsed)}")
+                found = parsed
+
+        print(f"кандидатов после нормализации: {len(found)}")
+
+        if not found:
+            _print_contest_summary([], None)
+            return 0
+
+        brief = Brief(industry="проба scripts/probe.py --contest", task_summary=text)
+        try:
+            scored = await score_candidates(router, brief, found)
+        except CostLimitExceededError as exc:
+            print(f"скоринг остановлен стоп-краном по расходу: {exc}")
+            _print_contest_summary(found, None)
+            return 0
+
+        for item in scored:
+            print(f"- {item.candidate.title}")
+            print(f"  узел адреса: {item.candidate.url.host}")
+            print(f"  org: {item.candidate.org or 'нет'}")
+            print(
+                f"  оценки: relevance={item.relevance} maturity={item.maturity} "
+                f"accessibility={item.accessibility} freshness={item.freshness} completeness={item.completeness}"
+            )
+            print(f"  notes: {item.notes}")
+
+        _print_contest_summary(found, scored)
         return 0
-
-    for item in scored:
-        print(f"- {item.candidate.title}")
-        print(f"  узел адреса: {item.candidate.url.host}")
-        print(f"  org: {item.candidate.org or 'нет'}")
-        print(
-            f"  оценки: relevance={item.relevance} maturity={item.maturity} "
-            f"accessibility={item.accessibility} freshness={item.freshness} completeness={item.completeness}"
-        )
-        print(f"  notes: {item.notes}")
-
-    _print_contest_summary(found, scored)
-    print(f"стоимость вызовов: {router.cost.spent_rub:.4f} ₽")
-    return 0
+    finally:
+        print(f"стоимость вызовов: {router.cost.spent_rub:.4f} ₽")
 
 
 def main(argv: list[str] | None = None) -> int:
