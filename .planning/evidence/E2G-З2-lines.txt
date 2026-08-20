@@ -1,0 +1,29 @@
+Задача З-2 — подсчёт строк по backend/app/pipeline/ после дробления stages.py.
+Команда: python -c "print(len(open(path, encoding='utf-8').readlines()))" на
+каждый файл каталога (тот же способ подсчёта, что использует
+tests/test_pipeline_layout.py — len(text.splitlines())).
+
+  227 cards.py
+  192 constraints_guard.py   (не тронут задачей — не под лимитом критерия)
+  244 extraction.py
+   81 intake.py
+ 1132 orchestrator.py        (не тронут задачей — не под лимитом критерия)
+  338 persistence.py         (не тронут задачей — не под лимитом критерия)
+  251 planning.py
+  156 prompting.py
+  367 scoring.py
+  125 selection.py
+  120 stages.py              (лимит 120 — ровно на границе)
+   89 summary.py
+    5 __init__.py
+
+Итог: все восемь новых модулей (cards, extraction, intake, planning,
+prompting, scoring, selection, summary) — от 81 до 367 строк, ниже общего
+лимита 500. Фасад stages.py — 120 строк, ровно на границе частного лимита
+120 (задача разрешает "не длиннее 120").
+
+pytest tests/test_pipeline_layout.py -v:
+tests/test_pipeline_layout.py::test_pipeline_modules_stay_within_line_limit PASSED
+tests/test_pipeline_layout.py::test_facade_reexports_required_names PASSED
+tests/test_pipeline_layout.py::test_stages_module_has_no_definitions PASSED
+3 passed in 0.25s

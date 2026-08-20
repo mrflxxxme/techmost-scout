@@ -1,0 +1,31 @@
+Задача З-2 - линтер, границы дифф, целостность фасада.
+
+1. ruff check . (весь репозиторий):
+All checks passed!
+
+2. ruff format --check . (весь репозиторий):
+113 files already formatted
+
+3. Границы: git diff --name-only <база>..HEAD -- tests/
+tests/test_pipeline_layout.py
+
+4. Границы: git diff --name-only <база>..HEAD -- backend/ (весь backend/ -
+   изменения только внутри backend/app/pipeline/, ни cli.py, ни
+   orchestrator.py, ни persistence.py, ни constraints_guard.py):
+backend/app/pipeline/cards.py
+backend/app/pipeline/extraction.py
+backend/app/pipeline/intake.py
+backend/app/pipeline/planning.py
+backend/app/pipeline/prompting.py
+backend/app/pipeline/scoring.py
+backend/app/pipeline/selection.py
+backend/app/pipeline/stages.py
+backend/app/pipeline/summary.py
+
+5. python -c "import app.pipeline.stages":
+import app.pipeline.stages OK
+
+6. Фасад держит минимальный набор публичных имён (включая owner_answers_block
+   и приватные _has_neutral_score/_neutral_scores/_model_relevance, на
+   которые опираются существующие тесты):
+missing: []
