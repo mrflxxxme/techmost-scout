@@ -1,0 +1,75 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z3
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 10 items
+
+tests/test_plan_types.py::test_каждый_тип_промпта_обслуживается_рабочим_адаптером PASSED [ 10%]
+tests/test_plan_types.py::test_каждый_рабочий_адаптер_достижим_типом_из_промпта PASSED [ 20%]
+tests/test_plan_types.py::test_типы_промпта_подмножество_source_type PASSED [ 30%]
+tests/test_plan_types.py::test_патентный_запрос_один_и_на_русском PASSED [ 40%]
+tests/test_plan_types.py::test_якоря_итогов_только_у_второй_конкурсной_формулировки_правила_8 FAILED [ 50%]
+tests/test_plan_types.py::test_объём_плана_повторного_поиска_совпадает_с_планировщиком PASSED [ 60%]
+tests/test_plan_types.py::test_патент_достижим_обоими_патентными_адаптерами PASSED [ 70%]
+tests/test_plan_types.py::test_версия_planner_совпадает_с_changelog PASSED [ 80%]
+tests/test_plan_types.py::test_страж_видит_правило_разорванное_переносом PASSED [ 90%]
+tests/test_plan_types.py::test_фикстура_settings_кладёт_ключи_через_окружение PASSED [100%]
+
+================================== FAILURES ===================================
+_____ test_якоря_итогов_только_у_второй_конкурсной_формулировки_правила_8 _____
+
+    def test_якоря_итогов_только_у_второй_конкурсной_формулировки_правила_8():
+        """Страж связи «якоря кода <-> якоря правила 8» (постановка задачи З-3,
+        критерий 7): каждый якорь из CONTEST_OUTCOME_MARKERS обязан стоять в
+        описании формулировки "итоги" и не должен стоять в описании формулировки
+        "площадки" - иначе она случайно потеряет сужение по площадкам (мутация
+        (д): "проект команды" оставлен в описании первой формулировки)."""
+        from app.search.yandex_search import CONTEST_OUTCOME_MARKERS
+    
+        # Состав сверяется с жёстко заданным списком, а не выводится из самого
+        # кортежа: иначе якорь, удалённый мутацией из CONTEST_OUTCOME_MARKERS,
+        # просто исчез бы из проверяемого набора вместе с собой (тот же дефект,
+        # что нашёлся в test_search_yandex.py при прогоне мутации (а)).
+        expected_markers = {"победител", "призёр", "призер", "итоги хакатона", "проект команды"}
+        assert set(CONTEST_OUTCOME_MARKERS) == expected_markers, (
+            "app.search.yandex_search.CONTEST_OUTCOME_MARKERS разошёлся с составом РЕШ-117"
+        )
+    
+        text = load_prompt("planner")
+        rule_8 = re.search(r"^8\.\s.*?(?=^\d+\.\s)", text, re.MULTILINE | re.DOTALL)
+        assert rule_8, "planner.md: не найдено правило 8"
+        body = rule_8.group(0)
+    
+        split_marker = "формулировка «итоги»"
+        assert split_marker in body, "planner.md: правило 8 не описывает формулировку «итоги» отдельно"
+        split_at = body.index(split_marker)
+        narrowed_description = body[:split_at]
+        outcome_description = body[split_at:]
+    
+        for anchor in expected_markers:
+            assert anchor in outcome_description, (
+                f"planner.md: якорь «{anchor}» из CONTEST_OUTCOME_MARKERS не описан у формулировки «итоги»"
+            )
+>           assert anchor not in narrowed_description, (
+                f"planner.md: якорь «{anchor}» остался в описании формулировки «площадки» - "
+                "она случайно потеряет сужение по площадкам"
+            )
+E           AssertionError: planner.md: якорь «проект команды» остался в описании формулировки «площадки» - она случайно потеряет сужение по площадкам
+E           assert 'проект команды' not in '8. Учитывай... `contest`, '
+E             
+E             'проект команды' is contained here:
+E               8. Учитывай специфику типа источника:
+E                  - `publication` — метод, механизм, измеряемый эффект, тип объекта исследования;
+E                  - `web` — сайты вузов, центров трансфера технологий (ЦТТ), лабораторий, реестры поддержанных
+E                    проектов, страницы с описанием разработок; ищи то, что не индексируют академические источники:
+E                    пилотные внедрения, отчёты по НИОКР, новости о разработке;...
+E             
+E             ...Full output truncated (13 lines hidden), use '-vv' to show
+
+tests\test_plan_types.py:156: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_plan_types.py::test_якоря_итогов_только_у_второй_конкурсной_формулировки_правила_8
+========================= 1 failed, 9 passed in 0.34s =========================

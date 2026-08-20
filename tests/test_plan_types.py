@@ -116,7 +116,47 @@ def test_патентный_запрос_один_и_на_русском():
     # модель имела право отдать шесть формулировок, законно выбросив конкурсную:
     # диапазон соблюдён, число типов не проверяет никто. Замок сторожит новое
     # число так же жёстко, как сторожил старое.
-    assert "от 7 до 9" in body, "planner.md: правило 2 не обновило общий объём плана под патентный запрос"
+    assert "от 8 до 10" in body, (
+        "planner.md: правило 2 не обновило общий объём плана под вторую конкурсную формулировку"
+    )
+
+
+def test_якоря_итогов_только_у_второй_конкурсной_формулировки_правила_8():
+    """Страж связи «якоря кода <-> якоря правила 8» (постановка задачи З-3,
+    критерий 7): каждый якорь из CONTEST_OUTCOME_MARKERS обязан стоять в
+    описании формулировки "итоги" и не должен стоять в описании формулировки
+    "площадки" - иначе она случайно потеряет сужение по площадкам (мутация
+    (д): "проект команды" оставлен в описании первой формулировки)."""
+    from app.search.yandex_search import CONTEST_OUTCOME_MARKERS
+
+    # Состав сверяется с жёстко заданным списком, а не выводится из самого
+    # кортежа: иначе якорь, удалённый мутацией из CONTEST_OUTCOME_MARKERS,
+    # просто исчез бы из проверяемого набора вместе с собой (тот же дефект,
+    # что нашёлся в test_search_yandex.py при прогоне мутации (а)).
+    expected_markers = {"победител", "призёр", "призер", "итоги хакатона", "проект команды"}
+    assert set(CONTEST_OUTCOME_MARKERS) == expected_markers, (
+        "app.search.yandex_search.CONTEST_OUTCOME_MARKERS разошёлся с составом РЕШ-117"
+    )
+
+    text = load_prompt("planner")
+    rule_8 = re.search(r"^8\.\s.*?(?=^\d+\.\s)", text, re.MULTILINE | re.DOTALL)
+    assert rule_8, "planner.md: не найдено правило 8"
+    body = rule_8.group(0)
+
+    split_marker = "формулировка «итоги»"
+    assert split_marker in body, "planner.md: правило 8 не описывает формулировку «итоги» отдельно"
+    split_at = body.index(split_marker)
+    narrowed_description = body[:split_at]
+    outcome_description = body[split_at:]
+
+    for anchor in expected_markers:
+        assert anchor in outcome_description, (
+            f"planner.md: якорь «{anchor}» из CONTEST_OUTCOME_MARKERS не описан у формулировки «итоги»"
+        )
+        assert anchor not in narrowed_description, (
+            f"planner.md: якорь «{anchor}» остался в описании формулировки «площадки» - "
+            "она случайно потеряет сужение по площадкам"
+        )
 
 
 def test_объём_плана_повторного_поиска_совпадает_с_планировщиком():

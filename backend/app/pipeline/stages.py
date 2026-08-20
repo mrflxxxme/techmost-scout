@@ -32,10 +32,12 @@ from app.schemas import (
     ReportSummary,
     ScoredCandidate,
     SearchPlan,
+    SearchQuery,
     SolutionCard,
     SourceType,
 )
 from app.search.base import normalize_url
+from app.search.yandex_search import has_contest_outcome_marker
 
 log = logging.getLogger(__name__)
 
@@ -269,7 +271,7 @@ async def refine_brief(
 # ── 2. План поиска ──────────────────────────────────────────────────────────
 async def plan_search(router: LLMRouter, brief: Brief) -> SearchPlan:
     """Превратить бриф в набор поисковых формулировок на двух языках."""
-    return await router.complete_json(
+    plan = await router.complete_json(
         "planner",
         [
             Message(role="system", content=render_prompt("planner", BRIEF_JSON=brief.model_dump_json(indent=2))),
@@ -280,6 +282,63 @@ async def plan_search(router: LLMRouter, brief: Brief) -> SearchPlan:
         # стандартных 4096 токенов на это не хватает.
         max_tokens=8000,
     )
+    return normalize_contest_queries(plan, brief)
+
+
+#: Признак «модель не вернула нужную конкурсную формулировку» — печатается в
+#: лог при каждом срабатывании нормализации, тем же приёмом, что и страховка
+#: requirement_checks (РЕШ-122): молчаливая подмена превратила бы дефект
+#: промпта в вечный, а видимая — в число, которое можно предъявить.
+_CONTEST_NARROWED_RATIONALE = (
+    "код-нормализация плана (РЕШ-121): формулировка «площадки» достроена, модель её не вернула"
+)
+_CONTEST_OUTCOME_RATIONALE = "код-нормализация плана (РЕШ-121): формулировка «итоги» достроена, модель её не вернула"
+
+
+def normalize_contest_queries(plan: SearchPlan, brief: Brief) -> SearchPlan:
+    """Код-гарантия РЕШ-121: после этой функции в плане ровно две формулировки
+    типа `contest` — одна без якорей итогов (уйдёт с сужением по площадкам,
+    `_with_site_filter`), одна с ними (уйдёт открытым вебом,
+    `has_contest_outcome_marker`).
+
+    План строит модель, а РЕШ-109 запрещает считать её послушание гарантией:
+    лишние конкурсные формулировки отбрасываются, недостающая достраивается
+    кодом из `brief.keywords_ru`. Вызывается в конце `plan_search` и
+    `replan_search`, ДО записи плана в `search_plans` (РЕШ-83) — прогон по
+    сохранённому плану (`--plan-id`) воспроизводит ровно то, что было
+    отправлено, а не пересчитывает нормализацию заново при каждом повторе.
+    """
+    contest = [q for q in plan.queries if q.source_type is SourceType.CONTEST]
+    other = [q for q in plan.queries if q.source_type is not SourceType.CONTEST]
+
+    narrowed = next((q for q in contest if not has_contest_outcome_marker(q.text)), None)
+    outcome = next((q for q in contest if has_contest_outcome_marker(q.text)), None)
+
+    if narrowed is None:
+        log.info("normalize_contest_queries: формулировка «площадки» достроена кодом")
+        narrowed = _default_contest_query(brief, outcome=False)
+    if outcome is None:
+        log.info("normalize_contest_queries: формулировка «итоги» достроена кодом")
+        outcome = _default_contest_query(brief, outcome=True)
+
+    return plan.model_copy(update={"queries": [*other, narrowed, outcome]})
+
+
+def _default_contest_query(brief: Brief, *, outcome: bool) -> SearchQuery:
+    """Достроить недостающую конкурсную формулировку кодом (РЕШ-121).
+
+    Текст собирается из `brief.keywords_ru`, а не заглушкой без темы задачи:
+    без ключевых слов формулировка искала бы вообще ничего не значащий текст
+    «хакатон итоги».
+    """
+    keyword = brief.keywords_ru[0] if brief.keywords_ru else brief.industry
+    if outcome:
+        text = f"итоги хакатона победитель проект команды {keyword}"
+        rationale = _CONTEST_OUTCOME_RATIONALE
+    else:
+        text = f"хакатон конкурс решение команды {keyword}"
+        rationale = _CONTEST_NARROWED_RATIONALE
+    return SearchQuery(text=text, source_type=SourceType.CONTEST, lang="ru", rationale=rationale)
 
 
 # ── 2а. Разбор сырой выдачи моделью (extractor) ─────────────────────────────
@@ -890,7 +949,7 @@ async def replan_search(router: LLMRouter, brief: Brief, plan: SearchPlan, score
     переписывать вход в ответ её не просят (грабля §0.1 п. 2 SPEC) — на
     кандидатов она ссылается номерами списка.
     """
-    return await router.complete_json(
+    new_plan = await router.complete_json(
         "replan",
         [
             Message(
@@ -910,6 +969,10 @@ async def replan_search(router: LLMRouter, brief: Brief, plan: SearchPlan, score
         # промахе первой выдачи вдобавок к нему.
         max_tokens=8000,
     )
+    # Та же код-гарантия РЕШ-121, что и у первого прохода (мутация (г) плана
+    # задачи): второй проход строит собственный план тем же составом типов и
+    # обязан пройти ту же нормализацию, иначе она бьёт только в plan_search.
+    return normalize_contest_queries(new_plan, brief)
 
 
 def select_top(scored: list[ScoredCandidate], *, limit: int, relevance_min: int | None = None) -> list[ScoredCandidate]:

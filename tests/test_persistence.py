@@ -701,7 +701,14 @@ async def test_successful_run_persists_exactly_one_plan_row(settings, brief, fak
     assert len(rows) == 1, "один проход — одна строка плана"
     assert rows[0].pass_no == 1
     saved = SearchPlan.model_validate(rows[0].queries)
-    assert [query.text for query in saved.queries] == ["катализатор гидроочистки серостойкий"]
+    # З-3 (РЕШ-121): plan_search гарантирует ровно две конкурсные формулировки
+    # кодом, а `_PLAN_JSON` их не содержит — normalize_contest_queries
+    # достраивает обе из `brief.keywords_ru` до записи плана в search_plans.
+    assert [query.text for query in saved.queries] == [
+        "катализатор гидроочистки серостойкий",
+        "хакатон конкурс решение команды катализатор гидроочистки",
+        "итоги хакатона победитель проект команды катализатор гидроочистки",
+    ]
 
 
 async def test_two_passes_persist_two_rows_with_their_own_pass_no(db_session_factory):

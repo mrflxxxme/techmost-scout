@@ -21,7 +21,15 @@ from app.pipeline.orchestrator import ScoutPipeline
 from app.schemas import SearchPlan, SearchQuery, SourceType
 from app.search import build_adapters
 from app.search.base import SearchAdapter, SearchError
-from app.search.yandex_search import CONTEST_SITES, GRANT_SITES, OPERATION_URL, SEARCH_ASYNC_URL, YandexSearchAdapter
+from app.search.yandex_search import (
+    CONTEST_OUTCOME_MARKERS,
+    CONTEST_SITES,
+    GRANT_SITES,
+    OPERATION_URL,
+    SEARCH_ASYNC_URL,
+    YandexSearchAdapter,
+    has_contest_outcome_marker,
+)
 
 
 def _xml(*docs: str) -> str:
@@ -318,6 +326,54 @@ async def test_страница_из_двух_поисковиков_склеи�
 
 def _contest_query(text: str = "хакатон решение команды катализатор") -> SearchQuery:
     return _query(text=text, lang="ru", source_type=SourceType.CONTEST)
+
+
+@respx.mock
+async def test_конкурсная_формулировка_с_якорем_итогов_уходит_без_сужения(make_adapter):
+    """Критерий 1 (РЕШ-107, РЕШ-117): формулировка с якорем итогов ищет
+    опубликованный разбор победы, а не саму площадку, и обязана уйти в
+    Яндекс БЕЗ `site:` - иначе выдача снова свелась бы к рекламным страницам
+    площадок, из-за которых конкурсная очередь дала 0 карточек при 20
+    кандидатах на прогон (РЕШ-107)."""
+    route = respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
+    respx.get(url__startswith=OPERATION_URL).mock(
+        return_value=httpx.Response(200, json=_operation_done(_xml(_doc("https://university.example.org/news/1"))))
+    )
+    async with httpx.AsyncClient() as client:
+        await make_adapter(client).search(_contest_query("итоги хакатона победитель диагностика УЗИ"), limit=5)
+
+    sent = json.loads(route.calls[0].request.content)["query"]["queryText"]
+    assert "site:" not in sent, "формулировка с якорем итогов не должна сужаться по площадкам"
+    assert sent == "итоги хакатона победитель диагностика УЗИ", "текст формулировки не должен меняться"
+
+
+def test_contest_outcome_markers_состав_дословно_по_реш_117():
+    """Мутация (а): якорь, убранный из CONTEST_OUTCOME_MARKERS, обязан ронять
+    именно этот тест. Состав сверяется с жёстко заданным списком, а не через
+    параметризацию по самому кортежу: `@pytest.mark.parametrize("marker",
+    CONTEST_OUTCOME_MARKERS)` собирает список параметров уже ИЗ изменённого
+    кортежа на этапе сбора тестов, поэтому удалённый якорь не даёт ни одного
+    провалившегося случая — такая проверка ничего не поймает."""
+    assert set(CONTEST_OUTCOME_MARKERS) == {
+        "победител",
+        "призёр",
+        "призер",
+        "итоги хакатона",
+        "проект команды",
+    }
+
+
+@pytest.mark.parametrize("marker", ["победител", "призёр", "призер", "итоги хакатона", "проект команды"])
+def test_has_contest_outcome_marker_ловит_каждый_якорь_по_отдельности(marker):
+    """Мутация (а) постановки задачи: якорь, убранный из CONTEST_OUTCOME_MARKERS,
+    обязан ронять именно этот тест - по одному случаю на каждый якорь. Список
+    якорей задан дословно, а не параметризацией по самому кортежу (см. докстроку
+    `test_contest_outcome_markers_состав_дословно_по_реш_117`)."""
+    assert has_contest_outcome_marker(f"текст формулировки с якорем {marker} внутри") is True
+
+
+def test_has_contest_outcome_marker_false_без_единого_якоря():
+    assert has_contest_outcome_marker("хакатон решение команды диагностика УЗИ") is False
 
 
 @respx.mock
