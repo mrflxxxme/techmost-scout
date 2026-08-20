@@ -1,0 +1,61 @@
+Задача: Э2-Г / З-1, цикл 2 — исправление дефекта из живого прогона
+(app.llm.base.LLMError валит пробу --contest целиком на стадии extractor).
+
+Мутация: убран перехват LLMError (и вообще любого Exception) вокруг вызова
+extract_candidates в probe_contest — оставлен голый вызов без try/except,
+эквивалент состояния ДО правки цикла 2.
+
+Diff мутации (правка на месте, снята сразу после прогона):
+-           parsed = found
+-           try:
+-               found = await extract_candidates(SourceType.CONTEST, adapter.name, raw, router)
+-           except CostLimitExceededError:
+-               raise
+-           except Exception as exc:
+-               print(f"extractor: стадия не удалась ({exc}) — беру разбор адаптера, кандидатов {len(parsed)}")
+-               found = parsed
++           parsed = found
++           found = await extract_candidates(SourceType.CONTEST, adapter.name, raw, router)  # мутация: без перехвата
+
+Команда: .venv\Scripts\python.exe -m pytest tests\test_probe.py -v
+
+Факт (дословно):
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+collecting ... collected 10 items
+
+tests/test_probe.py::test_help_код_возврата_ноль_и_называет_оба_режима PASSED [ 10%]
+tests/test_probe.py::test_импорт_не_делает_сетевых_вызовов PASSED        [ 20%]
+tests/test_probe.py::test_режим_поиска_печатает_суженный_запрос_для_конкурса PASSED [ 30%]
+tests/test_probe.py::test_режим_поиска_без_сужения_для_web_без_грантовых_маркеров PASSED [ 40%]
+tests/test_probe.py::test_режим_поиска_без_ключа_не_падает_и_сообщает_причину PASSED [ 50%]
+tests/test_probe.py::test_режим_контеста_печатает_пять_оценок_notes_и_сводку PASSED [ 60%]
+tests/test_probe.py::test_режим_контеста_сводка_всегда_печатается_для_пустой_выдачи PASSED [ 70%]
+tests/test_probe.py::test_режим_контеста_сводка_при_отказавшем_скоринге PASSED [ 80%]
+tests/test_probe.py::test_режим_контеста_отказ_extractor_не_роняет_пробу_и_печатает_расход FAILED [ 90%]
+tests/test_probe.py::test_продукт_не_ссылается_на_скрипт_пробы PASSED    [100%]
+
+================================== FAILURES ===================================
+____ test_режим_контеста_отказ_extractor_не_роняет_пробу_и_печатает_расход ____
+...
+scripts\probe.py:281: in probe_contest
+    found = await extract_candidates(SourceType.CONTEST, adapter.name, raw, router)  # мутация: без перехвата
+...
+E       app.llm.base.LLMError: router: ответ не сходится со схемой ExtractedBatch: input_type=list
+
+tests\test_probe.py:373: LLMError
+---------------------------- Captured stdout call -----------------------------
+стоимость вызовов: 0.0000 ₽
+=========================== short test summary info ===========================
+FAILED tests/test_probe.py::test_режим_контеста_отказ_extractor_не_роняет_пробу_и_печатает_расход
+========================= 1 failed, 9 passed in 4.43s =========================
+
+Мутация убила ровно ожидаемый тест — прицельного прогона достаточно (РЕШ-135),
+полный набор не требовался. Дополнительно видно из "Captured stdout call": даже
+когда LLMError уходит НЕПОЙМАННЫМ из probe_contest и тест падает, строка
+"стоимость вызовов: 0.0000 ₽" всё равно напечатана — это прямое доказательство,
+что печать расхода в finally переживает и непредвиденное исключение, а не
+только предусмотренные ветки (второе требование цикла 2, РЕШ-82).
+
+Мутация возвращена сразу после прогона; git status --short подтвердил, что
+изменены только scripts/probe.py и tests/test_probe.py.
