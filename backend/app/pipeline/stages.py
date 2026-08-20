@@ -302,7 +302,20 @@ _CONTEST_OUTCOME_RATIONALE = "код-нормализация плана (РЕШ
 #: `search_plans`, а `load_search_plan` потом не мог прочитать его через ту же
 #: схему (`SearchPlan.model_validate`). Число берётся отсюда, чтобы правка
 #: потолка в схеме не разошлась с этим местом молча.
-_MAX_PLAN_QUERIES = next(m.max_length for m in SearchPlan.model_fields["queries"].metadata if isinstance(m, MaxLen))
+#: Совет повторной проверки пост-аудита, взят оркестратором: без значения по
+#: умолчанию `next` бросает `StopIteration` прямо на импорте модуля — если
+#: pydantic изменит представление метаданных, падение будет без внятной
+#: причины и в неожиданном месте. Явный отказ называет, что именно потеряно.
+_max_plan_queries = next(
+    (m.max_length for m in SearchPlan.model_fields["queries"].metadata if isinstance(m, MaxLen)),
+    None,
+)
+if _max_plan_queries is None:  # pragma: no cover — защита от молчаливой потери потолка
+    raise RuntimeError(
+        "потолок SearchPlan.queries не объявлен через MaxLen: нормализация плана осталась бы без границы, "
+        "а план сверх потолка пишется в search_plans и потом не читается той же схемой"
+    )
+_MAX_PLAN_QUERIES = _max_plan_queries
 
 
 def normalize_contest_queries(plan: SearchPlan, brief: Brief) -> SearchPlan:

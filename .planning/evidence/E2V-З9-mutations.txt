@@ -1,0 +1,116 @@
+Задача З-9: три не блокирующие правки по повторной проверке пост-аудита волны Э2-В.
+Мутации ставились на рабочем дереве .claude/worktrees/E2V-Z9, откатывались вручную сразу
+после снятия вывода; git status --short проверялся до и после каждой мутации.
+
+=== Правка 1: tests/test_paid_demand_two_passes.py второй проход через stages.replan_search ===
+
+До правки: файл проверял второй проход, вызывая stages.strip_contest_queries прямо в теле
+теста — мутация "снять strip_contest_queries из replan_search" тест не роняла (по отчёту
+аудита: tests/test_paid_demand_two_passes.py 1 passed, мутация пережила).
+
+После правки, без мутации:
+$ pytest tests/test_paid_demand_two_passes.py -v
+tests/test_paid_demand_two_passes.py::test_обе_конкурсные_формулировки_первого_прохода_доезжают_а_спрос_не_превышает_предел PASSED
+1 passed in 3.30s
+
+Мутация M1: в backend/app/pipeline/stages.py, функция replan_search, строка
+"return strip_contest_queries(new_plan)" заменена на "return new_plan".
+
+$ pytest tests/test_paid_demand_two_passes.py -v
+FAILED tests/test_paid_demand_two_passes.py::test_обе_конкурсные_формулировки_первого_прохода_доезжают_а_спрос_не_превышает_предел
+AssertionError: спрос на платные запросы обязан остаться в пределах max_queries = 6
+assert 7 == 6
+ +  where 7 = <app.search.yandex_search.YandexSearchAdapter object at 0x...>.queries_used
+1 failed in 3.99s
+
+$ pytest tests/test_contest_queries.py -q
+FAILED tests/test_contest_queries.py::test_replan_search_срезает_конкурсные_если_модель_их_всё_же_вернула
+1 failed, 10 passed in 0.46s
+
+Итог: мутация M1 теперь роняет ИМЕННО tests/test_paid_demand_two_passes.py (запущенный
+отдельно), как требует критерий приёмки. Мутация откачена, git diff пуст на stages.py.
+
+=== Правка 2: накопление _limit_skipped_total по обоим проходам ===
+
+Новые тесты в tests/test_pipeline_second_pass.py:
+- test_платный_предел_исчерпан_только_на_первом_проходе_оговорка_видна
+- test_платный_предел_исчерпан_на_обоих_проходах_оговорка_не_задваивается
+
+Без мутации:
+$ pytest tests/test_pipeline_second_pass.py -q
+16 passed in 11.57s
+
+Мутация M3: в backend/app/pipeline/orchestrator.py, метод gather_candidates, строка
+"self._limit_skipped_total += limit_skipped" заменена на
+"self._limit_skipped_total = limit_skipped".
+
+$ pytest tests/test_pipeline_second_pass.py -k "исчерпан_только_на_первом or исчерпан_на_обоих" -v
+FAILED tests/test_pipeline_second_pass.py::test_платный_предел_исчерпан_только_на_первом_проходе_оговорка_видна
+AssertionError: предел исчерпан на первом проходе — оговорка обязана дойти до отчёта, а
+второй, чистый проход не имеет права её стереть
+assert 0 == 1
+ +  where 0 = <built-in method count of list object at 0x...>(PAID_LIMIT_NOTICE)
+1 failed, 1 passed in 1.52s
+
+$ pytest tests/test_pipeline_second_pass.py -q
+1 failed, 15 passed in 11.57s
+
+Итог: мутация M3 роняет ровно новый тест
+test_платный_предел_исчерпан_только_на_первом_проходе_оговорка_видна, как требует критерий
+приёмки. Второй новый тест (оба прохода) мутацию не ловит — оговорка печатается ровно один
+раз в обоих случаях (total=1 при мутации против total=3 без неё, но признак в отчёте
+булев), это ожидаемо и разобрано в отчёте. Мутация откачена, git diff пуст.
+
+Заодно: поле SearchOutcome.limit_skipped (на проход, не total) удалено — ни один вызывающий
+код и ни один тест его не читали (grep "\.limit_skipped\b" по backend/ и tests/ — пусто).
+Решение: удалить, а не давать фиктивного потребителя — тот самый класс дефекта
+"украшение без потребителя", который ловит вся эта волна.
+
+=== Правка 3: prompts/replanner.md больше не просит контест на втором проходе ===
+
+Изменения: правила 3, 4, 9 replanner.md; схема ответа; "Неправильный ответ"; версия
+1.3 -> 1.4; запись в prompts/CHANGELOG.md; tests/test_plan_types.py — тест
+test_объём_плана_повторного_поиска_совпадает_с_планировщиком (требовавший ОДИНАКОВОГО
+объёма и наличия contest у обоих промптов — то самое требование, что держало дефект
+незамеченным) заменён на
+test_объём_плана_повторного_поиска_меньше_планировщика_ровно_на_конкурс.
+
+Без мутации (промпт после правки):
+$ pytest tests/test_plan_types.py -q
+10 passed in 0.26s
+
+Мутация (откат правил 3 и 4 replanner.md к состоянию ДО правки — модель снова просит
+contest, объём снова "от 8 до 10"):
+$ pytest tests/test_plan_types.py -v
+FAILED tests/test_plan_types.py::test_объём_плана_повторного_поиска_меньше_планировщика_ровно_на_конкурс
+AssertionError: replanner.md: правило 3 всё ещё упоминает конкурсный тип — второй проход
+не имеет права запрашивать его (РЕШ-126)
+assert 'contest' not in '3. Типы источников...`source_type` не используй.'
+'contest' is contained here:
+  3. Типы источников, для которых составляются запросы: `publication`, `web`, `showcase`,
+  `patent`, `contest`. Других значений в `source_type` не используй.
+1 failed, 9 passed in 0.35s
+
+Мутация откачена (восстановлен файл после правки), контрольный прогон:
+$ pytest tests/test_plan_types.py -q
+10 passed in 0.26s
+
+=== Сводные прогоны после всех трёх правок ===
+
+$ pytest -q
+641 passed, 1 warning in 185.84s   (639 базовых + 2 новых теста правки 2; сеть не звалась)
+
+$ ruff check .
+All checks passed!
+
+$ ruff format --check .
+104 files already formatted
+
+git status --short после всех правок и отката всех мутаций:
+ M backend/app/pipeline/orchestrator.py
+ M prompts/CHANGELOG.md
+ M prompts/replanner.md
+ M tests/test_paid_demand_two_passes.py
+ M tests/test_pipeline_second_pass.py
+ M tests/test_plan_types.py
+(backend/app/pipeline/stages.py тронут не был: git diff по нему пуст)

@@ -1,0 +1,14 @@
+pytest -q  (после трёх правок и отката всех мутаций, эталонный интерпретатор .venv)
+
+........................................................................ [ 78%]
+........................................................................ [ 89%]
+.................................................................        [100%]
+============================== warnings summary ===============================
+..\..\..\.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\KUklonskiy\techmost-scout\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+641 passed, 1 warning in 188.07s (0:03:08)
+
+[exited with code 0]

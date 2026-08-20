@@ -224,11 +224,6 @@ class SearchOutcome:
     #: иначе пробел не виден ни в отчёте, ни в журнале, ни в списке
     #: недоступных источников.
     problems: list[str] = field(default_factory=list)
-    #: Сколько формулировок источник не получил из-за исчерпанного платного
-    #: предела на прогон (РЕШ-127 п. 2). Отдельное число, а не подстрока в
-    #: `problems`: оговорка клиенту опознаётся по счётчику, а не по тексту
-    #: сообщения — текст поменяется, и проверка молча исчезнет.
-    limit_skipped: int = 0
 
 
 class ScoutPipeline:
@@ -386,7 +381,6 @@ class ScoutPipeline:
             hits_by_provider=hits_by_label,
             hits_by_name=hits_by_name,
             problems=problems,
-            limit_skipped=limit_skipped,
         )
 
     # ── Обогащение по DOI ───────────────────────────────────────────────────

@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
 import httpx
@@ -287,6 +287,28 @@ class _LimitReportingAdapter(_TwoPassAdapter):
         return drained
 
 
+class _LimitReportingBothPassesAdapter(_TwoPassAdapter):
+    """Платный предел исчерпан на КАЖДОМ проходе отдельно (пост-аудит РЕШ-126/127,
+    правка 2): первый вызов ``drain_limit_problems`` отдаёт пропуск первого
+    прохода, второй вызов — пропуск второго. `_LimitReportingAdapter` выше
+    умеет отдавать пропуск только один раз (на том проходе, что спросит
+    первым) — этой формы достаточно для дыры в стороже накопления
+    (`_limit_skipped_total`), но не для обратной проверки «предел исчерпан на
+    обоих проходах — оговорка не задваивается»."""
+
+    def __init__(self, *args, skipped_by_pass: list[int], **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._skipped_by_pass = list(skipped_by_pass)
+        self._drain_calls = 0
+
+    def drain_limit_problems(self) -> list[str]:
+        if self._drain_calls >= len(self._skipped_by_pass):
+            return []
+        count = self._skipped_by_pass[self._drain_calls]
+        self._drain_calls += 1
+        return [f"формулировка №{n} не отправлена: исчерпан платный предел" for n in range(count)]
+
+
 async def _run_pipeline(
     settings,
     brief,
@@ -298,17 +320,24 @@ async def _run_pipeline(
     second: list[int],
     fail_second: bool = False,
     limit_skipped: int | None = None,
+    adapter_factory: Callable[[httpx.AsyncClient], SearchAdapter] | None = None,
 ):
     """Полный прогон с заданным порогом второго прохода и двумя выдачами.
 
     `fail_second` — источник отказывает на формулировке второго плана.
     `limit_skipped` — источник сообщает о стольких формулировках, не
-    отправленных из-за исчерпанного платного предела (РЕШ-127 п. 2).
+    отправленных из-за исчерпанного платного предела (РЕШ-127 п. 2), один раз,
+    на том проходе, что спросит первым.
+    `adapter_factory` — свой адаптер вместо трёх встроенных вариантов (нужен
+    `_LimitReportingBothPassesAdapter`, у которого пропуск свой на каждом
+    проходе).
     """
     tuned = settings.model_copy(update={"second_pass_relevance_max": threshold})
     router = LLMRouter(tuned, providers={"deepseek": provider})
     async with httpx.AsyncClient() as client:
-        if limit_skipped is None:
+        if adapter_factory is not None:
+            adapter = adapter_factory(client)
+        elif limit_skipped is None:
             adapter = _TwoPassAdapter(client, first=first, second=second, fail_second=fail_second)
         else:
             adapter = _LimitReportingAdapter(
@@ -675,3 +704,65 @@ async def test_без_исчерпания_предела_оговорки_не�
 
     assert PAID_LIMIT_NOTICE not in report.summary.caveats
     assert PAID_LIMIT_NOTICE not in render_markdown(report)
+
+
+# ── Пост-аудит РЕШ-126/127 (правка 2): накопление счётчика по проходам ──────
+async def test_платный_предел_исчерпан_только_на_первом_проходе_оговорка_видна(settings, brief, db_session_factory):
+    """`_limit_skipped_total` копится по обоим проходам через `+=` — до этого
+    теста мутация `+=` -> `=` (обнуление на каждом проходе) переживала весь
+    набор: 639 passed. Здесь предел исчерпан только на ПЕРВОМ проходе
+    (`_LimitReportingAdapter` отдаёт пропуск ровно один раз, тому проходу, что
+    спросит первым — здесь это первый), второй проход чистый.
+
+    При `=` вместо `+=` второй, чистый вызов `gather_candidates`
+    (`limit_skipped = 0`) стирает накопленное на первом проходе — оговорка
+    исчезает из отчёта именно там, где предел действительно был исчерпан.
+    """
+    provider = _ScriptedProvider(_routes(first_relevance=4))
+    report = await _run_pipeline(
+        settings,
+        brief,
+        provider,
+        db_session_factory,
+        threshold=6,
+        first=list(range(1, 11)),
+        second=[1, 2, 3, 4, 5, 6, 11, 12, 13, 14],
+        limit_skipped=2,
+    )
+
+    from app.export.markdown import PAID_LIMIT_NOTICE
+
+    assert report.summary.caveats.count(PAID_LIMIT_NOTICE) == 1, (
+        "предел исчерпан на первом проходе — оговорка обязана дойти до отчёта, "
+        "а второй, чистый проход не имеет права её стереть"
+    )
+
+
+async def test_платный_предел_исчерпан_на_обоих_проходах_оговорка_не_задваивается(settings, brief, db_session_factory):
+    """Обратная сторона предыдущего теста: предел исчерпан на ОБОИХ проходах —
+    оговорка обязана остаться ровно одной записью в `caveats`, а не появиться
+    дважды (по разу на проход)."""
+    provider = _ScriptedProvider(_routes(first_relevance=4))
+
+    def factory(client: httpx.AsyncClient) -> SearchAdapter:
+        return _LimitReportingBothPassesAdapter(
+            client,
+            first=list(range(1, 11)),
+            second=[1, 2, 3, 4, 5, 6, 11, 12, 13, 14],
+            skipped_by_pass=[2, 1],
+        )
+
+    report = await _run_pipeline(
+        settings,
+        brief,
+        provider,
+        db_session_factory,
+        threshold=6,
+        first=list(range(1, 11)),
+        second=[1, 2, 3, 4, 5, 6, 11, 12, 13, 14],
+        adapter_factory=factory,
+    )
+
+    from app.export.markdown import PAID_LIMIT_NOTICE
+
+    assert report.summary.caveats.count(PAID_LIMIT_NOTICE) == 1, "оговорка не имеет права появиться дважды"
