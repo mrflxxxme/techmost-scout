@@ -1,0 +1,55 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z3
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 44 items
+
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[card_author] PASSED [  2%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[extractor] PASSED [  4%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[intake] PASSED [  6%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[planner] PASSED [  9%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[replanner] PASSED [ 11%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[scorer] PASSED [ 13%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[summary] PASSED [ 15%]
+tests/test_prompts.py::test_prompt_exists_and_declares_expected_placeholders[verifier] PASSED [ 18%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[card_author] PASSED [ 20%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[extractor] PASSED [ 22%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[intake] PASSED [ 25%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[planner] PASSED [ 27%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[replanner] PASSED [ 29%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[scorer] PASSED [ 31%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[summary] PASSED [ 34%]
+tests/test_prompts.py::test_render_prompt_leaves_no_placeholders[verifier] PASSED [ 36%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[card_author] PASSED [ 38%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[extractor] PASSED [ 40%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[intake] PASSED [ 43%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[planner] PASSED [ 45%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[replanner] PASSED [ 47%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[summary] PASSED [ 50%]
+tests/test_prompts.py::test_placeholders_stand_after_instruction_blocks[verifier] PASSED [ 52%]
+tests/test_prompts.py::test_render_prompt_fails_loudly_on_missing_value PASSED [ 54%]
+tests/test_prompts.py::test_prompt_has_error_section[intake] PASSED      [ 56%]
+tests/test_prompts.py::test_prompt_has_error_section[planner] PASSED     [ 59%]
+tests/test_prompts.py::test_prompt_has_error_section[replanner] PASSED   [ 61%]
+tests/test_prompts.py::test_prompt_has_error_section[card_author] PASSED [ 63%]
+tests/test_prompts.py::test_prompt_has_error_section[verifier] PASSED    [ 65%]
+tests/test_prompts.py::test_prompt_has_error_section[summary] PASSED     [ 68%]
+tests/test_prompts.py::test_prompt_has_error_section[scorer] PASSED      [ 70%]
+tests/test_prompts.py::test_gov_support_reference_is_loadable PASSED     [ 72%]
+tests/test_prompts.py::test_card_author_does_not_default_to_lab_without_signs PASSED [ 75%]
+tests/test_prompts.py::test_card_author_response_format_has_requirement_checks PASSED [ 77%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[card_author] PASSED [ 79%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[extractor] PASSED [ 81%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[intake] PASSED [ 84%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[planner] PASSED [ 86%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[replanner] PASSED [ 88%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[scorer] PASSED [ 90%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[summary] PASSED [ 93%]
+tests/test_prompts.py::test_prompt_version_matches_latest_changelog_entry[verifier] PASSED [ 95%]
+tests/test_prompts.py::test_intake_empty_questions_requires_all_four_conditions PASSED [ 97%]
+tests/test_prompts.py::test_candidates_to_json_keeps_url_and_trims_snippet PASSED [100%]
+
+============================= 44 passed in 0.35s ==============================

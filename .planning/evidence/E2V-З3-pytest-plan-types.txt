@@ -1,0 +1,21 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z3
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 10 items
+
+tests/test_plan_types.py::test_каждый_тип_промпта_обслуживается_рабочим_адаптером PASSED [ 10%]
+tests/test_plan_types.py::test_каждый_рабочий_адаптер_достижим_типом_из_промпта PASSED [ 20%]
+tests/test_plan_types.py::test_типы_промпта_подмножество_source_type PASSED [ 30%]
+tests/test_plan_types.py::test_патентный_запрос_один_и_на_русском PASSED [ 40%]
+tests/test_plan_types.py::test_якоря_итогов_только_у_второй_конкурсной_формулировки_правила_8 PASSED [ 50%]
+tests/test_plan_types.py::test_объём_плана_повторного_поиска_совпадает_с_планировщиком PASSED [ 60%]
+tests/test_plan_types.py::test_патент_достижим_обоими_патентными_адаптерами PASSED [ 70%]
+tests/test_plan_types.py::test_версия_planner_совпадает_с_changelog PASSED [ 80%]
+tests/test_plan_types.py::test_страж_видит_правило_разорванное_переносом PASSED [ 90%]
+tests/test_plan_types.py::test_фикстура_settings_кладёт_ключи_через_окружение PASSED [100%]
+
+============================= 10 passed in 0.33s ==============================

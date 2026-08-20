@@ -1,0 +1,62 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z3
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items
+
+tests/test_contest_queries.py::test_zero_contest_queries_both_built_by_code PASSED [ 16%]
+tests/test_contest_queries.py::test_one_narrowed_contest_query_outcome_built_by_code PASSED [ 33%]
+tests/test_contest_queries.py::test_three_contest_queries_two_with_anchors_reduced_to_exactly_two PASSED [ 50%]
+tests/test_contest_queries.py::test_contest_queries_already_correct_are_left_untouched PASSED [ 66%]
+tests/test_contest_queries.py::test_default_contest_queries_use_brief_keywords PASSED [ 83%]
+tests/test_contest_queries.py::test_replan_search_also_normalizes_contest_queries FAILED [100%]
+
+================================== FAILURES ===================================
+_____________ test_replan_search_also_normalizes_contest_queries ______________
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=0, second_pass_relevance_max=0)
+fake_provider_factory = <class 'conftest.FakeProvider'>
+
+    async def test_replan_search_also_normalizes_contest_queries(settings, fake_provider_factory):
+        """Второй проход строит собственный план моделью заново - без вызова
+        normalize_contest_queries внутри `replan_search` (а не только внутри
+        `plan_search`) конкурсный класс второго прохода остался бы без гарантии
+        РЕШ-121."""
+        plan_json = json.dumps(
+            {
+                "queries": [
+                    {
+                        "text": "автоматическая выпойка поросят оборудование",
+                        "source_type": "web",
+                        "lang": "ru",
+                        "rationale": "тест",
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        )
+        provider = fake_provider_factory("gigachat", [plan_json])
+        router = LLMRouter(settings, providers={"gigachat": provider})
+    
+        brief = _brief(industry="агропром", task_summary="Автоматизация выпойки поросят.", keywords_ru=["выпойка поросят"])
+        previous_plan = SearchPlan(queries=[_query("выпойка поросят", source_type=SourceType.WEB)])
+        candidate = Candidate(source_type=SourceType.WEB, title="Т", url="https://example.org/a", provider="yandex_search")
+        scored = [
+            ScoredCandidate(candidate=candidate, relevance=2, maturity=2, accessibility=2, freshness=2, completeness=2)
+        ]
+    
+        result = await stages.replan_search(router, brief, previous_plan, scored)
+    
+        narrowed, outcome = _split(result.queries)
+>       assert len(narrowed) == 1, "replan_search не нормализовал формулировку «площадки»"
+E       AssertionError: replan_search не нормализовал формулировку «площадки»
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests\test_contest_queries.py:163: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_contest_queries.py::test_replan_search_also_normalizes_contest_queries
+========================= 1 failed, 5 passed in 0.34s =========================

@@ -1,0 +1,17 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\E2V-Z3
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items
+
+tests/test_contest_queries.py::test_zero_contest_queries_both_built_by_code PASSED [ 16%]
+tests/test_contest_queries.py::test_one_narrowed_contest_query_outcome_built_by_code PASSED [ 33%]
+tests/test_contest_queries.py::test_three_contest_queries_two_with_anchors_reduced_to_exactly_two PASSED [ 50%]
+tests/test_contest_queries.py::test_contest_queries_already_correct_are_left_untouched PASSED [ 66%]
+tests/test_contest_queries.py::test_default_contest_queries_use_brief_keywords PASSED [ 83%]
+tests/test_contest_queries.py::test_replan_search_also_normalizes_contest_queries PASSED [100%]
+
+============================== 6 passed in 0.31s ==============================
