@@ -1,0 +1,51 @@
+Задача З-2 — четыре обязательные мутации, прицельный прогон (РЕШ-135).
+Каждая мутация: правка → прицельный прогон → откат → git status подтверждает
+чистое дерево.
+
+Мутация (а): из __all__ и фасада stages.py убрано имя run_intake
+  (import + запись в __all__).
+  Прогон: pytest tests/test_pipeline_layout.py tests/test_cli_run.py -q
+  Результат: FAILED test_pipeline_layout.py::test_facade_reexports_required_names
+             FAILED 19 тестов в test_cli_run.py (AttributeError: module
+             'app.pipeline.stages' has no attribute 'run_intake')
+             20 failed, 2 passed
+  Мутация убила ожидаемые проверки — ожидание подтверждено.
+  Откат: git checkout -- backend/app/pipeline/stages.py
+  git status после отката: чисто.
+
+Мутация (б): в перенесённом _pick_top (selection.py) потолок на источник
+  cap = max(2, limit // 2) заменён на cap = limit.
+  Прогон: pytest tests/test_stages.py -q -k "select_top"
+  Результат: FAILED test_select_top_limits_single_provider_dominance
+             FAILED test_select_top_with_zero_threshold_keeps_previous_behaviour
+             2 failed, 4 passed
+  Мутация убила ожидаемые проверки — ожидание подтверждено.
+  Откат: git checkout -- backend/app/pipeline/selection.py
+  git status после отката: чисто; pytest tests/test_stages.py -q -k "select_top" → 6 passed.
+
+Мутация (в): в stages.py рядом с реэкспортом оставлена копия функции
+  (def run_intake_copy(): return None).
+  Прогон: pytest tests/test_pipeline_layout.py -q
+  Результат: FAILED test_pipeline_modules_stay_within_line_limit
+                (stages.py: 125 строк, лимит 120 — побочный эффект добавления)
+             FAILED test_stages_module_has_no_definitions
+                (в фасаде найдены определения: ['def '])
+             2 failed, 1 passed
+  Мутация убила ожидаемую проверку (страж «в») — ожидание подтверждено.
+  Откат: git checkout -- backend/app/pipeline/stages.py
+  git status после отката: чисто; pytest tests/test_pipeline_layout.py -q → 3 passed.
+
+Мутация (г): scoring.py раздут до 620 строк (заполнитель, имитация переноса
+  двух разделов в один файл).
+  Прогон: pytest tests/test_pipeline_layout.py -q
+  Результат: FAILED test_pipeline_modules_stay_within_line_limit
+                (scoring.py: 620 строк)
+             1 failed, 2 passed
+  Мутация убила ожидаемую проверку (страж «а») — ожидание подтверждено.
+  Откат: git checkout -- backend/app/pipeline/scoring.py
+  git status после отката: чисто; pytest tests/test_pipeline_layout.py -q → 3 passed.
+
+Итог: все четыре обязательные мутации убили названные в задаче проверки на
+первой попытке. Полный набор после отката всех четырёх — 644 passed, 0 failed
+(см. E2G-З2-pytest.txt); повторный полный набор не потребовался (РЕШ-135:
+он обязателен только тогда, когда мутация НЕ убивает ожидаемый тест).
