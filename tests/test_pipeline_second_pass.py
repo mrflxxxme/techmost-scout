@@ -267,6 +267,26 @@ async def db_session_factory(tmp_path):
     await engine.dispose()
 
 
+class _LimitReportingAdapter(_TwoPassAdapter):
+    """Тот же источник, но с исчерпанным платным пределом на одну формулировку.
+
+    Нужен для РЕШ-127 п. 2: до правки пропуск по платному пределу доезжал
+    только до `pipeline_logs`, и клиент видел недобор источника неотличимо от
+    «источник ответил и ничего не нашёл» — ровно то, что запрещает инвариант
+    №5. Метод повторяет контракт `YandexSearchAdapter.drain_limit_problems`:
+    отдаёт накопленное и обнуляет счёт, чтобы записи первого прохода не
+    приехали во второй и не задвоили недобор.
+    """
+
+    def __init__(self, *args, skipped: int = 1, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._pending = [f"формулировка №{n} не отправлена: исчерпан платный предел" for n in range(skipped)]
+
+    def drain_limit_problems(self) -> list[str]:
+        drained, self._pending = self._pending, []
+        return drained
+
+
 async def _run_pipeline(
     settings,
     brief,
@@ -277,18 +297,27 @@ async def _run_pipeline(
     first: list[int],
     second: list[int],
     fail_second: bool = False,
+    limit_skipped: int | None = None,
 ):
     """Полный прогон с заданным порогом второго прохода и двумя выдачами.
 
     `fail_second` — источник отказывает на формулировке второго плана.
+    `limit_skipped` — источник сообщает о стольких формулировках, не
+    отправленных из-за исчерпанного платного предела (РЕШ-127 п. 2).
     """
     tuned = settings.model_copy(update={"second_pass_relevance_max": threshold})
     router = LLMRouter(tuned, providers={"deepseek": provider})
     async with httpx.AsyncClient() as client:
+        if limit_skipped is None:
+            adapter = _TwoPassAdapter(client, first=first, second=second, fail_second=fail_second)
+        else:
+            adapter = _LimitReportingAdapter(
+                client, first=first, second=second, fail_second=fail_second, skipped=limit_skipped
+            )
         pipeline = ScoutPipeline(
             settings=tuned,
             router=router,
-            adapters=[_TwoPassAdapter(client, first=first, second=second, fail_second=fail_second)],
+            adapters=[adapter],
             session_factory=session_factory,
         )
         return await pipeline.run(brief, request_id=1, raw_text="задача теста")
@@ -597,3 +626,52 @@ async def test_стоп_кран_на_стадии_replan_роняет_прог�
     assert requests[0].error
     logs = await _rows(db_session_factory, PipelineLog)
     assert "cards" not in [row.stage for row in logs], "после стоп-крана прогон не имеет права платить дальше"
+
+
+# ── РЕШ-127 п. 2: исчерпанный платный предел доезжает до клиентского отчёта ──
+async def test_исчерпанный_платный_предел_доезжает_до_отчёта(settings, brief, db_session_factory):
+    """Пропуск формулировки по платному пределу виден клиенту, а не только в журнале.
+
+    Инвариант №5 требует, чтобы недобор источника был виден в ОТЧЁТЕ. До правки
+    пропуск уезжал в `SearchOutcome.problems`, оттуда в `StageRecord.error`
+    стадии `search` — то есть в `pipeline_logs`, и дальше никуда. Клиент видел
+    ровно то же, что при «источник ответил и ничего не нашёл».
+
+    Признак — счётчик пропущенных формулировок, а НЕ подстрока в тексте
+    сообщения источника: текст поменяется, и проверка молча исчезнет.
+    """
+    provider = _ScriptedProvider(_routes(first_relevance=9))
+    report = await _run_pipeline(
+        settings,
+        brief,
+        provider,
+        db_session_factory,
+        threshold=0,
+        first=list(range(1, 11)),
+        second=[],
+        limit_skipped=2,
+    )
+
+    from app.export.markdown import PAID_LIMIT_NOTICE, render_markdown
+
+    assert PAID_LIMIT_NOTICE in report.summary.caveats, (
+        "исчерпанный платный предел обязан доезжать до оговорок отчёта, а не оставаться в журнале"
+    )
+    assert PAID_LIMIT_NOTICE in render_markdown(report), "оговорка не дошла до собранного markdown"
+
+
+async def test_без_исчерпания_предела_оговорки_нет(settings, brief, db_session_factory):
+    """Обратная сторона: оговорка не печатается там, где предел не исчерпан.
+
+    Без этой проверки оговорка, печатаемая всегда, прошла бы предыдущий тест и
+    сделала бы недобор неотличимым от нормы — уже в другую сторону.
+    """
+    provider = _ScriptedProvider(_routes(first_relevance=9))
+    report = await _run_pipeline(
+        settings, brief, provider, db_session_factory, threshold=0, first=list(range(1, 11)), second=[]
+    )
+
+    from app.export.markdown import PAID_LIMIT_NOTICE, render_markdown
+
+    assert PAID_LIMIT_NOTICE not in report.summary.caveats
+    assert PAID_LIMIT_NOTICE not in render_markdown(report)

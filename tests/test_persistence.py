@@ -55,6 +55,7 @@ from app.pipeline import stages
 from app.pipeline.orchestrator import ScoutPipeline
 from app.pipeline.persistence import PlanRecord, SearchPlanNotFoundError, load_search_plan, persist_run
 from app.schemas import (
+    Brief,
     Candidate,
     Confidence,
     Evidence,
@@ -775,6 +776,46 @@ async def test_run_with_preset_plan_does_not_call_planner_and_logs_zero_cost(
     # сохраниться, иначе восстановить их потом неоткуда.
     assert len(plan_rows) == 1
     assert SearchPlan.model_validate(plan_rows[0].queries).model_dump() == plan.model_dump()
+
+
+async def test_normalize_contest_queries_план_на_потолке_переживает_search_plans_и_load_search_plan(
+    db_session_factory,
+):
+    """РЕШ-127 п. 1, круговой перегон: план из 12 формулировок без единой
+    `contest` (потолок `SearchPlan.queries`) после `normalize_contest_queries`
+    обязан не только пройти `model_validate` на месте (это отдельный тест в
+    `tests/test_contest_queries.py`), но и пережить настоящую запись в
+    `search_plans` и обратное чтение через `load_search_plan` — до правки
+    план из 14 формулировок писался в базу молча, а `load_search_plan` читал
+    его через ту же схему `SearchPlan` и падал `SearchPlanNotFoundError` на
+    прогоне `--plan-id`, хотя запись «успешно» состоялась."""
+    brief = Brief(industry="фарма", task_summary="Диагностика супоросности свиноматок по УЗИ.")
+    raw_plan = SearchPlan(
+        queries=[
+            SearchQuery(text=f"формулировка основной очереди {i}", source_type=SourceType.PUBLICATION, rationale="тест")
+            for i in range(12)
+        ]
+    )
+    normalized = stages.normalize_contest_queries(raw_plan, brief)
+    assert len(normalized.queries) == 12, "нормализация обязана соблюдать потолок схемы уже на этом шаге"
+
+    persisted_id = await persist_run(
+        db_session_factory,
+        raw_text="текст задачи с планом на потолке схемы",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[],
+        contest_cards=[],
+        stages=[],
+        plans=[PlanRecord(plan=normalized)],
+    )
+
+    async with db_session_factory() as session:
+        row = (await session.execute(select(SearchPlanRow))).scalars().one()
+    assert row.request_id == persisted_id
+
+    loaded = await load_search_plan(db_session_factory, row.id)  # не должно поднимать SearchPlanNotFoundError
+    assert loaded.model_dump() == normalized.model_dump()
 
 
 async def test_load_search_plan_returns_saved_plan(db_session_factory):

@@ -22,6 +22,7 @@ import httpx
 from pydantic import ValidationError
 
 from app.config import Settings, get_settings
+from app.export.markdown import PAID_LIMIT_NOTICE
 from app.llm import CostLimitExceededError, LLMRouter
 from app.metrics import score_payload
 from app.pipeline import stages
@@ -223,6 +224,11 @@ class SearchOutcome:
     #: иначе пробел не виден ни в отчёте, ни в журнале, ни в списке
     #: недоступных источников.
     problems: list[str] = field(default_factory=list)
+    #: Сколько формулировок источник не получил из-за исчерпанного платного
+    #: предела на прогон (РЕШ-127 п. 2). Отдельное число, а не подстрока в
+    #: `problems`: оговорка клиенту опознаётся по счётчику, а не по тексту
+    #: сообщения — текст поменяется, и проверка молча исчезнет.
+    limit_skipped: int = 0
 
 
 class ScoutPipeline:
@@ -252,6 +258,11 @@ class ScoutPipeline:
         #: не выполняется вовсе (тесты, веб до Э3): прогон не меняется ни на шаг.
         self._session_factory = session_factory
         self._client: httpx.AsyncClient | None = None
+        #: Сколько формулировок за весь прогон не доехало до источника из-за
+        #: исчерпанного платного предела (РЕШ-127 п. 2). Копится по обоим
+        #: проходам: один экземпляр — один запрос, поэтому обнуления по ходу
+        #: не требуется.
+        self._limit_skipped_total = 0
 
     # ── Вспомогательное ─────────────────────────────────────────────────────
     async def _notify(self, stage: str, message: str, fraction: float) -> None:
@@ -342,10 +353,16 @@ class ScoutPipeline:
         # Забирается ровно один раз на проход: `problems` живёт внутри
         # `gather_candidates`, и записи первого прохода, приехавшие во второй,
         # читались бы как удвоенный недобор.
+        limit_skipped = 0
         for adapter in adapters:
             drain = getattr(adapter, "drain_limit_problems", None)
             if drain is not None:
-                problems.extend(drain())
+                drained = drain()
+                limit_skipped += len(drained)
+                problems.extend(drained)
+        # Счётчик копится по всем проходам прогона: оговорка клиенту ставится
+        # один раз, а исчерпать предел может как первый проход, так и второй.
+        self._limit_skipped_total += limit_skipped
 
         candidates: list[Candidate] = []
         hits_by_label: dict[str, int] = {}
@@ -369,6 +386,7 @@ class ScoutPipeline:
             hits_by_provider=hits_by_label,
             hits_by_name=hits_by_name,
             problems=problems,
+            limit_skipped=limit_skipped,
         )
 
     # ── Обогащение по DOI ───────────────────────────────────────────────────
@@ -627,6 +645,12 @@ class ScoutPipeline:
             # В начало: оговорка о том, из чего собран бриф, объясняет качество
             # всей выдачи, а оговорки стадий — только своей части.
             report.summary.caveats = [*initial_caveats, *report.summary.caveats]
+        if self._limit_skipped_total:
+            # Признак — счётчик, а не подстрока в `problems` (РЕШ-127 п. 2):
+            # до этой правки исчерпанный платный предел доезжал только до
+            # `pipeline_logs`, и клиент видел недобор источника как «источник
+            # ответил и ничего не нашёл». Инвариант №5 требует обратного.
+            report.summary.caveats = [*report.summary.caveats, PAID_LIMIT_NOTICE]
         report.constraints_unresolved = constraints_unresolved
         persisted_id = await persist_run(
             self._session_factory,
