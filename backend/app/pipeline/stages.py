@@ -18,6 +18,7 @@ import time
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 
+from annotated_types import MaxLen
 from pydantic import BaseModel, Field, HttpUrl, TypeAdapter, ValidationError, field_validator
 
 from app.config import get_settings
@@ -294,6 +295,15 @@ _CONTEST_NARROWED_RATIONALE = (
 )
 _CONTEST_OUTCOME_RATIONALE = "код-нормализация плана (РЕШ-121): формулировка «итоги» достроена, модель её не вернула"
 
+#: Потолок `SearchPlan.queries` (`schemas.py`), прочитанный из самой схемы, а
+#: не продублированный числом рядом (РЕШ-127 п. 1): `plan.model_copy` в
+#: pydantic v2 не валидирует результат, и план из 12 формулировок без единой
+#: `contest` молча превращался в план из 14 — план сверх потолка писался в
+#: `search_plans`, а `load_search_plan` потом не мог прочитать его через ту же
+#: схему (`SearchPlan.model_validate`). Число берётся отсюда, чтобы правка
+#: потолка в схеме не разошлась с этим местом молча.
+_MAX_PLAN_QUERIES = next(m.max_length for m in SearchPlan.model_fields["queries"].metadata if isinstance(m, MaxLen))
+
 
 def normalize_contest_queries(plan: SearchPlan, brief: Brief) -> SearchPlan:
     """Код-гарантия РЕШ-121: после этой функции в плане ровно две формулировки
@@ -321,7 +331,59 @@ def normalize_contest_queries(plan: SearchPlan, brief: Brief) -> SearchPlan:
         log.info("normalize_contest_queries: формулировка «итоги» достроена кодом")
         outcome = _default_contest_query(brief, outcome=True)
 
+    # РЕШ-127 п. 1: потолок схемы главнее числа формулировок, которые вернула
+    # модель. `model_copy(update=...)` в pydantic v2 результат не валидирует,
+    # и без этой проверки план из 12 формулировок без единой `contest` молча
+    # становился планом из 14 — за объявленным потолком `SearchPlan.queries`
+    # (`schemas.py`). Вытесняются САМЫЕ ПОСЛЕДНИЕ формулировки основной
+    # очереди: `other` короче терять хвост, чем середину, а что именно
+    # вытеснено, обязано быть видно в логе, а не пропадать молча.
+    overflow = len(other) + 2 - _MAX_PLAN_QUERIES
+    if overflow > 0:
+        dropped, other = other[-overflow:], other[:-overflow]
+        log.warning(
+            "normalize_contest_queries: потолок схемы %s формулировок — конкурсные вытеснили %s: %s",
+            _MAX_PLAN_QUERIES,
+            overflow,
+            "; ".join(q.text for q in dropped),
+        )
+
     return plan.model_copy(update={"queries": [*other, narrowed, outcome]})
+
+
+def strip_contest_queries(plan: SearchPlan) -> SearchPlan:
+    """Код-гарантия РЕШ-126: второй проход конкурсные формулировки не шлёт.
+
+    Второй проход существует ради ГЛАВНОЙ очереди — порог его включения
+    считается по ней (`needs_second_pass`), а конкурсный класс идёт отдельной
+    секцией вне лимита 5-7 и вне метрики покрытия (РЕШ-85). Платить вторым
+    платным проходом за повторный поиск конкурсов значит тратить деньги на
+    очередь, ради которой проход не запускался: конкурсы ищутся один раз за
+    прогон, в `plan_search`, обеими формулировками (РЕШ-117).
+
+    Промпт `replanner.md` конкурсные формулировки не просит, но РЕШ-109
+    запрещает считать послушание модели гарантией: если она всё же вернула
+    тип `contest`, он вырезается кодом ДО записи плана в `search_plans`
+    (симметрично тому, как `normalize_contest_queries` достраивает конкурсные
+    в первом проходе) — иначе спрос на платные запросы Яндекса снова
+    превышает `max_queries` ровно так, как нашёл аудит волны Э2-В: спрос 8 при
+    пределе 6, обе конкурсные формулировки второго прохода отбрасывались
+    источником детерминированно, потому что нормализация ставила их в конец
+    списка, а предел исчерпывался раньше, на web-формулировках.
+    """
+    kept = [q for q in plan.queries if q.source_type is not SourceType.CONTEST]
+    dropped = len(plan.queries) - len(kept)
+    if dropped:
+        log.info("strip_contest_queries: %s конкурсных формулировок второго прохода срезано кодом (РЕШ-126)", dropped)
+    if not kept:
+        # Теоретический край: модель реплана вернула ИСКЛЮЧИТЕЛЬНО конкурсные
+        # формулировки — план без главной очереди для второго прохода не
+        # имеет смысла (SearchPlan.queries требует минимум одну формулировку).
+        # `replan_search` вызывается из `_second_pass`, который отказ стадии
+        # (в том числе этот) уже ловит и продолжает прогон по первой выдаче
+        # (инвариант №5) — падать сюда безопаснее, чем строить пустой план.
+        raise ValueError("второй план поиска целиком состоит из конкурсных формулировок — план без главной очереди")
+    return plan.model_copy(update={"queries": kept})
 
 
 def _default_contest_query(brief: Brief, *, outcome: bool) -> SearchQuery:
@@ -969,10 +1031,17 @@ async def replan_search(router: LLMRouter, brief: Brief, plan: SearchPlan, score
         # промахе первой выдачи вдобавок к нему.
         max_tokens=8000,
     )
-    # Та же код-гарантия РЕШ-121, что и у первого прохода (мутация (г) плана
-    # задачи): второй проход строит собственный план тем же составом типов и
-    # обязан пройти ту же нормализацию, иначе она бьёт только в plan_search.
-    return normalize_contest_queries(new_plan, brief)
+    # РЕШ-126 (правка блокирующей находки аудита волны Э2-В): второй проход
+    # конкурсные формулировки НЕ достраивает и НЕ шлёт вовсе. До этой правки
+    # здесь стояла та же `normalize_contest_queries`, что и в `plan_search`
+    # (мутация (г) постановки задачи З-3) — она честно достраивала обе
+    # конкурсные формулировки и на втором проходе, но `yandex_search` отдаёт
+    # источнику формулировки типов WEB и CONTEST за оба прохода вместе, а
+    # предел `max_queries = 6` считается на весь прогон. Спрос вырос до 8, и
+    # обе конкурсные формулировки второго прохода отбрасывались источником
+    # ДЕТЕРМИНИРОВАННО: нормализация ставит их в конец списка, а предел
+    # исчерпывался раньше, на web-формулировках. См. `strip_contest_queries`.
+    return strip_contest_queries(new_plan)
 
 
 def select_top(scored: list[ScoredCandidate], *, limit: int, relevance_min: int | None = None) -> list[ScoredCandidate]:
