@@ -16,8 +16,21 @@
     вызов функции нормализации — именно эта подмена одного другим и была
     найдена аудитом.
 
+    ПОСТ-АУДИТ РЕШ-126/127 (правка 1). Первая редакция этого файла второй
+    проход строила, вызывая `stages.strip_contest_queries` прямо в теле
+    теста — то есть проверяла работу функции, а не её подключение к
+    `replan_search`. Мутация «снять `strip_contest_queries` из
+    `replan_search`» такой тест переживала (1 passed), её ловил только
+    `tests/test_contest_queries.py` — файл, написанный про другую тему
+    (РЕШ-121). Здесь второй проход идёт через настоящий
+    `stages.replan_search` с подставным LLM-провайдером (`FakeProvider`):
+    доказательство и декларация файла теперь совпадают — срез конкурсных
+    формулировок второго прохода проверяется на пути вызова, которым идёт
+    реальный прогон, а не в обход него.
+
 Сети нет: `respx` подменяет оба вызова Яндекса (запуск асинхронного поиска и
-опрос операции), реальный `YandexSearchAdapter` работает с этими подменами.
+опрос операции), реальный `YandexSearchAdapter` работает с этими подменами;
+LLM-вызов второго прохода подменён `FakeProvider` из `tests/conftest.py`.
 """
 
 from __future__ import annotations
@@ -31,7 +44,7 @@ import respx
 from app.llm import LLMRouter
 from app.pipeline import stages
 from app.pipeline.orchestrator import ScoutPipeline
-from app.schemas import SearchPlan, SearchQuery, SourceType
+from app.schemas import Brief, Candidate, ScoredCandidate, SearchPlan, SearchQuery, SourceType
 from app.search.yandex_search import OPERATION_URL, SEARCH_ASYNC_URL, YandexSearchAdapter
 
 
@@ -85,11 +98,15 @@ _SECOND_PASS_CONTEST_TEXT = "хакатон второй попытки диаг
 
 
 @respx.mock
-async def test_обе_конкурсные_формулировки_первого_прохода_доезжают_а_спрос_не_превышает_предел(settings):
+async def test_обе_конкурсные_формулировки_первого_прохода_доезжают_а_спрос_не_превышает_предел(
+    settings, fake_provider_factory
+):
     """Полная арифметика аудита в одном тесте: план первого прохода — 8
     формулировок (2 publication, 2 web, 1 showcase, 1 patent, 2 contest),
-    план второго — 2 web (модель реплана их не просит, но вернула бы контест,
-    если бы не послушалась промпта; здесь проверяем оба случая).
+    план второго — модель реплана вопреки промпту `replanner.md` вернула
+    контест вперемешку с web (правка 1 пост-аудита: второй проход теперь
+    идёт через `stages.replan_search` с подставным LLM-провайдером, а не
+    прямым вызовом `strip_contest_queries` в теле теста).
 
     Критерий: `queries_used` не превышает `max_queries = 6`, ни одна
     формулировка не пропущена по пределу (`limit_problems` пуст), и ОБЕ
@@ -130,17 +147,61 @@ async def test_обе_конкурсные_формулировки_первог
         )
         outcome1 = await pipeline.gather_candidates(plan1)
 
-        # Второй проход — модель реплана вопреки промпту вернула контест
-        # вперемешку с web; strip_contest_queries обязана срезать его ДО
-        # того, как план попадёт в gather_candidates.
-        plan2_raw = SearchPlan(
-            queries=[
-                _q("веб формулировка второго прохода один"),
-                _q("веб формулировка второго прохода два"),
-                _q(_SECOND_PASS_CONTEST_TEXT, source_type=SourceType.CONTEST),
-            ]
+        # Второй проход — тело реального LLM-вызова replan_search подменено
+        # `FakeProvider`, а модель вопреки промпту `replanner.md` вернула
+        # контест вперемешку с web. `strip_contest_queries` обязана срезать
+        # его внутри самой стадии, ДО того, как план попадёт в
+        # gather_candidates: проверяется подключение среза к
+        # `replan_search`, а не сама функция среза в обход стадии
+        # (правка 1 пост-аудита волны Э2-В — см. докстроку файла).
+        plan2_json = json.dumps(
+            {
+                "queries": [
+                    {
+                        "text": "веб формулировка второго прохода один",
+                        "source_type": "web",
+                        "lang": "ru",
+                        "rationale": "тест",
+                    },
+                    {
+                        "text": "веб формулировка второго прохода два",
+                        "source_type": "web",
+                        "lang": "ru",
+                        "rationale": "тест",
+                    },
+                    {
+                        "text": _SECOND_PASS_CONTEST_TEXT,
+                        "source_type": "contest",
+                        "lang": "ru",
+                        "rationale": "тест: модель вернула конкурс вопреки промпту реплана",
+                    },
+                ]
+            },
+            ensure_ascii=False,
         )
-        plan2 = stages.strip_contest_queries(plan2_raw)
+        replan_provider = fake_provider_factory("gigachat", [plan2_json])
+        replan_router = LLMRouter(settings, providers={"gigachat": replan_provider})
+        brief = Brief(
+            industry="агропром",
+            task_summary="Диагностика супоросности свиноматок по УЗИ.",
+            keywords_ru=["диагностика супоросности"],
+        )
+        scored = [
+            ScoredCandidate(
+                candidate=Candidate(
+                    source_type=SourceType.WEB,
+                    title="Кандидат первого прохода",
+                    url="https://a.example.org/p",
+                    provider="yandex_search",
+                ),
+                relevance=2,
+                maturity=2,
+                accessibility=2,
+                freshness=2,
+                completeness=2,
+            )
+        ]
+        plan2 = await stages.replan_search(replan_router, brief, plan1, scored)
         outcome2 = await pipeline.gather_candidates(plan2)
 
     # Спрос вернулся к шести и предел сходится ровно, как до волны.
