@@ -1,0 +1,305 @@
+.....................................................FFFF............... [ 10%]
+...............................................................F........ [ 21%]
+......F................................................................. [ 32%]
+........................................................................ [ 43%]
+......F.........................F....................................... [ 54%]
+........................................................................ [ 65%]
+........................................................................ [ 75%]
+........................................................................ [ 86%]
+........................................................................ [ 97%]
+F...............                                                         [100%]
+=================================== FAILURES ===================================
+___________ test_при_выключенной_отсечке_конкурсная_очередь_прежняя ____________
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=4, second_pass_relevance_max=6)
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+fake_provider_factory = <class 'conftest.FakeProvider'>, stub_stages = []
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fdc2a2865a0>
+
+    async def test_при_выключенной_отсечке_конкурсная_очередь_прежняя(
+        settings, brief, fake_provider_factory, stub_stages, monkeypatch
+    ):
+        """Умолчание `RELEVANCE_MIN = 0` — отсечка выключена, и слабый конкурсный
+        кандидат доезжает до секции, как до правки."""
+        monkeypatch.setitem(CONTEST_RELEVANCE, 1, 1)
+>       assert settings.relevance_min == 0, "умолчание отсечки изменилось — тест мерит не то"
+E       AssertionError: умолчание отсечки изменилось — тест мерит не то
+E       assert 4 == 0
+E        +  where 4 = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=4, second_pass_relevance_max=6).relevance_min
+
+tests/test_contest_gate_and_order.py:352: AssertionError
+_________________ test_сводка_собирается_до_конкурсной_секции __________________
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=4, second_pass_relevance_max=6)
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+fake_provider_factory = <class 'conftest.FakeProvider'>
+stub_stages = [('summary', ''), ('card', 'Хакатонный прототип №1'), ('card', 'Хакатонный прототип №2')]
+
+    async def test_сводка_собирается_до_конкурсной_секции(settings, brief, fake_provider_factory, stub_stages):
+        """Порядок вызовов: основные карточки → сводка → конкурсные карточки.
+    
+        Перестановка обратно роняет тест: сводка окажется последней.
+        """
+        await _run(settings, fake_provider_factory, brief, main=[1, 2], contest=[1, 2])
+    
+        kinds = [
+            ("summary" if kind == "summary" else ("contest" if "Хакатонный" in title else "main"))
+            for kind, title in stub_stages
+        ]
+        assert kinds.count("summary") == 1, kinds
+        boundary = kinds.index("summary")
+>       assert set(kinds[:boundary]) == {"main"}, f"до сводки собрано не только основное: {kinds}"
+E       AssertionError: до сводки собрано не только основное: ['summary', 'contest', 'contest']
+E       assert set() == {'main'}
+E         
+E         Extra items in the right set:
+E         'main'
+E         Use -v to get more diff
+
+tests/test_contest_gate_and_order.py:373: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  app.pipeline.orchestrator:orchestrator.py:1016 стадия replan не удалась (router: стадия replan: ответ не сходится со схемой SearchPlan: 1 validation error for SearchPlan
+queries
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing), остаюсь на выдаче первого прохода
+__________ test_журнал_стадий_ставит_конкурсные_карточки_после_сводки __________
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=4, second_pass_relevance_max=6)
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+fake_provider_factory = <class 'conftest.FakeProvider'>
+stub_stages = [('summary', ''), ('card', 'Хакатонный прототип №1'), ('card', 'Хакатонный прототип №2')]
+db_session_factory = <function db_session_factory.<locals>.factory at 0x7fdc298f0cc0>
+
+    async def test_журнал_стадий_ставит_конкурсные_карточки_после_сводки(
+        settings, brief, fake_provider_factory, stub_stages, db_session_factory
+    ):
+        """Тот же порядок виден в журнале стадий: трата конкурсной секции записана
+        отдельной строкой ПОСЛЕ сводки, а не растворена в строке основных карточек."""
+        await _run(settings, fake_provider_factory, brief, main=[1, 2], contest=[1, 2], session_factory=db_session_factory)
+    
+        async with db_session_factory() as session:
+            rows = (await session.execute(select(PipelineLog).order_by(PipelineLog.id))).scalars().all()
+    
+        order = [row.stage for row in rows]
+>       assert order == ["planner", "search", "scorer", "cards", "summary", "contest_cards"], order
+E       AssertionError: ['planner', 'search', 'scorer', 'replan', 'cards', 'summary', ...]
+E       assert ['planner', '...summary', ...] == ['planner', '...ontest_cards']
+E         
+E         At index 3 diff: 'replan' != 'cards'
+E         Left contains one more item: 'contest_cards'
+E         Use -v to get more diff
+
+tests/test_contest_gate_and_order.py:388: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  app.pipeline.orchestrator:orchestrator.py:1016 стадия replan не удалась (router: стадия replan: ответ не сходится со схемой SearchPlan: 1 validation error for SearchPlan
+queries
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing), остаюсь на выдаче первого прохода
+______ test_прогон_без_конкурсных_кандидатов_не_добавляет_строку_журнала _______
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=4, second_pass_relevance_max=6)
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+fake_provider_factory = <class 'conftest.FakeProvider'>
+stub_stages = [('summary', '')]
+db_session_factory = <function db_session_factory.<locals>.factory at 0x7fdc298f0c20>
+
+    async def test_прогон_без_конкурсных_кандидатов_не_добавляет_строку_журнала(
+        settings, brief, fake_provider_factory, stub_stages, db_session_factory
+    ):
+        """Без конкурсных кандидатов лишней строки в журнале нет: стадии не было —
+        записывать нечего, и прежний порядок стадий не меняется."""
+        await _run(settings, fake_provider_factory, brief, main=[1, 2], contest=[], session_factory=db_session_factory)
+    
+        async with db_session_factory() as session:
+            rows = (await session.execute(select(PipelineLog).order_by(PipelineLog.id))).scalars().all()
+    
+        order = [row.stage for row in rows]
+>       assert order == ["planner", "search", "scorer", "cards", "summary"], order
+E       AssertionError: ['planner', 'search', 'scorer', 'replan', 'cards', 'summary']
+E       assert ['planner', '...s', 'summary'] == ['planner', '...s', 'summary']
+E         
+E         At index 3 diff: 'replan' != 'cards'
+E         Left contains one more item: 'summary'
+E         Use -v to get more diff
+
+tests/test_contest_gate_and_order.py:402: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  app.pipeline.orchestrator:orchestrator.py:1016 стадия replan не удалась (router: стадия replan: ответ не сходится со схемой SearchPlan: 1 validation error for SearchPlan
+queries
+  Field required [type=missing, input_value={}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing), остаюсь на выдаче первого прохода
+________________ test_short_answer_stage_goes_to_free_provider _________________
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=4, second_pass_relevance_max=6)
+fake_provider_factory = <class 'conftest.FakeProvider'>
+
+    async def test_short_answer_stage_goes_to_free_provider(settings, fake_provider_factory):
+        """Стадии с коротким ответом идут на бесплатный GigaChat — это и есть экономия.
+    
+        Длинный структурированный JSON ему не доверяем: живые прогоны показали, что
+        на плане поиска и батче оценок он обрывает ответ на середине.
+        """
+        giga = fake_provider_factory("gigachat")
+        deep = fake_provider_factory("deepseek")
+        router = _router(settings, {"gigachat": giga, "deepseek": deep})
+    
+        result = await router.complete("extractor", [Message(role="user", content="извлеки")])
+    
+>       assert result.usage.provider == "gigachat"
+E       AssertionError: assert 'deepseek' == 'gigachat'
+E         
+E         - gigachat
+E         + deepseek
+
+tests/test_llm_router.py:49: AssertionError
+_______________________ test_chain_puts_preferred_first ________________________
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=4, second_pass_relevance_max=6)
+fake_provider_factory = <class 'conftest.FakeProvider'>
+
+    def test_chain_puts_preferred_first(settings, fake_provider_factory):
+        providers = {name: fake_provider_factory(name) for name in ("gigachat", "deepseek", "yandex")}
+        router = _router(settings, providers)
+    
+        assert router.chain_for("card_author")[0] == "deepseek"
+>       assert router.chain_for("extractor")[0] == "gigachat"
+E       AssertionError: assert 'deepseek' == 'gigachat'
+E         
+E         - gigachat
+E         + deepseek
+
+tests/test_llm_router.py:300: AssertionError
+____________ test_при_выключенном_пороге_прогон_совпадает_с_прежним ____________
+
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=4, second_pass_relevance_max=6)
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+db_session_factory = <function db_session_factory.<locals>.factory at 0x7fdc296805e0>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7fdc29610dd0>
+
+    async def test_при_выключенном_пороге_прогон_совпадает_с_прежним(settings, brief, db_session_factory, caplog):
+        """Умолчание `SECOND_PASS_RELEVANCE_MAX = 0` — проход выключен: один план,
+        одна стадия поиска и ровно пять вызовов модели, как до задачи.
+    
+        Пять — это эталон прогона без второго прохода: планировщик, скоринг одного
+        батча, сборка карточки, её проверка, сводка. Безусловный второй проход
+        добавил бы к ним минимум вызов `replan` и второй скоринг.
+        """
+        caplog.set_level(logging.INFO, logger="app.pipeline.stages")
+>       assert settings.second_pass_relevance_max == 0, "по умолчанию второй проход обязан быть выключен"
+E       AssertionError: по умолчанию второй проход обязан быть выключен
+E       assert 6 == 0
+E        +  where 6 = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=4, second_pass_relevance_max=6).second_pass_relevance_max
+
+tests/test_pipeline_second_pass.py:448: AssertionError
+___________ test_режим_поиска_без_ключа_не_падает_и_сообщает_причину ___________
+
+capsys = <_pytest.capture.CaptureFixture object at 0x7fdc29551b80>
+
+    @respx.mock
+    async def test_режим_поиска_без_ключа_не_падает_и_сообщает_причину(
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """YANDEX_SEARCH_API_KEY в тестовом окружении не задан (см. conftest.TEST_ENV)."""
+        get_settings.cache_clear()
+    
+        module = _load_probe()
+>       code = await module.probe_query("любая формулировка", "web", "ru")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_probe.py:212: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/probe.py:164: in probe_query
+    found = await adapter.search(query, limit=10)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/app/search/yandex_search.py:208: in search
+    candidates, _ = await self.search_raw(query, limit=limit)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/app/search/yandex_search.py:240: in search_raw
+    raw = await self._run_search(text, search_type=search_type, limit=limit)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/app/search/yandex_search.py:326: in _run_search
+    response = await self._client.post(SEARCH_ASYNC_URL, headers=headers, json=body)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.venv/lib/python3.12/site-packages/httpx/_client.py:1859: in post
+    return await self.request(
+../../../.venv/lib/python3.12/site-packages/httpx/_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.venv/lib/python3.12/site-packages/httpx/_client.py:1629: in send
+    response = await self._send_handling_auth(
+../../../.venv/lib/python3.12/site-packages/httpx/_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+../../../.venv/lib/python3.12/site-packages/httpx/_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.venv/lib/python3.12/site-packages/httpx/_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.venv/lib/python3.12/site-packages/httpx/_transports/default.py:394: in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.venv/lib/python3.12/site-packages/respx/mocks.py:190: in amock
+    response = await cls._send_async_request(
+../../../.venv/lib/python3.12/site-packages/respx/mocks.py:224: in _send_async_request
+    httpx_response = await cls.async_handler(httpx_request)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.venv/lib/python3.12/site-packages/respx/mocks.py:136: in async_handler
+    raise assertion_error
+../../../.venv/lib/python3.12/site-packages/respx/mocks.py:129: in async_handler
+    httpx_response = await router.async_handler(httpx_request)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.venv/lib/python3.12/site-packages/respx/router.py:318: in async_handler
+    resolved = await self.aresolve(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.venv/lib/python3.12/site-packages/respx/router.py:291: in aresolve
+    with self.resolver(request) as resolved:
+/usr/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <respx.router.MockRouter object at 0x7fdc2ce4dc40>
+request = <Request('POST', 'https://searchapi.api.cloud.yandex.net/v2/web/searchAsync')>
+
+    @contextmanager
+    def resolver(self, request: httpx.Request) -> Generator[ResolvedRoute, None, None]:
+        resolved = ResolvedRoute()
+    
+        try:
+            yield resolved
+    
+            if resolved.route is None:
+                # Assert we always get a route match, if check is enabled
+                if self._assert_all_mocked:
+>                   raise AllMockedAssertionError(f"RESPX: {request!r} not mocked!")
+E                   respx.models.AllMockedAssertionError: RESPX: <Request('POST', 'https://searchapi.api.cloud.yandex.net/v2/web/searchAsync')> not mocked!
+
+../../../.venv/lib/python3.12/site-packages/respx/router.py:250: AllMockedAssertionError
+----------------------------- Captured stdout call -----------------------------
+итоговый запрос после сужения: любая формулировка
+____________________________ test_state_stays_short ____________________________
+
+    def test_state_stays_short():
+        """STATE.md — снимок на две страницы, а не архив: иначе его перестают читать."""
+        size = (REPO_ROOT / ".planning" / "STATE.md").stat().st_size
+>       assert size < 4096, f"STATE.md разросся до {size} байт — вынесите историю в JOURNAL.md"
+E       AssertionError: STATE.md разросся до 5489 байт — вынесите историю в JOURNAL.md
+E       assert 5489 < 4096
+
+tests/test_team_docs.py:188: AssertionError
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_contest_gate_and_order.py::test_при_выключенной_отсечке_конкурсная_очередь_прежняя
+FAILED tests/test_contest_gate_and_order.py::test_сводка_собирается_до_конкурсной_секции
+FAILED tests/test_contest_gate_and_order.py::test_журнал_стадий_ставит_конкурсные_карточки_после_сводки
+FAILED tests/test_contest_gate_and_order.py::test_прогон_без_конкурсных_кандидатов_не_добавляет_строку_журнала
+FAILED tests/test_llm_router.py::test_short_answer_stage_goes_to_free_provider
+FAILED tests/test_llm_router.py::test_chain_puts_preferred_first - AssertionE...
+FAILED tests/test_pipeline_second_pass.py::test_при_выключенном_пороге_прогон_совпадает_с_прежним
+FAILED tests/test_probe.py::test_режим_поиска_без_ключа_не_падает_и_сообщает_причину
+FAILED tests/test_team_docs.py::test_state_stays_short - AssertionError: STAT...
+9 failed, 655 passed, 1 warning in 44.79s
