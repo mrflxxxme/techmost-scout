@@ -1,0 +1,5 @@
+=== Ворота Э2-Г: линтер (критерий 3) ===
+$ ruff check .
+All checks passed!
+$ ruff format --check .
+116 files already formatted

@@ -1,0 +1,41 @@
+=== Ворота Э2-Г: дробление stages.py (критерий 4) ===
+$ pytest tests/test_pipeline_layout.py -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 3 items
+
+tests/test_pipeline_layout.py::test_pipeline_modules_stay_within_line_limit PASSED [ 33%]
+tests/test_pipeline_layout.py::test_facade_reexports_required_names PASSED [ 66%]
+tests/test_pipeline_layout.py::test_stages_module_has_no_definitions PASSED [100%]
+
+============================== 3 passed in 0.31s ===============================
+
+Строки файлов backend/app/pipeline/ (волна создавала/меняла):
+     5 backend/app/pipeline/__init__.py
+   227 backend/app/pipeline/cards.py
+   192 backend/app/pipeline/constraints_guard.py
+   231 backend/app/pipeline/diversity.py
+   244 backend/app/pipeline/extraction.py
+    81 backend/app/pipeline/intake.py
+  1152 backend/app/pipeline/orchestrator.py
+   338 backend/app/pipeline/persistence.py
+   251 backend/app/pipeline/planning.py
+   156 backend/app/pipeline/prompting.py
+   367 backend/app/pipeline/scoring.py
+   125 backend/app/pipeline/selection.py
+   120 backend/app/pipeline/stages.py
+    89 backend/app/pipeline/summary.py
+  3578 total
+
+Определения в stages.py (должно быть ноль def/class вне реэкспорта):
+0
+
+Правки существующих тестов волной (git diff --name-only 789d64e..HEAD -- tests/):
+tests/test_diversity.py
+tests/test_pipeline_layout.py
+tests/test_probe.py
