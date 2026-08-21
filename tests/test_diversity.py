@@ -1,8 +1,8 @@
 """Разнообразие выдачи: составной признак одной разработки и склейка заготовок
 карточек до их платной сборки (З-6, РЕШ-132 п. 2, РЕШ-139 Р-4).
 
-Фикстуры криериев 1 и 2 построены дословно по реальному воротному прогону
-фармы (`.planning/evidence/E2V-gate-фарма.md`): криерий 1 — по признанному
+Фикстуры критериев 1 и 2 построены дословно по реальному воротному прогону
+фармы (`.planning/evidence/E2V-gate-фарма.md`): критерий 1 — по признанному
 самим отчётом дублю (карточки 3 и 4, `:132` и `:166`), критерий 2 — по паре
 карточек на одну тему, которые дублями не являются (карточки 1 и 5, `:33` и
 `:170`). Порог сходства заголовков (`TITLE_SIMILARITY_THRESHOLD` в
@@ -100,7 +100,7 @@ def test_реальный_дубль_фармы_признан_одной_раз
 def test_разные_разработки_на_одну_тему_не_признаются_одной():
     """Критерий 2: карточки 1 и 5 отчёта Э2-В — общая тема (УЗИ-диагностика
     супоросности), но разные конкретные работы. Доля общих значимых слов их
-    заголовков — 4/7 ≈ 0.571, порог модуля строго выше (0.6), поэтому признак
+    заголовков — 4/7 ≈ 0.571, порог модуля строго выше (0.65), поэтому признак
     не срабатывает."""
     assert is_same_development(_DIFFERENT_A, _DIFFERENT_B) is False
 
@@ -166,7 +166,10 @@ def test_пустая_организация_не_совпадает_сама_с
         source_type=SourceType.PUBLICATION, title="Работа один", url="https://example.org/a", provider="crossref"
     )
     b = Candidate(
-        source_type=SourceType.PUBLICATION, title="Совсем другая работа два", url="https://example.org/b", provider="crossref"
+        source_type=SourceType.PUBLICATION,
+        title="Совсем другая работа два",
+        url="https://example.org/b",
+        provider="crossref",
     )
     assert is_same_development(a, b) is False
 
@@ -286,7 +289,9 @@ _CONTEST_B = _contest_candidate(
     url="https://vk.com/wall-1_1",
     org="Университет ИТМО, Санкт-Петербург",
 )
-_CONTEST_C = _contest_candidate(3, title="Совсем другой конкурсный прототип диагностики", url="https://hacks-ai.ru/event/3")
+_CONTEST_C = _contest_candidate(
+    3, title="Совсем другой конкурсный прототип диагностики", url="https://hacks-ai.ru/event/3"
+)
 _CONTEST_DUP_TITLE = _CONTEST_A.title
 
 
@@ -394,10 +399,10 @@ async def test_конкурсная_очередь_склеивает_дубль
 
     messages = [message for _, message, _ in events]
     assert any(
-        "Разнообразие (конкурсная очередь): заготовок до склейки 3, после 2, схлопнуто 1" == m for m in messages
+        m == "Разнообразие (конкурсная очередь): заготовок до склейки 3, после 2, схлопнуто 1" for m in messages
     ), messages
     assert any(
-        "Разнообразие (основная очередь): заготовок до склейки 2, после 2, схлопнуто 0" == m for m in messages
+        m == "Разнообразие (основная очередь): заготовок до склейки 2, после 2, схлопнуто 0" for m in messages
     ), messages
 
 
@@ -415,5 +420,5 @@ async def test_метрика_печатается_при_нуле_склеек(
 
     messages = [message for _, message, _ in events]
     assert any(
-        "Разнообразие (основная очередь): заготовок до склейки 2, после 2, схлопнуто 0" == m for m in messages
+        m == "Разнообразие (основная очередь): заготовок до склейки 2, после 2, схлопнуто 0" for m in messages
     ), messages
