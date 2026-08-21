@@ -1,0 +1,10 @@
+=== Ворота Э2-Г: pytest с подложным .env в корне (критерий 2, РЕШ-113) ===
+Подложный .env создан с заведомо ложными значениями (боевой .env в среде не существует,
+ключи живут в переменных процесса и на время прогона очищены той же командой, что в критерии 1):
+  RELEVANCE_MIN=9 / SECOND_PASS_RELEVANCE_MAX=9 / DATABASE_URL=...should-not-be-touched.db / DEEPSEEK_API_KEY=sk-fake-not-a-secret
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+664 passed, 1 warning in 44.14s
+
+Файл data/should-not-be-touched.db: не создан
+git status --porcelain data/: []

@@ -1,0 +1,9 @@
+=== Ворота Э2-Г: pytest без сети (критерий 1) ===
+Среда: удалённая, боевые ключи в переменных процесса; изоляция РЕШ-97 покрывает .env-файл,
+поэтому боевые переменные очищаются на время прогона (отступление среды, названо в шапке ворот):
+env -u RELEVANCE_MIN -u SECOND_PASS_RELEVANCE_MAX -u YANDEX_SEARCH_API_KEY -u YANDEX_CATALOG_ID -u LLM_STAGE_ROUTES -u LLM_FALLBACK_ORDER .venv/bin/python -m pytest -q
+Базовая линия волны: E2G-З2-baseline-pytest.txt (648); ориентир таблицы ворот 641.
+
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+664 passed, 1 warning in 42.91s
