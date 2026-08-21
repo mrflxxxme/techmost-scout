@@ -1,0 +1,110 @@
+extractor: стадия не удалась (router: стадия extractor: ответ не сходится со схемой ExtractedBatch: parser: ответ не содержит валидный JSON: Мы должны исправить ошибку: в схеме ожидается, что candidates — это список объектов, а не отдельный объект. Ошибка говорит, что мы вернули список вместо словаря с ключом candidates. Вероятно, предыдущ…) — беру разбор адаптера, кандидатов 20
+кандидатов после нормализации: 20
+- Студенты из Бурятии придумали систему для выявления...
+  узел адреса: gazeta-n1.ru
+  org: gazeta-n1.ru
+  оценки: relevance=2 maturity=4 accessibility=7 freshness=10 completeness=7
+  notes: ИИ-решение для свиноводства, но диагностирует патологии конечностей, а не супоросность; есть имена разработчиков, но нет данных об испытаниях
+- Объявлены победители всероссийского хакатона по...
+  узел адреса: nobl.ru
+  org: nobl.ru
+  оценки: relevance=0 maturity=0 accessibility=2 freshness=7 completeness=4
+  notes: Общий хакатон по ИИ без связи с супоросностью или свиноводством; только организационная информация
+- Диагностика супоросности у свиноматок
+  узел адреса: zzr.ru
+  org: zzr.ru
+  оценки: relevance=3 maturity=4 accessibility=5 freshness=5 completeness=6
+  notes: Описана флоридзиновая проба для диагностики супоросности, но метод не ИИ и не связан с хакатоном
+- Telegram: View @sprint_1T
+  узел адреса: t.me
+  org: t.me
+  оценки: relevance=0 maturity=0 accessibility=2 freshness=7 completeness=3
+  notes: Хакатон по созданию кейс-историй о специальности, не имеет отношения к диагностике супоросности
+- Завершился хакатон «По следам животным»
+  узел адреса: vbudushee.ru
+  org: vbudushee.ru
+  оценки: relevance=1 maturity=0 accessibility=5 freshness=10 completeness=4
+  notes: Хакатон для школьников по теме животных, но без конкретики по супоросности и ИИ-диагностике
+- 300 тысяч рублей за 42 часа кодинга: в ИТМО завершился...
+  узел адреса: news.itmo.ru
+  org: news.itmo.ru
+  оценки: relevance=0 maturity=0 accessibility=3 freshness=10 completeness=4
+  notes: Крупный хакатон «Цифровой прорыв», но кейсы не связаны с супоросностью
+- Новости - Правительство России
+  узел адреса: government.ru
+  org: government.ru
+  оценки: relevance=0 maturity=0 accessibility=2 freshness=6 completeness=4
+  notes: Международный хакатон по ИИ в медицине, не относится к свиноводству
+- Официальный подсайт Уфимского университета науки...
+  узел адреса: uust.ru
+  org: uust.ru
+  оценки: relevance=2 maturity=0 accessibility=5 freshness=10 completeness=4
+  notes: ИИ-хакатон в агробиотехнологиях, но фрагмент обрывается, нет упоминания супоросности
+- Супоросность свиней и как определить супоросность свиньи ...
+  узел адреса: www.vitasol.ru
+  org: www.vitasol.ru
+  оценки: relevance=4 maturity=3 accessibility=3 freshness=5 completeness=5
+  notes: Обзор методов определения супоросности (УЗИ, лабораторные), но без ИИ и данных о победителях хакатона
+- Подводим итоги хакатона X5 Tech AI Hack / Хабр
+  узел адреса: habr.com
+  org: habr.com
+  оценки: relevance=0 maturity=0 accessibility=3 freshness=10 completeness=5
+  notes: Хакатон X5 Tech по NLP, не связан с супоросностью или свиноводством
+- В Москве наградили победителей Международного хакатона по ИИ
+  узел адреса: ura.news
+  org: ura.news
+  оценки: relevance=1 maturity=4 accessibility=5 freshness=8 completeness=6
+  notes: Общая новость о хакатоне: 10 кейсов, но сельское хозяйство и супоросность не упомянуты
+- 40 часов чтобы сделать невозможное! Итоги AgroCode Hack 2022
+  узел адреса: svoefermerstvo.ru
+  org: svoefermerstvo.ru
+  оценки: relevance=2 maturity=5 accessibility=6 freshness=7 completeness=6
+  notes: Агрохакатон, но в фрагменте кейс про выгрузку урожая, а не диагностику свиноматок; названы команды-победители
+- Команда программистов из Нижнего Новгорода стала призёром...
+  узел адреса: gorky.tech
+  org: gorky.tech
+  оценки: relevance=1 maturity=4 accessibility=5 freshness=8 completeness=5
+  notes: Описание международного хакатона без конкретных кейсов и сельскохозяйственной тематики
+- Победителей Международного хакатона по ИИ наградили на...
+  узел адреса: ren.tv
+  org: ren.tv
+  оценки: relevance=1 maturity=4 accessibility=5 freshness=8 completeness=5
+  notes: Новость о награждении; нет ни решений, ни агрокейсов
+- Объявлены итоги международного хакатона по... - ИА REGNUM
+  узел адреса: regnum.ru
+  org: regnum.ru
+  оценки: relevance=0 maturity=4 accessibility=5 freshness=10 completeness=6
+  notes: Единственный упомянутый кейс — от Минздрава; к животноводству отношения нет
+- Новость
+  узел адреса: omskportal.ru
+  org: omskportal.ru
+  оценки: relevance=0 maturity=5 accessibility=5 freshness=8 completeness=6
+  notes: Прототипы про видео, промбезопасность и оценку труда — другой процесс, не диагностика супоросности
+- Команда Поморья победила на зональном хакатоне по...
+  узел адреса: pravdasevera.ru
+  org: pravdasevera.ru
+  оценки: relevance=1 maturity=3 accessibility=5 freshness=8 completeness=5
+  notes: Общее описание окружного хакатона; конкретных задач и решений нет
+- В Омске наградили победителей Сибирского окружного хакатона ...
+  узел адреса: it-chempionat.ru
+  org: it-chempionat.ru
+  оценки: relevance=1 maturity=4 accessibility=5 freshness=10 completeness=6
+  notes: Новость о церемонии награждения без раскрытия кейсов и сельхознаправления
+- Итоги хакатона по созданию антикоррупционной... — CMS Magazine
+  узел адреса: cmsmagazine.ru
+  org: cmsmagazine.ru
+  оценки: relevance=0 maturity=4 accessibility=6 freshness=5 completeness=6
+  notes: Хакатон по антикоррупции; юридическая тематика, не имеющая отношения к свиноводству
+- В Ставрополе определены победители хакатона по... - МЧС России
+  узел адреса: mchs.gov.ru
+  org: mchs.gov.ru
+  оценки: relevance=0 maturity=5 accessibility=7 freshness=5 completeness=7
+  notes: Разработан алгоритм предотвращения пожаров — другой процесс; зато названы команда и участники
+сводка:
+  кандидатов: 20
+  relevance min/медиана/max: 0/1.0/4
+  relevance >= 4 / >= 3 / >= 2: 1 / 2 / 5
+  с непустым org: 20 из 20
+  с непустым snippet: 20 из 20
+  адресов с узлом из CONTEST_SITES: 0 из 20
+стоимость вызовов: 1.1561 ₽

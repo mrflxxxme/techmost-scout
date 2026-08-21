@@ -1,0 +1,110 @@
+extractor: стадия не удалась (router: стадия extractor: ответ не сходится со схемой ExtractedBatch: parser: ответ не содержит валидный JSON: Мы должны проверить ошибку: предыдущий ответ был, вероятно, не JSON объект, а список? Или что-то не так. Ошибка говорит "Input should be a valid dictionary or instance of ExtractedBatch [type=model_ty…) — беру разбор адаптера, кандидатов 20
+кандидатов после нормализации: 20
+- Технология внутрискважинной сепарации
+  узел адреса: ngdelo.ru
+  org: ngdelo.ru
+  оценки: relevance=4 maturity=6 accessibility=5 freshness=5 completeness=8
+  notes: Подробно описывает опытно-промысловую установку внутрискважинной сепарации, но это не итоги хакатона
+- НОВОСТЬ
+  узел адреса: ritek.lukoil.ru
+  org: ritek.lukoil.ru
+  оценки: relevance=8 maturity=3 accessibility=8 freshness=5 completeness=6
+  notes: Прямое попадание: победивший проект «Внутрискважинная сепарация вода-нефть» от Новомет-Пермь, хотя это конкурс идей, а не хакатон
+- Хакатон | Развитие ТЭК – Telegram
+  узел адреса: t.me
+  org: t.me
+  оценки: relevance=1 maturity=2 accessibility=4 freshness=10 completeness=5
+  notes: Хакатон-победитель, но про переработку газовой серы, а не внутрискважинную сепарацию
+- Физтехи — победители хакатона «Нефтекод-2025»
+  узел адреса: mipt.ru
+  org: mipt.ru
+  оценки: relevance=1 maturity=3 accessibility=7 freshness=10 completeness=6
+  notes: Хакатон-победитель, но про смазочные масла; контакт возможен через МФТИ
+- Картинки по запросу "итоги хакатона победитель проект команды внутрискважинная сепарация нефти и воды"
+  узел адреса: yandex.ru
+  org: yandex.ru
+  оценки: relevance=0 maturity=0 accessibility=0 freshness=0 completeness=0
+  notes: Поисковая выдача картинок без содержательного результата; данных недостаточно для оценки
+- Стали известны призеры хакатона вузов страны «Роснефти»...
+  узел адреса: vk.ru
+  org: vk.ru
+  оценки: relevance=1 maturity=0 accessibility=5 freshness=8 completeness=5
+  notes: Итоги хакатона «Роснефти», но без внутрискважинной сепарации; известны призёры, проекта нет
+- В Уфе подвели итоги хакатона вузов страны - смотреть видео...
+  узел адреса: rutube.ru
+  org: rutube.ru
+  оценки: relevance=1 maturity=0 accessibility=4 freshness=8 completeness=4
+  notes: Видео об итогах хакатона «Роснефти», но тема не связана с внутрискважинной сепарацией
+- Студенты университета – победители хакатон -чемпионата...
+  узел адреса: gubkin.ru
+  org: gubkin.ru
+  оценки: relevance=1 maturity=1 accessibility=6 freshness=5 completeness=5
+  notes: Хакатон Digital OilHack в Губкинском университете, но без темы внутрискважинной сепарации
+- Утилизация балластной попутно добываемой воды ...
+  узел адреса: cyberleninka.ru
+  org: cyberleninka.ru
+  оценки: relevance=4 maturity=5 accessibility=4 freshness=5 completeness=7
+  notes: Стендовые испытания и моделирование технологии скважинной сепарации водонефтяных эмульсий, но не итоги хакатона
+- «Нефтянка не загниет»: в Альметьевске подвели итоги ...
+  узел адреса: kazanfirst.ru
+  org: kazanfirst.ru
+  оценки: relevance=1 maturity=2 accessibility=4 freshness=5 completeness=6
+  notes: Хакатон-победитель про переработку попутного нефтяного газа, не про внутрискважинную сепарацию
+- RU2481471C1 - Способ внутрискважинной сепарации ...
+  узел адреса: patents.google.com
+  org: patents.google.com
+  оценки: relevance=10 maturity=3 accessibility=6 freshness=3 completeness=6
+  notes: Патент прямо описывает способ внутрискважинной сепарации водогазонефтяной смеси, но нет данных о внедрении.
+- СЕКЦИЯ 19.
+  узел адреса: earchive.tpu.ru
+  org: earchive.tpu.ru
+  оценки: relevance=6 maturity=1 accessibility=8 freshness=5 completeness=5
+  notes: Тема совпадает, но это студенческая публикация о технологии без показателей и промышленных данных.
+- Церемония награждения победителей хакатона ASEAN AI...
+  узел адреса: www.vietnam.vn
+  org: www.vietnam.vn
+  оценки: relevance=0 maturity=0 accessibility=6 freshness=10 completeness=5
+  notes: Хакатон по ИИ для устойчивого развития АСЕАН, никак не связан с нефтедобычей и сепарацией.
+- Металлургический хакатон ЕВРАЗа по Data Science: результаты ...
+  узел адреса: habr.com
+  org: habr.com
+  оценки: relevance=0 maturity=5 accessibility=6 freshness=5 completeness=6
+  notes: Проект Data Science по продувке металла на ЕВРАЗе, к внутрискважинной сепарации отношения не имеет.
+- Презентация PowerPoint
+  узел адреса: case-in.ru
+  org: case-in.ru
+  оценки: relevance=1 maturity=1 accessibility=7 freshness=5 completeness=4
+  notes: Студенческий проект по абсорбционной очистке сорбентом MEA, а не по внутрискважинной сепарации нефти и воды.
+- Новости
+  узел адреса: xn----7sbhc6c1ah6b.xn--p1ai
+  org: xn----7sbhc6c1ah6b.xn--p1ai
+  оценки: relevance=0 maturity=2 accessibility=7 freshness=8 completeness=4
+  notes: Хакатон про переработку газовой серы, задача не про сепарацию нефти и воды.
+- На ТNF 2020 определили победителя Хакатона Нейронефть
+  узел адреса: neftegaz.ru
+  org: neftegaz.ru
+  оценки: relevance=1 maturity=3 accessibility=3 freshness=5 completeness=2
+  notes: Хакатон по прогнозированию цен на нефть; есть нефтегазовая отрасль, но нет сепарации и технических деталей.
+- Внедрение установок кустового сброса и утилизации воды
+  узел адреса: glavteh.ru
+  org: glavteh.ru
+  оценки: relevance=4 maturity=7 accessibility=7 freshness=5 completeness=7
+  notes: Опытные испытания установки кустового сброса и сепарации воды с закачкой в ППД; смежно, но не внутрискважинная сепарация.
+- Список команд - победителей « Хакатон Развития ТЭК 2050»...
+  узел адреса: storage.yandexcloud.net
+  org: storage.yandexcloud.net
+  оценки: relevance=1 maturity=0 accessibility=6 freshness=10 completeness=3
+  notes: Итоги хакатона ТЭК без конкретных решений; фрагмент не содержит информации о сепарации.
+- Научный парк МГУ В Научном парке МГУ завершился хакатон от...
+  узел адреса: sciencepark.ru
+  org: sciencepark.ru
+  оценки: relevance=1 maturity=2 accessibility=5 freshness=8 completeness=3
+  notes: Хакатон по стратегии снабжения месторождения для Газпром нефти, к сепарации не относится.
+сводка:
+  кандидатов: 20
+  relevance min/медиана/max: 0/1.0/10
+  relevance >= 4 / >= 3 / >= 2: 6 / 6 / 6
+  с непустым org: 20 из 20
+  с непустым snippet: 20 из 20
+  адресов с узлом из CONTEST_SITES: 0 из 20
+стоимость вызовов: 1.2642 ₽
