@@ -1,0 +1,27 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KUklonskiy\techmost-scout\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KUklonskiy\techmost-scout\.claude\worktrees\agent-a90029151abf50645
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, respx-0.23.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 16 items
+
+tests/test_diversity.py::test_реальный_дубль_фармы_признан_одной_разработкой PASSED [  6%]
+tests/test_diversity.py::test_разные_разработки_на_одну_тему_не_признаются_одной PASSED [ 12%]
+tests/test_diversity.py::test_порог_держит_пару_критерия_2_ниже_себя PASSED [ 18%]
+tests/test_diversity.py::test_нормализация_организации_ловит_дубль_с_опф_и_адресным_хвостом PASSED [ 25%]
+tests/test_diversity.py::test_разные_организации_без_опф_не_склеиваются PASSED [ 31%]
+tests/test_diversity.py::test_пустая_организация_не_совпадает_сама_с_собой PASSED [ 37%]
+tests/test_diversity.py::test_канонический_адрес_ловит_дубль_независимо_от_www_и_схемы PASSED [ 43%]
+tests/test_diversity.py::test_склейка_пустого_списка_возвращает_пустой_список PASSED [ 50%]
+tests/test_diversity.py::test_склейка_единственной_заготовки_возвращает_её_без_изменений PASSED [ 56%]
+tests/test_diversity.py::test_все_заготовки_дубли_схлопываются_в_одну PASSED [ 62%]
+tests/test_diversity.py::test_ни_одна_пара_не_дубли_список_не_меняется PASSED [ 68%]
+tests/test_diversity.py::test_склейка_смешанного_набора_оставляет_дубли_вместе_а_остальных_врозь PASSED [ 75%]
+tests/test_diversity.py::test_склейка_доезжает_до_отчёта_и_экономит_платный_вызов PASSED [ 81%]
+tests/test_diversity.py::test_дублирующая_заготовка_не_печатается_дважды PASSED [ 87%]
+tests/test_diversity.py::test_конкурсная_очередь_склеивает_дубль_и_печатает_свою_строку PASSED [ 93%]
+tests/test_diversity.py::test_метрика_печатается_при_нуле_склеек PASSED  [100%]
+
+============================= 16 passed in 2.29s ==============================

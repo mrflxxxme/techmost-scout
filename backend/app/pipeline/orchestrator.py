@@ -25,7 +25,7 @@ from app.config import Settings, get_settings
 from app.export.markdown import PAID_LIMIT_NOTICE
 from app.llm import CostLimitExceededError, LLMRouter
 from app.metrics import score_payload
-from app.pipeline import stages
+from app.pipeline import diversity, stages
 from app.pipeline.persistence import CandidateRecord, PlanRecord, SessionFactory, StageRecord, persist_run
 from app.schemas import Brief, Candidate, Report, ScoredCandidate, SearchPlan, SolutionCard, SourceType
 from app.search import build_adapters, normalize_doi
@@ -814,7 +814,17 @@ class ScoutPipeline:
         # ровно отсечка, а не весь `select_top`, — вторая строка калибровки
         # осталась бы тем же испорченным воротным критерием.
         contest_eligible = self._cut_by_relevance(contest_scored)
-        contest_groups = stages.group_for_cards(contest_eligible, target=CONTEST_CARDS_TARGET)
+        contest_groups_raw = stages.group_for_cards(contest_eligible, target=CONTEST_CARDS_TARGET)
+        # Склейка заготовок до сборки карточек (З-6, РЕШ-132 п. 2): дублирующую
+        # заготовку нет смысла оплачивать отдельным вызовом модели. Порог до
+        # сборки, а не после — карточка стоит платного вызова.
+        contest_groups = diversity.merge_duplicate_groups(contest_groups_raw)
+        await self._notify(
+            "scorer",
+            f"Разнообразие (конкурсная очередь): заготовок до склейки {len(contest_groups_raw)}, "
+            f"после {len(contest_groups)}, схлопнуто {len(contest_groups_raw) - len(contest_groups)}",
+            0.63,
+        )
         contest_picked = [item for group in contest_groups for item in group]
         # Оценки уезжают в БД сразу после отбора, а не в конце прогона: отказ
         # сборки карточек или сводки не должен уносить с собой единственное
@@ -832,8 +842,18 @@ class ScoutPipeline:
         candidate_log.extend(candidate_records(scored, picked))
         if scored_second:
             candidate_log.extend(candidate_records(scored_second, picked, pass_no=2))
-        groups = stages.group_for_cards(selected, target=target)
+        groups_raw = stages.group_for_cards(selected, target=target)
+        # Склейка заготовок до сборки карточек (З-6, РЕШ-132 п. 2) — та же
+        # причина, что у конкурсной очереди: дублирующая заготовка не должна
+        # доезжать до платного вызова модели.
+        groups = diversity.merge_duplicate_groups(groups_raw)
         await self._notify("scorer", f"Отобрано вариантов для карточек: {len(groups)}", 0.6)
+        await self._notify(
+            "scorer",
+            f"Разнообразие (основная очередь): заготовок до склейки {len(groups_raw)}, "
+            f"после {len(groups)}, схлопнуто {len(groups_raw) - len(groups)}",
+            0.61,
+        )
         # Строка печатается ВСЕГДА, в том числе с нулями: «конкурсных кандидатов
         # не было» и «конкурсные были, но до карточек не дошли» — разные события,
         # и молчание сделало бы их неотличимыми. Именно на этом «подключили и не
