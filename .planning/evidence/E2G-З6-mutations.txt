@@ -1,0 +1,83 @@
+Задача: Э2-Г / З-6 — разнообразие выдачи: признак дубля и склейка карточек
+Мутации ставились и снимались прицельным прогоном `pytest tests/test_diversity.py -q`
+(РЕШ-135). После каждой мутации дерево возвращалось правкой обратно; `git diff --stat`
+подтверждал пустой дифф. Все шесть мутаций убили ожидаемые тесты прицельным
+прогоном — полный набор после снятия каждой не требовался (граница РЕШ-135 не
+сработала: убивало сразу).
+
+── Мутация (а): в orchestrator.py вызов `groups = diversity.merge_duplicate_groups(groups_raw)`
+заменён на `groups = groups_raw` (merge_duplicate_groups не вызывается для основной очереди).
+Ожидание по плану: падает критерий 3 (число карточек и число вызовов author_card).
+Факт:
+  tests/test_diversity.py::test_склейка_доезжает_до_отчёта_и_экономит_платный_вызов FAILED
+    assert len(report.cards) == 3  →  assert 4 == 3
+  tests/test_diversity.py::test_дублирующая_заготовка_не_печатается_дважды FAILED
+    assert titles.count(_DUP_TITLE) == 1  →  assert 2 == 1
+  Итог: 2 failed, 14 passed.
+Правка возвращена, `git diff --stat` — пусто.
+
+── Мутация (б): в diversity.py `_same_org` сравнивает организации по сырой строке
+(без `_normalize_org`) — ОПФ и адресный хвост после запятой не снимаются.
+Ожидание по плану: падает отдельный тест пары «ФГБОУ ВО … / …» внутри критерия 1.
+Факт:
+  tests/test_diversity.py::test_нормализация_организации_ловит_дубль_с_опф_и_адресным_хвостом FAILED
+    assert is_same_development(a, b) is True  →  False (строки не совпали дословно)
+  tests/test_diversity.py::test_конкурсная_очередь_склеивает_дубль_и_печатает_свою_строку FAILED
+    (дубль конкурсной очереди тоже ловится только организацией — не склеился)
+  Итог: 2 failed, 14 passed.
+Правка возвращена.
+
+── Мутация (в): в diversity.py из `is_same_development` убрано слагаемое
+`_title_similarity(a.title, b.title) >= TITLE_SIMILARITY_THRESHOLD`.
+Ожидание по плану: падает критерий 1 (реальный дубль Э2-В ловится именно заголовком).
+Факт:
+  tests/test_diversity.py::test_реальный_дубль_фармы_признан_одной_разработкой FAILED
+    assert is_same_development(_DUP_CANDIDATE_A, _DUP_CANDIDATE_B) is True  →  False
+  tests/test_diversity.py::test_все_заготовки_дубли_схлопываются_в_одну FAILED
+  tests/test_diversity.py::test_склейка_смешанного_набора_оставляет_дубли_вместе_а_остальных_врозь FAILED
+  tests/test_diversity.py::test_склейка_доезжает_до_отчёта_и_экономит_платный_вызов FAILED
+  tests/test_diversity.py::test_дублирующая_заготовка_не_печатается_дважды FAILED
+  Итог: 5 failed, 11 passed.
+Правка возвращена.
+
+── Мутация (г): в diversity.py `TITLE_SIMILARITY_THRESHOLD` понижен с 0.65 до 0.01.
+Ожидание по плану: падает критерий 2 (карточки 1 и 5 Э2-В склеиваются ложно).
+Факт:
+  tests/test_diversity.py::test_разные_разработки_на_одну_тему_не_признаются_одной FAILED
+  tests/test_diversity.py::test_порог_держит_пару_критерия_2_ниже_себя FAILED
+  tests/test_diversity.py::test_разные_организации_без_опф_не_склеиваются FAILED
+  tests/test_diversity.py::test_пустая_организация_не_совпадает_сама_с_собой FAILED
+  tests/test_diversity.py::test_ни_одна_пара_не_дубли_список_не_меняется FAILED
+  tests/test_diversity.py::test_склейка_смешанного_набора_оставляет_дубли_вместе_а_остальных_врозь FAILED
+  tests/test_diversity.py::test_склейка_доезжает_до_отчёта_и_экономит_платный_вызов FAILED
+  tests/test_diversity.py::test_конкурсная_очередь_склеивает_дубль_и_печатает_свою_строку FAILED
+  tests/test_diversity.py::test_метрика_печатается_при_нуле_склеек FAILED
+  Итог: 9 failed, 7 passed (порог почти до нуля склеивает почти всё подряд, эффект
+  много шире одного критерия — ожидаемо: он затрагивает единственную функцию
+  сравнения, от которой зависят все сценарии).
+Правка возвращена.
+
+── Мутация (д): в orchestrator.py вызов `contest_groups = diversity.merge_duplicate_groups(contest_groups_raw)`
+заменён на `contest_groups = contest_groups_raw` (склейка применена только к основной очереди).
+Ожидание по плану: падает критерий 4 (конкурсная очередь).
+Факт:
+  tests/test_diversity.py::test_конкурсная_очередь_склеивает_дубль_и_печатает_свою_строку FAILED
+    assert len(report.contest_cards) == 2  →  assert 3 == 2
+  Итог: 1 failed, 15 passed.
+Правка возвращена.
+
+── Мутация (е): в orchestrator.py строка «Разнообразие (основная очередь): …»
+обёрнута в `if len(groups_raw) - len(groups) > 0:` — печатается только при K > 0.
+Ожидание по плану: падает критерий 5 (метрика при K=0).
+Факт:
+  tests/test_diversity.py::test_метрика_печатается_при_нуле_склеек FAILED
+    (строка «схлопнуто 0» для основной очереди отсутствует в событиях прогресса)
+  tests/test_diversity.py::test_конкурсная_очередь_склеивает_дубль_и_печатает_свою_строку FAILED
+    (тот же тест проверяет строку основной очереди со «схлопнуто 0» — тоже пропала)
+  Итог: 2 failed, 14 passed.
+Правка возвращена.
+
+Итог по всем шести: каждая мутация убила ровно тот критерий (или критерии), что
+предсказан планом задачи. Финальная проверка после снятия последней мутации —
+tests/test_diversity.py: 16 passed; `git diff --stat` пуст (см.
+E2G-З6-pytest-narrow.txt и E2G-З6-pytest-full.txt).
