@@ -4,18 +4,22 @@
 поддельными, HTTP-ответы источников — через respx. Поэтому набор проходит
 на машине без ключей и без интернета.
 
-Изоляция от боевого `.env` (РЕШ-97, РЕШ-113, РЕШ-120). Движок базы создаётся
-на импорте модуля `backend/app/db.py` (`_settings = get_settings()` на
-верхнем уровне), поэтому никакая фикстура опоздать не может по построению —
-до первого импорта `app.db` любым тестовым модулем окружение обязано быть
-подменено. Правки изоляции — только здесь: `backend/app/db.py` и
-`backend/app/config.py` не трогаются (граница задачи З-1).
+Изоляция от боевого `.env` (РЕШ-97, РЕШ-113, РЕШ-120) и от переменных,
+экспортированных в оболочке процесса (З-1 Э2-Д, долг 7 ворот Э2-Г). Движок
+базы создаётся на импорте модуля `backend/app/db.py` (`_settings =
+get_settings()` на верхнем уровне), поэтому никакая фикстура опоздать не
+может по построению — до первого импорта `app.db` любым тестовым модулем
+окружение обязано быть подменено. Правки изоляции — только здесь:
+`backend/app/db.py` и `backend/app/config.py` не трогаются (граница задачи
+З-1).
 """
 
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, MutableMapping
+
+from app.config import Settings
 
 #: Окружение тестового прогона. Имена — ровно те переменные, которые читает
 #: рабочий код (`validation_alias` в `app.config.Settings`); значения —
@@ -30,15 +34,49 @@ TEST_ENV: dict[str, str] = {
     "COST_LIMIT_RUB_PER_REQUEST": "10.0",
 }
 
+
+def purge_settings_env(environ: MutableMapping[str, str]) -> list[str]:
+    """Удаляет из `environ` все переменные, которые может прочитать `Settings`.
+
+    Список имён строится программно из `Settings.model_fields`, а не пишется
+    руками: для каждого поля берётся его `validation_alias`, если он задан
+    (`GIGACHAT_AUTH_KEY`, `YANDEX_SEARCH_API_KEY` и т. п.), иначе имя поля в
+    верхнем регистре — тем же способом, каким `pydantic-settings` ищет
+    переменную при `case_sensitive=False`. Рукописный список из шести имён
+    устаревает на следующем поле (например `ROSPATENT_API_KEY`, у которого
+    алиаса нет) — дыра из долга ворот Э2-Г вернётся тихо.
+
+    Возвращает имена фактически удалённых переменных (в исходном регистре
+    ключа `environ`) — без значений (инвариант №3): по имени вызывающий код
+    может сообщить, что затронуто, не раскрывая, что там лежало.
+    """
+    names: set[str] = set()
+    for field_name, field_info in Settings.model_fields.items():
+        alias = field_info.validation_alias
+        candidate = alias if isinstance(alias, str) else field_name
+        names.add(candidate.upper())
+    removed = [key for key in list(environ) if key.upper() in names]
+    for key in removed:
+        del environ[key]
+    return removed
+
+
+# Порядок обязателен (первая мутация задачи З-1: обратный порядок стирает сам
+# TEST_ENV). Сначала чистка боевого окружения процесса — до первого импорта
+# `app.db` и до того, как ниже будет установлен `TEST_ENV`, — потом сам
+# `TEST_ENV`. `Settings` уже импортирован выше: сам класс безопасен, читает
+# окружение только при вызове `Settings()`/`get_settings()`.
+purge_settings_env(os.environ)
+
 # Перекрытие (не setdefault!) окружения — на импорте этого файла, до первого
-# импорта `app.config` и тем более `app.db` в этом процессе. Боевой `.env`
-# рядом с рабочим деревом не должен долетать ни до одной переменной, включая
-# ещё не перечисленные здесь (РЕШ-97, РЕШ-120).
+# импорта `app.db` в этом процессе. Боевой `.env` и боевые переменные
+# процесса рядом с рабочим деревом не должны долетать ни до одной переменной,
+# включая ещё не перечисленные здесь (РЕШ-97, РЕШ-120).
 os.environ.update(TEST_ENV)
 
 import pytest  # noqa: E402
 
-from app.config import Settings, get_settings  # noqa: E402
+from app.config import get_settings  # noqa: E402
 
 # Вторая половина изоляции: даже поля, которых нет в TEST_ENV (например
 # `RELEVANCE_MIN`, `SECOND_PASS_RELEVANCE_MAX`), не должны читаться из
