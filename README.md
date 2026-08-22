@@ -12,6 +12,7 @@
 - Правила работы агентов в репозитории: [CLAUDE.md](CLAUDE.md)
 - Где мы сейчас: [.planning/STATE.md](.planning/STATE.md)
 - Что нужно донести вручную (ключи, регистрации): [docs/deps-manual.md](docs/deps-manual.md)
+- Материалы компании — рынок, дорожная карта, интервью, дек: [docs/marketing/](docs/marketing/README.md)
 
 ## Разработка ведётся командой агентов
 
@@ -97,6 +98,8 @@ backend/app/
 prompts/          промпты стадий; правка = запись в CHANGELOG.md
 data/             gov_support.yaml — справочник господдержки; scout.db
 docs/             SPEC.md, deps-manual.md, sources.md
+  marketing/      бизнес-материалы компании: рынок, дорожная карта, дек
+  archive/        выведенные из действия PRD и ТЗ версии 1
 tests/            все тесты работают без сети и без ключей
 ```
 
