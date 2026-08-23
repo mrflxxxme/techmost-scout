@@ -41,6 +41,9 @@ _ORCH_MODULES_UNDER_LIMIT = (
     "run_cards.py",
     "run_flow.py",
     "run_journal.py",
+    # Накопительный поиск (З-4, РЕШ-163): чистые функции восстановления
+    # кандидатов прошлых прогонов — новый модуль, под тем же общим лимитом.
+    "history.py",
 )
 
 _ORCH_FACADE_LIMIT = 120

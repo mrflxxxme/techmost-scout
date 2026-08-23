@@ -17,7 +17,7 @@ import logging
 from datetime import UTC, datetime
 
 from app.llm import CostLimitExceededError
-from app.pipeline import diversity, stages
+from app.pipeline import diversity, history, stages
 from app.pipeline.persistence import CandidateRecord, PlanRecord, StageRecord
 from app.pipeline.pipeline_context import PipelineContextMixin
 from app.pipeline.pipeline_enrichment import EnrichmentMixin
@@ -49,6 +49,7 @@ class ScoutPipeline(PipelineContextMixin, SearchMixin, EnrichmentMixin, Selectio
         initial_stage_log: list[StageRecord] | None = None,
         initial_caveats: list[str] | None = None,
         constraints_unresolved: bool = False,
+        history_request_id: int | None = None,  # РЕШ-166: явный номер прошлого прогона
     ) -> Report:
         """Бриф → отчёт. Интейк выполняется отдельно, до этого вызова.
 
@@ -103,8 +104,13 @@ class ScoutPipeline(PipelineContextMixin, SearchMixin, EnrichmentMixin, Selectio
         #: причине, что и планы: без сохранённых оценок числовой критерий
         #: приёмки (РЕШ-86) не с чем сравнивать.
         candidate_log: list[CandidateRecord] = []
+        # Накопительный поиск (РЕШ-163) — чтение, лог и запись отказа в
+        # журнал стадий собраны в history.load_and_log (инвариант №5).
+        history_pool = await history.load_and_log(
+            self._session_factory, raw_text=raw_text, explicit_request_id=history_request_id, stage_log=stage_log
+        )
         try:
-            report = await self._run_stages(brief, request_id, stage_log, plan_log, candidate_log)
+            report = await self._run_stages(brief, request_id, stage_log, plan_log, candidate_log, history_pool)
         except Exception as exc:
             await persist_run(
                 self._session_factory,
@@ -173,10 +179,12 @@ class ScoutPipeline(PipelineContextMixin, SearchMixin, EnrichmentMixin, Selectio
         stage_log: list[StageRecord],
         plan_log: list[PlanRecord],
         candidate_log: list[CandidateRecord],
+        history_pool: history.HistoryPool | None = None,
     ) -> Report:
         """Прежнее тело `run` — прогон стадий, теперь ещё собирает `stage_log`,
         планы проходов в `plan_log` (РЕШ-83) и кандидатов с оценками в
-        `candidate_log` (РЕШ-84).
+        `candidate_log` (РЕШ-84). `history_pool` — накопительный поиск (РЕШ-163,
+        `app.pipeline.history`); умолчание `None` — ради прямых вызовов в тестах.
 
         Оба журнала **обязательны** (РЕШ-89). Пока `plan_log` был необязательным,
         ветка «списка не передали» переживала мутацию молча: следующий
@@ -185,6 +193,7 @@ class ScoutPipeline(PipelineContextMixin, SearchMixin, EnrichmentMixin, Selectio
         из тестов, которым нужен только журнал стадий, дешевле передать пустой
         список, чем оставлять в коде необязательную ветку.
         """
+        history_pool = history_pool or history.HistoryPool()
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
         if self._preset_plan is not None:
@@ -241,20 +250,22 @@ class ScoutPipeline(PipelineContextMixin, SearchMixin, EnrichmentMixin, Selectio
         unique = stages.deduplicate(outcome.candidates)
         await self._notify("dedup", f"После склейки дублей осталось {len(unique)}", 0.45)
 
-        if not unique:
+        if not unique and not history_pool.scored:
             return self._empty_report(brief, request_id, outcome.unavailable)
+
+        new_for_scoring = history.exclude_known(unique, history_pool.scored)  # РЕШ-163, пункт 4
 
         # Между дедупликацией и скорингом (РЕШ-52.3): обогащать до склейки
         # дублей — платить лишние запросы за кандидатов, которые всё равно
         # схлопнутся, а после скоринга цитируемость уже никому не поможет.
-        unique, citations = await self.enrich_candidates(unique, stage_log=stage_log)
+        new_for_scoring, citations = await self.enrich_candidates(new_for_scoring, stage_log=stage_log)
         if citations:
             await self._notify("enrich", f"Цитируемость известна у кандидатов: {len(citations)}", 0.47)
 
         await self._notify("scorer", "Оцениваю кандидатов", 0.5)
         started = datetime.now(UTC)
         cost_before = dict(self._router.cost.by_provider)
-        scored = await stages.score_candidates(self._router, brief, unique, citations=citations)
+        scored = await stages.score_candidates(self._router, brief, new_for_scoring, citations=citations)
         stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
         stage_log.append(
             StageRecord(
@@ -265,6 +276,8 @@ class ScoutPipeline(PipelineContextMixin, SearchMixin, EnrichmentMixin, Selectio
                 cost_rub=stage_cost,
             )
         )
+        # Пункт 5: объединённый пул для отбора и гейта второго прохода.
+        scored_pool = [*history_pool.scored, *scored]
         # Условный второй проход (РЕШ-81). Решение печатается ВСЕГДА, одной из
         # двух дословных строк, в том числе при выключенном пороге: иначе
         # «проход не сработал» неотличимо от «код до проверки не дошёл».
@@ -277,10 +290,10 @@ class ScoutPipeline(PipelineContextMixin, SearchMixin, EnrichmentMixin, Selectio
         # гейт смотрел на весь список, один хакатонный прототип с relevance 9
         # гасил проход на выдаче из двоек и троек — ровно на той задаче, ради
         # которой проход затеян (РЕШ-81).
-        main_first_pass, _ = split_contest_candidates(scored)
+        main_first_pass, _ = split_contest_candidates(scored_pool)
         if stages.needs_second_pass(main_first_pass, threshold=self._settings.second_pass_relevance_max):
             scored_second, second_unavailable = await self._second_pass(
-                brief, plan, unique, scored, stage_log=stage_log, plan_log=plan_log
+                brief, plan, unique, scored_pool, stage_log=stage_log, plan_log=plan_log, history=history_pool.scored
             )
             if second_unavailable:
                 # Источник, не ответивший хотя бы одному проходу, честно едет в
@@ -294,7 +307,7 @@ class ScoutPipeline(PipelineContextMixin, SearchMixin, EnrichmentMixin, Selectio
         # Но конкурсные кандидаты в общий отбор не идут (РЕШ-85 п. 1, РЕШ-92):
         # они не конкурируют с публикациями по общему скорингу и никого из
         # обещанных клиенту 5–7 вариантов не вытесняют.
-        main_scored, contest_scored = split_contest_candidates([*scored, *scored_second])
+        main_scored, contest_scored = split_contest_candidates([*scored_pool, *scored_second])
         selected = stages.select_top(main_scored, limit=target * 2)
         # Своя очередь конкурсного класса: группировка по организации та же, но
         # с собственной верхней границей, и `select_top` здесь не зовётся —
@@ -337,6 +350,9 @@ class ScoutPipeline(PipelineContextMixin, SearchMixin, EnrichmentMixin, Selectio
         candidate_log.extend(candidate_records(scored, picked))
         if scored_second:
             candidate_log.extend(candidate_records(scored_second, picked, pass_no=2))
+        if history_pool.scored:
+            # Пункт 6: свой вызов с pass_no=0, судьба — по ЭТОМУ прогону.
+            candidate_log.extend(candidate_records(history_pool.scored, picked, pass_no=history.HISTORY_PASS_NO))
         groups_raw = stages.group_for_cards(selected, target=target)
         # Склейка заготовок до сборки карточек (З-6, РЕШ-132 п. 2) — та же
         # причина, что у конкурсной очереди: дублирующая заготовка не должна
