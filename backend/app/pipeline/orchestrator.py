@@ -60,6 +60,29 @@ def cost_delta(before: dict[str, float], after: dict[str, float]) -> tuple[float
     return round(total, 6), provider
 
 
+def format_active_run_params(settings: Settings) -> str:
+    """Строка активных параметров прогона (З-7): стоп-кран, оба порога отбора,
+    маршрут каждой стадии, порядок резерва, имена моделей.
+
+    Печатается ДО первой платной стадии — окружение между подготовкой и
+    прогоном способно измениться незаметно (Б-2 аудита Э2-Г: `extractor` ушёл
+    на `deepseek`, а модель оказалась не той, что боевая, и это вскрылось
+    только аудитом задним числом). Значения секретов сюда не попадают: из
+    настроек берутся только величины, у которых нет тайной составляющей, —
+    ключи в строку не подставляются вовсе, ни значением, ни фрагментом.
+    """
+    routes = ", ".join(f"{stage}:{provider}" for stage, provider in settings.stage_routes().items())
+    fallback = "→".join(settings.fallback_order())
+    return (
+        f"Параметры прогона: стоп-кран {settings.cost_limit_rub_per_request:.2f} ₽/запрос; "
+        f"relevance_min={settings.relevance_min}; "
+        f"second_pass_relevance_max={settings.second_pass_relevance_max}; "
+        f"маршруты стадий: {routes}; "
+        f"порядок резерва: {fallback}; "
+        f"модели: gigachat={settings.gigachat_model}, deepseek={settings.deepseek_model}"
+    )
+
+
 def _unwrap_group(wrapped: BaseExceptionGroup) -> BaseException:
     """Достать из обёртки `asyncio.TaskGroup` исходное исключение.
 
@@ -629,6 +652,11 @@ class ScoutPipeline:
         по тому `brief`, что был передан на вход, — флаг только про то, что
         клиент увидит в отчёте.
         """
+        # Печатается первой строкой прогона, до вызова стадий (критерий 1 З-7):
+        # обязана попасть в лог и тогда, когда первая же платная стадия падает,
+        # — именно тогда фактическое окружение прогона важнее всего разобрать,
+        # а восстановить его после падения больше неоткуда.
+        log.info(format_active_run_params(self._settings))
         stage_log: list[StageRecord] = list(initial_stage_log or [])
         #: Планы проходов этого прогона (РЕШ-83): собираются по ходу стадий и
         #: пишутся в `search_plans` той же транзакцией, что и строка запроса.
