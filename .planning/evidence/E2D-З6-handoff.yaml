@@ -1,0 +1,62 @@
+handoff:
+  from: implementer-D
+  to: reviewer
+  task: З-6
+  did:
+    - "backend/app/pipeline/orchestrator.py: отказ отдельной формулировки внутри
+      _safe_search теперь пишется в problems (текст с именем источника и
+      формулировкой) — раньше уходил только в log.warning."
+    - "Добавлен счётчик self._partial_failure_total (по образцу
+      _limit_skipped_total), копится по обоим проходам."
+    - "run(): оговорка PAID_LIMIT_NOTICE ставится при
+      self._limit_skipped_total ИЛИ self._partial_failure_total — ровно один
+      раз, даже если сработали оба признака (единый if, один append)."
+    - "sources_unavailable и логика полного отказа источника не менялись —
+      частичный отказ по-прежнему не делает источник недоступным."
+    - "export/markdown.py не тронут: текст PAID_LIMIT_NOTICE и способ его
+      печати в блоке «Ограничения этого поиска» — те же, что и до задачи."
+    - "Тесты tests/test_partial_source_failure.py — 5 штук, сквозной прогон
+      через ScoutPipeline.run на поддельном адаптере и провайдере-заглушке
+      (без сети): критерий 1 (доезжает до клиента, sources_unavailable пуст),
+      критерий 2 (не задваивается при обоих признаках + мутационно-устойчивый
+      тест на приём РЕШ-129), критерий 3 (причина в pipeline_logs через
+      временную SQLite), контрольный тест на неизменность текста константы."
+  artifacts:
+    - backend/app/pipeline/orchestrator.py
+    - tests/test_partial_source_failure.py
+    - .planning/evidence/E2D-З6-pytest-full.txt
+    - .planning/evidence/E2D-З6-pytest-task.txt
+    - .planning/evidence/E2D-З6-pytest-criterion4.txt
+    - .planning/evidence/E2D-З6-ruff-check.txt
+    - .planning/evidence/E2D-З6-ruff-format.txt
+    - .planning/evidence/E2D-З6-mutations.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_partial_source_failure.py -v: 5 passed"
+    - "pytest tests/test_search_failures.py tests/test_yandex_limit_visibility.py -q: 22 passed"
+    - "pytest -q (без RELEVANCE_MIN, SECOND_PASS_RELEVANCE_MAX, YANDEX_SEARCH_API_KEY,
+      YANDEX_CATALOG_ID, LLM_STAGE_ROUTES, LLM_FALLBACK_ORDER,
+      --deselect test_state_stays_short): 668 passed, 1 deselected, 0 failed
+      (базовая линия из постановки — 664, без нового файла тестов в дереве
+      было 663 — прирост ровно на 5 новых тестов задачи)"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 117 files already formatted"
+    - "git diff --name-only: только backend/app/pipeline/orchestrator.py —
+      backend/app/export/ не задет"
+    - "5 мутаций из карточки (а, б, в, г, д) — прицельный прогон
+      tests/test_partial_source_failure.py, каждая падает минимум одним
+      тестом; дерево между мутациями восстановлено побайтно (сверено diff'ом),
+      git status после каждой — только исходный diff задачи (см.
+      .planning/evidence/E2D-З6-mutations.txt)"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-6, строки 605-681)
+    - docs/team/INVARIANTS.md (пункт 5)
+    - backend/app/pipeline/orchestrator.py (_safe_search, SearchOutcome.problems, run())
+    - tests/test_partial_source_failure.py
+    - .planning/evidence/E2D-З6-mutations.txt
+  notes: >
+    Клиентский текст не менялся и не сочинялся — использован одобренный
+    PAID_LIMIT_NOTICE, случай покрыт без развилки владельцу. За границами
+    задачи не замечено ничего нового сверх того, что уже названо в аудите
+    Э2-Г (В-3), — сама находка закрыта этой правкой.

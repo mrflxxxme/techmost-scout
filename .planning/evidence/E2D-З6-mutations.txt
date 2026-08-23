@@ -1,0 +1,45 @@
+Мутации из карточки З-6 PLAN.md — прицельный прогон (РЕШ-135), дерево
+восстанавливалось командой `cp orchestrator.py.orig` между мутациями,
+`git status` после каждой правки и после восстановления показывал только
+исходный diff задачи (M backend/app/pipeline/orchestrator.py,
+?? tests/test_partial_source_failure.py). После восстановления —
+`diff orchestrator.py.orig backend/app/pipeline/orchestrator.py` — IDENTICAL.
+
+(а) Счётчик _partial_failure_total не увеличивается в except-ветке _safe_search.
+    Команда: pytest tests/test_partial_source_failure.py -q
+    Результат: 2 failed, 3 passed
+      FAILED test_частичный_отказ_доезжает_до_клиента
+      FAILED test_признак_оговорки_переживает_подмену_текста_константы
+    Критерий 1 упал — мутация поймана.
+
+(б) Оговорка добавляется на каждый отказ (а не по счётчику один раз).
+    Команда: pytest tests/test_partial_source_failure.py -q
+    Результат: 1 failed, 4 passed
+      FAILED test_оговорка_не_задваивается_при_обоих_признаках (2 == 1)
+    Критерий 2 упал — мутация поймана.
+
+(в) Частичный отказ дополнительно засчитывается в sources_unavailable.
+    Команда: pytest tests/test_partial_source_failure.py -q
+    Результат: 1 failed, 4 passed
+      FAILED test_частичный_отказ_доезжает_до_клиента (['yandex_search'] == [])
+    Вторая половина критерия 1 упала — мутация поймана.
+
+(г) Причина отказа не пишется в problems (счётчик при этом инкрементируется).
+    Команда: pytest tests/test_partial_source_failure.py -q
+    Результат: 1 failed, 4 passed
+      FAILED test_причина_отказа_в_журнале_стадии_search (record.error is None)
+    Критерий 3 упал — мутация поймана.
+
+(д) Опознание оговорки переведено на подстроку текста PAID_LIMIT_NOTICE в
+    caveats вместо счётчика (условие: `PAID_LIMIT_NOTICE in caveats or
+    self._limit_skipped_total`).
+    Команда: pytest tests/test_partial_source_failure.py -q
+    Результат: 2 failed, 3 passed
+      FAILED test_частичный_отказ_доезжает_до_клиента
+      FAILED test_признак_оговорки_переживает_подмену_текста_константы
+        (текст константы подменён монкипатчем — распознавание по счётчику
+        обязано выжить; при мутации на подстроку — не выживает)
+    Критерий 2 (отдельный тест на приём РЕШ-129) упал — мутация поймана.
+
+Итог: все 5 предписанных мутаций убивают тесты, дерево после каждой мутации
+восстановлено байт-в-байт (сверено diff'ом с сохранённой копией до правок).
