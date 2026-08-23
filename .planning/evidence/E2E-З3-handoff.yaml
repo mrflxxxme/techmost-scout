@@ -1,0 +1,51 @@
+handoff:
+  from: implementer-C
+  to: reviewer
+  task: З-3
+  did:
+    - Написан офлайн-скрипт scripts/history_probe.py (проба, вне поставки продукта,
+      РЕШ-119): читает data/scout.db в режиме ?mode=ro, сети и платных вызовов не
+      делает.
+    - Признак «та же задача» измерен на прогонах 1 (Э2-Г) и 2 (Э2-Д) — тексты
+      raw_text совпадают дословно (exact_match=True), доля общих слов формулировок
+      плана поиска всего 0.432 при этом же полном совпадении исходного текста —
+      план поиска признаком не годится.
+    - Что дало бы накопление посчитано тем же кодом, что и продукт
+      (app.pipeline.selection.select_top/group_for_cards, app.metrics): пороги 3 и 4
+      по пулам 72/200 и по объединению 266 — 5/9/13 и 5/2/7 соответственно; заготовок
+      карточек 5/6/6 и 5/2/6; обе «семёрки» Э2-Г отсутствуют в пуле Э2-Д, но
+      возвращаются в объединение и в заготовки карточек при обоих порогах.
+    - Пригодность сохранённых строк проверена на всех 343 строках candidates обоих
+      прогонов — 0 ошибок восстановления Candidate, 0 расхождений dedup_key(), 0
+      пустых/нейтральных оценок; pdf_url теряют все 343 строки — колонки в таблице
+      нет вовсе (models.py подтверждает).
+    - Три контрольные величины из E2E-выдача-сравнение.md воспроизведены дословно
+      (72, 200, 6) — мутационная проверка задачи пройдена.
+  artifacts:
+    - scripts/history_probe.py
+    - .planning/evidence/E2E-history-probe.md
+    - .planning/evidence/E2E-history-probe.txt
+  self_audit: pass
+  checks:
+    - ".venv/bin/python scripts/history_probe.py --help: exit 0, параметры --db/--requests/--min-relevance названы"
+    - "grep -nE 'httpx|respx|requests\\.|aiohttp' scripts/history_probe.py: совпадений нет"
+    - "ls -l --time-style=full-iso data/scout.db до и после: размер 950272 и время правки не изменились"
+    - ".venv/bin/python -m pytest -q: 698 passed, 0 failed (не меньше базовой линии)"
+    - "ruff check scripts/history_probe.py: All checks passed"
+    - "ruff format --check scripts/history_probe.py: 1 file already formatted"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-3, строки 387-479)
+    - .planning/evidence/E2E-выдача-сравнение.md (контрольные величины и контекст волны)
+    - scripts/history_probe.py
+    - .planning/evidence/E2E-history-probe.md
+  notes: >
+    Исход: накопление помогает на этой паре прогонов (числа в отчёте), но выигрыш
+    измерен на одной паре — обобщать без повторной пробы на другой паре нельзя.
+    Признак «та же задача» по raw_text сработал безотказно только потому, что оба
+    прогона поданы дословно одним и тем же текстом (частный случай, не общее
+    доказательство); план поиска как признак не годится (модель каждый раз
+    перефразирует). Ruff check/format на весь репозиторий (не только на мой файл)
+    показывает 15 предсуществующих замечаний в docs/marketing/deck/*.py — это вне
+    границ задачи З-3, файл не мой, не трогал; проверено git stash, что замечания
+    были уже в базовой линии до моих правок.
