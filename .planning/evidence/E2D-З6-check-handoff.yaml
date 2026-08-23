@@ -1,0 +1,39 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "З-6"
+  did:
+    - "Сверены diff, все 10 инвариантов, границы задачи по PLAN.md (строки 605-681)"
+    - "Прогнан полный набор pytest -q (668 passed, 1 deselected) очищенной командой,
+      целевые команды критериев 1-4 и ruff check/format самостоятельно"
+    - "Независимо от исполнителя поставлены две собственные мутации (уборка
+      problems.append и подмена условия if на только limit_skipped_total) —
+      обе ловятся ПОЛНЫМ набором тестов, не только модулем задачи (урок Э2-В);
+      дерево восстановлено побайтно, git status --porcelain пуст"
+    - "Сверен текст PAID_LIMIT_NOTICE побайтно с версией до задачи (commit 0f6ffd3)
+      — не изменён; export/markdown.py не тронут диффом"
+    - "Проверено разделение sources_unavailable / оговорки, отсутствие
+      задвоения при обоих признаках, доставка причины в pipeline_logs"
+  artifacts:
+    - .planning/evidence/E2D-З6-check.md (закоммичен до ответа)
+    - .planning/evidence/E2D-З6-check-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q (очищенное окружение) --deselect test_state_stays_short: 668 passed, 1 deselected"
+    - "pytest tests/test_partial_source_failure.py -v: 5 passed"
+    - "pytest tests/test_search_failures.py tests/test_yandex_limit_visibility.py -q: 22 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 117 files already formatted"
+    - "своя мутация 1 (уборка problems.append): pytest -q -> 1 failed, 667 passed"
+    - "своя мутация 2 (условие if только limit_skipped_total): pytest -q -> 2 failed, 666 passed"
+    - "git status --porcelain после восстановления: пусто"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-6, строки 605-681)
+    - .planning/evidence/E2D-З6-check.md
+    - backend/app/pipeline/orchestrator.py (_safe_search, run())
+  notes: >
+    Цикл 1. Вердикт ПРИНЯТЬ, блокирующих находок нет. Один совет (не
+    блокирует): нет отдельного явного негативного теста «ни один из двух
+    признаков — строки оговорки нет вовсе», сейчас это подтверждается лишь
+    косвенно остальным набором. Дальше — верификатору/оркестратору волны.
