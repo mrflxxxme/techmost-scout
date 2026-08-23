@@ -1,0 +1,60 @@
+handoff:
+  from: implementer-J
+  to: reviewer
+  task: "З-10"
+  did:
+    - "Раздроблен backend/app/pipeline/orchestrator.py (1203 строки) на семь модулей рядом: pipeline_context.py (конструктор ScoutPipeline и _notify), pipeline_search.py (поиск, извлечение extractor, второй проход), pipeline_enrichment.py (обогащение по DOI), pipeline_selection_flow.py (деление на обычных/конкурсных кандидатов, candidate_records, отсечка по relevance), run_cards.py (сборка карточек), run_journal.py (cost_delta, format_active_run_params), run_flow.py (сам класс ScoutPipeline через мультинаследование миксинов, метод run/_run_stages/_empty_report)"
+    - "orchestrator.py — фасад-реэкспорт, 51 строка, ни одного def/class"
+    - "Сохранены три точки монkeypatch по атрибуту фасада (грабля коммита 3891b08): build_adapters, persist_run, PAID_LIMIT_NOTICE читаются отложенным импортом из app.pipeline.orchestrator внутри вызывающих функций, а не напрямую из исходных модулей"
+    - "Логгер во всех новых модулях явно называется app.pipeline.orchestrator (не __name__) — тесты фильтруют caplog ровно по этой строке"
+    - "Расширен страж tests/test_pipeline_layout.py: три новых теста на лимит строк, реэкспорт и отсутствие определений в фасаде orchestrator.py — по образцу теста для stages.py (З-2 Э2-Г)"
+    - "Поведение не менялось: тело всех перенесённых функций и методов скопировано дословно"
+  artifacts:
+    - backend/app/pipeline/orchestrator.py
+    - backend/app/pipeline/pipeline_context.py
+    - backend/app/pipeline/pipeline_search.py
+    - backend/app/pipeline/pipeline_enrichment.py
+    - backend/app/pipeline/pipeline_selection_flow.py
+    - backend/app/pipeline/run_cards.py
+    - backend/app/pipeline/run_flow.py
+    - backend/app/pipeline/run_journal.py
+    - tests/test_pipeline_layout.py
+    - .planning/evidence/E2D-З10-pytest.txt
+    - .planning/evidence/E2D-З10-layout.txt
+    - .planning/evidence/E2D-З10-lines.txt
+    - .planning/evidence/E2D-З10-ruff.txt
+    - .planning/evidence/E2D-З10-mutations.txt
+  self_audit: pass
+  checks:
+    - "pytest -q (голый прогон): 698 passed, 0 failed (базовая линия 695 + 3 новых теста стража)"
+    - "pytest tests/test_pipeline_layout.py -v: 6 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 128 files already formatted"
+    - "git diff --name-only -- tests/: ровно tests/test_pipeline_layout.py"
+    - "подсчёт строк: orchestrator.py 51, pipeline_context.py 82, pipeline_search.py 417, pipeline_enrichment.py 170, pipeline_selection_flow.py 109, run_cards.py 59, run_flow.py 477, run_journal.py 58 — все ≤ 500, фасад ≤ 120"
+    - "мутация (а, def в фасаде): test_orchestrator_module_has_no_definitions падает; дерево восстановлено, git status чист"
+    - "мутация (б, run_journal.py 559 строк): test_orchestrator_modules_stay_within_line_limit падает; дерево восстановлено"
+    - "мутация (в, split_contest_candidates не реэкспортирован): tests/test_contest_section_flow.py падает ImportError при коллекции; дерево восстановлено"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-10, раздел «Ворота Э2-Д» критерий 14)
+    - docs/team/INVARIANTS.md (№5, №6 — деferred-импорт build_adapters/persist_run/PAID_LIMIT_NOTICE не нарушает слои, это чтение атрибута фасада)
+    - backend/app/pipeline/orchestrator.py (фасад)
+    - backend/app/pipeline/run_flow.py (класс ScoutPipeline, композиция миксинов)
+    - tests/test_pipeline_layout.py (расширенный страж)
+  notes: >
+    Рабочая копия при старте задачи оказалась на устаревшей базе (хвост волны
+    Э2-Г, коммит 0f6ffd3), а не на верхушке волны Э2-Д (d51d9cf, ветка
+    claude/remote-work-readiness-check-ze0wg3, где слиты З-1..З-9). Обнаружено
+    по расхождению orchestrator.py (1152 строки вместо ожидаемых 1203) и
+    отсутствию функций, на которые ссылаются тесты волны (format_active_run_params,
+    partial_failure_total). Исправлено `git reset --hard d51d9cf` — на branch
+    не было ни одного локального коммита, только незакоммиченные новые файлы
+    задачи, которые проверены на отсутствие конфликтов путей и сохранены.
+    После сброса md5 orchestrator.py совпал с версией, на основе которой велась
+    разработка (уже читалась ранее по абсолютному пути общего чекаута), поэтому
+    сам перенос кода переделывать не пришлось — только пересобрана база ветки.
+    Это находка за пределами задачи по оснастке (не код), фиксирую отдельно:
+    инструмент подготовки рабочих копий для волны Э2-Д стоит проверить на то,
+    что новые worktree создаются от актуального HEAD целевой ветки, а не от
+    более раннего кэшированного состояния.

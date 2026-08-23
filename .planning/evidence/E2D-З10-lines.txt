@@ -1,0 +1,42 @@
+=== Подсчёт строк backend/app/pipeline/ (git diff --name-only и wc -l) ===
+
+-- wc -l всех файлов пакета --
+     5 backend/app/pipeline/__init__.py
+   227 backend/app/pipeline/cards.py
+   231 backend/app/pipeline/constraints_guard.py
+   231 backend/app/pipeline/diversity.py
+   332 backend/app/pipeline/extraction.py
+    81 backend/app/pipeline/intake.py
+    51 backend/app/pipeline/orchestrator.py
+   338 backend/app/pipeline/persistence.py
+    82 backend/app/pipeline/pipeline_context.py
+   170 backend/app/pipeline/pipeline_enrichment.py
+   417 backend/app/pipeline/pipeline_search.py
+   109 backend/app/pipeline/pipeline_selection_flow.py
+   251 backend/app/pipeline/planning.py
+   156 backend/app/pipeline/prompting.py
+    59 backend/app/pipeline/run_cards.py
+   477 backend/app/pipeline/run_flow.py
+    58 backend/app/pipeline/run_journal.py
+   367 backend/app/pipeline/scoring.py
+   125 backend/app/pipeline/selection.py
+   120 backend/app/pipeline/stages.py
+    89 backend/app/pipeline/summary.py
+  3976 total
+
+-- git diff --name-only HEAD -- tests/ (обязано быть ровно test_pipeline_layout.py) --
+tests/test_pipeline_layout.py
+
+-- git status --porcelain (новые/изменённые файлы задачи) --
+ M backend/app/pipeline/orchestrator.py
+ M tests/test_pipeline_layout.py
+?? ".planning/evidence/E2D-\320\22710-layout.txt"
+?? ".planning/evidence/E2D-\320\22710-lines.txt"
+?? ".planning/evidence/E2D-\320\22710-pytest.txt"
+?? backend/app/pipeline/pipeline_context.py
+?? backend/app/pipeline/pipeline_enrichment.py
+?? backend/app/pipeline/pipeline_search.py
+?? backend/app/pipeline/pipeline_selection_flow.py
+?? backend/app/pipeline/run_cards.py
+?? backend/app/pipeline/run_flow.py
+?? backend/app/pipeline/run_journal.py
