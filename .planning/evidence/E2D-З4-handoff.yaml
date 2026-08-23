@@ -1,0 +1,47 @@
+handoff:
+  from: implementer-C
+  to: reviewer
+  task: З-4
+  did:
+    - "extractor больше не просит дословную цитату — модель называет record_index и границы фрагмента (fragment_offset/fragment_length), цитату собирает КОД срезом сырой записи (backend/app/pipeline/extraction.py)"
+    - "Три ветки валидации границ — нет границ: запись целиком до 400 знаков; границы за пределом записи: усечение с записью в лог; валидные границы: точный срез"
+    - "Сверка адреса кандидата ужесточена бесплатно (РЕШ-61 п. 2) — адрес обязан принадлежать именно НАЗВАННОЙ записи, а не любой записи выдачи"
+    - "prompts/extractor.md — правило 4 переписано под новый контракт, оба примера и формат ответа приведены в соответствие, версия 1.1 -> 2.0"
+    - "prompts/CHANGELOG.md — запись о правке (раздел 2.0)"
+    - "tests/test_stages.py — фикстуры ответа extractor обновлены под новый контракт (record_index вместо snippet), ужесточение сверки адреса закреплено правкой существующего теста"
+    - "tests/test_probe.py — фикстура _CONTEST_EXTRACT_JSON обновлена под новый контракт; collateral-правка вне списка файлов задачи, см. поле notes"
+    - "tests/test_extractor_fragment.py (новый, 9 тестов) — критерии 1-3 задачи: сокращение выхода стадии, цитата дословно из сырья и её сборка кодом, «своя» цитата модели игнорируется, три ветки обработки негодных ссылок на сырьё, плюс замок на текст промпта (мутация д)"
+  artifacts:
+    - backend/app/pipeline/extraction.py
+    - prompts/extractor.md
+    - prompts/CHANGELOG.md
+    - tests/test_stages.py
+    - tests/test_probe.py
+    - tests/test_extractor_fragment.py
+    - .planning/evidence/E2D-З4-tokens.txt
+    - .planning/evidence/E2D-З4-grep.txt
+    - .planning/evidence/E2D-З4-prompt-diff.txt
+    - .planning/evidence/E2D-З4-mutations.txt
+    - .planning/evidence/E2D-З4-pytest.txt
+    - .planning/evidence/E2D-З4-pytest-full.txt
+    - .planning/evidence/E2D-З4-ruff.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_extractor_fragment.py -v: 9 passed"
+    - "pytest tests/test_stages.py -q: 102 passed, 0 failed"
+    - "pytest tests/test_prompts.py -v: 44 passed"
+    - "pytest -q без RELEVANCE_MIN, SECOND_PASS_RELEVANCE_MAX, YANDEX_SEARCH_API_KEY, YANDEX_CATALOG_ID, LLM_STAGE_ROUTES, LLM_FALLBACK_ORDER, с deselect test_state_stays_short: 672 passed, 1 deselected (базовая линия волны 664 плюс 9 новых тестов задачи)"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 117 files already formatted"
+    - "grep -n 400-символов prompts/extractor.md: нет совпадений"
+    - "grep -n номер-записи prompts/extractor.md: 2 совпадения (правило 4, пояснение к схеме ответа)"
+    - "5 обязательных мутаций (а-д) убивают соответствующие тесты; дерево восстановлено git checkout между каждой, git status --short пусто после каждой (см. E2D-З4-mutations.txt)"
+  escalate: "ВИЗА ПРОМПТА (§9 п. 4, развилка Р-4) обязательна до слияния. Текст prompts/extractor.md изменён (правило 4 переписано, оба примера и формат ответа приведены в соответствие, версия 1.1 -> 2.0) — влияет на клиентскую выдачу через содержание candidate.snippet. Полный текст было/стало — в отчёте исполнителя и в .planning/evidence/E2D-З4-prompt-diff.txt. Слияние ветки блокируется до визы владельца; остальные задачи волны идут дальше независимо."
+  read_first:
+    - ".planning/PLAN.md (задача З-4, строки 504-604)"
+    - "docs/SPEC.md (раздел Э2-5, §0.1 п. 7)"
+    - "backend/app/pipeline/extraction.py"
+    - "prompts/extractor.md"
+    - "tests/test_extractor_fragment.py"
+    - ".planning/evidence/E2D-З4-mutations.txt"
+  notes: "За границами списка файлов задачи пришлось тронуть tests/test_probe.py: полный прогон pytest -q выявил, что фикстура _CONTEST_EXTRACT_JSON (режим --contest пробы scripts/probe.py) использует старый контракт ответа extractor (snippet без record_index) и после моей правки роняла тест test_режим_контеста_печатает_пять_оценок_notes_и_сводку (extractor находил 0 кандидатов вместо 1, скоринг не вызывался). Правка минимальна и механическая — добавлено поле record_index=0 к единственному кандидату, снято поле snippet, логика теста не менялась. Без этой правки критерий 8 задачи (pytest -q не меньше базовой линии, 0 failed) не выполняется. Отдельно нашёл и НЕ трогал: тест tests/test_probe.py::test_режим_поиска_без_ключа_не_падает_и_сообщает_причину падает при запуске в изоляции (respx не мокает второй запрос) и на исходном коде до моих правок тоже — подтверждено git stash. В полном прогоне набора он проходит. Предсуществующая флакийность порядка тестов, к задаче З-4 не относится — не правил, за границами задачи. Живой вызов модели не делался (сеть запрещена, инвариант №7) — все проверки на respx и заглушках. Ключей и их значений в коде, тестах и логах нет."
