@@ -1,0 +1,48 @@
+handoff:
+  from: reviewer
+  to: implementer-B
+  task: "З-2 (волна Э2-Ж) — КиберЛенинка: короткий запрос вместо нулевой выдачи"
+  did:
+    - >
+      Проверены diff (fc049f7..2a3f579), все 10 инвариантов способами из
+      INVARIANTS.md, границы задачи, условия РЕШ-70 (темп, честный UA, отказ
+      → SearchError, никакой маскировки), укорачивание запроса (детерминизм,
+      порядок слов, краевые случаи — целиком стоп-слова, короче лимита),
+      ключевание кэша по q, содержимое лога.
+    - >
+      Лично прогнаны pytest -q (755 passed), pytest -k cyberleninka (19
+      passed), test_prompts.py + test_team_docs.py (79 passed), ruff check,
+      ruff format --check, wc -l адаптера (431/500).
+    - >
+      Лично воспроизведены все три заявленные мутации (а/б/в) точечно на
+      файле адаптера — каждая ловится ровно тем тестом, что назван в
+      handoff исполнителя; дерево восстановлено, git status чист.
+    - >
+      Найдено 1 блокирующее нарушение (инвариант №10 — незакавыченное
+      двоеточие в собственном handoff исполнителя, ломает yaml.safe_load) и
+      3 совета, не блокирующих.
+  artifacts:
+    - .planning/evidence/E2J-З2-review.md (закоммичен до ответа)
+    - .planning/evidence/E2J-З2-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q (копия исполнителя): 755 passed"
+    - "pytest tests/test_search_cyberleninka.py -v: 19 passed"
+    - "pytest tests/test_prompts.py tests/test_team_docs.py -q: 79 passed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 137 files already formatted"
+    - "python -c yaml.safe_load(...) на E2J-З2-handoff.yaml: ScannerError line 4"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-2, волна Э2-Ж)
+    - .planning/evidence/E2J-З2-review.md
+    - .claude/worktrees/agent-aaad2d9ac2400d349/.planning/evidence/E2J-З2-handoff.yaml
+    - docs/team/INVARIANTS.md (пункт 10)
+  notes: >
+    Цикл 1 из двух допустимых (предел циклов проверки для З-2 — 2). Код,
+    тесты и docs/sources.md — без замечаний, все критерии приёмки карточки
+    подтверждены лично. Единственное блокирующее — формальное: одна строка
+    в собственном handoff-файле исполнителя, вне кода задачи. Исправление —
+    взять значение поля task в кавычки, пересобрать коммит, приложить
+    обновлённый handoff. Повторной проверки кода не требуется, только
+    самого файла handoff.
