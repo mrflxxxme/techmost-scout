@@ -1,0 +1,26 @@
+handoff:
+  from: implementer-A
+  to: reviewer
+  task: З-1
+  did:
+    - "backend/app/search/arxiv.py:26-27 — API_URL переведён с http:// на https://export.arxiv.org/api/query, добавлен однострочный комментарий: прокси среды режет незашифрованный http (403 на трёх воротных прогонах подряд)"
+    - "tests/test_search_failures.py — добавлен тест-страж test_arxiv_api_url_только_https (проверяет константу напрямую, respx этого не поймает, т.к. существующие тесты берут URL из того же импорта); мутация обратно на http валит его, показано вручную (см. checks)"
+    - "Существующие respx-тесты arXiv (500, нечитаемое тело, пустой список, pdf_url, русская формулировка) не тронуты — они уже импортируют API_URL из модуля и продолжили работать без правок"
+  artifacts:
+    - backend/app/search/arxiv.py
+    - tests/test_search_failures.py
+  self_audit: pass
+  checks:
+    - "grep -n 'http://export' backend/app/search/arxiv.py: пусто (exit 1)"
+    - "pytest tests/ -k arxiv -v: 8 passed"
+    - "Мутация (URL обратно на http): pytest tests/test_search_failures.py::test_arxiv_api_url_только_https -v → FAILED (AssertionError: 'http://export.arxiv.org/api/query'.startswith('https://') == False); дерево восстановлено, git status --short после отката пуст"
+    - "pytest -q: 750 passed, 0 failed, 42.44s (базовая линия волны 749 + 1 новый тест-страж)"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 137 files already formatted"
+  escalate: "РЕШ-158: рабочая копия создана от 892de13 (main, слияние Э2-Е), а не от указанного в постановке d88c377 (session/E2J) — это дивергентные ветки с общим предком d1d3152, не предок/потомок друг друга. Проверено: git diff --stat 892de13 d88c377 -- backend/ tests/ prompts/ пуст — код, тесты и промпты идентичны между двумя коммитами, различия только в .planning/*.md (PLAN.md, DECISIONS.md, STATE.md, evidence-файлы Э2-Ж), которые задача не трогает. Работа сделана и закоммичена поверх 892de13 в ветке worktree-agent-a6d56c133ee4e0882 — оркестратору нужно решить, переносить ли коммит cb87dfe на session/E2J (cherry-pick) при слиянии волны 0. Не решал молча, код не переписывал."
+  read_first:
+    - ".planning/PLAN.md (задача З-1, раздел «Волна 0»)"
+    - "docs/SPEC.md (§0.1 «грабли»)"
+    - "backend/app/search/arxiv.py"
+    - "tests/test_search_failures.py (секция «── arXiv ──»)"
+  notes: "Границы задачи не расширялись: качество выдачи arXiv (формулировки, стоп-слова) не трогал — это отдельный разбор, не эта задача. Живых вызовов к export.arxiv.org не делал — вся проверка на respx и прямом assert константы (инвариант №7). Ключей и секретов в задаче нет — arXiv работает без ключа."
