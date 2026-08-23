@@ -1,0 +1,32 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: З-4
+  did:
+    - "Прочитаны PLAN.md (задача З-4), INVARIANTS.md, CONVENTIONS.md §5/§7, diff 0f6ffd3..715d89a целиком"
+    - "Проверены хвостовые случаи границ фрагмента (отрицательное смещение, длина за концом, record_index вне диапазона/null/чужой записи, оба поля null) — ни один не роняет стадию и не пускает в snippet текст модели"
+    - "Независимо пересчитан критерий 1 (сокращение выхода): 11397 -> 4407 знаков, 38.67%, совпадает с заявленным"
+    - "Независимо воспроизведены мутации (а) и (б) прицельным прогоном tests/test_extractor_fragment.py — обе убили заявленные тесты с первого раза, дерево восстановлено"
+    - "Прогнан полный набор (env -u ... --deselect test_state_stays_short): 672 passed, 1 deselected — совпадает с заявленным"
+    - "ruff check . и ruff format --check . — 0 замечаний"
+    - "Проверены 10 инвариантов и грабли §0.1 SPEC — нарушений не найдено"
+    - "Сверены границы задачи: orchestrator.py/yandex_search.py/constraints_guard.py/conftest.py не тронуты; tests/test_probe.py тронут вне списка, признан вынужденным и раскрытым исполнителем, не блокирую"
+  artifacts:
+    - .planning/evidence/E2D-З4-check.md (закоммичен до ответа)
+    - .planning/evidence/E2D-З4-check-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q (полный набор, env-исключения из задания): 672 passed, 1 deselected"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 117 files already formatted"
+    - "grep -n \"400 символов\" prompts/extractor.md: нет совпадений"
+    - "grep -n \"номер записи\" prompts/extractor.md: 2 совпадения"
+    - "мутация (а): 5 failed, 4 passed — воспроизведено независимо, совпадает с заявленным"
+    - "мутация (б): 1 failed, 8 passed — воспроизведено независимо, совпадает с заявленным"
+  escalate: "Виза промпта требуется до слияния (§9 п. 4, отмечено ещё в handoff исполнителя) — на территории владельца, не на территории ревью. Отдельно один совет (не блокирует): тон формулировки правила 4 промпта («если границы искать не хочется») стоит рассмотреть при визе."
+  read_first:
+    - .planning/PLAN.md (задача З-4, строки 504-604)
+    - .planning/evidence/E2D-З4-check.md
+    - prompts/extractor.md
+    - backend/app/pipeline/extraction.py
+  notes: "Вердикт ПРИНЯТЬ, цикл 1, блокирующих нет. Дальнейший шаг — вынос текста промпта владельцу на визу перед слиянием, как и предусмотрено карточкой задачи."
