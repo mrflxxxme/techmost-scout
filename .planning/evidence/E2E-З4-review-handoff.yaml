@@ -1,0 +1,57 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: З-4
+  did:
+    - "Сверен diff (git diff 91f8a22..47110c7) со списком файлов задачи — выхода
+       за границы нет; orchestrator.py не тронут обоснованно (реэкспорт нужен
+       только именам, подменяемым тестами атрибутом, history.py к ним не
+       относится)."
+    - "Проверены оба пути РЕШ-166 (текст/явный номер, явный перевешивает) и
+       РЕШ-167 (происхождение не в клиентском тексте — проверено по
+       фактически отрендеренному markdown-отчёту, а не по коду)."
+    - "Независимо воспроизведены 4 из 8 мутаций (а, б, ж, з) прицельным
+       прогоном tests/test_history_reuse.py и tests/test_pipeline_layout.py —
+       все упали ожидаемым тестом с первого раза, полный набор не
+       потребовался; дерево восстановлено, git status пуст после каждой."
+    - "Отдельным скриптом вне рабочей копии подтверждена побайтовая
+       неизменность строк первого прогона после второго (dedup_key, score,
+       status, pass_no) и пересчёт судьбы по текущему отбору."
+    - "Вручную проверена проводка --history-request-id через cli.py (мок
+       ScoutPipeline) — значение доходит корректно; в штатном наборе тестов
+       эта проводка не покрыта — названо не блокирующей докладной."
+    - "Прогнаны полный pytest (739 passed), ruff check, ruff format --check;
+       целевые срезы (test_history_reuse.py, test_pipeline_layout.py,
+       test_pipeline_counters.py + test_pipeline_second_pass.py +
+       test_persistence.py) — все зелёные, числа исполнителя подтверждены."
+    - "Проверены все десять инвариантов способами из INVARIANTS.md."
+  artifacts:
+    - .planning/evidence/E2E-З4-review.md (закоммичен до ответа)
+    - .planning/evidence/E2E-З4-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_history_reuse.py -v: 20 passed"
+    - "pytest tests/test_pipeline_layout.py -v: 6 passed"
+    - "wc -l backend/app/pipeline/run_flow.py: 498 (лимит 500)"
+    - "pytest tests/test_pipeline_counters.py tests/test_pipeline_second_pass.py tests/test_persistence.py -q: 50 passed"
+    - ".venv/bin/python -m pytest -q: 739 passed, 0 failed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 134 files already formatted"
+    - "мутация б (known без ключей истории): 1 failed — test_второй_проход_не_переоценивает..."
+    - "мутация а (exclude_known не вызван): 1 failed — test_история_не_платит_дважды..."
+    - "мутация ж (признак ослаблен до любого прогона): 2 failed — оба теста про чужую задачу"
+    - "мутация з (инфляция run_flow.py до 508 строк): 1 failed — test_orchestrator_modules_stay_within_line_limit"
+    - "git status --porcelain после всех мутаций: пусто"
+  escalate: none
+  read_first:
+    - .planning/evidence/E2E-З4-review.md
+    - .planning/PLAN.md (карточка З-4, строки 610-740)
+    - backend/app/pipeline/history.py
+    - backend/app/pipeline/persistence.py (load_history_pool)
+    - tests/test_history_reuse.py
+  notes: |
+    Вердикт ПРИНЯТЬ, цикл 1. Единственная некритичная находка — проводка
+    CLI-флага --history-request-id в cli.py не покрыта отдельным тестом
+    (объяснено проверяющим вручную, работает верно) — не блокирует, стоит
+    закрыть маленьким тестом при следующей правке cli.py, отдельной задачи не
+    требует.
