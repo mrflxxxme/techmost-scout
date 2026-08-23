@@ -1,0 +1,4 @@
+=== Критерий 2: враждебные переменные процесса ===
+$ env RELEVANCE_MIN=9 SECOND_PASS_RELEVANCE_MAX=9 YANDEX_SEARCH_API_KEY=fake YANDEX_CATALOG_ID=fake LLM_STAGE_ROUTES=intake:yandex LLM_FALLBACK_ORDER=yandex DEEPSEEK_MODEL=fake ROSPATENT_API_KEY=fake pytest -q
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+698 passed, 1 warning in 37.18s

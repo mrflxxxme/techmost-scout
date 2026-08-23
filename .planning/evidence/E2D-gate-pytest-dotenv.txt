@@ -1,0 +1,10 @@
+=== Критерий 3: подложный .env в корне дерева (РЕШ-113) ===
+содержимое .env — подложное, значения не боевые
+$ .venv/bin/python -m pytest -q
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+698 passed, 1 warning in 37.09s
+
+--- файл data/should-not-be-touched.db не создан: ---
+ls: cannot access 'data/should-not-be-touched.db': No such file or directory
+--- git status --porcelain по data/: ---
+(пусто = чисто)

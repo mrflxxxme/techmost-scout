@@ -1,0 +1,5 @@
+=== Критерий 4: линтер ===
+$ ruff check .
+All checks passed!
+$ ruff format --check .
+128 files already formatted
