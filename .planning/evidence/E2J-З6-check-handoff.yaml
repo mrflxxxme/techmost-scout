@@ -1,0 +1,27 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "З-6"
+  did:
+    - "Проверены все числа доказательства против первоисточников: data/scout.db (?mode=ro), оба лога, код rospatent.py, config.py, planner.md"
+    - "Найдено расхождение candidates (48) vs лога (rospatent: 1) для request_id=3 — разобрано кодом history.py: 48 записей это pass_no=0 (восстановлены из истории прежних запросов), не свежий улов; заявленная в доказательстве цифра (1) верна и подтверждена дважды (лог + pipeline_logs.sources_hit)"
+    - "Проверены git show для 5c5df24, fd89a67, 260e0d8 — во всех коммитах волны только два файла .planning/evidence/*, код не менялся"
+    - "Проверен handoff исполнителя (yaml.safe_load), секреты (grep) — ничего не найдено"
+  artifacts:
+    - .planning/evidence/E2J-З6-check.md (закоммичен до ответа)
+    - .planning/evidence/E2J-З6-check-handoff.yaml
+  self_audit: pass
+  checks:
+    - "grep -n 'ровно 1' prompts/planner.md: строка 23 найдена"
+    - "grep -c 'POST https://searchplatform' out/E2E-gate-run.log: 1"
+    - "grep -c 'POST https://searchplatform' out/E2D-gate-run2.log: 2"
+    - "candidates: request_id=2 provider=rospatent 35 (20+15); request_id=3 provider=rospatent 48 все pass_no=0 (история)"
+    - "git show 5c5df24/fd89a67/260e0d8 --stat: только .planning/evidence/*"
+    - "git status --short: пусто"
+    - "yaml.safe_load(E2J-З6-handoff.yaml): без исключений"
+  escalate: none
+  read_first:
+    - .planning/evidence/E2J-З6-check.md
+    - .planning/evidence/E2J-rospatent-разбор.md
+    - .planning/PLAN.md (задача З-6)
+  notes: "Вердикт ПРИНЯТЬ, блокирующих находок нет. Это единственный цикл (предел циклов задачи — 1)."
