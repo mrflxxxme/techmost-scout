@@ -25,6 +25,7 @@ import base64
 import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -32,11 +33,13 @@ import respx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+import app.cli as cli
+import app.pipeline as pipeline_pkg
 from app.llm import LLMRouter
 from app.llm.base import LLMError, LLMProvider, LLMResult, Message, Usage
 from app.models import Base, PipelineLog
 from app.pipeline.orchestrator import ScoutPipeline
-from app.schemas import Candidate, SearchPlan, SearchQuery, SourceType
+from app.schemas import Brief, Candidate, Report, ReportSummary, SearchPlan, SearchQuery, SourceType
 from app.search.base import SearchAdapter
 from app.search.yandex_search import OPERATION_URL, SEARCH_ASYNC_URL, YandexSearchAdapter
 
@@ -438,3 +441,214 @@ async def test_обогащение_второго_прохода_не_прип�
         f"проходы обогащения в журнале неразличимы: {[row.pass_no for row in enrich_rows]}"
     )
     assert all(row.error for row in enrich_rows), "тест обязан идти по настоящему отказу обогащения, иначе он слеп"
+
+
+# ── Ц-3: удачный интейк тоже попадает в журнал (З-8) ─────────────────────────
+#
+# Долг 8 аудита Э2-Г: сумма `cost_rub` по записям стадий давала 8,6659 ₽ против
+# 9,18 ₽ в отчёте клиенту — 0,51 ₽ (5,6%) не были отнесены ни к какой стадии.
+# Причина — интейк писал строку журнала только на отказе; на удачном пути
+# `_intake_stage_record` не вызывался вовсе, и его реальная плата (стадия
+# `intake` идёт на GigaChat, но в других конфигурациях маршрутов бывает и
+# платной) нигде не оседала.
+#
+# Здесь `run_intake`/`refine_brief` НЕ подменены заглушками — зовутся по-
+# настоящему, на `FakeProvider`, чтобы протраченные рубли были настоящими
+# рублями счётчика `router.cost`, а не придуманными тестом числами. Пайплайн
+# после интейка подменён: он не имеет отношения к учёту интейка, а настоящий
+# сквозной прогон уже есть выше в этом файле для другого долга (Т-37).
+
+
+class _RecordingPipelineAfterIntake:
+    """Пайплайн-заглушка: не ходит дальше интейка, только запоминает бриф и
+    переданный `initial_stage_log` — сумма стоимости прогона тем самым равна
+    тому, что потратил `router.cost` на интейке, и ничему больше."""
+
+    def __init__(
+        self, *, settings=None, router=None, adapters=None, progress=None, session_factory=None, preset_plan=None
+    ) -> None:
+        del settings, router, adapters, progress, session_factory, preset_plan
+
+    async def run(
+        self,
+        brief: Brief,
+        *,
+        request_id: int = 0,
+        raw_text: str = "",
+        initial_stage_log=None,
+        initial_caveats=None,
+        constraints_unresolved: bool = False,
+    ) -> Report:
+        del constraints_unresolved, initial_caveats
+        _RecordingPipelineAfterIntake.captured.append(brief)
+        _RecordingPipelineAfterIntake.stage_logs.append(initial_stage_log)
+        return Report(
+            request_id=request_id,
+            brief=brief,
+            cards=[],
+            summary=ReportSummary(recommendation="тест: пайплайн подменён заглушкой"),
+            generated_at=datetime.now(UTC),
+        )
+
+    async def aclose(self) -> None:
+        pass
+
+
+def _patch_cli_for_intake_accounting(monkeypatch, settings, fake_provider_factory, *, responses: list[str]):
+    """Общая подготовка для проверок расхода интейка через `cli._run`.
+
+    `run_intake`/`refine_brief` не подменяются: настоящая функция вызывает
+    настоящий `router.complete_json`, и только провайдер — заглушка.
+    """
+    _RecordingPipelineAfterIntake.captured = []
+    _RecordingPipelineAfterIntake.stage_logs = []
+    monkeypatch.setattr(pipeline_pkg, "ScoutPipeline", _RecordingPipelineAfterIntake)
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+    router = LLMRouter(settings=settings, providers={"gigachat": fake_provider_factory("gigachat", responses)})
+    monkeypatch.setattr(cli, "LLMRouter", lambda _settings: router)
+
+    async def fake_init_db() -> None:
+        pass
+
+    monkeypatch.setattr("app.db.init_db", fake_init_db)
+    return router
+
+
+_INTAKE_NO_QUESTIONS_JSON = json.dumps(
+    {
+        "questions": [],
+        "draft_brief": {
+            "industry": "нефтепереработка",
+            "task_summary": "Катализатор гидроочистки теряет активность раньше срока.",
+            "constraints": [],
+            "owner_answers": [],
+        },
+    },
+    ensure_ascii=False,
+)
+
+_INTAKE_ONE_QUESTION_JSON = json.dumps(
+    {
+        "questions": [{"question": "Какая температура процесса?", "why": "нужна для отбора решений"}],
+        "draft_brief": {
+            "industry": "нефтепереработка",
+            "task_summary": "Катализатор гидроочистки теряет активность раньше срока.",
+            "constraints": [],
+            "owner_answers": [],
+        },
+    },
+    ensure_ascii=False,
+)
+
+_INTAKE_REFINED_JSON = json.dumps(
+    {
+        "questions": [],
+        "draft_brief": {
+            "industry": "нефтепереработка",
+            "task_summary": "Катализатор гидроочистки теряет активность раньше срока при 380 °C.",
+            "constraints": ["работа при 380 °C"],
+            "owner_answers": [],
+        },
+    },
+    ensure_ascii=False,
+)
+
+
+async def test_удачный_интейк_даёт_одну_запись_и_сумма_сходится_со_счётчиком(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """Критерии 1 и 2 карточки З-8: немой режим — один платный вызов `intake`,
+    в журнале ровно одна запись с непустым провайдером и `error is None`, а
+    сумма `cost_rub` по записям стадий равна тому, что потратил `router.cost`,
+    с точностью до 0,01 ₽.
+
+    Мутация «запись успеха не пишется» валит этот тест: `stage_log` останется
+    пустым, и `len(...) == 1` не выполнится.
+    """
+    router = _patch_cli_for_intake_accounting(
+        monkeypatch, settings, fake_provider_factory, responses=[_INTAKE_NO_QUESTIONS_JSON]
+    )
+
+    await cli._run("Катализатор гидроочистки теряет активность раньше срока", None, None, tmp_path / "report.md", False)
+
+    assert len(_RecordingPipelineAfterIntake.captured) == 1, "прогон обязан дойти до пайплайна"
+    stage_log = _RecordingPipelineAfterIntake.stage_logs[-1]
+    assert stage_log is not None and len(stage_log) == 1, f"ожидалась ровно одна запись, получено {stage_log}"
+    record = stage_log[0]
+    assert record.stage == "intake"
+    assert record.error is None
+    assert record.provider == "gigachat", "провайдер, оплативший вызов, обязан быть назван"
+    # `FakeProvider` берёт за вызов ровно 0,01 ₽ (`tests/conftest.py`) — сверка
+    # с точным числом, а не только «больше нуля», ловит мутацию (в): запись с
+    # полной стоимостью прогона вместо дельты стадии здесь неотличима от верной
+    # только по знаку, а по значению — ровно вдвое (или больше) не сходится.
+    assert record.cost_rub == pytest.approx(0.01)
+
+    spent_total = sum(item.cost_rub for item in stage_log)
+    # Точность сверки — на три порядка туже, чем «до 0,01 ₽» из критерия 1:
+    # цена вызова заглушки известна заранее (0,01 ₽), поэтому расхождение в
+    # ровно один вызов (мутация «дельта → итог прогона») обязано быть поймано,
+    # а не спрятано широким допуском, который сам по себе равен цене вызова.
+    assert spent_total == pytest.approx(router.cost.spent_rub, abs=1e-6), (
+        f"сумма по журналу {spent_total} ₽ не сходится со счётчиком роутера {router.cost.spent_rub} ₽"
+    )
+
+
+async def test_путь_с_уточнением_даёт_две_записи_и_сумма_тоже_сходится(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """Критерий 3 карточки З-8: непустой список вопросов — интерактивный
+    диалог зовёт и `run_intake`, и `refine_brief`, и обе платные удачи обязаны
+    остаться в журнале по отдельности — `intake` и `intake_refine`, не одна
+    строка (деньги `refine_brief` потерялись бы) и не три (задвоение).
+    """
+    router = _patch_cli_for_intake_accounting(
+        monkeypatch,
+        settings,
+        fake_provider_factory,
+        responses=[_INTAKE_ONE_QUESTION_JSON, _INTAKE_REFINED_JSON],
+    )
+    monkeypatch.setattr("typer.prompt", lambda *args, **kwargs: "380 °C")
+
+    await cli._run("Катализатор гидроочистки теряет активность раньше срока", None, None, tmp_path / "report.md", True)
+
+    stage_log = _RecordingPipelineAfterIntake.stage_logs[-1]
+    assert stage_log is not None
+    assert [item.stage for item in stage_log] == ["intake", "intake_refine"], (
+        f"ожидались ровно две записи в этом порядке, получено {[item.stage for item in stage_log]}"
+    )
+    assert all(item.error is None for item in stage_log), "обе стадии этого сценария удачные"
+    # Каждый вызов заглушки стоит ровно 0,01 ₽ — сверка по каждой записи в
+    # отдельности ловит мутацию (в) там, где широкий допуск на сумме её бы не
+    # заметил: `intake_refine` получил бы 0,02 ₽ (итог прогона), а не свою
+    # дельту 0,01 ₽.
+    assert [item.cost_rub for item in stage_log] == [pytest.approx(0.01), pytest.approx(0.01)]
+
+    spent_total = sum(item.cost_rub for item in stage_log)
+    assert spent_total == pytest.approx(router.cost.spent_rub, abs=1e-6), (
+        f"сумма по журналу {spent_total} ₽ не сходится со счётчиком роутера {router.cost.spent_rub} ₽"
+    )
+
+
+async def test_отказ_интейка_по_прежнему_даёт_одну_запись_с_ошибкой(
+    monkeypatch, settings, fake_provider_factory, tmp_path
+):
+    """Критерий 4 карточки З-8: отказ читается как прежде — одна запись `intake`
+    с причиной отказа, без добавочной записи об успехе рядом с ней.
+
+    Провайдер отвечает текстом вне JSON-схемы `IntakeResult`: `complete_json`
+    один раз просит модель починить ответ и всё равно падает — тот же путь,
+    которым идёт настоящий отказ интейка.
+    """
+    router = _patch_cli_for_intake_accounting(monkeypatch, settings, fake_provider_factory, responses=["не JSON"])
+
+    await cli._run("Катализатор гидроочистки теряет активность раньше срока", None, None, tmp_path / "report.md", False)
+
+    stage_log = _RecordingPipelineAfterIntake.stage_logs[-1]
+    assert stage_log is not None and len(stage_log) == 1, f"ожидалась ровно одна запись, получено {stage_log}"
+    record = stage_log[0]
+    assert record.stage == "intake"
+    assert record.error, "отказ интейка обязан оставлять причину"
+
+    spent_total = sum(item.cost_rub for item in stage_log)
+    assert spent_total == pytest.approx(router.cost.spent_rub, abs=1e-6)
