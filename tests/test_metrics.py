@@ -22,8 +22,8 @@ import re
 
 import pytest
 
+from app.config import Settings
 from app.metrics import (
-    RELEVANCE_MIN,
     count_at_least_relevance,
     max_relevance,
     model_relevance,
@@ -90,13 +90,23 @@ def test_failed_batch_does_not_change_max_and_share():
 
     Это и есть цена ошибки: без пометки нейтральных доля выросла бы с 0,3 до
     0,65, а прогон с полностью отказавшим скорингом выглядел бы лучше исправного.
+
+    Порог 4 передан явно (правка вслед за РЕШ-162): раньше он приходил
+    умолчанием функции (`RELEVANCE_MIN = 4`), а без второй копии умолчание
+    резолвится через `get_settings().relevance_min`, и в тестовом окружении это
+    0 — историческое число критерия Т-20 не зависит от текущих настроек и
+    поэтому названо явно.
     """
     model = [_scored(number, relevance=value) for number, value in enumerate(_MODEL_TEN)]
     with_failed_batch = [*model, *stages._neutral_scores([_candidate(100 + number) for number in range(10)])]
 
     assert max_relevance(_saved(with_failed_batch)) == max_relevance(_saved(model)) == 9
-    assert share_at_least_relevance(_saved(with_failed_batch)) == share_at_least_relevance(_saved(model)) == 0.3
-    assert count_at_least_relevance(_saved(with_failed_batch)) == 3
+    assert (
+        share_at_least_relevance(_saved(with_failed_batch), minimum=4)
+        == share_at_least_relevance(_saved(model), minimum=4)
+        == 0.3
+    )
+    assert count_at_least_relevance(_saved(with_failed_batch), minimum=4) == 3
 
 
 def test_neutral_batch_does_not_raise_maximum_above_model_scores():
@@ -113,18 +123,67 @@ def test_neutral_batch_does_not_raise_maximum_above_model_scores():
     assert max_relevance(_saved(with_failed_batch)) == 4
 
 
-def test_share_counts_score_exactly_at_threshold():
-    """Оценка ровно 4 считается годной: порог нестрогий (`RELEVANCE_MIN = 4`, РЕШ-74).
+def test_share_counts_score_exactly_at_threshold(monkeypatch):
+    """Оценка ровно на пороге считается годной: сравнение нестрогое (РЕШ-74).
+
+    Правка строки: до РЕШ-162 порог брался из константы `RELEVANCE_MIN = 4`,
+    жившей прямо в этом модуле, — тест читал её напрямую. Копия снята, и
+    измеритель без явного `minimum` берёт порог из настроек тем же приёмом, что
+    и `select_top`; здесь настройки подставлены подменой `stages.get_settings`.
 
     Замок на подмену `>=` на `>`: при строгом сравнении доля стала бы нулевой, а
-    вся выдача агропрома с максимумом 4 — «ни одного годного кандидата».
+    вся выдача агропрома с максимумом на пороге — «ни одного годного кандидата».
     """
-    assert RELEVANCE_MIN == 4
-    at_threshold = _saved([_scored(0, relevance=RELEVANCE_MIN)])
+    threshold = 4
+    monkeypatch.setattr(stages, "get_settings", lambda: Settings(relevance_min=threshold))
+    at_threshold = _saved([_scored(0, relevance=threshold)])
 
     assert share_at_least_relevance(at_threshold) == 1.0
     assert count_at_least_relevance(at_threshold) == 1
-    assert share_at_least_relevance(_saved([_scored(0, relevance=RELEVANCE_MIN - 1)])) == 0.0
+    assert share_at_least_relevance(_saved([_scored(0, relevance=threshold - 1)])) == 0.0
+
+
+def test_metrics_and_selection_agree_on_the_same_settings_threshold(monkeypatch):
+    """Измеритель и отбор берут порог из одного источника (РЕШ-162, критерий 2).
+
+    До снятия второй копии (`RELEVANCE_MIN = 4` в `app.metrics`) измеритель мог
+    считать по одному числу, а `select_top` — по другому: сравнение прогонов
+    держалось на том, что кто-то не забыл поправить обе константы разом. После
+    снятия копии оба пути читают `Settings.relevance_min` одной и той же
+    подменой `stages.get_settings`: кандидат с `relevance = 3` обязан получить
+    один и тот же вердикт «годен» / «не годен» у измерителя и у отбора при
+    любом значении порога.
+    """
+    candidate_relevance = 3
+    scored = [_scored(0, relevance=candidate_relevance)]
+
+    for relevance_min in (3, 4):
+        monkeypatch.setattr(
+            stages, "get_settings", lambda relevance_min=relevance_min: Settings(relevance_min=relevance_min)
+        )
+        expected = candidate_relevance >= relevance_min
+
+        counted_as_eligible = count_at_least_relevance(_saved(scored)) == 1
+        selected = any(item.candidate.title == "Кандидат 0" for item in select_top(scored, limit=6))
+
+        assert counted_as_eligible == expected, f"измеритель разошёлся с ожиданием при пороге {relevance_min}"
+        assert selected == expected, f"отбор разошёлся с ожиданием при пороге {relevance_min}"
+
+
+def test_explicit_minimum_overrides_settings(monkeypatch):
+    """Явный `minimum` побеждает настройки (РЕШ-162, критерий 3) — как и у `select_top`.
+
+    Настройки заявляют порог 3, но явный аргумент 5 в разборе или в тесте
+    обязан считать по пятёрке независимо от того, что стоит в `Settings`.
+    """
+    monkeypatch.setattr(stages, "get_settings", lambda: Settings(relevance_min=3))
+    saved = _saved([_scored(0, relevance=4), _scored(1, relevance=5)])
+
+    assert count_at_least_relevance(saved, minimum=5) == 1
+    assert share_at_least_relevance(saved, minimum=5) == 0.5
+    # без явного аргумента считает по настройкам (порог 3) — обе оценки годны
+    assert count_at_least_relevance(saved) == 2
+    assert share_at_least_relevance(saved) == 1.0
 
 
 def test_measures_are_none_when_model_scored_nothing():

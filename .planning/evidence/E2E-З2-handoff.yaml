@@ -1,0 +1,56 @@
+handoff:
+  from: implementer-B
+  to: reviewer
+  task: "З-2"
+  did:
+    - "Снята вторая копия порога RELEVANCE_MIN=4 из backend/app/metrics.py"
+    - "count_at_least_relevance и share_at_least_relevance получили необязательный minimum: при None порог читается через get_settings().relevance_min тем же отложенным импортом, что и select_top (app/pipeline/selection.py:40-49); явный minimum сильнее"
+    - "Умолчание Settings.relevance_min (0) не тронуто, config.py не тронут"
+    - "docs/remote-setup.md: боевое значение переведено с 4 на 3 (РЕШ-162)"
+    - "tests/test_metrics.py: два новых теста на согласованность измерителя и отбора и на приоритет явного аргумента"
+    - "Одна сознательная правка теста на бывшей строке 122 (test_share_counts_score_exactly_at_threshold): читает порог через monkeypatch настроек вместо удалённой константы"
+    - "Дополнительно потребовалась правка test_failed_batch_does_not_change_max_and_share: без явного minimum=4 дефолт стал бы 0 через настройки, а тест проверяет исторический критерий Т-20, завязанный на число 4 — см. notes"
+    - "Проверка эффекта на data/scout.db (только чтение): запрос 2 (Э2-Д) 2 -> 9 кандидатов, запрос 1 (Э2-Г) 5 -> 5 без изменений"
+    - "Четыре мутации (а-г) прицельным прогоном, дерево восстановлено git checkout после каждой"
+  artifacts:
+    - backend/app/metrics.py
+    - tests/test_metrics.py
+    - docs/remote-setup.md
+    - .planning/evidence/E2E-З2-effect-check.py
+    - .planning/evidence/E2E-З2-effect-check.txt
+    - .planning/evidence/E2E-З2-check.md
+    - .planning/evidence/E2E-З2-mutations.md
+  self_audit: pass
+  checks:
+    - "pytest -q: 700 passed, 1 warning (базовая линия волны 698 + 2 новых теста)"
+    - "pytest tests/test_metrics.py -v: 12 passed"
+    - "ruff check backend/app/metrics.py tests/test_metrics.py docs/remote-setup.md: All checks passed"
+    - "ruff format --check backend/app/metrics.py tests/test_metrics.py: 2 files already formatted"
+    - "grep -rnE RELEVANCE_MIN=[0-9] backend/app --include=*.py: без совпадений"
+    - "grep -n RELEVANCE_MIN docs/remote-setup.md: RELEVANCE_MIN=3"
+    - "эффект на data/scout.db: request_id=2 порог4=2 порог3=9; request_id=1 порог4=5 порог3=5"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (задача З-2, строки 311-386)"
+    - "docs/SPEC.md (раздел Э2-Е)"
+    - "backend/app/metrics.py"
+    - "backend/app/pipeline/selection.py (строки 40-49, образец приёма)"
+    - "tests/test_metrics.py"
+    - ".planning/evidence/E2E-З2-mutations.md"
+    - ".planning/evidence/E2E-З2-check.md"
+  notes: |
+    Планировщик ожидал ровно одну правку в tests/test_metrics.py (бывшая
+    строка 122). На практике потребовалась ещё одна: test_failed_batch_does_not_change_max_and_share
+    вызывал share_at_least_relevance/count_at_least_relevance без аргумента и
+    неявно полагался на старое умолчание функции RELEVANCE_MIN=4; после снятия
+    копии умолчание стало settings-based (0 в тестовом окружении), и этот
+    исторический тест Т-20 (порог 4 из РЕШ-86, а не текущая настройка) стал бы
+    недетерминированным без явного minimum=4. Правка минимальна (добавлен
+    именованный аргумент в трёх местах внутри теста), причина зафиксирована в
+    докстроке теста и в сообщении коммита. Живой платный прогон не делался —
+    вся проверка эффекта идёт по сохранённым данным data/scout.db в режиме
+    только для чтения, скрипт .planning/evidence/E2E-З2-effect-check.py
+    воспроизводим. Мутация (б) временно правила backend/app/pipeline/selection.py
+    (не в списке файлов задачи) исключительно для проверки прицельным прогоном
+    и была восстановлена git checkout сразу после — в коммит эта правка не
+    попала (git diff --stat после восстановления пуст).
