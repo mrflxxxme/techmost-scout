@@ -1,0 +1,39 @@
+handoff:
+  from: reviewer
+  to: implementer-A
+  task: "З-4"
+  did:
+    - "Прочитаны PLAN.md (задача З-4), INVARIANTS.md, CONVENTIONS.md §5/§7, CLAUDE.md, diff 1dfb2b8..a07e1d1 целиком"
+    - "Проверен сквозной путь критерия 1: tests/test_grant_source_type.py идёт реальным роутингом (ScoutPipeline.gather_candidates), не в обход адаптера"
+    - "Проверено наследование source_type в обоих путях extraction.py (LLM-разбор и код-откат при отказе стадии) — грант не схлопывается в web ни в одном"
+    - "Проверено, что count_source_type_coverage не менялась (только докстрока), проверены тесты покрытия 4/3"
+    - "Проверено, что split_contest_candidates/cap_contest_maturity фильтруют строго по SourceType.CONTEST — грант в конкурсную секцию не уходит"
+    - "Воспроизведена мутация (откат GRANT из source_types) — уронила tests/test_grant_source_type.py; дерево восстановлено, git status чист"
+    - "Прогнаны pytest -q (767 passed), ruff check, ruff format --check, tests/test_prompts.py (44 passed), tests/test_team_docs.py (35 passed)"
+    - "Сверен git diff --stat с файлами задачи из PLAN.md — границы не нарушены"
+    - "Найдено расхождение: запись 2.6 prompts/CHANGELOG.md утверждает правку диапазона planner.md правила 2 на «от 9 до 11», факт — planner.md по-прежнему «от 8 до 10» (грепом подтверждено отсутствие «9 до 11» нигде, кроме CHANGELOG)"
+  artifacts:
+    - ".planning/evidence/E2J-З4-review.md (закоммичен до ответа)"
+    - ".planning/evidence/E2J-З4-review-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest -q: 767 passed, 0 failed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 137 files already formatted"
+    - "pytest tests/test_prompts.py -q: 44 passed"
+    - "pytest tests/test_team_docs.py -q: 35 passed"
+    - "мутация (source_types без GRANT): tests/test_grant_source_type.py упал (route.call_count 0 вместо 1), дерево восстановлено"
+  escalate: "вердикт ВЕРНУТЬ — 1 блокирующая находка (CHANGELOG расходится с фактическим текстом planner.md); виза владельца на текст промпта отдельно запрошена оркестратором и не является предметом этого ревью"
+  read_first:
+    - ".planning/evidence/E2J-З4-review.md"
+    - "prompts/planner.md (правило 2, строка 31)"
+    - "prompts/CHANGELOG.md (запись 2.6)"
+  notes: |
+    Цикл 1 из двух возможных. Второй цикл — последний: если после него
+    блокирующее не устранено, дальше не третий цикл, а разбор с владельцем (§4).
+    Остальные пункты задачи (сквозной путь, наследование типа, метрика,
+    основная очередь, мутация, границы) — без замечаний, подтверждены лично
+    прогонами и чтением кода, не приняты на слово.
+    Долг вне этой задачи (не блокирует, зафиксировано в отчёте): replanner.md
+    правило 9 не знает про тип grant — не входит в файлы ни одной задачи
+    волны Э2-Ж, требует внимания владельца отдельно.
