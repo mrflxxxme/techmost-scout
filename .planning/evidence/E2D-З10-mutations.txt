@@ -1,0 +1,98 @@
+=== Мутация (а): определение оставлено в фасаде ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a079083d26414b8fa
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items
+
+tests/test_pipeline_layout.py::test_pipeline_modules_stay_within_line_limit PASSED [ 16%]
+tests/test_pipeline_layout.py::test_facade_reexports_required_names PASSED [ 33%]
+tests/test_pipeline_layout.py::test_stages_module_has_no_definitions PASSED [ 50%]
+tests/test_pipeline_layout.py::test_orchestrator_modules_stay_within_line_limit PASSED [ 66%]
+tests/test_pipeline_layout.py::test_orchestrator_facade_reexports_required_names PASSED [ 83%]
+tests/test_pipeline_layout.py::test_orchestrator_module_has_no_definitions FAILED [100%]
+
+=================================== FAILURES ===================================
+_________________ test_orchestrator_module_has_no_definitions __________________
+
+    def test_orchestrator_module_has_no_definitions():
+        """В `orchestrator.py` нет ни одного `def`, `async def` или `class` —
+        только реэкспорт."""
+        text = (_PIPELINE_DIR / "orchestrator.py").read_text(encoding="utf-8")
+        found = _DEFINITION_LINE.findall(text)
+>       assert not found, f"в фасаде найдены определения: {found}"
+E       AssertionError: в фасаде найдены определения: ['def ']
+E       assert not ['def ']
+
+tests/test_pipeline_layout.py:154: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_pipeline_layout.py::test_orchestrator_module_has_no_definitions
+========================= 1 failed, 5 passed in 0.29s ==========================
+=== Мутация (б): модуль длиннее 500 строк (run_journal.py -> 559) ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a079083d26414b8fa
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items
+
+tests/test_pipeline_layout.py::test_pipeline_modules_stay_within_line_limit PASSED [ 16%]
+tests/test_pipeline_layout.py::test_facade_reexports_required_names PASSED [ 33%]
+tests/test_pipeline_layout.py::test_stages_module_has_no_definitions PASSED [ 50%]
+tests/test_pipeline_layout.py::test_orchestrator_modules_stay_within_line_limit FAILED [ 66%]
+tests/test_pipeline_layout.py::test_orchestrator_facade_reexports_required_names PASSED [ 83%]
+tests/test_pipeline_layout.py::test_orchestrator_module_has_no_definitions PASSED [100%]
+
+=================================== FAILURES ===================================
+_______________ test_orchestrator_modules_stay_within_line_limit _______________
+
+    def test_orchestrator_modules_stay_within_line_limit():
+        """Ни один из модулей дробления `orchestrator.py` не длиннее 500 строк,
+        сам фасад — не длиннее 120."""
+        over_limit = []
+        for name in _ORCH_MODULES_UNDER_LIMIT:
+            path = _PIPELINE_DIR / name
+            count = _line_count(path)
+            if count > _GENERAL_LIMIT:
+                over_limit.append(f"{name}: {count} строк")
+        facade_count = _line_count(_PIPELINE_DIR / "orchestrator.py")
+        if facade_count > _ORCH_FACADE_LIMIT:
+            over_limit.append(f"orchestrator.py: {facade_count} строк (лимит {_ORCH_FACADE_LIMIT})")
+>       assert not over_limit, "превышен лимит строк: " + "; ".join(over_limit)
+E       AssertionError: превышен лимит строк: run_journal.py: 559 строк
+E       assert not ['run_journal.py: 559 строк']
+
+tests/test_pipeline_layout.py:139: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_pipeline_layout.py::test_orchestrator_modules_stay_within_line_limit
+========================= 1 failed, 5 passed in 0.28s ==========================
+=== Мутация (в): публичное имя не реэкспортировано (split_contest_candidates убран из фасада) ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a079083d26414b8fa
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items / 1 error
+
+==================================== ERRORS ====================================
+_____________ ERROR collecting tests/test_contest_section_flow.py ______________
+ImportError while importing test module '/home/user/techmost-scout/.claude/worktrees/agent-a079083d26414b8fa/tests/test_contest_section_flow.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_contest_section_flow.py:38: in <module>
+    from app.pipeline.orchestrator import CONTEST_CARDS_TARGET, ScoutPipeline, split_contest_candidates
+E   ImportError: cannot import name 'split_contest_candidates' from 'app.pipeline.orchestrator' (/home/user/techmost-scout/.claude/worktrees/agent-a079083d26414b8fa/backend/app/pipeline/orchestrator.py)
+=========================== short test summary info ============================
+ERROR tests/test_contest_section_flow.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+=============================== 1 error in 0.48s ===============================
