@@ -1,0 +1,53 @@
+handoff:
+  from: implementer-A
+  to: reviewer
+  task: "З-4"
+  did:
+    - "Правило 9 prompts/planner.md переписано: грантовая формулировка получает source_type grant вместо web; формулировочные требования (название фонда, слова «грант», «поддержанные проекты» рядом с темой) сохранены дословно"
+    - "Правило 1 добавило тип grant в список обязательных; правило 2 задаёт по grant ровно один запрос на русском; правило 8 получило отдельный пункт про формулировку grant; примеры (правильный, случай 2 и 4 «Форматов ошибок») приведены к новому составу"
+    - "Общий диапазон queries (правило 2, «от 8 до 10») не тронут сознательно: сумма частных правил стала 9, что укладывается в уже документированный запас текста (долг, не эта задача) — правка избегает каскада в replanner.md, который в границы задачи не входит"
+    - "Запись в prompts/CHANGELOG.md версии 2.6, метка версии planner.md поднята с 2.5 до 2.6"
+    - "backend/app/search/yandex_search.py: SourceType.GRANT добавлен в source_types адаптера (иначе gather_candidates фильтрует формулировку до адаптера); _with_site_filter сужает grant-формулировки до GRANT_SITES в русском контуре без разбора маркеров текста (тип уже несёт намерение); прежнее маркерное сужение web-формулировок оставлено как страховка на непослушание модели (РЕШ-109)"
+    - "backend/app/pipeline/extraction.py: докстрока COVERAGE_EXCLUDED_SOURCE_TYPES переписана под метрику «публикации, патенты, гранты, веб» (РЕШ-173), упоминание org как ожидаемого типа метрики убрано"
+    - "Наследование типа query.source_type до кандидата extract_candidates уже было в коде (payload источника навязывается кодом, не ответом модели) — проверено сквозным тестом на подменах, а не переписано"
+    - "Тесты: tests/test_grant_source_type.py (новый файл, 1 сквозной тест план→поиск→extractor); tests/test_search_yandex.py (+3: source_types содержит grant, сужение grant в ru-контуре без маркеров, отсутствие сужения grant в en-контуре; докстрока устаревшего теста РЕШ-39 поправлена под реверс РЕШ-173); tests/test_stages.py (+2: покрытие publication+patent+grant+web=4 / без гранта=3, грант в основной очереди без потолка зрелости); tests/test_plan_types.py (обновлена проверка диапазона, +1 тест на правило grant в правиле 2)"
+  artifacts:
+    - "prompts/planner.md"
+    - "prompts/CHANGELOG.md"
+    - "backend/app/search/yandex_search.py"
+    - "backend/app/pipeline/extraction.py"
+    - "tests/test_grant_source_type.py"
+    - "tests/test_search_yandex.py"
+    - "tests/test_stages.py"
+    - "tests/test_plan_types.py"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_grant_source_type.py -v: 1 passed"
+    - "pytest tests/test_search_yandex.py -q: 34 passed"
+    - "pytest tests/test_stages.py -q: 104 passed"
+    - "pytest tests/test_plan_types.py -q: 11 passed"
+    - "pytest -q: 767 passed (база коммита 1dfb2b8 — 760 passed, прирост +7 новых тестов задачи, 0 failed)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 137 files already formatted"
+    - "мутация: временный откат source_types к (WEB, CONTEST) без GRANT уронил tests/test_grant_source_type.py (route.call_count 0 вместо 1) — код восстановлен, тесты снова зелёные"
+  escalate: "требуется виза владельца на текст prompts/planner.md (правила 1, 2, 8, 9) до слияния — §9 п.4 CONVENTIONS.md, как РЕШ-157; дословный дифф промпта приведён в текстовом отчёте исполнителя"
+  read_first:
+    - ".planning/PLAN.md (задача З-4 волны Э2-Ж)"
+    - "docs/SPEC.md (§0.1, метрика покрытия §2а)"
+    - "prompts/planner.md (правила 1, 2, 8, 9)"
+    - "backend/app/search/yandex_search.py (_with_site_filter, source_types)"
+    - "backend/app/pipeline/extraction.py (extract_candidates, count_source_type_coverage)"
+    - "tests/test_grant_source_type.py"
+  notes: |
+    База копии была устаревшей (HEAD=892de13, волна Э2-Е), а не верхушкой ветки волны
+    (1dfb2b8, волна 0 влита) — сверка по РЕШ-158 обнаружила расхождение первым шагом,
+    дерево было чистым, сделан git reset --hard 1dfb2b8 до первой правки кода.
+    Границы задачи: replanner.md и общий диапазон объёма плана в planner.md намеренно
+    не тронуты — правка каскадом задела бы файл другой задачи и его арифметический тест
+    (tests/test_plan_types.py::test_объём_плана_повторного_поиска...); тип grant добавлен
+    как дополнительная формулировка сверх прежнего диапазона, сам диапазон в тексте
+    промпта остался «от 8 до 10» (уже был с документированным запасом на момент
+    предыдущей задачи, не эта задача его чинит). backend/app/metrics.py не тронут —
+    метрика покрытия типов живёт в backend/app/pipeline/extraction.py
+    (count_source_type_coverage), проверено грепом. SourceType.ORG из enum не удалён.
+    Живых платных вызовов не делалось.
