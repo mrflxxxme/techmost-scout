@@ -1,0 +1,454 @@
+=== Мутация А (позитивный контроль): печать значения ключа в format_active_run_params ===
+--- До мутации: git status ---
+?? ".planning/evidence/E2E-\320\2276-audit-mutations.txt"
+?? ".planning/evidence/E2E-\320\2276-control.txt"
+?? ".planning/evidence/E2E-\320\2276-pytest-full.txt"
+?? ".planning/evidence/E2E-\320\2276-pytest-task.txt"
+?? ".planning/evidence/E2E-\320\2276-ruff-check.txt"
+?? ".planning/evidence/E2E-\320\2276-ruff-format.txt"
+?? tests/test_secret_leak_guard.py
+--- Мутация применена: git diff backend/app/pipeline/run_journal.py ---
+diff --git a/backend/app/pipeline/run_journal.py b/backend/app/pipeline/run_journal.py
+index 3403fe2..ec0f658 100644
+--- a/backend/app/pipeline/run_journal.py
++++ b/backend/app/pipeline/run_journal.py
+@@ -54,5 +54,5 @@ def format_active_run_params(settings: Settings) -> str:
+         f"second_pass_relevance_max={settings.second_pass_relevance_max}; "
+         f"маршруты стадий: {routes}; "
+         f"порядок резерва: {fallback}; "
+-        f"модели: gigachat={settings.gigachat_model}, deepseek={settings.deepseek_model}"
++        f"модели: gigachat={settings.gigachat_model}, deepseek={settings.deepseek_model}; debug_leak={settings.deepseek_api_key.get_secret_value()}"
+     )
+--- pytest tests/test_run_visibility.py -v (ожидание: 1 failed — существующий страж ловит утечку на своём пути) ---
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a7d5a19d80de0cd3e
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+tests/test_run_visibility.py::test_params_line_printed_on_successful_run PASSED [ 20%]
+tests/test_run_visibility.py::test_params_line_printed_on_run_failing_at_first_stage PASSED [ 40%]
+tests/test_run_visibility.py::test_params_line_carries_all_named_values PASSED [ 60%]
+tests/test_run_visibility.py::test_params_line_has_no_secret_values FAILED [ 80%]
+tests/test_run_visibility.py::test_params_line_does_not_add_router_calls PASSED [100%]
+
+=================================== FAILURES ===================================
+____________________ test_params_line_has_no_secret_values _____________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3d43461df0>
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+fake_provider_factory = <class 'conftest.FakeProvider'>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f3d43461130>
+capsys = <_pytest.capture.CaptureFixture object at 0x7f3d43460ad0>
+
+    async def test_params_line_has_no_secret_values(monkeypatch, brief, fake_provider_factory, caplog, capsys):
+        """Прогон с уникальными фиктивными значениями ключей: ни одно из них не
+        встречается ни в caplog, ни в перехваченных stdout/stderr."""
+        from app.config import Settings, get_settings
+    
+        monkeypatch.setenv("GIGACHAT_AUTH_KEY", _FAKE_GIGACHAT_KEY)
+        monkeypatch.setenv("DEEPSEEK_API_KEY", _FAKE_DEEPSEEK_KEY)
+        monkeypatch.setenv("YANDEX_API_KEY", _FAKE_YANDEX_KEY)
+        monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+        monkeypatch.setenv("YANDEX_CATALOG_ID", "b1gtest")
+        monkeypatch.setenv("COST_LIMIT_RUB_PER_REQUEST", "10.0")
+        get_settings.cache_clear()
+        fake_settings = Settings()
+        try:
+            caplog.set_level(logging.INFO)
+            provider = fake_provider_factory("deepseek", [_PLAN_JSON])
+            router = LLMRouter(fake_settings, providers={"deepseek": provider})
+            pipeline = ScoutPipeline(settings=fake_settings, router=router, adapters=[])
+    
+            await pipeline.run(brief, request_id=1)
+        finally:
+            get_settings.cache_clear()
+    
+        captured = capsys.readouterr()
+        for secret in (_FAKE_GIGACHAT_KEY, _FAKE_DEEPSEEK_KEY, _FAKE_YANDEX_KEY):
+>           assert secret not in caplog.text, "значение ключа не имеет права попасть в лог прогона"
+E           AssertionError: значение ключа не имеет права попасть в лог прогона
+E           assert 'FAKE-DEEPSEEK-KEY-2b7a44dd' not in 'INFO     ap...осталось 0\n'
+E             
+E             'FAKE-DEEPSEEK-KEY-2b7a44dd' is contained here:
+E               INFO     app.pipeline.orchestrator:run_flow.py:88 Параметры прогона: стоп-кран 10.00 ₽/запрос; relevance_min=0; second_pass_relevance_max=0; маршруты стадий: intake:gigachat, extractor:gigachat, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek; порядок резерва: gigachat→deepseek→yandex; модели: gigachat=GigaChat-2, deepseek=deepseek-v4-flash; debug_leak=FAKE-DEEPSEEK-KEY-2b7a44dd
+E             ?                                                                                   ...
+E             
+E             ...Full output truncated (8 lines hidden), use '-vv' to show
+
+tests/test_run_visibility.py:171: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     app.pipeline.orchestrator:run_flow.py:88 Параметры прогона: стоп-кран 10.00 ₽/запрос; relevance_min=0; second_pass_relevance_max=0; маршруты стадий: intake:gigachat, extractor:gigachat, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek; порядок резерва: gigachat→deepseek→yandex; модели: gigachat=GigaChat-2, deepseek=deepseek-v4-flash; debug_leak=FAKE-DEEPSEEK-KEY-2b7a44dd
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [planner] Составляю план поиска
+INFO     app.pipeline.stages:planning.py:98 normalize_contest_queries: формулировка «площадки» достроена кодом
+INFO     app.pipeline.stages:planning.py:101 normalize_contest_queries: формулировка «итоги» достроена кодом
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [planner] Формулировок в плане: 3
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [search] Опрашиваю источники
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [search] Найдено кандидатов — ничего
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [dedup] После склейки дублей осталось 0
+=========================== short test summary info ============================
+FAILED tests/test_run_visibility.py::test_params_line_has_no_secret_values - ...
+========================= 1 failed, 4 passed in 0.30s ==========================
+
+--- восстановлено, git status ---
+?? ".planning/evidence/E2E-\320\2276-audit-mutations.txt"
+?? ".planning/evidence/E2E-\320\2276-control.txt"
+?? ".planning/evidence/E2E-\320\2276-pytest-full.txt"
+?? ".planning/evidence/E2E-\320\2276-pytest-task.txt"
+?? ".planning/evidence/E2E-\320\2276-ruff-check.txt"
+?? ".planning/evidence/E2E-\320\2276-ruff-format.txt"
+?? tests/test_secret_leak_guard.py
+
+=== Мутация Б (негативный контроль аудита Э2-Д): печать ключа в YandexSearchAdapter._run_search и DeepSeekProvider.complete ===
+diff --git a/backend/app/llm/deepseek.py b/backend/app/llm/deepseek.py
+index ef66045..e9ee14d 100644
+--- a/backend/app/llm/deepseek.py
++++ b/backend/app/llm/deepseek.py
+@@ -47,6 +47,7 @@ class DeepSeekProvider(LLMProvider):
+         json_mode: bool = False,
+     ) -> LLMResult:
+         key = self._settings.deepseek_api_key.get_secret_value()
++        log.debug("DeepSeek: используемый ключ %s", key)  # МУТАЦИЯ АУДИТА — временно
+         if not key or key.startswith("TBD_"):
+             raise LLMError(self.name, "не задан DEEPSEEK_API_KEY", retryable=False)
+ 
+diff --git a/backend/app/search/yandex_search.py b/backend/app/search/yandex_search.py
+index c4036e7..d7ceed0 100644
+--- a/backend/app/search/yandex_search.py
++++ b/backend/app/search/yandex_search.py
+@@ -326,6 +326,7 @@ class YandexSearchAdapter(SearchAdapter):
+             "groupSpec": {"groupsOnPage": str(max(1, min(limit, MAX_PER_PAGE)))},
+         }
+         headers = {"Authorization": f"Api-Key {self._api_key}", "Content-Type": "application/json"}
++        log.debug("yandex_search: заголовки запроса %s", headers)  # МУТАЦИЯ АУДИТА — временно
+ 
+         await self._throttle()
+         try:
+
+--- ДО: pytest tests/test_run_visibility.py -v (существующий страж; ожидание аудита — 5 passed, слеп к этой утечке) ---
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a7d5a19d80de0cd3e
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+tests/test_run_visibility.py::test_params_line_printed_on_successful_run PASSED [ 20%]
+tests/test_run_visibility.py::test_params_line_printed_on_run_failing_at_first_stage PASSED [ 40%]
+tests/test_run_visibility.py::test_params_line_carries_all_named_values PASSED [ 60%]
+tests/test_run_visibility.py::test_params_line_has_no_secret_values PASSED [ 80%]
+tests/test_run_visibility.py::test_params_line_does_not_add_router_calls PASSED [100%]
+
+============================== 5 passed in 0.28s ===============================
+
+--- ПОСЛЕ: pytest tests/test_secret_leak_guard.py -v (новый страж; ожидание — красный) ---
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a7d5a19d80de0cd3e
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+tests/test_secret_leak_guard.py::test_отказ_yandex_search_не_печатает_ключ[401] FAILED [ 20%]
+tests/test_secret_leak_guard.py::test_отказ_yandex_search_не_печатает_ключ[500] FAILED [ 40%]
+tests/test_secret_leak_guard.py::test_отказ_deepseek_и_исчерпанный_резерв_не_печатают_ключ FAILED [ 60%]
+tests/test_secret_leak_guard.py::test_scout_doctor_называет_имена_ключей_а_не_значения PASSED [ 80%]
+tests/test_secret_leak_guard.py::test_страж_ловит_утечку_в_stdout_а_не_только_в_caplog PASSED [100%]
+
+=================================== FAILURES ===================================
+________________ test_отказ_yandex_search_не_печатает_ключ[401] ________________
+
+status_code = 401
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=0, second_pass_relevance_max=0)
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+fake_provider_factory = <class 'conftest.FakeProvider'>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7fc633123710>
+capsys = <_pytest.capture.CaptureFixture object at 0x7fc6331237a0>
+
+    @pytest.mark.parametrize("status_code", [401, 500])
+    async def test_отказ_yandex_search_не_печатает_ключ(
+        status_code, settings, brief, fake_provider_factory, caplog, capsys
+    ):
+        """Настоящий `YandexSearchAdapter` с фиктивным ключом опрашивается,
+        respx отвечает отказом (401 — плохой ключ, 500 — сбой источника); адаптер
+        поднимает `SearchError` (инвариант №5), пайплайн доходит до пустого
+        отчёта. Ни один фиктивный ключ не имеет права попасть в лог или в
+        перехваченные потоки."""
+        caplog.set_level(logging.DEBUG)
+        with respx.mock:
+            respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(status_code, json={"message": "отказ поиска"}))
+    
+            async with httpx.AsyncClient() as client:
+                adapter = YandexSearchAdapter(client, api_key=_FAKE_YANDEX_SEARCH_KEY, folder_id="b1gguardtest")
+                provider = fake_provider_factory("deepseek", [_WEB_PLAN_JSON])
+                router = LLMRouter(settings, providers={"deepseek": provider})
+                pipeline = ScoutPipeline(settings=settings, router=router, adapters=[adapter])
+    
+                report = await pipeline.run(brief, request_id=1)
+    
+        # Мутация (в): пустой список адаптеров прошёл бы этот тест без единого
+        # обращения к источнику — страж проверял бы только собственную тишину.
+        assert adapter.queries_used >= 1, "адаптер обязан был реально вызваться, а не остаться нетронутым"
+        assert "yandex_search" in report.sources_unavailable
+    
+        captured = capsys.readouterr()
+>       _assert_no_secrets((_FAKE_YANDEX_SEARCH_KEY,), caplog.text, captured.out, captured.err)
+
+tests/test_secret_leak_guard.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+secrets = ('FAKE-YANDEX-SEARCH-KEY-guard-e91cf047',)
+blobs = ('INFO     app.pipeline.orchestrator:run_flow.py:88 Параметры прогона: стоп-кран 10.00 ₽/запрос; relevance_min=0; seco...x_search\nINFO     app.pipeline.orchestrator:pipeline_context.py:77 [dedup] После склейки дублей осталось 0\n', '', '')
+
+    def _assert_no_secrets(secrets: tuple[str, ...], *blobs: str) -> None:
+        """Ни одно фиктивное значение ключа не встречается ни в одном перехваченном тексте."""
+        for secret in secrets:
+            for blob in blobs:
+>               assert secret not in blob, "значение ключа обнаружено в перехваченном выводе прогона"
+E               AssertionError: значение ключа обнаружено в перехваченном выводе прогона
+E               assert 'FAKE-YANDEX...ard-e91cf047' not in 'INFO     ap...осталось 0\n'
+E                 
+E                 'FAKE-YANDEX-SEARCH-KEY-guard-e91cf047' is contained here:
+E                   INFO     app.pipeline.orchestrator:run_flow.py:88 Параметры прогона: стоп-кран 10.00 ₽/запрос; relevance_min=0; second_pass_relevance_max=0; маршруты стадий: intake:gigachat, extractor:gigachat, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek; порядок резерва: gigachat→deepseek→yandex; модели: gigachat=GigaChat-2, deepseek=deepseek-v4-flash
+E                   INFO     app.pipeline.orchestrator:pipeline_context.py:77 [planner] Составляю план поиска
+E                   INFO     app.pipeli...
+E                 
+E                 ...Full output truncated (20 lines hidden), use '-vv' to show
+
+tests/test_secret_leak_guard.py:68: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     app.pipeline.orchestrator:run_flow.py:88 Параметры прогона: стоп-кран 10.00 ₽/запрос; relevance_min=0; second_pass_relevance_max=0; маршруты стадий: intake:gigachat, extractor:gigachat, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek; порядок резерва: gigachat→deepseek→yandex; модели: gigachat=GigaChat-2, deepseek=deepseek-v4-flash
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [planner] Составляю план поиска
+INFO     app.pipeline.stages:planning.py:98 normalize_contest_queries: формулировка «площадки» достроена кодом
+INFO     app.pipeline.stages:planning.py:101 normalize_contest_queries: формулировка «итоги» достроена кодом
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [planner] Формулировок в плане: 3
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [search] Опрашиваю источники
+DEBUG    app.search.yandex_search:yandex_search.py:329 yandex_search: заголовки запроса {'Authorization': 'Api-Key FAKE-YANDEX-SEARCH-KEY-guard-e91cf047', 'Content-Type': 'application/json'}
+INFO     httpx:_client.py:1740 HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 401 Unauthorized"
+WARNING  app.pipeline.orchestrator:pipeline_search.py:231 источник yandex_search не смог выполнить поиск «катализатор гидроочистки серостойкий разработка»: yandex_search: поиск не запустился (SEARCH_TYPE_RU): Client error '401 Unauthorized' for url 'https://searchapi.api.cloud.yandex.net/v2/web/searchAsync'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+DEBUG    app.search.yandex_search:yandex_search.py:329 yandex_search: заголовки запроса {'Authorization': 'Api-Key FAKE-YANDEX-SEARCH-KEY-guard-e91cf047', 'Content-Type': 'application/json'}
+DEBUG    app.search.yandex_search:yandex_search.py:329 yandex_search: заголовки запроса {'Authorization': 'Api-Key FAKE-YANDEX-SEARCH-KEY-guard-e91cf047', 'Content-Type': 'application/json'}
+INFO     httpx:_client.py:1740 HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 401 Unauthorized"
+WARNING  app.pipeline.orchestrator:pipeline_search.py:231 источник yandex_search не смог выполнить поиск «хакатон конкурс решение команды катализатор гидроочистки»: yandex_search: поиск не запустился (SEARCH_TYPE_RU): Client error '401 Unauthorized' for url 'https://searchapi.api.cloud.yandex.net/v2/web/searchAsync'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+INFO     httpx:_client.py:1740 HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 401 Unauthorized"
+WARNING  app.pipeline.orchestrator:pipeline_search.py:231 источник yandex_search не смог выполнить поиск «итоги хакатона победитель проект команды катализатор гидроочистки»: yandex_search: поиск не запустился (SEARCH_TYPE_RU): Client error '401 Unauthorized' for url 'https://searchapi.api.cloud.yandex.net/v2/web/searchAsync'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [search] Найдено кандидатов — ничего
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [search] Не ответили: yandex_search
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [dedup] После склейки дублей осталось 0
+________________ test_отказ_yandex_search_не_печатает_ключ[500] ________________
+
+status_code = 500
+settings = Settings(app_env='test', database_url='sqlite+aiosqlite:///:memory:', backend_port=8000, log_level='INFO', web_auth_us...target_cards=6, cost_limit_rub_per_request=10.0, demo_mode_default=False, relevance_min=0, second_pass_relevance_max=0)
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+fake_provider_factory = <class 'conftest.FakeProvider'>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7fc63315bda0>
+capsys = <_pytest.capture.CaptureFixture object at 0x7fc63315be30>
+
+    @pytest.mark.parametrize("status_code", [401, 500])
+    async def test_отказ_yandex_search_не_печатает_ключ(
+        status_code, settings, brief, fake_provider_factory, caplog, capsys
+    ):
+        """Настоящий `YandexSearchAdapter` с фиктивным ключом опрашивается,
+        respx отвечает отказом (401 — плохой ключ, 500 — сбой источника); адаптер
+        поднимает `SearchError` (инвариант №5), пайплайн доходит до пустого
+        отчёта. Ни один фиктивный ключ не имеет права попасть в лог или в
+        перехваченные потоки."""
+        caplog.set_level(logging.DEBUG)
+        with respx.mock:
+            respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(status_code, json={"message": "отказ поиска"}))
+    
+            async with httpx.AsyncClient() as client:
+                adapter = YandexSearchAdapter(client, api_key=_FAKE_YANDEX_SEARCH_KEY, folder_id="b1gguardtest")
+                provider = fake_provider_factory("deepseek", [_WEB_PLAN_JSON])
+                router = LLMRouter(settings, providers={"deepseek": provider})
+                pipeline = ScoutPipeline(settings=settings, router=router, adapters=[adapter])
+    
+                report = await pipeline.run(brief, request_id=1)
+    
+        # Мутация (в): пустой список адаптеров прошёл бы этот тест без единого
+        # обращения к источнику — страж проверял бы только собственную тишину.
+        assert adapter.queries_used >= 1, "адаптер обязан был реально вызваться, а не остаться нетронутым"
+        assert "yandex_search" in report.sources_unavailable
+    
+        captured = capsys.readouterr()
+>       _assert_no_secrets((_FAKE_YANDEX_SEARCH_KEY,), caplog.text, captured.out, captured.err)
+
+tests/test_secret_leak_guard.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+secrets = ('FAKE-YANDEX-SEARCH-KEY-guard-e91cf047',)
+blobs = ('INFO     app.pipeline.orchestrator:run_flow.py:88 Параметры прогона: стоп-кран 10.00 ₽/запрос; relevance_min=0; seco...x_search\nINFO     app.pipeline.orchestrator:pipeline_context.py:77 [dedup] После склейки дублей осталось 0\n', '', '')
+
+    def _assert_no_secrets(secrets: tuple[str, ...], *blobs: str) -> None:
+        """Ни одно фиктивное значение ключа не встречается ни в одном перехваченном тексте."""
+        for secret in secrets:
+            for blob in blobs:
+>               assert secret not in blob, "значение ключа обнаружено в перехваченном выводе прогона"
+E               AssertionError: значение ключа обнаружено в перехваченном выводе прогона
+E               assert 'FAKE-YANDEX...ard-e91cf047' not in 'INFO     ap...осталось 0\n'
+E                 
+E                 'FAKE-YANDEX-SEARCH-KEY-guard-e91cf047' is contained here:
+E                   INFO     app.pipeline.orchestrator:run_flow.py:88 Параметры прогона: стоп-кран 10.00 ₽/запрос; relevance_min=0; second_pass_relevance_max=0; маршруты стадий: intake:gigachat, extractor:gigachat, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek; порядок резерва: gigachat→deepseek→yandex; модели: gigachat=GigaChat-2, deepseek=deepseek-v4-flash
+E                   INFO     app.pipeline.orchestrator:pipeline_context.py:77 [planner] Составляю план поиска
+E                   INFO     app.pipeli...
+E                 
+E                 ...Full output truncated (20 lines hidden), use '-vv' to show
+
+tests/test_secret_leak_guard.py:68: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     app.pipeline.orchestrator:run_flow.py:88 Параметры прогона: стоп-кран 10.00 ₽/запрос; relevance_min=0; second_pass_relevance_max=0; маршруты стадий: intake:gigachat, extractor:gigachat, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek; порядок резерва: gigachat→deepseek→yandex; модели: gigachat=GigaChat-2, deepseek=deepseek-v4-flash
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [planner] Составляю план поиска
+INFO     app.pipeline.stages:planning.py:98 normalize_contest_queries: формулировка «площадки» достроена кодом
+INFO     app.pipeline.stages:planning.py:101 normalize_contest_queries: формулировка «итоги» достроена кодом
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [planner] Формулировок в плане: 3
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [search] Опрашиваю источники
+DEBUG    app.search.yandex_search:yandex_search.py:329 yandex_search: заголовки запроса {'Authorization': 'Api-Key FAKE-YANDEX-SEARCH-KEY-guard-e91cf047', 'Content-Type': 'application/json'}
+INFO     httpx:_client.py:1740 HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 500 Internal Server Error"
+WARNING  app.pipeline.orchestrator:pipeline_search.py:231 источник yandex_search не смог выполнить поиск «катализатор гидроочистки серостойкий разработка»: yandex_search: поиск не запустился (SEARCH_TYPE_RU): Server error '500 Internal Server Error' for url 'https://searchapi.api.cloud.yandex.net/v2/web/searchAsync'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500
+DEBUG    app.search.yandex_search:yandex_search.py:329 yandex_search: заголовки запроса {'Authorization': 'Api-Key FAKE-YANDEX-SEARCH-KEY-guard-e91cf047', 'Content-Type': 'application/json'}
+DEBUG    app.search.yandex_search:yandex_search.py:329 yandex_search: заголовки запроса {'Authorization': 'Api-Key FAKE-YANDEX-SEARCH-KEY-guard-e91cf047', 'Content-Type': 'application/json'}
+INFO     httpx:_client.py:1740 HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 500 Internal Server Error"
+WARNING  app.pipeline.orchestrator:pipeline_search.py:231 источник yandex_search не смог выполнить поиск «хакатон конкурс решение команды катализатор гидроочистки»: yandex_search: поиск не запустился (SEARCH_TYPE_RU): Server error '500 Internal Server Error' for url 'https://searchapi.api.cloud.yandex.net/v2/web/searchAsync'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500
+INFO     httpx:_client.py:1740 HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 500 Internal Server Error"
+WARNING  app.pipeline.orchestrator:pipeline_search.py:231 источник yandex_search не смог выполнить поиск «итоги хакатона победитель проект команды катализатор гидроочистки»: yandex_search: поиск не запустился (SEARCH_TYPE_RU): Server error '500 Internal Server Error' for url 'https://searchapi.api.cloud.yandex.net/v2/web/searchAsync'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [search] Найдено кандидатов — ничего
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [search] Не ответили: yandex_search
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [dedup] После склейки дублей осталось 0
+__________ test_отказ_deepseek_и_исчерпанный_резерв_не_печатают_ключ ___________
+
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7fc633123ec0>
+capsys = <_pytest.capture.CaptureFixture object at 0x7fc633123cb0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc63318ef00>
+
+    async def test_отказ_deepseek_и_исчерпанный_резерв_не_печатают_ключ(brief, caplog, capsys, monkeypatch):
+        """Настоящий `DeepSeekProvider` с фиктивным ключом отвечает 401 через
+        respx; резервный провайдер тоже отказывает — роутер исчерпывает цепочку
+        и поднимает `LLMError`. Сообщения роутера («перехожу к резерву», «все
+        провайдеры отказали») печатаются в лог — ни в одном не может быть значения
+        ключа ни одного из двух провайдеров."""
+        caplog.set_level(logging.DEBUG)
+        monkeypatch.setenv("GIGACHAT_AUTH_KEY", _FAKE_GIGACHAT_KEY)
+        monkeypatch.setenv("DEEPSEEK_API_KEY", _FAKE_DEEPSEEK_KEY)
+        monkeypatch.setenv("YANDEX_API_KEY", _FAKE_YANDEX_LLM_KEY)
+        monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+        monkeypatch.setenv("YANDEX_CATALOG_ID", "b1gguardtest")
+        monkeypatch.setenv("COST_LIMIT_RUB_PER_REQUEST", "10.0")
+        get_settings.cache_clear()
+        fake_settings = Settings()
+    
+        class _ReserveAlsoFails(LLMProvider):
+            """Второй провайдер цепочки — тоже отказывает, без похода в сеть."""
+    
+            name = "gigachat"
+            price_in_rub_per_mtok = 0.0
+            price_out_rub_per_mtok = 0.0
+    
+            async def complete(
+                self,
+                messages: list[Message],
+                *,
+                model: str | None = None,
+                temperature: float = 0.2,
+                max_tokens: int = 4096,
+                json_mode: bool = False,
+            ) -> LLMResult:
+                raise LLMError(self.name, "тестовый безусловный отказ резерва", retryable=False)
+    
+            async def health(self) -> tuple[bool, str]:
+                return False, "заглушка"
+    
+        try:
+            with respx.mock:
+                respx.post(f"{fake_settings.deepseek_base_url.rstrip('/')}/chat/completions").mock(
+                    return_value=httpx.Response(401, json={"error": {"message": "invalid api key"}})
+                )
+    
+                real_deepseek = DeepSeekProvider(fake_settings)
+                router = LLMRouter(fake_settings, providers={"deepseek": real_deepseek, "gigachat": _ReserveAlsoFails()})
+                pipeline = ScoutPipeline(settings=fake_settings, router=router, adapters=[])
+    
+                with pytest.raises(LLMError):
+                    await pipeline.run(brief, request_id=1)
+        finally:
+            get_settings.cache_clear()
+    
+        captured = capsys.readouterr()
+>       _assert_no_secrets((_FAKE_DEEPSEEK_KEY, _FAKE_GIGACHAT_KEY), caplog.text, captured.out, captured.err)
+
+tests/test_secret_leak_guard.py:156: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+secrets = ('FAKE-DEEPSEEK-KEY-guard-771ba4d9', 'FAKE-GIGACHAT-KEY-guard-2f38ad10')
+blobs = ('INFO     app.pipeline.orchestrator:run_flow.py:88 Параметры прогона: стоп-кран 10.00 ₽/запрос; relevance_min=0; seco...161 стадия planner: gigachat не подходит (gigachat: тестовый безусловный отказ резерва), перехожу к резерву\n', '', '')
+
+    def _assert_no_secrets(secrets: tuple[str, ...], *blobs: str) -> None:
+        """Ни одно фиктивное значение ключа не встречается ни в одном перехваченном тексте."""
+        for secret in secrets:
+            for blob in blobs:
+>               assert secret not in blob, "значение ключа обнаружено в перехваченном выводе прогона"
+E               AssertionError: значение ключа обнаружено в перехваченном выводе прогона
+E               assert 'FAKE-DEEPSE...ard-771ba4d9' not in 'INFO     ap... к резерву\n'
+E                 
+E                 'FAKE-DEEPSEEK-KEY-guard-771ba4d9' is contained here:
+E                   INFO     app.pipeline.orchestrator:run_flow.py:88 Параметры прогона: стоп-кран 10.00 ₽/запрос; relevance_min=0; second_pass_relevance_max=0; маршруты стадий: intake:gigachat, extractor:gigachat, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek; порядок резерва: gigachat→deepseek→yandex; модели: gigachat=GigaChat-2, deepseek=deepseek-v4-flash
+E                   INFO     app.pipeline.orchestrator:pipeline_context.py:77 [planner] Составляю план поиска
+E                   DEBUG    app.llm.deepsee...
+E                 
+E                 ...Full output truncated (5 lines hidden), use '-vv' to show
+
+tests/test_secret_leak_guard.py:68: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     app.pipeline.orchestrator:run_flow.py:88 Параметры прогона: стоп-кран 10.00 ₽/запрос; relevance_min=0; second_pass_relevance_max=0; маршруты стадий: intake:gigachat, extractor:gigachat, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek; порядок резерва: gigachat→deepseek→yandex; модели: gigachat=GigaChat-2, deepseek=deepseek-v4-flash
+INFO     app.pipeline.orchestrator:pipeline_context.py:77 [planner] Составляю план поиска
+DEBUG    app.llm.deepseek:deepseek.py:50 DeepSeek: используемый ключ FAKE-DEEPSEEK-KEY-guard-771ba4d9
+INFO     httpx:_client.py:1740 HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+WARNING  app.llm.router:router.py:161 стадия planner: deepseek не подходит (deepseek: HTTP 401: {"error":{"message":"invalid api key"}}), перехожу к резерву
+WARNING  app.llm.router:router.py:161 стадия planner: gigachat не подходит (gigachat: тестовый безусловный отказ резерва), перехожу к резерву
+=========================== short test summary info ============================
+FAILED tests/test_secret_leak_guard.py::test_отказ_yandex_search_не_печатает_ключ[401]
+FAILED tests/test_secret_leak_guard.py::test_отказ_yandex_search_не_печатает_ключ[500]
+FAILED tests/test_secret_leak_guard.py::test_отказ_deepseek_и_исчерпанный_резерв_не_печатают_ключ
+========================= 3 failed, 2 passed in 3.65s ==========================
+
+--- восстановлено, git status ---
+?? ".planning/evidence/E2E-\320\2276-audit-mutations.txt"
+?? ".planning/evidence/E2E-\320\2276-control.txt"
+?? ".planning/evidence/E2E-\320\2276-pytest-full.txt"
+?? ".planning/evidence/E2E-\320\2276-pytest-task.txt"
+?? ".planning/evidence/E2E-\320\2276-ruff-check.txt"
+?? ".planning/evidence/E2E-\320\2276-ruff-format.txt"
+?? tests/test_secret_leak_guard.py
+
+--- pytest -q (полный набор после восстановления) ---
+........................................................................ [  9%]
+........................................................................ [ 19%]
+........................................................................ [ 29%]
+........................................................................ [ 39%]
+........................................................................ [ 49%]
+........................................................................ [ 59%]
+........................................................................ [ 69%]
+........................................................................ [ 79%]
+........................................................................ [ 89%]
+........................................................................ [ 99%]
+.                                                                        [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+721 passed, 1 warning in 40.46s
