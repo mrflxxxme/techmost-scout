@@ -1,0 +1,38 @@
+handoff:
+  from: reviewer
+  to: verifier-next
+  task: "З-10"
+  did:
+    - "Сверен построчно перенос всех 23 def/class старого orchestrator.py (1203 строки) в семь новых модулей — расхождений в логике нет, только декоративные разделители-комментарии и переезд трёх констант к месту использования"
+    - "Проверен фасад: 51 строка, ни одного def/class, все внешние импортёры (backend и tests) получают нужные имена"
+    - "Независимо воспроизведены три мутации карточки (def в фасаде, модуль >500 строк, имя не реэкспортировано) — все три убиты стражом/ImportError, дерево восстановлено"
+    - "Дополнительно проверена мутация логгера (__name__ вместо явной строки) во всех пяти подмодулях — полный набор 698 passed, ни один тест не поймал; тот же пробел воспроизведён на существующем cards.py/stages.py (не регрессия задачи, найден системный пробел покрытия — вынесено советом)"
+    - "Проверена нагрузка отложенного импорта persist_run: замена на прямой импорт роняет test_обогащение_встроено_между_дедупликацией_и_скорингом (KeyError: stages) — приём не декоративен"
+    - "Подтверждено git reset --hard по заявлению исполнителя: merge-base d51d9cf HEAD == d51d9cf, файлы предыдущих задач волны (extractor.md 2.0/2.0.1, test_partial_source_failure.py, test_run_visibility.py, test_fallback_without_guesses.py, test_run_accounting.py) на месте"
+    - "Прогнаны pytest -q, ruff check, ruff format --check — числа совпадают с заявленными"
+  artifacts:
+    - .planning/evidence/E2D-З10-check.md (закоммичен до ответа)
+    - .planning/evidence/E2D-З10-check-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q: 698 passed, 0 failed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 128 files already formatted"
+    - "git diff --name-only d51d9cf..c05d949 -- tests/: tests/test_pipeline_layout.py (единственный файл)"
+    - "git merge-base d51d9cf HEAD: d51d9cf"
+    - "три мутации карточки воспроизведены независимо, дерево восстановлено (git status --porcelain пуст)"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-10, критерий 14 ворот Э2-Д)
+    - backend/app/pipeline/orchestrator.py (фасад)
+    - backend/app/pipeline/run_flow.py (класс ScoutPipeline, отложенные импорты)
+    - .planning/evidence/E2D-З10-check.md (полный разбор пункта а)
+  notes: >
+    Вердикт ПРИНЯТЬ, цикл 1, второго не потребовалось. Единственная находка —
+    совет (не блокирует): заявление handoff-а о том, что тесты «фильтруют
+    caplog по имени логгера», не подтвердилось экспериментально — механика
+    pytest этого не делает, и такой же пробел уже был в принятом дроблении
+    stages.py. Поведение при этом сохранено буквально (логгер называется так
+    же, как называлась бы __name__ в исходном единственном файле
+    orchestrator.py), это не дефект переноса, а пробел тестового покрытия вне
+    границ этой задачи.
