@@ -11,7 +11,7 @@
 | Версия | 1.0 · 9 августа 2026 (архив с 10.08.2026) |
 | Владелец продукта | Кирилл Уклонский · uklonskiy.k@gmail.com |
 | Статус | Архив; заменён docs/SPEC.md v2.1, раздел 2а |
-| Связанные документы | roadmap.md · market-overview.md · tz-scout.md — в этом репозитории отсутствуют |
+| Связанные документы | [roadmap.md](../marketing/roadmap.md) · [market-overview.md](../marketing/market-overview.md) · [tz-scout-v1.md](tz-scout-v1.md) |
 
 ---
 
