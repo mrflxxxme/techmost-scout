@@ -1,0 +1,31 @@
+handoff:
+  from: reviewer
+  to: verifier
+  task: "З-5 (Э2-Ж): чистка — google_search, колонки-нули, порог в коде, инвариант 6, страж 500"
+  did:
+    - "Прочитаны PLAN.md (карточка З-5), INVARIANTS.md, diff 1dfb2b8..749fc72 целиком по файлам"
+    - "Прогнан pytest -q в копии (745 passed, 1 failed — единственный известный)"
+    - "Базовая линия задачи (760 passed) перепроверена независимо во временном git worktree на 1dfb2b8, число 745 сведено с базой по файлам построчно (google-тесты, параметризация test_search_adapters, новый страж)"
+    - "Прогнаны ruff check/format, test_team_docs.py, test_metrics.py, test_prompts.py"
+    - "Мутация стража 500 (лимит 400) воспроизведена отдельным скриптом на актуальном дереве — подтверждены 4 файла (persistence 407, pipeline_search 423, run_flow 498, cyberleninka 431), это заранее оговорённое расхождение формулировки карточки с фактическим кодом, не находка"
+    - "Разобран пограничный случай cli.py вне явного списка файлов задачи — признан обоснованным (доктор иначе показывал бы несуществующую настройку через SECRET_CHECKS/has_secret)"
+    - "Проверены грепы инвариантов №3 и №6 самостоятельно — 0 нарушений"
+    - "Блокирующих находок нет"
+  artifacts:
+    - .planning/evidence/E2J-З5-review.md (закоммичен до ответа)
+    - .planning/evidence/E2J-З5-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q (копия, 749fc72): 745 passed, 1 failed (known)"
+    - "pytest -q (временный worktree, база 1dfb2b8): 760 passed, 0 failed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 103 files already formatted"
+    - "pytest tests/test_team_docs.py -q: 35 passed"
+    - "pytest tests/test_metrics.py -q: 12 passed"
+    - "мутация лимита 400 (backend_layout): 4 файла — persistence.py 407, pipeline_search.py 423, run_flow.py 498, cyberleninka.py 431"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-5, волна Э2-Ж)
+    - .planning/evidence/E2J-З5-review.md
+    - tests/test_backend_layout.py
+  notes: "Вердикт ПРИНЯТЬ, цикл 1. Блокирующих находок нет, 2 совета не критичны. Единственный failed тест — заранее оговорённое обстоятельство (.env.example, чинится оркестратором при слиянии), не находка ревью."
