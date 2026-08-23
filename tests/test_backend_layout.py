@@ -26,7 +26,10 @@ _LINE_LIMIT = 500
 _EXCEPTIONS: dict[str, int] = {
     "cli.py": 674,
     "search/openalex.py": 593,
-    "search/yandex_search.py": 544,
+    # 544 → 558: задача З-4 той же волны добавила тип grant в контур
+    # (source_types + сужение формулировки) — рост сознательный, влит
+    # оркестратором вместе со слиянием З-4; дробление файла — долг ворот.
+    "search/yandex_search.py": 558,
 }
 
 
