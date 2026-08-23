@@ -45,3 +45,8 @@ tests/test_run_accounting.py
 tests/test_run_visibility.py
 tests/test_search_yandex.py
 tests/test_stages.py
+
+=== Граница задачи З-10 отдельно (правка 3 аудита) ===
+$ git show --name-only --format= c05d949 -- tests/
+tests/test_pipeline_layout.py
+(единственный файл — страж раскладки; список из 14 файлов выше — это ВСЯ волна, девять задач)
