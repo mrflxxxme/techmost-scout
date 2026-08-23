@@ -216,7 +216,7 @@ class ShowcaseItem(Base):
 
 
 class PipelineLog(Base):
-    """Журнал стадий: время, источники, токены, стоимость. Основа демо-режима."""
+    """Журнал стадий: время, источники, стоимость. Основа демо-режима."""
 
     __tablename__ = "pipeline_logs"
 
@@ -235,8 +235,10 @@ class PipelineLog(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    tokens_in: Mapped[int] = mapped_column(Integer, default=0)
-    tokens_out: Mapped[int] = mapped_column(Integer, default=0)
+    # `tokens_in`/`tokens_out` удалены из модели (РЕШ-174): счётчик стоимости
+    # копит только рубли, токены нигде не читались. На уже существующем файле
+    # базы старые колонки остаются мёртвым грузом до пересоздания — SQLite не
+    # мигрирует схему при `create_all`, и это не задача этой правки.
     cost_rub: Mapped[float] = mapped_column(Float, default=0.0)
     sources_hit: Mapped[dict] = mapped_column(JSON, default=dict)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

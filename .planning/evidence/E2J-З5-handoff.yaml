@@ -1,0 +1,113 @@
+handoff:
+  from: implementer-B
+  to: reviewer
+  task: "З-5 (Э2-Ж): чистка — google_search, колонки-нули, порог в коде, инвариант 6, страж 500"
+  did:
+    - "База копии была устаревшей (892de13, до слияния волны 0 Э2-Ж) — сверка
+      по РЕШ-158 показала расхождение, подтянул git reset --hard 1dfb2b8
+      (верхушка ветки волны на момент старта, содержит З-1/З-2/З-3 влитыми)."
+    - "Удалён backend/app/search/google_search.py и tests/test_search_google.py;
+      вычищены google_api_key/google_cse_id/google_lang_restrict из Settings
+      (config.py), реестра адаптеров (search/__init__.py) и таблицы ключей
+      доктора SECRET_CHECKS (cli.py — файл затронут сознательно, обе задачи
+      его трогают по плану волны). В docs/sources.md — раздел «был, удалён
+      (РЕШ-174), вернётся, если Google откроет доступ»."
+    - "Мёртвая ссылка на удалённый файл backend/app/search/google_search.py
+      в докстроке yandex_search.py заменена ссылкой на docs/sources.md;
+      содержательное пояснение «почему не Google» оставлено — это легитимная
+      история решения, не мусор."
+    - "tests/test_search_yandex.py: тест склейки дублей с GoogleSearchAdapter
+      переписан на второй Candidate, собранный вручную через normalize_url —
+      тестируемая логика (общий ключ склейки веб-страниц) осталась той же,
+      без зависимости от удалённого адаптера."
+    - "tests/test_openalex.py: тест длины SECRET_CHECKS поправлен с 10 на 8
+      строк; тест «доктор честен про Google» заменён на «доктор не знает про
+      Google» (проверяет отсутствие GOOGLE_* в таблице ключей)."
+    - "Колонки tokens_in/tokens_out удалены из models.py (PipelineLog),
+      pipeline/persistence.py (StageRecord и запись в PipelineLogRow); попутно
+      поправлена ставшая неточной докстрока в cli.py (_intake_stage_record),
+      упоминавшая эти поля. Поля Usage/LLMResponse в llm/base.py,
+      llm/deepseek.py, llm/yandex.py — другая сущность (учёт токенов роутером
+      для расчёта стоимости), не трогал."
+    - "ОДНА СТРОКА ПРО МЁРТВЫЕ КОЛОНКИ: на уже существующем файле базы данных
+      (data/scout.db, если он есть на машине) колонки tokens_in/tokens_out
+      таблицы pipeline_logs остаются мёртвым грузом — SQLite не мигрирует
+      схему при create_all() и не удаляет колонки, отсутствующие в новой
+      модели; уйдут только при пересоздании файла базы."
+    - "Settings.relevance_min: умолчание 0 → 3 (config.py:131, РЕШ-174).
+      Сознательно поправлены тесты, закреплявшие ноль: test_stages.py
+      (test_relevance_min_default_is_zero_cutoff_disabled →
+      test_relevance_min_default_is_three), test_contest_gate_and_order.py
+      (test_при_выключенной_отсечке_конкурсная_очередь_прежняя теперь явно
+      выключает отсечку через model_copy, а не полагается на умолчание),
+      test_pipeline_second_pass.py (test_при_выключенном_пороге_прогон…
+      дополнительно выключает relevance_min через переменную окружения —
+      select_top() без явного аргумента читает порог из закэшированного
+      get_settings(), а не из объекта settings пайплайна, это существующее
+      поведение кода, не моя правка)."
+    - "docs/remote-setup.md: RELEVANCE_MIN убран из обязательного к заданию
+      блока настроек и описан как переопределение при необходимости —
+      рабочее значение теперь умолчание кода."
+    - "docs/team/INVARIANTS.md, инвариант №6: способ проверки переписан под
+      фактическую карту httpx (llm/, search/, cli.py, pipeline_context.py,
+      pipeline_search.py); прогнан — 0 срабатываний, вывод в отчёте
+      исполнителя ниже."
+    - "Новый страж tests/test_backend_layout.py: лимит 500 строк для всего
+      backend/app рекурсивно, три именованных исключения (cli.py 674,
+      search/openalex.py 593, search/yandex_search.py 544) с комментарием
+      «список только сокращается»; второй тест ловит рост исключений сверх
+      зафиксированного размера. diversity.py, cli.py, openalex.py,
+      yandex_search.py по содержанию не дробились — только точечные правки
+      внутри границ задачи."
+  artifacts:
+    - backend/app/config.py
+    - backend/app/cli.py
+    - backend/app/models.py
+    - backend/app/pipeline/persistence.py
+    - backend/app/search/__init__.py
+    - backend/app/search/yandex_search.py
+    - docs/sources.md
+    - docs/remote-setup.md
+    - docs/team/INVARIANTS.md
+    - tests/test_backend_layout.py
+    - tests/test_contest_gate_and_order.py
+    - tests/test_openalex.py
+    - tests/test_pipeline_second_pass.py
+    - tests/test_search_yandex.py
+    - tests/test_stages.py
+  self_audit: pass
+  checks:
+    - "pytest -q: 745 passed, 1 failed (известный: tests/test_config.py::test_в_примере_нет_переменных_которых_settings_не_читает — .env.example чинится слиянием, как GIGACHAT_* в волне 0)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 135 files already formatted"
+    - "pytest tests/test_prompts.py -q: 44 passed"
+    - "pytest tests/test_backend_layout.py -v: 3 passed"
+    - "grep -rni 'google' backend/app --include='*.py': только патенты patents.google.com (rospatent.py, patents_view.py — не относится к удалённому Custom Search) и объяснительные комментарии в cli.py/config.py/yandex_search.py про удаление; настроек google_* в Settings нет"
+    - "grep -n 'tokens_in\\|tokens_out' backend/app -r (без __pycache__): только llm/base.py, llm/deepseek.py, llm/yandex.py — поля Usage роутера, вне границ задачи"
+    - "Settings.model_fields['relevance_min'].default == 3 (проверено PYTHONPATH=backend python -c ...)"
+    - "grep -rln 'httpx' backend/app --include='*.py' | grep -vE 'backend/app/(llm/|search/|cli\\.py$|pipeline/pipeline_context\\.py$|pipeline/pipeline_search\\.py$)': пусто (0 срабатываний)"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-5, волна Э2-Ж)
+    - docs/SPEC.md (§0.1 грабли)
+    - docs/team/INVARIANTS.md (инвариант №6, новая формулировка)
+    - backend/app/config.py
+    - tests/test_backend_layout.py
+  notes: >-
+    Мутация стража (лимит 400 вместо 500) называет ЧЕТЫРЕ файла, а не три,
+    как предполагала формулировка задачи: pipeline/persistence.py (407),
+    pipeline/pipeline_search.py (423), pipeline/run_flow.py (498),
+    search/cyberleninka.py (431) — все они уже были такого размера на базе
+    1dfb2b8, до моих правок (run_flow.py 498/500 назван известным долгом в
+    STATE.md). Ни один из них не входит в список из трёх постоянных
+    исключений (cli.py, openalex.py, yandex_search.py) — они попадают под
+    общий лимит 500 и его не превышают, поэтому test_backend_app_stays_within_line_limit
+    зелёный при лимите 500. Формулировка задачи «три файла» относится, видимо,
+    к состоянию кода на момент написания плана; сейчас реальность иная —
+    называю честно, не подгонял вывод под ожидание. Отдельно: cli.py тронут
+    (SECRET_CHECKS без GOOGLE_*, докстрока про tokens_in/out) — формально не
+    в списке файлов задачи З-5, но явно назван в разделе «Порядок и
+    параллельность» плана («З-5 идёт после З-3 сознательно: обе трогают
+    config.py и cli.py») и правка была необходима: без неё доктор показывал бы
+    строки про несуществующие поля Settings. Если это расхождение с границами
+    — прошу ревьюера явно решить, оставлять правку или откатывать.

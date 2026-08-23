@@ -18,9 +18,9 @@ import respx
 
 from app.llm import LLMRouter
 from app.pipeline.orchestrator import ScoutPipeline
-from app.schemas import SearchPlan, SearchQuery, SourceType
+from app.schemas import Candidate, SearchPlan, SearchQuery, SourceType
 from app.search import build_adapters
-from app.search.base import SearchAdapter, SearchError
+from app.search.base import SearchAdapter, SearchError, normalize_url
 from app.search.yandex_search import (
     CONTEST_OUTCOME_MARKERS,
     CONTEST_SITES,
@@ -312,33 +312,29 @@ async def test_источник_включается_только_с_обоим�
 
 
 @respx.mock
-async def test_страница_из_двух_поисковиков_склеивается_в_одного_кандидата(make_adapter):
-    """Главная причина общего ключа склейки: один адрес — один кандидат."""
-    from app.search.google_search import API_URL, GoogleSearchAdapter
+async def test_страница_из_другого_веб_источника_склеивается_в_одного_кандидата(make_adapter):
+    """Главная причина общего ключа склейки: один адрес — один кандидат.
 
+    Раньше вторым источником в паре был Google (адаптер удалён, РЕШ-174).
+    Ключ склейки — общая функция `normalize_url`, а не что-то специфичное
+    для Яндекса, поэтому её достаточно проверить напрямую вторым кандидатом,
+    без второго живого адаптера.
+    """
     _mock_ok(_xml(_doc("https://pure.manchester.ac.uk/lab/", "Лаборатория")))
-    respx.get(API_URL).mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "items": [
-                    {
-                        "title": "Lab page",
-                        "link": "https://www.pure.manchester.ac.uk/lab",
-                        "snippet": "…",
-                        "displayLink": "pure.manchester.ac.uk",
-                    }
-                ]
-            },
-        )
-    )
     async with httpx.AsyncClient() as client:
         from_yandex = await make_adapter(client).search(_query(), limit=5)
-        google = GoogleSearchAdapter(client, api_key="k", cse_id="cx")
-        from_google = await google.search(_query(lang="en"), limit=5)
 
-    assert from_yandex[0].raw_id == from_google[0].raw_id
-    assert from_yandex[0].dedup_key() == from_google[0].dedup_key()
+    other_source = Candidate(
+        source_type=SourceType.WEB,
+        title="Lab page",
+        url="https://www.pure.manchester.ac.uk/lab",
+        snippet="…",
+        raw_id=normalize_url("https://www.pure.manchester.ac.uk/lab"),
+        provider="другой_веб_источник",
+    )
+
+    assert from_yandex[0].raw_id == other_source.raw_id
+    assert from_yandex[0].dedup_key() == other_source.dedup_key()
 
 
 # ── Т-23: конкурсные формулировки через контур Яндекса ─────────────────────

@@ -95,15 +95,9 @@ class Settings(BaseSettings):
     patentsview_api_key: SecretStr = Field(default=SecretStr(""))
     yandex_search_api_key: SecretStr = Field(default=SecretStr(""), validation_alias="YANDEX_SEARCH_API_KEY")
     rospatent_api_key: SecretStr = Field(default=SecretStr(""))
-    # Google Programmable Search: мировой веб там, где Яндекс не достаёт.
-    # Нужны оба значения — ключ и идентификатор поисковой системы, причём сама
-    # система обязана быть настроена на режим «искать по всему вебу».
-    # Бесплатно 100 запросов в сутки, дальше $5 за 1000, потолок 10 000 в сутки.
-    google_api_key: SecretStr = Field(default=SecretStr(""), validation_alias="GOOGLE_API_KEY")
-    google_cse_id: str = Field(default="", validation_alias="GOOGLE_CSE_ID")
-    # Ограничение языка выдачи (например lang_en). Пусто = искать на всех
-    # языках: в этом и смысл источника.
-    google_lang_restrict: str = Field(default="", validation_alias="GOOGLE_LANG_RESTRICT")
+    # Google Programmable Search Engine удалён (РЕШ-174): Custom Search JSON
+    # API закрыт для новых клиентов, доступ владельца получить не удалось.
+    # Настройки убраны вместе с адаптером — подробности в `docs/sources.md`.
 
     search_timeout_seconds: int = 30
     max_candidates_per_query: int = 20
@@ -114,10 +108,11 @@ class Settings(BaseSettings):
     demo_mode_default: bool = False
 
     # Отсечка по предметному соответствию (РЕШ-48): кандидат с `relevance` ниже
-    # порога до карточек не доходит. По умолчанию 0 — отсечка выключена.
-    # Значение подбирается по журналу калибровки на живом прогоне, а не
-    # угадывается: сохранённых оценок прошлых прогонов не существует.
-    relevance_min: int = Field(default=0, ge=0, le=10, description="Порог relevance для отбора; 0 — отсечка выключена")
+    # порога до карточек не доходит. Умолчание 3 — рабочее значение по итогам
+    # калибровки на живых прогонах Э2 (РЕШ-174): нулевая отсечка пропускала
+    # явно нерелевантных кандидатов дальше по пайплайну без причины платить за
+    # них модели. 0 по-прежнему означает «отсечка выключена».
+    relevance_min: int = Field(default=3, ge=0, le=10, description="Порог relevance для отбора; 0 — отсечка выключена")
 
     # Условный второй проход поиска (РЕШ-81, Т-21): если максимум `relevance` по
     # оценкам МОДЕЛИ первой выдачи строго ниже этого порога, система признаёт

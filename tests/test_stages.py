@@ -156,12 +156,14 @@ def test_select_top_limits_single_provider_dominance(candidates):
     assert sum(1 for i in picked if i.candidate.provider == "crossref") <= 3
 
 
-def test_relevance_min_default_is_zero_cutoff_disabled():
-    """Порог по умолчанию — 0: отсечка выключена, пока значение не подобрано на
-    прогоне (Т-10). Догадка в коде хуже отсутствия отсечки."""
+def test_relevance_min_default_is_three():
+    """Умолчание порога — 3 (РЕШ-174): значение подобрано по журналу калибровки
+    живых прогонов Э2 и переехало в код рабочим, а не нулевым, — нулевая
+    отсечка пропускала явно нерелевантных кандидатов дальше по пайплайну без
+    причины платить за них модели на следующих стадиях."""
     field = Settings.model_fields["relevance_min"]
 
-    assert field.default == 0
+    assert field.default == 3
 
 
 def test_select_top_drops_candidate_below_relevance_min():
