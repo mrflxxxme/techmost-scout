@@ -1,0 +1,57 @@
+handoff:
+  from: implementer-F
+  to: reviewer
+  task: З-9
+  did:
+    - "Диагноз (evidence/E2D-З9-diagnosis.md): страховка РЕШ-115
+       (constraints_guard.py:128-129) срабатывала только при пустом
+       Brief.constraints. На прогоне Э2-Г список уже был непуст (точность
+       собралась первым проходом интейка), поэтому маркер TRL, не покрытый
+       ни одним требованием, тихо терялся - повторного вызова не было.
+       Побочная находка вне границ задачи: таблица briefs в БД никогда не
+       заполняется (models.Brief нигде не создаётся) - не правил, только
+       описал."
+    - "Падающий тест до фикса зафиксирован отдельным коммитом
+       (77189c4, evidence/E2D-З9-red.txt: 2 failed из 4 новых)."
+    - "Минимальный фикс отдельным коммитом (af0be76): условие расширено на
+       случай «constraints непуст, но маркер _LEVEL_MARKERS не покрыт» -
+       сравнение без учёта регистра, объединение списков вместо затирания,
+       вызов остаётся однократным (считается список маркеров целиком, а не
+       по одному вызову на маркер)."
+    - "Обновлён один существующий тест
+       (test_retry_constraints_skipped_when_constraints_already_present) -
+       его фикстура раньше подразумевала «непусто -> вызова нет всегда»,
+       теперь явно покрывает маркер TRL, чтобы соответствовать новой,
+       корректной семантике."
+    - "5 целевых мутаций из постановки (а-д) применены вручную по очереди
+       (не закоммичены - воспроизводимый ручной прогон), каждая ломает
+       tests/test_constraints_guard.py, файл восстановлен после каждой."
+  artifacts:
+    - backend/app/pipeline/constraints_guard.py
+    - tests/test_constraints_guard.py
+    - .planning/evidence/E2D-З9-diagnosis.md
+    - .planning/evidence/E2D-З9-red.txt
+    - .planning/evidence/E2D-З9-green.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_constraints_guard.py -v: 24 passed (evidence/E2D-З9-green.txt)"
+    - "pytest -q (без RELEVANCE_MIN/SECOND_PASS_RELEVANCE_MAX/YANDEX_*/LLM_*),
+       --deselect test_state_stays_short: 667 passed, 1 deselected"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 116 files already formatted"
+    - "git diff main --name-only: только constraints_guard.py,
+       test_constraints_guard.py и evidence/ - prompts/, export/, cli.py не тронуты"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-9, строки 828-915)
+    - .planning/evidence/E2D-З9-diagnosis.md
+    - backend/app/pipeline/constraints_guard.py (функции _uncovered_markers, retry_constraints_if_missing)
+    - tests/test_constraints_guard.py (раздел «Регрессия Э2-Г»)
+  notes: >-
+    Граница-эскалация Р-5 не сработала: причина полностью внутри
+    constraints_guard.py, prompts/intake.md не тронут, детерминированное
+    извлечение TRL в клиентский текст не добавлялось - маркер только
+    ДЕТЕКТИРУЕТСЯ (has_requirement_signs/_uncovered_markers), а не
+    извлекается в бриф кодом; в брифе остаётся то, что вернула модель.
+    Таблица briefs в БД пуста для всех прогонов (models.Brief нигде не
+    создаётся в backend/app) - за границами файлов задачи, не правил.

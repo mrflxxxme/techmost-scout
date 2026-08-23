@@ -69,6 +69,28 @@ def has_requirement_signs(text: str) -> bool:
     return bool(_NUMBER_WITH_UNIT.search(text))
 
 
+def _uncovered_markers(raw_text: str, constraints: list[str]) -> list[str]:
+    """Маркеры из `_LEVEL_MARKERS`, присутствующие в тексте задачи, но не
+    покрытые ни одним уже собранным требованием (диагноз E2D-З9).
+
+    Регрессия Э2-Г: `has_requirement_signs` даёт признак наличия требований в
+    тексте, но ничего не говорит о том, что из них реально попало в
+    `constraints` - на том прогоне список уже был непуст (собралась точность),
+    а маркер `trl` в него не попал, и старая страховка (`brief.constraints or
+    ...`) такой случай не ловит по построению.
+
+    Сравнение - без учёта регистра (мутация в): «TRL» в тексте и «trl» в уже
+    собранном требовании считаются одним и тем же маркером.
+    """
+    lowered_text = raw_text.lower()
+    lowered_constraints = [item.lower() for item in constraints]
+    return [
+        marker
+        for marker in _LEVEL_MARKERS
+        if marker in lowered_text and not any(marker in item for item in lowered_constraints)
+    ]
+
+
 def _stage_record(
     *, started_at: datetime, cost_before: dict[str, float], router: LLMRouter, error: BaseException | None
 ) -> StageRecord:
@@ -105,13 +127,21 @@ async def retry_constraints_if_missing(
 ) -> tuple[Brief, bool]:
     """Дозаполнить `brief.constraints` одним адресным вызовом интейка.
 
-    Вызывается ровно один раз за прогон и только когда `brief.constraints`
-    пуст, а `has_requirement_signs(raw_text)` истинно - иначе бриф
-    возвращается как есть, второе значение `False`.
+    Вызывается не более одного раза за прогон и только в одном из двух
+    случаев (диагноз E2D-З9): `brief.constraints` пуст целиком, а
+    `has_requirement_signs(raw_text)` истинно, - **либо** список уже непуст,
+    но в тексте задачи есть маркер `_LEVEL_MARKERS`, не покрытый ни одним уже
+    собранным требованием (регрессия Э2-Г: список был непуст из-за собранной
+    точности, и старая страховка `brief.constraints or ...` такой случай не
+    ловила по построению - TRL тихо терялся). Иначе бриф возвращается как
+    есть, второе значение `False`.
 
-    Из ответа берётся **только** `draft_brief.constraints`: второй вызов не
-    имеет права переписать `task_summary`, ключевые слова и отрасль - он
-    вызван за одним полем (`model_copy` с точечным `update`).
+    Из ответа берётся **только** `draft_brief.constraints`, и он
+    **объединяется** с уже собранным списком, а не заменяет его: второй вызов
+    не имеет права переписать `task_summary`, ключевые слова и отрасль - он
+    вызван за одним полем (`model_copy` с точечным `update`), и объединение,
+    а не затирание, нужно ровно затем, чтобы новый случай (список уже непуст)
+    не терял то, что уже было собрано первым проходом.
 
     Возвращает `(бриф, constraints_unresolved)`. Второе значение - `True`,
     если после этого вызова требования всё равно не собраны (отказ модели,
@@ -125,7 +155,10 @@ async def retry_constraints_if_missing(
     (инвариант №5): повторный вызов - доводка, а не обязательный шаг, без
     которого прогон не имеет права дойти до отчёта.
     """
-    if brief.constraints or not has_requirement_signs(raw_text):
+    if brief.constraints:
+        if not _uncovered_markers(raw_text, brief.constraints):
+            return brief, False
+    elif not has_requirement_signs(raw_text):
         return brief, False
 
     # Отложенный импорт по той же причине, что и в `_stage_record`:
@@ -159,10 +192,16 @@ async def retry_constraints_if_missing(
         return brief, True
 
     stage_log.append(_stage_record(started_at=started, cost_before=cost_before, router=router, error=None))
-    new_constraints = list(dict.fromkeys(item.strip() for item in result.draft_brief.constraints if item.strip()))
-    if not new_constraints:
+    # Объединение, а не затирание (диагноз E2D-З9, п. 4 постановки): список
+    # мог быть уже непустым (случай непокрытого маркера) - второй ответ
+    # добавляет то, чего не хватало, и не имеет права стереть то, что уже
+    # собрано первым проходом.
+    merged = list(
+        dict.fromkeys(item.strip() for item in (*brief.constraints, *result.draft_brief.constraints) if item.strip())
+    )
+    if not merged:
         return brief, True
-    return brief.model_copy(update={"constraints": new_constraints}), False
+    return brief.model_copy(update={"constraints": merged}), False
 
 
 def ensure_requirement_checks(card: SolutionCard, brief: Brief) -> SolutionCard:
