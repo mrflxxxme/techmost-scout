@@ -11,6 +11,7 @@ handoff:
     - "backend/app/pipeline/extraction.py: докстрока COVERAGE_EXCLUDED_SOURCE_TYPES переписана под метрику «публикации, патенты, гранты, веб» (РЕШ-173), упоминание org как ожидаемого типа метрики убрано"
     - "Наследование типа query.source_type до кандидата extract_candidates уже было в коде (payload источника навязывается кодом, не ответом модели) — проверено сквозным тестом на подменах, а не переписано"
     - "Тесты: tests/test_grant_source_type.py (новый файл, 1 сквозной тест план→поиск→extractor); tests/test_search_yandex.py (+3: source_types содержит grant, сужение grant в ru-контуре без маркеров, отсутствие сужения grant в en-контуре; докстрока устаревшего теста РЕШ-39 поправлена под реверс РЕШ-173); tests/test_stages.py (+2: покрытие publication+patent+grant+web=4 / без гранта=3, грант в основной очереди без потолка зрелости); tests/test_plan_types.py (обновлена проверка диапазона, +1 тест на правило grant в правиле 2)"
+    - "Цикл 2 (правка по ревью, ПРИНЯТЬ после исправления): запись 2.6 prompts/CHANGELOG.md утверждала правку диапазона «от 8 до 10» на «от 9 до 11», которой в planner.md нет (диапазон сознательно не трогался) — текст записи переписан под фактический дифф, упоминание диапазона убрано; попутно найдена и починена регрессия своей же правки: слово `replanner.md` в кавычках внутри записи 2.6 ловилось тестом test_prompt_version_matches_latest_changelog_entry как «упоминание файла», требуя от версии заголовка записи (2.6) совпасть с меткой версии самого replanner.md (1.4) — переформулировано без обратных кавычек вокруг чужого имени файла"
   artifacts:
     - "prompts/planner.md"
     - "prompts/CHANGELOG.md"
@@ -30,6 +31,9 @@ handoff:
     - "ruff check .: All checks passed!"
     - "ruff format --check .: 137 files already formatted"
     - "мутация: временный откат source_types к (WEB, CONTEST) без GRANT уронил tests/test_grant_source_type.py (route.call_count 0 вместо 1) — код восстановлен, тесты снова зелёные"
+    - "цикл 2: grep -rn «9 до 11» prompts/ — пусто"
+    - "цикл 2: pytest tests/test_prompts.py tests/test_plan_types.py -q → 55 passed"
+    - "цикл 2: полный pytest -q → 767 passed, 0 failed; ruff check и ruff format --check чисты"
   escalate: "требуется виза владельца на текст prompts/planner.md (правила 1, 2, 8, 9) до слияния — §9 п.4 CONVENTIONS.md, как РЕШ-157; дословный дифф промпта приведён в текстовом отчёте исполнителя"
   read_first:
     - ".planning/PLAN.md (задача З-4 волны Э2-Ж)"
@@ -51,3 +55,8 @@ handoff:
     метрика покрытия типов живёт в backend/app/pipeline/extraction.py
     (count_source_type_coverage), проверено грепом. SourceType.ORG из enum не удалён.
     Живых платных вызовов не делалось.
+
+    Ревью (цикл 1, .planning/evidence/E2J-З4-review.md): вердикт ВЕРНУТЬ, одна
+    блокирующая находка — запись 2.6 CHANGELOG.md утверждала правку диапазона
+    правила 2, которой в planner.md нет. Исправлено этим же коммитом (см. did,
+    цикл 2); сам диапазон «от 8 до 10» в planner.md по-прежнему не тронут.
