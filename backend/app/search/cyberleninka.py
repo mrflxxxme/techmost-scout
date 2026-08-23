@@ -46,6 +46,18 @@ https://cyberleninka.ru/oai и на живых запросах давал но�
 `SearchError`: его ловит `_safe_search` оркестратора, и источник честно
 попадает в «Не ответили источники» (инвариант №5, РЕШ-43). Пустая выдача при
 успешном ответе — обычный пустой список, а не отказ.
+
+ДЛИННЫЕ ФОРМУЛИРОВКИ ДАЮТ НОЛЬ (диагноз Э2-Ж, числа — в `docs/sources.md`).
+Полнотекстовый поиск КиберЛенинки склеивает термины запроса жёстко: 8-словная
+формулировка модели даёт `found=0`, а «супоросность свиноматок УЗИ» (3 слова)
+на той же теме — `found=21`. Починка — ступенчатое укорачивание внутри
+адаптера: при `found=0` на исходной формулировке ОДИН повтор с первыми 3–4
+содержательными словами (маленький стоп-словарь ниже, без модели, порядок
+сохраняется). Больше одного повтора не делаем: темп 1 з/с и уважение к
+источнику (РЕШ-70) важнее полноты подбора формы запроса. Кэш ключуется точным
+телом запроса (то есть фактически отправленным текстом), поэтому нулевой
+ответ длинной формы никогда не заслоняет результат короткой: у них разные
+ключи кэша с самого начала.
 """
 
 from __future__ import annotations
@@ -89,11 +101,77 @@ MAX_AUTHORS = 12
 MAX_OCR_FRAGMENTS = 3
 #: catalogs = [{"id": 8, "alias_name": "vak", "acronym": "ВАК"}, …]
 VAK_ALIASES = frozenset({"vak", "вак"})
+#: Сколько содержательных слов оставлять при укорачивании (диагноз Э2-Ж):
+#: «супоросность свиноматок узи» — 3 слова — уже даёт found=21, поэтому 4 —
+#: разумный потолок, не подгонка под один пример.
+SHORT_QUERY_WORDS = 4
+#: Маленький стоп-словарь для укорачивания длинной формулировки модели.
+#: Деталь конкретного адаптера, не данные проекта — поэтому здесь, в коде, а
+#: не в отдельном файле или справочнике (граница задачи З-2).
+_STOP_WORDS = frozenset(
+    {
+        "и",
+        "в",
+        "во",
+        "на",
+        "с",
+        "со",
+        "к",
+        "ко",
+        "от",
+        "до",
+        "из",
+        "у",
+        "о",
+        "об",
+        "обо",
+        "по",
+        "при",
+        "про",
+        "для",
+        "без",
+        "над",
+        "под",
+        "перед",
+        "через",
+        "между",
+        "за",
+        "а",
+        "но",
+        "или",
+        "либо",
+        "то",
+        "как",
+        "что",
+        "чтобы",
+        "это",
+        "этот",
+        "эта",
+        "эти",
+        "этих",
+        "не",
+        "ни",
+        "же",
+        "ли",
+        "бы",
+        "также",
+        "уже",
+        "ещё",
+        "очень",
+        "более",
+        "менее",
+        "самый",
+    }
+)
+#: Символы, которые не считаются частью слова при сравнении со стоп-словарём —
+#: снимаются только с краёв токена, само слово не трогаем.
+_PUNCT = ".,!?;:()«»\"'…—-"
 
 #: Совпадения в ответе подсвечены разметкой <b>…</b> — снимаем её
 _TAG = re.compile(r"<[^>]+>")
 _WS = re.compile(r"\s+")
 _YEAR = re.compile(r"(19|20)\d{2}")
+_TOKEN = re.compile(r"\S+")
 
 
 class CyberLeninkaAdapter(SearchAdapter):
@@ -111,18 +189,45 @@ class CyberLeninkaAdapter(SearchAdapter):
         self._cache_dir = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
 
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
-        """Кандидаты по одной формулировке. Отказ источника — `SearchError`."""
+        """Кандидаты по одной формулировке. Отказ источника — `SearchError`.
+
+        Диагноз Э2-Ж (числа — в `docs/sources.md`): длинная формулировка
+        модели «пере-уточняет» полнотекстовый поиск до `found=0`. При нуле на
+        исходном тексте — один повтор с укороченной формой (первые 3–4
+        содержательных слова, без модели). Больше одного повтора не делаем.
+        """
         text = query.text.strip()
         if not text:
             return []
-        payload = await self._fetch(text, size=max(1, min(limit, MAX_SIZE)))
+        size = max(1, min(limit, MAX_SIZE))
 
+        payload = await self._fetch(text, size=size)
+        found = _found_count(payload)
+        candidates = self._parse_articles(payload)
+
+        short_text = _shorten_query(text)
+        if found == 0 and short_text and short_text != text:
+            short_payload = await self._fetch(short_text, size=size)
+            short_found = _found_count(short_payload)
+            candidates = self._parse_articles(short_payload)
+            log.info(
+                "cyberleninka: «%s» → found=%s; повтор укороченной «%s» → found=%s",
+                text,
+                found,
+                short_text,
+                short_found,
+            )
+            return candidates[:limit]
+
+        log.info("cyberleninka: «%s» → found=%s", text, found)
+        return candidates[:limit]
+
+    def _parse_articles(self, payload: dict[str, Any]) -> list[Candidate]:
+        """Список кандидатов из `articles` ответа; found = 0 приходит вообще
+        без `articles` — это результат, не отказ."""
         articles = payload.get("articles")
         if not isinstance(articles, list):
-            # found = 0 приходит вообще без articles — это результат, не отказ
-            log.info("cyberleninka: в ответе нет статей (found=%s)", payload.get("found"))
             return []
-
         candidates: list[Candidate] = []
         for article in articles:
             if not isinstance(article, dict):
@@ -130,7 +235,7 @@ class CyberLeninkaAdapter(SearchAdapter):
             candidate = self._to_candidate(article)
             if candidate is not None:
                 candidates.append(candidate)
-        return candidates[:limit]
+        return candidates
 
     async def health(self) -> tuple[bool, str]:
         """Проверка для `scout doctor`: один дешёвый поиск на размер 1."""
@@ -302,3 +407,25 @@ def _ocr_fragments(value: Any) -> str:
         return ""
     fragments = [text for item in value[:MAX_OCR_FRAGMENTS] if (text := _clean(item))]
     return " … ".join(fragments)
+
+
+def _found_count(payload: dict[str, Any]) -> int:
+    """Число `found` из ответа; нечисловое или отсутствующее — честный ноль."""
+    value = payload.get("found")
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _shorten_query(text: str) -> str:
+    """Первые 3–4 содержательных слова формулировки — детерминированно.
+
+    Не модель и не эвристика по частотности: маленький фиксированный
+    стоп-словарь и «первые N слов после фильтра» — один и тот же вход всегда
+    даёт один и тот же короткий запрос, порядок слов исходной формулировки
+    сохраняется. Если вся формулировка состоит из стоп-слов (редкость, но
+    честность важнее) — короче добросовестно не сделать, отдаём как есть.
+    """
+    tokens = _TOKEN.findall(text)
+    content = [token for token in tokens if token.strip(_PUNCT).lower() not in _STOP_WORDS]
+    if not content:
+        content = tokens
+    return " ".join(content[:SHORT_QUERY_WORDS])
