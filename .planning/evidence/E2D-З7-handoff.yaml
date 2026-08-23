@@ -1,0 +1,42 @@
+handoff:
+  from: implementer-G
+  to: reviewer
+  task: З-7
+  did:
+    - "Добавлена функция format_active_run_params(settings) в backend/app/pipeline/orchestrator.py"
+    - "ScoutPipeline.run печатает её строкой лога INFO первой, до вызова стадий (до первой платной)"
+    - "Строка несёт: стоп-кран, оба порога отбора, маршрут КАЖДОЙ стадии, порядок резерва, имена gigachat/deepseek моделей"
+    - "Значений секретов строка не содержит — из настроек берутся только величины без тайной составляющей"
+    - "tests/test_run_visibility.py: 5 тестов — успешный прогон, прогон, упавший на первой стадии, полнота набора величин, страж секретов по caplog/stdout/stderr с уникальными фиктивными ключами (РЕШ-124), отсутствие лишних вызовов роутера"
+    - "Пять мутаций прогнаны прицельно и восстановлены: (а) печать после первой стадии — падает тест упавшего прогона; (б) маршруты убраны из строки — падает тест полноты; (в) добавлено значение ключа в строку — падает страж секретов; (г) уровень понижен до DEBUG — падают оба теста присутствия строки; (д) печать убрана из run() (эмуляция переноса в cli.py) — падают те же тесты"
+  artifacts:
+    - backend/app/pipeline/orchestrator.py
+    - tests/test_run_visibility.py
+    - .planning/evidence/E2D-З7-params.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_run_visibility.py -v: 5 passed"
+    - "pytest tests/test_export_markdown.py -q: 33 passed (клиентский отчёт не тронут)"
+    - "pytest -q: 660 passed, 9 failed — те же 9 отказов, что и на голой базовой копии до правки (подтверждено git stash: 655 passed + 5 новых = 660; список отказов идентичен до/после)"
+    - "ruff check . && ruff format --check .: All checks passed / 117 files already formatted"
+    - "git diff --name-only не содержит backend/app/export/"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-7, строки 756-827)
+    - docs/SPEC.md (§0.1 грабли; раздел этапа)
+    - backend/app/pipeline/orchestrator.py (format_active_run_params, вызов в начале run())
+    - tests/test_run_visibility.py
+    - .planning/evidence/E2D-З7-params.txt (фактическая строка на настройках по умолчанию)
+  notes: >-
+    Расхождение с постановкой: голая команда `pytest -q` в этой рабочей копии
+    ДО моей правки уже даёт 9 отказов и 655 passed (не 671 passed, как указано
+    в постановке задачи). Проверено git stash -u перед началом работы: те же
+    9 тестов (test_contest_gate_and_order.py x4, test_llm_router.py x2,
+    test_pipeline_second_pass.py, test_probe.py, test_team_docs.py::test_state_stays_short)
+    падают и без моих изменений — значит расхождение унаследовано от слияния
+    предыдущих волн, к задаче З-7 не относится и правкой этой задачи не
+    исправлялось (вне границ файлов задачи). С моей правкой те же 9 отказов
+    плюс 5 новых зелёных тестов: 660 passed, 9 failed. Секреты боевых ключей
+    нигде не читались и не печатались — все проверки шли на fixture `settings`
+    (tests/conftest.py, TEST_ENV) и на заведомо фиктивных значениях,
+    сгенерированных для теста-стража.
