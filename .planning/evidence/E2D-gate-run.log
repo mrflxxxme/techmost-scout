@@ -1,0 +1,288 @@
+=== ВОРОТНЫЙ ПРОГОН Э2-Д, фарма ===
+старт: 2026-08-23T13:45:04Z
+app из: /home/user/techmost-scout/backend/app/__init__.py
+--- фактические переменные окружения, влияющие на прогон (только ИМЕНА и не-секретные значения) ---
+LLM_STAGE_ROUTES=intake:deepseek,extractor:deepseek ,planner:deepseek,replan:deepseek,scorer:deepseek,card_author:deepseek,verifier:deepseek,summary:deepseek
+LLM_FALLBACK_ORDER=gigachat,deepseek,yandex
+DEEPSEEK_MODEL=deepseek-v4-flash-vision-exp
+RELEVANCE_MIN=4 SECOND_PASS_RELEVANCE_MAX=6 COST_LIMIT_RUB_PER_REQUEST=20
+13:45:06 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+Бриф: Автоматический анализ ультразвуковых исследований свиноматок с помощью ИИ:
+решение должно определять супоросность, прохолост и микроаборт с точностью 
+95–98%. Требуемый уровень готовности — от TRL 6 до TRL 9. (свиноводство)
+
+13:45:59 INFO    app.pipeline.orchestrator | Параметры прогона: стоп-кран 20.00 ₽/запрос; relevance_min=4; second_pass_relevance_max=6; маршруты стадий: intake:deepseek, extractor:deepseek, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek; порядок резерва: gigachat→deepseek→yandex; модели: gigachat=GigaChat-2, deepseek=deepseek-v4-flash-vision-exp
+13:45:59 INFO    app.pipeline.orchestrator | [planner] Составляю план поиска
+  5% planner  Составляю план поиска
+13:46:00 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:47:08 INFO    app.pipeline.orchestrator | [planner] Формулировок в плане: 8
+ 10% planner  Формулировок в плане: 8
+13:47:08 INFO    app.pipeline.orchestrator | [search] Опрашиваю источники
+ 15% search   Опрашиваю источники
+13:47:08 INFO    app.search | источник google_search выключен: нет настроек google_api_key, google_cse_id
+13:47:08 INFO    app.search | активные источники: showcase, crossref, cyberleninka, arxiv, semanticscholar, rospatent, openalex, yandex_search
+13:47:08 INFO    app.pipeline.orchestrator | подключено источников: showcase, crossref, cyberleninka, arxiv, semanticscholar, rospatent, openalex, yandex_search
+13:47:08 INFO    httpx | HTTP Request: GET http://export.arxiv.org/api/query?search_query=ti%3A%22embryonic+resorption+detection+ultrasound+sows%22+OR+abs%3A%22embryonic+resorption+detection+ultrasound+sows%22&start=0&max_results=20 "HTTP/1.1 403 Forbidden"
+13:47:08 WARNING app.pipeline.orchestrator | источник arxiv не смог выполнить поиск «embryonic resorption detection ultrasound sows AI»: arxiv не ответил на «ti:"embryonic resorption detection ultrasound sows" OR abs:"embryonic resorption detection ultrasound sows"»: Client error '403 Forbidden' for url 'http://export.arxiv.org/api/query?search_query=ti%3A%22embryonic+resorption+detection+ultrasound+sows%22+OR+abs%3A%22embryonic+resorption+detection+ultrasound+sows%22&start=0&max_results=20'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403
+13:47:08 INFO    httpx | HTTP Request: GET https://api.openalex.org/works?search=%D0%BD%D0%B5%D0%B9%D1%80%D0%BE%D1%81%D0%B5%D1%82%D0%B5%D0%B2%D0%B0%D1%8F+%D0%B4%D0%B8%D0%B0%D0%B3%D0%BD%D0%BE%D1%81%D1%82%D0%B8%D0%BA%D0%B0+%D1%81%D1%83%D0%BF%D0%BE%D1%80%D0%BE%D1%81%D0%BD%D0%BE%D1%81%D1%82%D0%B8+%D1%81%D0%B2%D0%B8%D0%BD%D0%BE%D0%BC%D0%B0%D1%82%D0%BE%D0%BA+%D1%83%D0%BB%D1%8C%D1%82%D1%80%D0%B0%D0%B7%D0%B2%D1%83%D0%BA&filter=language%3Aru%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 429 Too Many Requests"
+13:47:08 WARNING app.pipeline.orchestrator | источник openalex не смог выполнить поиск «нейросетевая диагностика супоросности свиноматок ультразвук»: openalex не ответил на поиск «нейросетевая диагностика супоросности свиноматок ультразвук»: Client error '429 Too Many Requests' for url 'https://api.openalex.org/works?search=%D0%BD%D0%B5%D0%B9%D1%80%D0%BE%D1%81%D0%B5%D1%82%D0%B5%D0%B2%D0%B0%D1%8F+%D0%B4%D0%B8%D0%B0%D0%B3%D0%BD%D0%BE%D1%81%D1%82%D0%B8%D0%BA%D0%B0+%D1%81%D1%83%D0%BF%D0%BE%D1%80%D0%BE%D1%81%D0%BD%D0%BE%D1%81%D1%82%D0%B8+%D1%81%D0%B2%D0%B8%D0%BD%D0%BE%D0%BC%D0%B0%D1%82%D0%BE%D0%BA+%D1%83%D0%BB%D1%8C%D1%82%D1%80%D0%B0%D0%B7%D0%B2%D1%83%D0%BA&filter=language%3Aru%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429
+13:47:08 INFO    httpx | HTTP Request: GET https://api.openalex.org/works?search=embryonic+resorption+detection+ultrasound+sows+AI&filter=language%3Aen%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 429 Too Many Requests"
+13:47:08 WARNING app.pipeline.orchestrator | источник openalex не смог выполнить поиск «embryonic resorption detection ultrasound sows AI»: openalex не ответил на поиск «embryonic resorption detection ultrasound sows AI»: Client error '429 Too Many Requests' for url 'https://api.openalex.org/works?search=embryonic+resorption+detection+ultrasound+sows+AI&filter=language%3Aen%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429
+13:47:08 INFO    httpx | HTTP Request: GET https://api.semanticscholar.org/graph/v1/paper/search?query=%D0%BD%D0%B5%D0%B9%D1%80%D0%BE%D1%81%D0%B5%D1%82%D0%B5%D0%B2%D0%B0%D1%8F+%D0%B4%D0%B8%D0%B0%D0%B3%D0%BD%D0%BE%D1%81%D1%82%D0%B8%D0%BA%D0%B0+%D1%81%D1%83%D0%BF%D0%BE%D1%80%D0%BE%D1%81%D0%BD%D0%BE%D1%81%D1%82%D0%B8+%D1%81%D0%B2%D0%B8%D0%BD%D0%BE%D0%BC%D0%B0%D1%82%D0%BE%D0%BA+%D1%83%D0%BB%D1%8C%D1%82%D1%80%D0%B0%D0%B7%D0%B2%D1%83%D0%BA&limit=20&fields=title%2Cabstract%2Cyear%2Cauthors%2CexternalIds%2Curl%2CopenAccessPdf "HTTP/1.1 429 "
+13:47:08 WARNING app.pipeline.orchestrator | источник semanticscholar не смог выполнить поиск «нейросетевая диагностика супоросности свиноматок ультразвук»: semanticscholar: лимит запросов исчерпан (429), ключ не задан и пул общий
+13:47:08 INFO    httpx | HTTP Request: GET https://api.crossref.org/works?query.bibliographic=%D0%BD%D0%B5%D0%B9%D1%80%D0%BE%D1%81%D0%B5%D1%82%D0%B5%D0%B2%D0%B0%D1%8F+%D0%B4%D0%B8%D0%B0%D0%B3%D0%BD%D0%BE%D1%81%D1%82%D0%B8%D0%BA%D0%B0+%D1%81%D1%83%D0%BF%D0%BE%D1%80%D0%BE%D1%81%D0%BD%D0%BE%D1%81%D1%82%D0%B8+%D1%81%D0%B2%D0%B8%D0%BD%D0%BE%D0%BC%D0%B0%D1%82%D0%BE%D0%BA+%D1%83%D0%BB%D1%8C%D1%82%D1%80%D0%B0%D0%B7%D0%B2%D1%83%D0%BA&rows=20&filter=from-pub-date%3A2014-01-01&select=DOI%2Ctitle%2Ccontainer-title%2Cauthor%2Cissued%2Cabstract%2CURL&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 200 OK"
+13:47:08 INFO    httpx | HTTP Request: GET https://api.crossref.org/works?query.bibliographic=embryonic+resorption+detection+ultrasound+sows+AI&rows=20&filter=from-pub-date%3A2014-01-01&select=DOI%2Ctitle%2Ccontainer-title%2Cauthor%2Cissued%2Cabstract%2CURL&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 200 OK"
+13:47:08 INFO    httpx | HTTP Request: POST https://cyberleninka.ru/api/search "HTTP/1.1 200 OK"
+13:47:08 INFO    app.search.cyberleninka | cyberleninka: в ответе нет статей (found=0)
+13:47:09 INFO    httpx | HTTP Request: POST https://cyberleninka.ru/api/search "HTTP/1.1 200 OK"
+13:47:09 INFO    app.search.cyberleninka | cyberleninka: в ответе нет статей (found=0)
+13:47:09 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+13:47:09 INFO    httpx | HTTP Request: GET https://api.semanticscholar.org/graph/v1/paper/search?query=embryonic+resorption+detection+ultrasound+sows+AI&limit=20&fields=title%2Cabstract%2Cyear%2Cauthors%2CexternalIds%2Curl%2CopenAccessPdf "HTTP/1.1 200 OK"
+13:47:09 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+13:47:10 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+13:47:10 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+13:47:11 INFO    httpx | HTTP Request: POST https://searchplatform.rospatent.gov.ru/patsearch/v0.2/search "HTTP/1.1 200 OK"
+13:47:13 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/sprhkob5aplsbv645mat "HTTP/1.1 200 OK"
+13:47:13 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/spr5n84guutmkg093t7d "HTTP/1.1 200 OK"
+13:47:13 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/spr3cul7aqmpdoan3rsh "HTTP/1.1 200 OK"
+13:47:13 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/spr33re5eaq2gj0pt7jb "HTTP/1.1 200 OK"
+13:47:14 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:47:14 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:47:14 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:47:14 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:48:03 INFO    app.pipeline.stages | extractor: yandex_search, сырых записей 20 → кандидатов 20
+13:48:13 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+13:48:13 INFO    app.llm.router | стадия extractor: прошу модель починить JSON (ValidationError)
+13:48:13 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+13:48:13 INFO    app.llm.router | стадия extractor: прошу модель починить JSON (ValidationError)
+13:48:14 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+13:48:14 INFO    app.llm.router | стадия extractor: прошу модель починить JSON (ValidationError)
+13:48:14 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:48:15 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:48:15 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:48:53 INFO    app.pipeline.stages | extractor: yandex_search, сырых записей 20 → кандидатов 11
+13:48:59 INFO    app.pipeline.stages | extractor: yandex_search, сырых записей 20 → кандидатов 11
+13:49:13 WARNING app.pipeline.orchestrator | extractor: стадия не удалась для yandex_search («победитель конкурса проект команды ультразвуковая диагностика свиноматок»): router: стадия extractor: ответ не сходится со схемой ExtractedBatch: 1 validation error for ExtractedBatch
+candidates
+  Field required [type=missing, input_value={'source_type': 'contest'...vider': 'yandex_search'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing — беру разбор адаптера
+13:49:13 INFO    app.pipeline.orchestrator | [search] Найдено кандидатов — arxiv: 0, crossref: 40, cyberleninka: 0, rospatent: 20, semanticscholar: 20, showcase: 0, yandex-com: 20, yandex-ru: 42
+ 40% search   Найдено кандидатов — arxiv: 0, crossref: 40, cyberleninka: 0, 
+rospatent: 20, semanticscholar: 20, showcase: 0, yandex-com: 20, yandex-ru: 42
+13:49:13 INFO    app.pipeline.orchestrator | [search] Не ответили: arxiv, openalex
+ 42% search   Не ответили: arxiv, openalex
+13:49:13 INFO    app.pipeline.stages | дедупликация убрала 1 дублей из 142
+13:49:13 INFO    app.pipeline.orchestrator | [dedup] После склейки дублей осталось 141
+ 45% dedup    После склейки дублей осталось 141
+13:49:14 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.25701/zzr.2019.30.68.001 "HTTP/1.1 200 OK"
+13:49:14 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.22450/1999-6837-2024-19-2-83-95 "HTTP/1.1 200 OK"
+13:49:14 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.25687/1996-6733.prodanimbiol.2025.4.58-64 "HTTP/1.1 200 OK"
+13:49:14 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.25791/pribor.5.2021.1261 "HTTP/1.1 200 OK"
+13:49:15 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.12731/wsd-2017-4-64-76 "HTTP/1.1 200 OK"
+13:49:15 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.25791/pribor.06.2020.1184 "HTTP/1.1 200 OK"
+13:49:15 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.17238/issn2072-2419.2018.3.58 "HTTP/1.1 200 OK"
+13:49:15 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.15827/0236-235x.145.122-130 "HTTP/1.1 200 OK"
+13:49:15 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.15827/0236-235x.152.724-732 "HTTP/1.1 200 OK"
+13:49:15 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.7256/2305-6061.2016.2.18314 "HTTP/1.1 200 OK"
+13:49:16 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.7256/2409-7543.2016.2.18834 "HTTP/1.1 200 OK"
+13:49:16 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.14357/20718594250407 "HTTP/1.1 200 OK"
+13:49:16 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.22141/2224-0586.1.88.2018.124979 "HTTP/1.1 200 OK"
+13:49:16 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.24108/preprints-3114768 "HTTP/1.1 200 OK"
+13:49:16 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.24108/preprints-3114765 "HTTP/1.1 200 OK"
+13:49:17 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.7256/2306-4196.2016.3.18010 "HTTP/1.1 200 OK"
+13:49:17 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.25701/zzr.2019.82.93.013 "HTTP/1.1 200 OK"
+13:49:17 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.21661/r-496814 "HTTP/1.1 200 OK"
+13:49:17 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.25701/zzr.2019.79.36.011 "HTTP/1.1 200 OK"
+13:49:17 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.25701/zzr.2019.60.53.010 "HTTP/1.1 200 OK"
+13:49:18 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1079/cabicompendium.84271 "HTTP/1.1 200 OK"
+13:49:18 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1186/isrctn88222986 "HTTP/1.1 200 OK"
+13:49:18 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1186/isrctn11223725 "HTTP/1.1 200 OK"
+13:49:18 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1101/2025.04.05.25325217 "HTTP/1.1 200 OK"
+13:49:18 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1186/1477-7827-12-38 "HTTP/1.1 200 OK"
+13:49:28 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1016/j.theriogenology.2023.05.009 "HTTP/1.1 504 Gateway Timeout"
+13:49:28 WARNING app.search.openalex | openalex: обход прерван на DOI 10.1016/j.theriogenology.2023.05.009: openalex не ответил на lookup DOI 10.1016/j.theriogenology.2023.05.009: Server error '504 Gateway Timeout' for url 'https://api.openalex.org/works/doi:10.1016/j.theriogenology.2023.05.009'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/504; сохранено патчей: 25, проверено DOI: 25 из 56
+13:49:28 INFO    app.search.openalex | openalex: обогащено 25 DOI из 56 за 25 бесплатных lookup-запросов
+13:49:28 INFO    app.pipeline.orchestrator | обогащение: заполнен пустой org у 2 кандидатов из 141 (карточки группируются по точной строке org)
+13:49:28 INFO    app.pipeline.orchestrator | [enrich] Цитируемость известна у кандидатов: 25
+ 47% enrich   Цитируемость известна у кандидатов: 25
+13:49:28 INFO    app.pipeline.orchestrator | [scorer] Оцениваю кандидатов
+ 50% scorer   Оцениваю кандидатов
+13:49:28 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:50:29 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:52:06 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:53:38 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:54:45 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:56:20 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:57:23 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:58:40 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:00:15 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:01:53 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:03:23 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:04:36 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:05:31 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:06:28 INFO    app.llm.router | стадия scorer: deepseek ошибка (deepseek: пустой content: лимит токенов ушёл на рассуждения модели (finish_reason=stop) — нужен больший max_tokens), повтор через 2 с
+14:06:31 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:07:29 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:08:56 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:09:20 INFO    app.pipeline.stages | скоринг: батчей 15, повторов по лимиту 0, время стадии 1192.2 с
+14:09:20 INFO    app.pipeline.stages | второй проход: максимум relevance 4 ниже порога 6 — иду повторно
+14:09:20 INFO    app.pipeline.orchestrator | [replan] Выдача мимо задачи — перестраиваю план поиска
+ 55% replan   Выдача мимо задачи — перестраиваю план поиска
+14:09:21 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:10:29 INFO    app.llm.router | стадия replan: deepseek ошибка (deepseek: пустой content: лимит токенов ушёл на рассуждения модели (finish_reason=length) — нужен больший max_tokens), повтор через 2 с
+14:10:32 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:11:41 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+14:11:41 INFO    app.llm.router | стадия replan: прошу модель починить JSON (ValidationError)
+14:11:42 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:11:56 INFO    app.pipeline.orchestrator | [replan] Формулировок во втором плане: 6
+ 56% replan   Формулировок во втором плане: 6
+14:11:56 INFO    httpx | HTTP Request: GET http://export.arxiv.org/api/query?search_query=all%3Amulticlass+AND+all%3Aclassification+AND+all%3Asow+AND+all%3Aultrasound+AND+all%3Apregnancy+AND+all%3Anon-pregnancy&start=0&max_results=20 "HTTP/1.1 403 Forbidden"
+14:11:56 WARNING app.pipeline.orchestrator | источник arxiv не смог выполнить поиск «multiclass classification sow ultrasound pregnancy non-pregnancy embryonic resorption»: arxiv не ответил на «all:multiclass AND all:classification AND all:sow AND all:ultrasound AND all:pregnancy AND all:non-pregnancy»: Client error '403 Forbidden' for url 'http://export.arxiv.org/api/query?search_query=all%3Amulticlass+AND+all%3Aclassification+AND+all%3Asow+AND+all%3Aultrasound+AND+all%3Apregnancy+AND+all%3Anon-pregnancy&start=0&max_results=20'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403
+14:11:57 INFO    httpx | HTTP Request: GET https://api.openalex.org/works?search=multiclass+classification+sow+ultrasound+pregnancy+non-pregnancy+embryonic+resorption&filter=language%3Aen%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 429 Too Many Requests"
+14:11:57 WARNING app.pipeline.orchestrator | источник openalex не смог выполнить поиск «multiclass classification sow ultrasound pregnancy non-pregnancy embryonic resorption»: openalex не ответил на поиск «multiclass classification sow ultrasound pregnancy non-pregnancy embryonic resorption»: Client error '429 Too Many Requests' for url 'https://api.openalex.org/works?search=multiclass+classification+sow+ultrasound+pregnancy+non-pregnancy+embryonic+resorption&filter=language%3Aen%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429
+14:11:57 INFO    httpx | HTTP Request: GET https://api.openalex.org/works?search=%D0%BC%D1%83%D0%BB%D1%8C%D1%82%D0%B8%D0%BA%D0%BB%D0%B0%D1%81%D1%81%D0%BE%D0%B2%D0%B0%D1%8F+%D0%BA%D0%BB%D0%B0%D1%81%D1%81%D0%B8%D1%84%D0%B8%D0%BA%D0%B0%D1%86%D0%B8%D1%8F+%D1%83%D0%BB%D1%8C%D1%82%D1%80%D0%B0%D0%B7%D0%B2%D1%83%D0%BA%D0%BE%D0%B2%D1%8B%D1%85+%D0%B8%D0%B7%D0%BE%D0%B1%D1%80%D0%B0%D0%B6%D0%B5%D0%BD%D0%B8%D0%B9+%D1%81%D0%B2%D0%B8%D0%BD%D0%BE%D0%BC%D0%B0%D1%82%D0%BE%D0%BA+%D0%BF%D1%80%D0%BE%D1%85%D0%BE%D0%BB%D0%BE%D1%81%D1%82+%D0%BC%D0%B8%D0%BA%D1%80%D0%BE%D0%B0%D0%B1%D0%BE%D1%80%D1%82&filter=language%3Aru%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 429 Too Many Requests"
+14:11:57 WARNING app.pipeline.orchestrator | источник openalex не смог выполнить поиск «мультиклассовая классификация ультразвуковых изображений свиноматок прохолост микроаборт»: openalex не ответил на поиск «мультиклассовая классификация ультразвуковых изображений свиноматок прохолост микроаборт»: Client error '429 Too Many Requests' for url 'https://api.openalex.org/works?search=%D0%BC%D1%83%D0%BB%D1%8C%D1%82%D0%B8%D0%BA%D0%BB%D0%B0%D1%81%D1%81%D0%BE%D0%B2%D0%B0%D1%8F+%D0%BA%D0%BB%D0%B0%D1%81%D1%81%D0%B8%D1%84%D0%B8%D0%BA%D0%B0%D1%86%D0%B8%D1%8F+%D1%83%D0%BB%D1%8C%D1%82%D1%80%D0%B0%D0%B7%D0%B2%D1%83%D0%BA%D0%BE%D0%B2%D1%8B%D1%85+%D0%B8%D0%B7%D0%BE%D0%B1%D1%80%D0%B0%D0%B6%D0%B5%D0%BD%D0%B8%D0%B9+%D1%81%D0%B2%D0%B8%D0%BD%D0%BE%D0%BC%D0%B0%D1%82%D0%BE%D0%BA+%D0%BF%D1%80%D0%BE%D1%85%D0%BE%D0%BB%D0%BE%D1%81%D1%82+%D0%BC%D0%B8%D0%BA%D1%80%D0%BE%D0%B0%D0%B1%D0%BE%D1%80%D1%82&filter=language%3Aru%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429
+14:11:57 INFO    httpx | HTTP Request: GET https://api.semanticscholar.org/graph/v1/paper/search?query=%D0%BC%D1%83%D0%BB%D1%8C%D1%82%D0%B8%D0%BA%D0%BB%D0%B0%D1%81%D1%81%D0%BE%D0%B2%D0%B0%D1%8F+%D0%BA%D0%BB%D0%B0%D1%81%D1%81%D0%B8%D1%84%D0%B8%D0%BA%D0%B0%D1%86%D0%B8%D1%8F+%D1%83%D0%BB%D1%8C%D1%82%D1%80%D0%B0%D0%B7%D0%B2%D1%83%D0%BA%D0%BE%D0%B2%D1%8B%D1%85+%D0%B8%D0%B7%D0%BE%D0%B1%D1%80%D0%B0%D0%B6%D0%B5%D0%BD%D0%B8%D0%B9+%D1%81%D0%B2%D0%B8%D0%BD%D0%BE%D0%BC%D0%B0%D1%82%D0%BE%D0%BA+%D0%BF%D1%80%D0%BE%D1%85%D0%BE%D0%BB%D0%BE%D1%81%D1%82+%D0%BC%D0%B8%D0%BA%D1%80%D0%BE%D0%B0%D0%B1%D0%BE%D1%80%D1%82&limit=20&fields=title%2Cabstract%2Cyear%2Cauthors%2CexternalIds%2Curl%2CopenAccessPdf "HTTP/1.1 429 "
+14:11:57 WARNING app.pipeline.orchestrator | источник semanticscholar не смог выполнить поиск «мультиклассовая классификация ультразвуковых изображений свиноматок прохолост микроаборт»: semanticscholar: лимит запросов исчерпан (429), ключ не задан и пул общий
+14:11:57 INFO    httpx | HTTP Request: GET https://api.crossref.org/works?query.bibliographic=multiclass+classification+sow+ultrasound+pregnancy+non-pregnancy+embryonic+resorption&rows=20&filter=from-pub-date%3A2014-01-01&select=DOI%2Ctitle%2Ccontainer-title%2Cauthor%2Cissued%2Cabstract%2CURL&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 200 OK"
+14:11:57 INFO    httpx | HTTP Request: POST https://cyberleninka.ru/api/search "HTTP/1.1 200 OK"
+14:11:57 INFO    app.search.cyberleninka | cyberleninka: в ответе нет статей (found=0)
+14:11:57 INFO    httpx | HTTP Request: GET https://api.crossref.org/works?query.bibliographic=%D0%BC%D1%83%D0%BB%D1%8C%D1%82%D0%B8%D0%BA%D0%BB%D0%B0%D1%81%D1%81%D0%BE%D0%B2%D0%B0%D1%8F+%D0%BA%D0%BB%D0%B0%D1%81%D1%81%D0%B8%D1%84%D0%B8%D0%BA%D0%B0%D1%86%D0%B8%D1%8F+%D1%83%D0%BB%D1%8C%D1%82%D1%80%D0%B0%D0%B7%D0%B2%D1%83%D0%BA%D0%BE%D0%B2%D1%8B%D1%85+%D0%B8%D0%B7%D0%BE%D0%B1%D1%80%D0%B0%D0%B6%D0%B5%D0%BD%D0%B8%D0%B9+%D1%81%D0%B2%D0%B8%D0%BD%D0%BE%D0%BC%D0%B0%D1%82%D0%BE%D0%BA+%D0%BF%D1%80%D0%BE%D1%85%D0%BE%D0%BB%D0%BE%D1%81%D1%82+%D0%BC%D0%B8%D0%BA%D1%80%D0%BE%D0%B0%D0%B1%D0%BE%D1%80%D1%82&rows=20&filter=from-pub-date%3A2014-01-01&select=DOI%2Ctitle%2Ccontainer-title%2Cauthor%2Cissued%2Cabstract%2CURL&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 200 OK"
+14:11:57 INFO    httpx | HTTP Request: GET https://api.semanticscholar.org/graph/v1/paper/search?query=multiclass+classification+sow+ultrasound+pregnancy+non-pregnancy+embryonic+resorption&limit=20&fields=title%2Cabstract%2Cyear%2Cauthors%2CexternalIds%2Curl%2CopenAccessPdf "HTTP/1.1 429 "
+14:11:57 WARNING app.pipeline.orchestrator | источник semanticscholar не смог выполнить поиск «multiclass classification sow ultrasound pregnancy non-pregnancy embryonic resorption»: semanticscholar: лимит запросов исчерпан (429), ключ не задан и пул общий
+14:11:57 INFO    httpx | HTTP Request: POST https://cyberleninka.ru/api/search "HTTP/1.1 200 OK"
+14:11:57 INFO    app.search.cyberleninka | cyberleninka: в ответе нет статей (found=0)
+14:11:58 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+14:11:58 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+14:12:01 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/spr58ctrclherkbvojtk "HTTP/1.1 200 OK"
+14:12:02 INFO    httpx | HTTP Request: POST https://searchplatform.rospatent.gov.ru/patsearch/v0.2/search "HTTP/1.1 200 OK"
+14:12:02 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/sprj2ai1p9ddo9d915pn "HTTP/1.1 200 OK"
+14:12:02 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:12:03 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:13:02 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+14:13:02 INFO    app.llm.router | стадия extractor: прошу модель починить JSON (ValidationError)
+14:13:02 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+14:13:02 INFO    app.llm.router | стадия extractor: прошу модель починить JSON (ValidationError)
+14:13:03 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:13:03 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:14:01 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+14:14:01 WARNING app.pipeline.orchestrator | extractor: стадия не удалась для yandex_search («Фонд содействия инновациям распознавание микроаборта у свиноматок УЗИ»): router: стадия extractor: ответ не сходится со схемой ExtractedBatch: 1 validation error for ExtractedBatch
+  Input should be a valid dictionary or instance of ExtractedBatch [type=model_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/model_type — беру разбор адаптера
+14:14:02 INFO    app.pipeline.stages | extractor: yandex_search, сырых записей 20 → кандидатов 16
+14:14:02 INFO    app.pipeline.stages | дедупликация убрала 1 дублей из 232
+14:14:02 INFO    app.pipeline.orchestrator | [search] Второй проход: найдено 91, из них новых после склейки 90
+ 57% search   Второй проход: найдено 91, из них новых после склейки 90
+14:14:02 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.52167/1609-1817-2025-141-6-222-231 "HTTP/1.1 200 OK"
+14:14:02 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.7868/s0320791916020027 "HTTP/1.1 200 OK"
+14:14:03 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.31857/s0320791920020124 "HTTP/1.1 200 OK"
+14:14:03 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1134/s0320791919040038 "HTTP/1.1 200 OK"
+14:14:03 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.52575/2687-0932-2022-49-3-575-581 "HTTP/1.1 200 OK"
+14:14:03 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1134/s0367676518120086 "HTTP/1.1 200 OK"
+14:14:03 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.29003/m3159.sudak.ns2023-19/38-39 "HTTP/1.1 200 OK"
+14:14:03 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.18413/2518-1092-2022-7-4-0-1 "HTTP/1.1 200 OK"
+14:14:04 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.24852/2411-7374.2024.3.49.54 "HTTP/1.1 200 OK"
+14:14:04 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.18413/2518-1092-2025-10-1-0-8 "HTTP/1.1 200 OK"
+14:14:04 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.14341/cbai-2023-103 "HTTP/1.1 200 OK"
+14:14:04 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.18411/e-2016-004 "HTTP/1.1 200 OK"
+14:14:04 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.25791/pribor.5.2021.1260 "HTTP/1.1 200 OK"
+14:14:05 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.15622/ia.23.6.11 "HTTP/1.1 200 OK"
+14:14:05 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.62132/ijdt.v8i2.261 "HTTP/1.1 200 OK"
+14:14:05 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.18522/2311-3103-2025-3-171-180 "HTTP/1.1 404 Not Found"
+14:14:05 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.20948/graphicon-2023-743-756 "HTTP/1.1 200 OK"
+14:14:05 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.25210/jfop-1704-074081 "HTTP/1.1 200 OK"
+14:14:05 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.30898/1684-1719.2020.10.1 "HTTP/1.1 200 OK"
+14:14:06 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.21515/1990-4665-121-004 "HTTP/1.1 200 OK"
+14:14:06 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1017/9781009519014.002 "HTTP/1.1 200 OK"
+14:14:06 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1017/9781316481776.002 "HTTP/1.1 200 OK"
+14:14:06 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1017/9781009519014.001 "HTTP/1.1 200 OK"
+14:14:06 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1530/biosciprocs.10.007 "HTTP/1.1 200 OK"
+14:14:07 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1017/9781316481776.012 "HTTP/1.1 200 OK"
+14:14:07 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1201/9781351046237-17 "HTTP/1.1 200 OK"
+14:14:07 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1186/s12884-025-08606-9 "HTTP/1.1 200 OK"
+14:14:07 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1017/9781316481776.007 "HTTP/1.1 200 OK"
+14:14:07 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1017/9781139976787.021 "HTTP/1.1 200 OK"
+14:14:07 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1002/uog.21710 "HTTP/1.1 200 OK"
+14:14:08 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1186/s12884-025-08511-1 "HTTP/1.1 200 OK"
+14:14:08 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1017/9781009519014.008 "HTTP/1.1 200 OK"
+14:14:08 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1017/9781316481776.008 "HTTP/1.1 200 OK"
+14:14:08 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.5005/jp/books/18036_6 "HTTP/1.1 200 OK"
+14:14:08 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1186/s12884-018-2043-3 "HTTP/1.1 200 OK"
+14:14:09 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.5772/intechopen.81498 "HTTP/1.1 200 OK"
+14:14:09 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1017/9781316481776.011 "HTTP/1.1 200 OK"
+14:14:09 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1186/s12884-024-06952-8 "HTTP/1.1 200 OK"
+14:14:09 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1017/9781009519014.007 "HTTP/1.1 200 OK"
+14:14:09 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1007/s11250-023-03649-6 "HTTP/1.1 200 OK"
+14:14:09 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.26599/audt.2025.250095 "HTTP/1.1 200 OK"
+14:14:10 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.3389/fmed.2021.733468 "HTTP/1.1 200 OK"
+14:14:10 INFO    app.search.openalex | openalex: обогащено 41 DOI из 42 за 42 бесплатных lookup-запросов
+14:14:10 INFO    app.pipeline.orchestrator | обогащение: заполнен пустой org у 3 кандидатов из 90 (карточки группируются по точной строке org)
+14:14:10 INFO    app.pipeline.orchestrator | [scorer] Оцениваю новых кандидатов второго прохода: 90
+ 59% scorer   Оцениваю новых кандидатов второго прохода: 90
+14:14:10 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:16:28 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+14:16:28 INFO    app.llm.router | стадия scorer: прошу модель починить JSON (ValidationError)
+14:16:29 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:16:46 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:18:01 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:18:59 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:20:22 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:21:37 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:23:04 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:25:03 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:26:29 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:27:51 INFO    app.pipeline.stages | скоринг: батчей 9, повторов по лимиту 0, время стадии 821.4 с
+14:27:51 INFO    app.pipeline.stages | калибровка relevance: кандидатов 200, оценок модели 200, min/медиана/max по оценкам модели 0/1/4, порог 4, отсечено 198; отсеклось бы по всему списку при 4: 198, при 5: 200, при 6: 200, при 7: 200; среди отобранных 2 (лимит 12) ниже порога 4: 0, 5: 2, 6: 2, 7: 2; нейтральных оценок 0 (не отсекаются никогда)
+14:27:51 INFO    app.pipeline.orchestrator | [scorer] Разнообразие (конкурсная очередь): заготовок до склейки 1, после 1, схлопнуто 0
+ 63% scorer   Разнообразие (конкурсная очередь): заготовок до склейки 1, после 
+1, схлопнуто 0
+14:27:51 INFO    app.pipeline.orchestrator | [scorer] Отобрано вариантов для карточек: 2
+ 60% scorer   Отобрано вариантов для карточек: 2
+14:27:51 INFO    app.pipeline.orchestrator | [scorer] Разнообразие (основная очередь): заготовок до склейки 2, после 2, схлопнуто 0
+ 61% scorer   Разнообразие (основная очередь): заготовок до склейки 2, после 2, 
+схлопнуто 0
+14:27:51 INFO    app.pipeline.orchestrator | [scorer] Конкурсный класс: кандидатов 31, заготовок карточек 1 (секция вне лимита 5–7)
+ 62% scorer   Конкурсный класс: кандидатов 31, заготовок карточек 1 (секция вне 
+лимита 5–7)
+14:27:51 INFO    app.pipeline.orchestrator | [cards] Собираю карточки решений
+ 65% cards    Собираю карточки решений
+14:27:52 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:27:52 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:28:52 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+14:28:52 INFO    app.llm.router | стадия card_author: deepseek ошибка (deepseek: сеть: peer closed connection without sending complete message body (incomplete chunked read)), повтор через 2 с
+14:28:52 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:28:55 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:29:45 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+14:29:45 INFO    app.llm.router | стадия verifier: прошу модель починить JSON (ValidationError)
+14:29:46 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:29:55 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+14:29:55 INFO    app.llm.router | стадия card_author: прошу модель починить JSON (ValidationError)
+14:29:56 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:30:07 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:30:43 INFO    app.pipeline.orchestrator | [cards] Готово карточек: 2, отброшено пустых: 0
+ 80% cards    Готово карточек: 2, отброшено пустых: 0
+14:30:43 INFO    app.pipeline.orchestrator | [summary] Составляю сводку и рекомендацию
+ 85% summary  Составляю сводку и рекомендацию
+14:30:44 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:31:32 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:32:09 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+14:32:55 INFO    app.pipeline.orchestrator | [cards] Карточек конкурсного класса: 1, отброшено пустых: 0
+ 95% cards    Карточек конкурсного класса: 1, отброшено пустых: 0
+14:32:55 INFO    app.pipeline.orchestrator | [done] Отчёт готов. Стоимость запроса: 12.19 ₽
+100% done     Отчёт готов. Стоимость запроса: 12.19 ₽
+
+Отчёт сохранён: /home/user/techmost-scout/out/report-20260823-143255.md
+Стоимость запроса: 12.19 ₽; вызовов модели 49, из них с кэшем префикса 49 (кэш 
+считается только у DeepSeek; у остальных провайдеров всегда 0)
+Платные источники: OpenAlex — платный поиск: запросов 4, $0.004 по $0.001 за 
+запрос; суточная бесплатная норма $0.10, осталось $0.000 (0 запросов)
+финиш: 2026-08-23T14:32:55Z
+код выхода: 0
