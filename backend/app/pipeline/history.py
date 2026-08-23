@@ -143,15 +143,29 @@ def restore_history_candidate(row: HistoryRow) -> tuple[ScoredCandidate | None, 
 
 
 def build_history_pool(rows: list[HistoryRow]) -> HistoryPool:
-    """Восстановить пул кандидатов из строк истории, посчитав отбраковку."""
+    """Восстановить пул кандидатов из строк истории, посчитав отбраковку.
+
+    Склейка по `dedup_key` (пост-аудит Э2-Е, находка Б-1): пул истории
+    накопительного поиска сам пишет свои строки обратно в `candidates` с
+    `pass_no=0` (см. `run_flow.py`), и следующий прогон читает и исходные
+    строки, и их же копии — без склейки число записей удваивалось на каждом
+    прогоне при неизменном числе реальных кандидатов. При совпадении ключа
+    остаётся запись с бо́льшим `total` — обе уже когда-то посчитаны моделью на
+    этих же данных, выбор лучшей не искажает оценку.
+    """
     pool = HistoryPool()
+    merged: dict[str, ScoredCandidate] = {}
     for row in rows:
         scored, reason = restore_history_candidate(row)
         if scored is None:
             assert reason is not None  # для читателя типов: пара всегда согласована
             pool.dropped[reason] = pool.dropped.get(reason, 0) + 1
-        else:
-            pool.scored.append(scored)
+            continue
+        key = scored.candidate.dedup_key()
+        current = merged.get(key)
+        if current is None or scored.total > current.total:
+            merged[key] = scored
+    pool.scored = list(merged.values())
     return pool
 
 
@@ -198,6 +212,13 @@ async def load_and_log(
         finished = datetime.now(UTC)
         stage_log.append(StageRecord(stage="history", started_at=started, finished_at=finished, error=str(exc)))
         return HistoryPool()
+    # Пост-аудит Э2-Е, находка В-1: строка печатается ВСЕГДА, одной из двух
+    # дословных вариантов, по образцу условного второго прохода (РЕШ-81,
+    # `run_flow.py`). Раньше пустая история молчала, и «накопление не
+    # сработало» было неотличимо от «код до проверки не дошёл» — а ворота
+    # требуют назвать числом «кандидатов всего, из них из истории, новых».
     if pool.taken or pool.dropped:
         log.info(format_history_summary(pool))
+    else:
+        log.info("история пуста")
     return pool

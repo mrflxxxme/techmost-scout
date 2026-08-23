@@ -132,6 +132,23 @@ def test_build_history_pool_считает_взятое_и_отбраковку_
     }
 
 
+def test_build_history_pool_склеивает_дубли_по_dedup_key_и_берёт_лучший_total():
+    """Пост-аудит Э2-Е, находка Б-1: `run_flow.py` пишет пул истории обратно в
+    `candidates` (`pass_no=0`), и следующий прогон читает и исходную строку, и
+    её же копии. Без склейки один и тот же кандидат попадает в пул истории
+    несколько раз — здесь три строки с одним ключом и разными оценками должны
+    свестись к одной, с наибольшим `total`."""
+    rows = [
+        _row(1, score=_score(5), request_id=1),
+        _row(1, score=_score(9), request_id=2),  # копия того же кандидата, найденная позже
+        _row(1, score=_score(3), request_id=3),  # ещё одна копия, оценка хуже — не должна победить
+    ]
+    pool = build_history_pool(rows)
+    assert pool.taken == 1
+    assert pool.dropped == {}
+    assert pool.scored[0].relevance == 9
+
+
 def test_format_history_summary_называет_каждую_причину_и_число():
     pool = HistoryPool(
         scored=[restore_history_candidate(_row(1))[0]], dropped={"пустая оценка": 2, "нейтральная оценка": 1}
@@ -255,6 +272,50 @@ async def test_load_history_pool_отказавший_прогон_не_учит
     assert pool.taken == 0
 
 
+async def test_три_прогона_одной_задачи_не_удваивают_пул_истории(db_session_factory):
+    """Мутация Б-1 пост-аудита Э2-Е: `run_flow.py` пишет пул истории обратно в
+    `candidates` со своим `pass_no=0` (пункт 6 задачи З-4) — следующий прогон
+    читает и исходные строки, и их копии. Аудит замерил на пяти прогонах трёх
+    кандидатов кратное удвоение пула истории (3 → 6 → 12 → 24 → 48); здесь то
+    же самое на трёх прогонах: без склейки по `dedup_key` третий прогон отдал
+    бы 6 записей на 3 уникальных ключа, со склейкой — ровно 3.
+    """
+    task_text = "Задача для проверки накопления без удвоения пула истории."
+    candidates = [_candidate(1), _candidate(2), _candidate(3)]
+
+    # Прогон 1: своих кандидатов в истории ещё нет, пишем их напрямую.
+    await _seed(db_session_factory, raw_text=task_text, candidates=candidates)
+
+    # Прогон 2: читаем историю (3 уникальных), пишем её обратно с pass_no=0 —
+    # ровно то, что делает run_flow.py после каждого прогона.
+    pool2 = await load_history_pool(db_session_factory, raw_text=task_text)
+    assert pool2.taken == 3
+    await persist_run(
+        db_session_factory,
+        raw_text=task_text,
+        status="drafted",
+        cost_rub=0.0,
+        cards=[],
+        contest_cards=[],
+        stages=[],
+        candidates=[
+            CandidateRecord(candidate=item.candidate, score=_score(item.relevance), status="selected", pass_no=0)
+            for item in pool2.scored
+        ],
+    )
+
+    # Прогон 3: история теперь читается из прогона 1 (3 исходных строки) и
+    # прогона 2 (3 их копии) — без склейки это дало бы 6 записей на 3 ключа.
+    pool3 = await load_history_pool(db_session_factory, raw_text=task_text)
+    assert pool3.taken == 3, "склейка по dedup_key обязана свести дубли к уникальным ключам"
+    assert pool3.dropped == {}
+    assert {item.candidate.dedup_key() for item in pool3.scored} == {
+        "10.1/seed-1",
+        "10.1/seed-2",
+        "10.1/seed-3",
+    }
+
+
 async def test_load_history_pool_без_фабрики_отдаёт_пустой_пул():
     pool = await load_history_pool(None, raw_text="что угодно")
     assert pool.scored == []
@@ -305,6 +366,27 @@ async def test_load_and_log_отказ_чтения_уходит_в_журнал
     assert len(stage_log) == 1
     assert stage_log[0].stage == "history"
     assert "залокирована" in stage_log[0].error
+
+
+async def test_load_and_log_печатает_история_пуста_когда_совпадений_нет(db_session_factory, caplog):
+    """Пост-аудит Э2-Е, находка В-1: строка печатается ВСЕГДА, одним из двух
+    дословных вариантов, по образцу условного второго прохода (РЕШ-81). Раньше
+    пустая история молчала — «накопление не сработало» было неотличимо от
+    «код до проверки не дошёл»."""
+    from app.pipeline import history as history_module
+
+    caplog.set_level(logging.INFO, logger="app.pipeline.orchestrator")
+    stage_log: list = []
+    pool = await history_module.load_and_log(
+        db_session_factory,
+        raw_text="задачи с таким текстом в истории ещё не было",
+        explicit_request_id=None,
+        stage_log=stage_log,
+    )
+
+    assert pool.taken == 0
+    assert pool.dropped == {}
+    assert "история пуста" in caplog.text
 
 
 # ── Уровень 3: полный прогон ScoutPipeline.run ──────────────────────────────
