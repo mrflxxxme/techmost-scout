@@ -583,7 +583,7 @@ def _patch_cli_for_intake_test(monkeypatch, settings, fake_provider_factory) -> 
     _RecordingIntakePipeline.caveats = []
     monkeypatch.setattr(pipeline_pkg, "ScoutPipeline", _RecordingIntakePipeline)
     monkeypatch.setattr(cli, "get_settings", lambda: settings)
-    router = LLMRouter(settings=settings, providers={"gigachat": fake_provider_factory("gigachat")})
+    router = LLMRouter(settings=settings, providers={"deepseek": fake_provider_factory("deepseek")})
     monkeypatch.setattr(cli, "LLMRouter", lambda _settings: router)
 
     async def fake_init_db() -> None:
@@ -733,7 +733,7 @@ async def test_failed_intake_stage_carries_actual_cost_not_zero(monkeypatch, set
     record = stage_log[0]
     assert record.error, "отказ интейка обязан оставлять причину"
     assert record.cost_rub == pytest.approx(0.02), "две оплаченные попытки по 0,01 ₽ — журнал обязан их показать"
-    assert record.provider == "gigachat", "провайдер, который потратил деньги, обязан быть назван"
+    assert record.provider == "deepseek", "провайдер, который потратил деньги, обязан быть назван"
 
 
 @pytest.mark.parametrize("typed", ["не знаю", "  Не Знаю  "])
@@ -828,7 +828,7 @@ class _CostlyProvider(LLMProvider):
     порядок `except` в `cli.py`, а то, что после уже состоявшейся траты
     остаётся запись в БД."""
 
-    name = "gigachat"
+    name = "deepseek"
     price_in_rub_per_mtok = 10.0
     price_out_rub_per_mtok = 20.0
 
@@ -852,7 +852,7 @@ class _CostlyProvider(LLMProvider):
 
 def _patch_costly_router(monkeypatch, settings) -> None:
     """Роутер, на котором первый же вызов модели выбирает лимит стоимости."""
-    router = LLMRouter(settings, providers={"gigachat": _CostlyProvider()})
+    router = LLMRouter(settings, providers={"deepseek": _CostlyProvider()})
     monkeypatch.setattr(cli, "LLMRouter", lambda _settings: router)
 
 

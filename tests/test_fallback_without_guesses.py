@@ -104,8 +104,8 @@ async def _run_gather(settings, xml: str):
     """Общая часть обоих тестов: платный поиск отвечает `xml`, стадия
     `extractor` отказывает на каждой попытке (основной вызов и ремонтный)."""
     _mock_yandex(xml)
-    extractor_provider = _FixedResponseProvider("gigachat", "точно не JSON, а разговор ни о чём")
-    router = LLMRouter(settings, providers={"gigachat": extractor_provider})
+    extractor_provider = _FixedResponseProvider("deepseek", "точно не JSON, а разговор ни о чём")
+    router = LLMRouter(settings, providers={"deepseek": extractor_provider})
 
     async with httpx.AsyncClient() as client:
         adapter = YandexSearchAdapter(

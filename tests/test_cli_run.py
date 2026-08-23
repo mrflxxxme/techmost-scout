@@ -121,7 +121,7 @@ def _patch_init_db(monkeypatch):
 
 
 def _router(settings, fake_provider_factory) -> LLMRouter:
-    return LLMRouter(settings=settings, providers={"gigachat": fake_provider_factory("gigachat")})
+    return LLMRouter(settings=settings, providers={"deepseek": fake_provider_factory("deepseek")})
 
 
 def _draft_brief(*, industry: str, constraints: list[str] | None = None) -> Brief:
@@ -389,8 +389,8 @@ async def test_cost_line_says_cache_is_counted_only_for_deepseek(
     """Итоговая строка со стоимостью обязана нести оговорку про DeepSeek.
 
     Счётчик `cached_calls` заполняет только DeepSeek (поле
-    `prompt_cache_hit_tokens` в ответе); у GigaChat и Yandex `Usage.cached`
-    всегда False, поэтому на прогоне через них строка честно покажет ноль. Без
+    `prompt_cache_hit_tokens` в ответе); у Yandex `Usage.cached`
+    всегда False, поэтому на прогоне через резерв строка честно покажет ноль. Без
     оговорки оператор прочтёт этот ноль как «кэш префикса не работает» и пойдёт
     чинить работающее. Мутант «вырезать оговорку из строки счётчика» пережил
     прогон Т-7: печатаемый вывод `scout run` не смотрел ни один тест.
@@ -409,8 +409,7 @@ async def test_cost_line_says_cache_is_counted_only_for_deepseek(
     console_output = " ".join(capsys.readouterr().out.split())
     assert "из них с кэшем префикса" in console_output, "строки со счётчиком кэша в выводе вовсе нет"
     assert "кэш считается только у DeepSeek" in console_output, (
-        "у счётчика кэша пропала оговорка: без неё ноль на прогоне через GigaChat или Yandex "
-        "читается как «кэш префикса не работает»"
+        "у счётчика кэша пропала оговорка: без неё ноль на прогоне через Yandex читается как «кэш префикса не работает»"
     )
 
 

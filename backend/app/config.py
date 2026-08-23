@@ -1,9 +1,9 @@
 """Настройки приложения.
 
 Имена переменных окружения намеренно совпадают с проектом TEAMLY_RU/oriion
-(DEEPSEEK_API_KEY, YANDEX_API_KEY, YANDEX_CATALOG_ID, GIGACHAT_AUTH_KEY,
-YANDEX_SEARCH_API_KEY, LLM_PROVIDER_TIMEOUT_SECONDS, FX_RATE_USD_TO_RUB) —
-чтобы значения переносились копированием, без ручной правки.
+(DEEPSEEK_API_KEY, YANDEX_API_KEY, YANDEX_CATALOG_ID, YANDEX_SEARCH_API_KEY,
+LLM_PROVIDER_TIMEOUT_SECONDS, FX_RATE_USD_TO_RUB) — чтобы значения переносились
+копированием, без ручной правки.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -36,17 +36,10 @@ class Settings(BaseSettings):
     web_auth_password: SecretStr = Field(default=SecretStr("change-me"))
 
     # ── Языковые модели ─────────────────────────────────────────────────────
-    # GigaChat: ключ авторизации = base64(client_id:client_secret) из личного
-    # кабинета developers.sber.ru. Бесплатный тариф — 250 млн токенов на Lite.
-    gigachat_auth_key: SecretStr = Field(default=SecretStr(""), validation_alias="GIGACHAT_AUTH_KEY")
-    gigachat_scope: str = Field(default="GIGACHAT_API_PERS", description="PERS — физлицо, CORP/B2B — организация")
-    gigachat_model: str = Field(default="GigaChat-2", description="Lite-модель, самая дешёвая линейка")
-    # *.sberbank.ru подписан корневым сертификатом НУЦ Минцифры, которого нет в
-    # certifi. Либо подложить бандл с ним, либо (только для локальной отладки)
-    # выключить проверку.
-    gigachat_verify_ssl: bool = True
-    gigachat_ca_bundle: str = ""
-
+    # Бесплатный провайдер массовых стадий выпилен (РЕШ-171): двухпровайдерная
+    # экономия обслуживала путь, которым никто не ходил — все вызовы прогона
+    # Э2-Е ушли на DeepSeek. Его настроечные поля и секретная переменная
+    # окружения удалены вместе с ним.
     # DeepSeek: с 24.07.2026 алиасы deepseek-chat/deepseek-reasoner отключены,
     # актуальны V4-Flash (дёшево) и V4-Pro. Скидок off-peak больше нет.
     deepseek_api_key: SecretStr = Field(default=SecretStr(""), validation_alias="DEEPSEEK_API_KEY")
@@ -64,23 +57,19 @@ class Settings(BaseSettings):
 
     # Маршрутизация по стадиям — распределение по факту, а не по надежде.
     #
-    # Живые прогоны показали: GigaChat-2 Lite надёжен там, где ответ короткий
-    # (уточняющие вопросы, извлечение кандидатов), но на длинном
-    # структурированном JSON — план поиска, батч оценок, карточка — обрывает
-    # ответ на середине и стадия уходит на резерв. Поэтому бесплатный тариф
-    # используем там, где он работает, остальное считает DeepSeek: при
-    # измеренных 3–5 ₽ на запрос экономить на этом нечего.
-    # `replan` (Т-21, РЕШ-81) идёт туда же, куда `planner`: это та же работа —
-    # длинный структурированный JSON плана поиска, — а на ней GigaChat-2 Lite
-    # обрывает ответ. Без явного маршрута стадия ушла бы по общему резерву,
-    # который начинается как раз с gigachat.
+    # РЕШ-171: ГигаЧат выпилен, DeepSeek — основной провайдер для всех стадий.
+    # Главное требование к работе LLM теперь — качество, а не бесплатный
+    # тариф: на прогоне Э2-Е все 46 вызовов и так ушли на DeepSeek (11,28 ₽,
+    # 1% потолка стоимости) — двухпровайдерная машинерия обслуживала путь,
+    # которым никто не пользовался. YandexGPT остаётся резервом на случай
+    # отказа DeepSeek.
     llm_stage_routes: str = Field(
         default=(
-            "intake:gigachat,extractor:gigachat,planner:deepseek,replan:deepseek,scorer:deepseek,"
+            "intake:deepseek,extractor:deepseek,planner:deepseek,replan:deepseek,scorer:deepseek,"
             "card_author:deepseek,verifier:deepseek,summary:deepseek"
         )
     )
-    llm_fallback_order: str = Field(default="gigachat,deepseek,yandex")
+    llm_fallback_order: str = Field(default="deepseek,yandex")
 
     # ── Поисковые источники ─────────────────────────────────────────────────
     # Работают без ключа: Crossref, КиберЛенинка, arXiv, OpenAlex. Роспатента
@@ -144,14 +133,6 @@ class Settings(BaseSettings):
         description="Порог включения второго прохода поиска; 0 — второй проход выключен",
     )
 
-    @field_validator("gigachat_scope")
-    @classmethod
-    def _known_scope(cls, v: str) -> str:
-        allowed = {"GIGACHAT_API_PERS", "GIGACHAT_API_B2B", "GIGACHAT_API_CORP"}
-        if v not in allowed:
-            raise ValueError(f"неизвестный scope GigaChat: {v}; допустимо {sorted(allowed)}")
-        return v
-
     # ── Производные значения ────────────────────────────────────────────────
     def stage_routes(self) -> dict[str, str]:
         """Разобрать строку маршрутов в словарь «стадия → провайдер»."""
@@ -172,23 +153,6 @@ class Settings(BaseSettings):
         value = getattr(self, name, None)
         raw = value.get_secret_value() if isinstance(value, SecretStr) else str(value or "")
         return bool(raw) and not raw.startswith("TBD_")
-
-    @property
-    def gigachat_ca_bundle_path(self) -> str | None:
-        """Абсолютный путь к бандлу сертификатов для GigaChat.
-
-        В .env путь пишут относительным (data/ru_bundle.pem), чтобы файл
-        оставался переносимым, но httpx считает относительный путь от текущего
-        каталога — а команды запускают откуда угодно. Поэтому разворачиваем от
-        корня репозитория. Отсутствующий файл возвращаем как None: пусть лучше
-        сработает обычная проверка и понятная ошибка, чем загадочный сбой.
-        """
-        if not self.gigachat_ca_bundle:
-            return None
-        path = Path(self.gigachat_ca_bundle)
-        if not path.is_absolute():
-            path = REPO_ROOT / path
-        return str(path) if path.exists() else None
 
     @property
     def prompts_dir(self) -> Path:

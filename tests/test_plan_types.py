@@ -322,7 +322,6 @@ def test_фикстура_settings_кладёт_ключи_через_окруж
     """
     assert settings.app_env == "test"
     assert settings.deepseek_api_key == SecretStr("sk-test")
-    assert settings.gigachat_auth_key == SecretStr("dGVzdDp0ZXN0")
     assert settings.yandex_api_key == SecretStr("test")
     assert settings.yandex_catalog_id == "b1gtest"
     assert settings.cost_limit_rub_per_request == 10.0

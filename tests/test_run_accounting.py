@@ -449,8 +449,7 @@ async def test_обогащение_второго_прохода_не_прип�
 # 9,18 ₽ в отчёте клиенту — 0,51 ₽ (5,6%) не были отнесены ни к какой стадии.
 # Причина — интейк писал строку журнала только на отказе; на удачном пути
 # `_intake_stage_record` не вызывался вовсе, и его реальная плата (стадия
-# `intake` идёт на GigaChat, но в других конфигурациях маршрутов бывает и
-# платной) нигде не оседала.
+# `intake` идёт на DeepSeek и всегда платная) нигде не оседала.
 #
 # Здесь `run_intake`/`refine_brief` НЕ подменены заглушками — зовутся по-
 # настоящему, на `FakeProvider`, чтобы протраченные рубли были настоящими
@@ -504,7 +503,7 @@ def _patch_cli_for_intake_accounting(monkeypatch, settings, fake_provider_factor
     _RecordingPipelineAfterIntake.stage_logs = []
     monkeypatch.setattr(pipeline_pkg, "ScoutPipeline", _RecordingPipelineAfterIntake)
     monkeypatch.setattr(cli, "get_settings", lambda: settings)
-    router = LLMRouter(settings=settings, providers={"gigachat": fake_provider_factory("gigachat", responses)})
+    router = LLMRouter(settings=settings, providers={"deepseek": fake_provider_factory("deepseek", responses)})
     monkeypatch.setattr(cli, "LLMRouter", lambda _settings: router)
 
     async def fake_init_db() -> None:
@@ -577,7 +576,7 @@ async def test_удачный_интейк_даёт_одну_запись_и_с�
     record = stage_log[0]
     assert record.stage == "intake"
     assert record.error is None
-    assert record.provider == "gigachat", "провайдер, оплативший вызов, обязан быть назван"
+    assert record.provider == "deepseek", "провайдер, оплативший вызов, обязан быть назван"
     # `FakeProvider` берёт за вызов ровно 0,01 ₽ (`tests/conftest.py`) — сверка
     # с точным числом, а не только «больше нуля», ловит мутацию (в): запись с
     # полной стоимостью прогона вместо дельты стадии здесь неотличима от верной

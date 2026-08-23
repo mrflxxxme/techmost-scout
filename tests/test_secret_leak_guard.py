@@ -39,7 +39,6 @@ log = logging.getLogger(__name__)
 #: свою утечку, а не на случайное совпадение с чужим тестовым значением.
 _FAKE_YANDEX_SEARCH_KEY = "FAKE-YANDEX-SEARCH-KEY-guard-e91cf047"
 _FAKE_DEEPSEEK_KEY = "FAKE-DEEPSEEK-KEY-guard-771ba4d9"
-_FAKE_GIGACHAT_KEY = "FAKE-GIGACHAT-KEY-guard-2f38ad10"
 _FAKE_YANDEX_LLM_KEY = "FAKE-YANDEX-LLM-KEY-guard-06c9e2b3"
 
 #: Формулировка веб-плана: тип `web`, чтобы формулировка реально ушла в
@@ -107,7 +106,6 @@ async def test_отказ_deepseek_и_исчерпанный_резерв_не_�
     провайдеры отказали») печатаются в лог — ни в одном не может быть значения
     ключа ни одного из двух провайдеров."""
     caplog.set_level(logging.DEBUG)
-    monkeypatch.setenv("GIGACHAT_AUTH_KEY", _FAKE_GIGACHAT_KEY)
     monkeypatch.setenv("DEEPSEEK_API_KEY", _FAKE_DEEPSEEK_KEY)
     monkeypatch.setenv("YANDEX_API_KEY", _FAKE_YANDEX_LLM_KEY)
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
@@ -117,9 +115,9 @@ async def test_отказ_deepseek_и_исчерпанный_резерв_не_�
     fake_settings = Settings()
 
     class _ReserveAlsoFails(LLMProvider):
-        """Второй провайдер цепочки — тоже отказывает, без похода в сеть."""
+        """Второй провайдер цепочки (резерв YandexGPT) — тоже отказывает, без похода в сеть."""
 
-        name = "gigachat"
+        name = "yandex"
         price_in_rub_per_mtok = 0.0
         price_out_rub_per_mtok = 0.0
 
@@ -144,7 +142,7 @@ async def test_отказ_deepseek_и_исчерпанный_резерв_не_�
             )
 
             real_deepseek = DeepSeekProvider(fake_settings)
-            router = LLMRouter(fake_settings, providers={"deepseek": real_deepseek, "gigachat": _ReserveAlsoFails()})
+            router = LLMRouter(fake_settings, providers={"deepseek": real_deepseek, "yandex": _ReserveAlsoFails()})
             pipeline = ScoutPipeline(settings=fake_settings, router=router, adapters=[])
 
             with pytest.raises(LLMError):
@@ -153,7 +151,7 @@ async def test_отказ_deepseek_и_исчерпанный_резерв_не_�
         get_settings.cache_clear()
 
     captured = capsys.readouterr()
-    _assert_no_secrets((_FAKE_DEEPSEEK_KEY, _FAKE_GIGACHAT_KEY), caplog.text, captured.out, captured.err)
+    _assert_no_secrets((_FAKE_DEEPSEEK_KEY, _FAKE_YANDEX_LLM_KEY), caplog.text, captured.out, captured.err)
 
 
 # ── Критерий отдельной ветки: `scout doctor` называет имена, а не значения ──
@@ -165,7 +163,7 @@ class _DoctorFakeRouter:
         self._settings = settings
 
     async def health(self) -> dict[str, tuple[bool, str]]:
-        return {"gigachat": (True, "заглушка")}
+        return {"deepseek": (True, "заглушка")}
 
 
 async def _run_doctor_with_fake_keys(monkeypatch) -> str:
@@ -178,7 +176,6 @@ async def _run_doctor_with_fake_keys(monkeypatch) -> str:
     """
     import app.db
 
-    monkeypatch.setenv("GIGACHAT_AUTH_KEY", _FAKE_GIGACHAT_KEY)
     monkeypatch.setenv("DEEPSEEK_API_KEY", _FAKE_DEEPSEEK_KEY)
     monkeypatch.setenv("YANDEX_API_KEY", _FAKE_YANDEX_LLM_KEY)
     monkeypatch.setenv("YANDEX_SEARCH_API_KEY", _FAKE_YANDEX_SEARCH_KEY)
@@ -217,7 +214,7 @@ async def test_scout_doctor_называет_имена_ключей_а_не_з�
 
     captured = capsys.readouterr()
     _assert_no_secrets(
-        (_FAKE_GIGACHAT_KEY, _FAKE_DEEPSEEK_KEY, _FAKE_YANDEX_LLM_KEY, _FAKE_YANDEX_SEARCH_KEY),
+        (_FAKE_DEEPSEEK_KEY, _FAKE_YANDEX_LLM_KEY, _FAKE_YANDEX_SEARCH_KEY),
         text,
         caplog.text,
         captured.out,
