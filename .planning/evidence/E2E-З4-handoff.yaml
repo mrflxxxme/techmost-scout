@@ -1,0 +1,98 @@
+handoff:
+  from: implementer-A
+  to: reviewer
+  task: З-4
+  did:
+    - "Новый модуль backend/app/pipeline/history.py: чистые функции
+       восстановления кандидата из строки истории (Candidate + ScoredCandidate),
+       отбраковка по трём причинам (пустая оценка, нейтральная оценка,
+       несовпавший dedup_key), HistoryPool со счётчиками, format_history_summary,
+       exclude_known, normalize_task_text (РЕШ-166), load_and_log — врезка для
+       run_flow.py, отказ чтения не роняет прогон (инвариант №5)."
+    - "backend/app/pipeline/persistence.py: HistoryReadError и
+       load_history_pool — читает candidates прошлых запросов по признаку «та же
+       задача» (Р-1, оба пути: явный request_id важнее нормализованного текста),
+       исключая прогоны status=failed."
+    - "backend/app/pipeline/pipeline_search.py: _second_pass принимает history=,
+       ключи истории добавлены в known второго прохода (пункт 4 задачи) — не
+       переоценивает повторно найденного кандидата."
+    - "backend/app/pipeline/run_flow.py: история читается до отбора, участвует в
+       select_top/needs_second_pass наравне с новыми (scored_pool), не идёт
+       повторно в скоринг (exclude_known), пишется отдельным вызовом
+       candidate_records(..., pass_no=history.HISTORY_PASS_NO=0), судьба
+       считается по текущему прогону. Прирост 16 строк, файл 498/500."
+    - "backend/app/cli.py: флаг --history-request-id (явный путь РЕШ-166);
+       передаётся в pipeline.run() условно (только если задан), чтобы не сломать
+       заглушку _RecordingPipeline.run() в tests/test_cli_run.py (её не трогал —
+       вне границ задачи)."
+    - "tests/test_pipeline_layout.py: history.py добавлен в
+       _ORCH_MODULES_UNDER_LIMIT с комментарием (пункт 10 задачи)."
+    - "Новый tests/test_history_reuse.py — 20 тестов на трёх уровнях: чистые
+       функции history.py (без БД), persistence.load_history_pool (временный
+       SQLite), полный прогон ScoutPipeline.run (два последовательных прогона на
+       одной базе) — критерии 1, 2, 3, 4, 5, 6 приёмки задачи."
+    - "РЕШ-167 соблюдён: происхождение кандидата (pass_no=0) нигде не попадает в
+       клиентский текст — ни в карточку, ни в summary.caveats; новых полей
+       отчёта не заведено."
+  artifacts:
+    - backend/app/pipeline/history.py
+    - backend/app/pipeline/persistence.py
+    - backend/app/pipeline/pipeline_search.py
+    - backend/app/pipeline/run_flow.py
+    - backend/app/cli.py
+    - tests/test_pipeline_layout.py
+    - tests/test_history_reuse.py
+  self_audit: pass
+  checks:
+    - "pytest tests/test_history_reuse.py -v: 20 passed"
+    - "pytest tests/test_pipeline_layout.py -v: 6 passed"
+    - "wc -l backend/app/pipeline/run_flow.py: 498 (лимит 500, прирост 16 строк)"
+    - "pytest tests/test_pipeline_counters.py tests/test_pipeline_second_pass.py tests/test_persistence.py -q: 50 passed, не правились"
+    - ".venv/bin/python -m pytest -q: 739 passed (719 базовых + 20 новых), 0 failed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 134 files already formatted"
+    - "Восемь мутаций (а-з) прицельным прогоном tests/test_history_reuse.py (и
+       tests/test_pipeline_layout.py для з) — все восемь пойманы, дерево
+       восстановлено между мутациями (git status чист после каждой)"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (карточка З-4, строки 610-800)
+    - docs/SPEC.md (раздел Э2-Е, если заведён; иначе §0.1 «грабли»)
+    - backend/app/pipeline/history.py
+    - backend/app/pipeline/persistence.py (load_history_pool, HistoryReadError)
+    - backend/app/pipeline/run_flow.py (метод run, _run_stages)
+    - tests/test_history_reuse.py
+  notes: |
+    Живой прогон не делался (нет платного бюджета у исполнителя, это работа
+    воротного прогона оркестратора). База рабочей копии сверена с верхушкой
+    ветки волны claude/remote-work-readiness-check-ze0wg3 (SHA 91f8a22) перед
+    стартом — исполнитель начинал от устаревшего main (87575fe), подтянул
+    fast-forward merge, назвал факт в отчёте.
+
+    Ключевое архитектурное решение, отличающее реализацию от буквального текста
+    плана: логика чтения+лога+журнала стадий при отказе истории вынесена в
+    history.load_and_log (асинхронная функция с отложенным импортом
+    persistence внутри, чтобы избежать цикла persistence⇄history), а не
+    разложена по run_flow.py построчно. Это сделано ради лимита строк
+    run_flow.py (482 базовых + 15 бюджета из карточки задачи) — без выноса
+    прирост составил бы 30+ строк и файл превысил бы 500. Прошу проверяющего
+    явно оценить, не противоречит ли это пункту 1 задачи («чтение — в
+    persistence.py»): по факту SQL-запрос и сборка HistoryRow остались в
+    persistence.py, а load_and_log в history.py — это только оркестрация
+    (лог + журнал стадий + отказоустойчивость), не чтение как таковое.
+
+    Второе отступление от буквы: _second_pass получил новый keyword-параметр
+    history (список ScoredCandidate), а не merge истории в first_pass на месте
+    вызова — выбрано ради явности (комментарий в pipeline_search.py объясняет
+    зачем) и потому что это прямо соответствует замечанию плана про
+    pipeline_search.py:389.
+
+    Мутация (з) («логика в run_flow.py вместо history.py») проверена не
+    буквальным переносом кода, а инфляцией run_flow.py на 10 строк-пустышек до
+    508 — так же надёжно ловится стражем test_pipeline_layout.py, но без
+    реальной порчи архитектуры на время проверки.
+
+    За границами задачи замечено, но не тронуто: app/pipeline/pipeline_context.py
+    не редактировался (в списке файлов задачи его не было) — history_request_id
+    передаётся параметром run()/​_run_stages(), а не полем конструктора
+    ScoutPipeline; это решение осознанное и не требует правки контекста.
