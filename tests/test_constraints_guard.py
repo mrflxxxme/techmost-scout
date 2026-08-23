@@ -157,11 +157,12 @@ async def test_retry_constraints_skipped_without_requirement_signs(settings, fak
 
 
 async def test_retry_constraints_skipped_when_constraints_already_present(settings, fake_provider_factory):
-    """Обратная сторона критерия 2: `constraints` уже заполнен - вызова нет
-    независимо от признаков в тексте (мутация (б): вызов делается всегда)."""
+    """Обратная сторона критерия 2: `constraints` уже заполнен и покрывает все
+    маркеры `_LEVEL_MARKERS` из текста - вызова нет, хотя признаки в тексте
+    есть (мутация (б): вызов делается всегда независимо от покрытия)."""
     provider = fake_provider_factory("gigachat", ["{}"])
     router = LLMRouter(settings, providers={"gigachat": provider})
-    brief = _brief(constraints=["уже есть ограничение"])
+    brief = _brief(constraints=["уже есть ограничение вместе с уровнем готовности TRL 6-9"])
 
     updated_brief, unresolved = await retry_constraints_if_missing(
         router, brief, _FARMA_TEXT, industry_hint="фарма", stage_log=[]
@@ -264,14 +265,11 @@ async def test_retry_constraints_cost_limit_propagates(settings):
 #: Текст с двумя маркерами `_LEVEL_MARKERS`, ни один из которых не совпадает с
 #: единственным уже собранным требованием - критерий 5 (один вызов на оба).
 _TWO_MARKERS_TEXT = (
-    "Прочность материала не менее нормативной для данного класса изделий. "
-    "Уровень технологической готовности - TRL 6-9."
+    "Прочность материала не менее нормативной для данного класса изделий. Уровень технологической готовности - TRL 6-9."
 )
 
 
-async def test_retry_constraints_fires_when_constraints_non_empty_but_marker_uncovered(
-    settings, fake_provider_factory
-):
+async def test_retry_constraints_fires_when_constraints_non_empty_but_marker_uncovered(settings, fake_provider_factory):
     """Регрессия Э2-Г: `constraints` уже содержит точность (список непуст), но
     в тексте задачи есть маркер TRL, не покрытый ни одним собранным
     требованием - страховка обязана дозвониться и добавить его, а не молчать

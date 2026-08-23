@@ -1,0 +1,35 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a824858646b22d105
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 24 items
+
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_farma_text_with_percent_and_trl PASSED [  4%]
+tests/test_constraints_guard.py::test_has_requirement_signs_false_without_any_sign PASSED [  8%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043f\u0440\u043e\u0446\u0435\u043d\u0442] PASSED [ 12%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[trl] PASSED [ 16%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u043c\u0435\u043d\u0435\u0435] PASSED [ 20%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u043d\u0435-\u0431\u043e\u043b\u0435\u0435] PASSED [ 25%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0433\u043e\u0441\u0442] PASSED [ 29%]
+tests/test_constraints_guard.py::test_has_requirement_signs_true_on_each_sign_in_isolation[\u0447\u0438\u0441\u043b\u043e-\u0441-\u0435\u0434\u0438\u043d\u0438\u0446\u0435\u0439] PASSED [ 33%]
+tests/test_constraints_guard.py::test_retry_constraints_fills_only_constraints_field PASSED [ 37%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_without_requirement_signs PASSED [ 41%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_when_constraints_already_present PASSED [ 45%]
+tests/test_constraints_guard.py::test_retry_constraints_empty_second_answer_marks_unresolved PASSED [ 50%]
+tests/test_constraints_guard.py::test_retry_constraints_llm_error_does_not_raise_run_continues PASSED [ 54%]
+tests/test_constraints_guard.py::test_retry_constraints_cost_limit_propagates PASSED [ 58%]
+tests/test_constraints_guard.py::test_retry_constraints_fires_when_constraints_non_empty_but_marker_uncovered PASSED [ 62%]
+tests/test_constraints_guard.py::test_retry_constraints_skipped_when_marker_already_covered PASSED [ 66%]
+tests/test_constraints_guard.py::test_retry_constraints_marker_coverage_ignores_case PASSED [ 70%]
+tests/test_constraints_guard.py::test_retry_constraints_two_uncovered_markers_trigger_single_call PASSED [ 75%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_backfills_not_confirmed_per_requirement PASSED [ 79%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_leaves_existing_checks_untouched PASSED [ 83%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_noop_without_brief_constraints PASSED [ 87%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_logs_on_backfill PASSED [ 91%]
+tests/test_constraints_guard.py::test_ensure_requirement_checks_does_not_log_when_not_triggered PASSED [ 95%]
+tests/test_constraints_guard.py::test_author_card_backfills_requirement_checks_when_model_omits_them PASSED [100%]
+
+============================== 24 passed in 0.31s ==============================
