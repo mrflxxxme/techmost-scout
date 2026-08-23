@@ -929,7 +929,7 @@ async def _run_doctor(monkeypatch, adapters: list[_DoctorAdapter]) -> str:
             self._settings = settings
 
         async def health(self) -> dict[str, tuple[bool, str]]:
-            return {"gigachat": (True, "заглушка")}
+            return {"deepseek": (True, "заглушка")}
 
     async def fake_init_db() -> None:
         return None
@@ -1048,12 +1048,12 @@ async def test_здоровье_отличает_отказ_источника_�
 
 
 def test_таблица_ключей_доктора_знает_про_роспатент_и_patentsview():
-    """РЕШ-52.2: одиннадцать строк, включая два новых ключа."""
+    """РЕШ-52.2: десять строк (ГигаЧат выпилен, РЕШ-171), включая два новых ключа."""
     names = [env_name for env_name, _, _ in SECRET_CHECKS]
 
-    assert len(names) == 11
+    assert len(names) == 10
     assert "ROSPATENT_API_KEY" in names and "PATENTSVIEW_API_KEY" in names
-    assert len(set(names)) == 11, "дубли в таблице ключей"
+    assert len(set(names)) == 10, "дубли в таблице ключей"
 
 
 # ── Правки пост-аудита (Т-18) ───────────────────────────────────────────────
@@ -1221,7 +1221,7 @@ async def _run_cli(monkeypatch, settings, fake_provider_factory, tmp_path, adapt
         )
 
     def fake_router(_settings):
-        return LLMRouter(settings=settings, providers={"gigachat": fake_provider_factory("gigachat")})
+        return LLMRouter(settings=settings, providers={"deepseek": fake_provider_factory("deepseek")})
 
     _CountingPipeline.adapters = adapters
     monkeypatch.setattr(cli, "get_settings", lambda: settings)

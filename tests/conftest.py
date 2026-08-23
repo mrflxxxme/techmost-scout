@@ -27,7 +27,6 @@ from app.config import Settings
 TEST_ENV: dict[str, str] = {
     "APP_ENV": "test",
     "DATABASE_URL": "sqlite+aiosqlite:///:memory:",
-    "GIGACHAT_AUTH_KEY": "dGVzdDp0ZXN0",  # base64("test:test")
     "DEEPSEEK_API_KEY": "sk-test",
     "YANDEX_API_KEY": "test",
     "YANDEX_CATALOG_ID": "b1gtest",
@@ -40,7 +39,7 @@ def purge_settings_env(environ: MutableMapping[str, str]) -> list[str]:
 
     Список имён строится программно из `Settings.model_fields`, а не пишется
     руками: для каждого поля берётся его `validation_alias`, если он задан
-    (`GIGACHAT_AUTH_KEY`, `YANDEX_SEARCH_API_KEY` и т. п.), иначе имя поля в
+    (`DEEPSEEK_API_KEY`, `YANDEX_SEARCH_API_KEY` и т. п.), иначе имя поля в
     верхнем регистре — тем же способом, каким `pydantic-settings` ищет
     переменную при `case_sensitive=False`. Рукописный список из шести имён
     устаревает на следующем поле (например `ROSPATENT_API_KEY`, у которого

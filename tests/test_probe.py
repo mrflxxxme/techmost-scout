@@ -233,13 +233,15 @@ async def test_режим_контеста_печатает_пять_оцено�
     with respx.mock:
         _mock_search_ok(url="https://university.example.org/news/winners", title="Победители хакатона")
 
-        extractor_provider = fake_provider_factory("gigachat", [_CONTEST_EXTRACT_JSON])
-        scorer_provider = fake_provider_factory("deepseek", [_CONTEST_SCORE_JSON])
+        # extractor и scorer маршрутизируются на одного и того же провайдера
+        # (РЕШ-171: все стадии на DeepSeek) — ответы идут одной очередью в
+        # порядке вызова: сначала извлечение, потом скоринг.
+        deepseek_provider = fake_provider_factory("deepseek", [_CONTEST_EXTRACT_JSON, _CONTEST_SCORE_JSON])
 
         from app.llm.router import LLMRouter as RealLLMRouter
 
         def _router_factory(settings=None, providers=None):
-            return RealLLMRouter(settings, providers={"gigachat": extractor_provider, "deepseek": scorer_provider})
+            return RealLLMRouter(settings, providers={"deepseek": deepseek_provider})
 
         monkeypatch.setattr("app.llm.LLMRouter", _router_factory)
 

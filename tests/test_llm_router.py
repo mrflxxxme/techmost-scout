@@ -23,48 +23,46 @@ def _router(settings, providers) -> LLMRouter:
 
 
 async def test_stage_route_picks_configured_provider(settings, fake_provider_factory):
-    """Стадия сборки карточек по умолчанию идёт на DeepSeek, а не на GigaChat."""
-    giga = fake_provider_factory("gigachat", ['{"answer": "giga", "number": 1}'])
+    """Стадия сборки карточек по умолчанию идёт на DeepSeek, а не на резервный YandexGPT."""
     deep = fake_provider_factory("deepseek", ['{"answer": "deep", "number": 2}'])
-    router = _router(settings, {"gigachat": giga, "deepseek": deep})
+    yandex = fake_provider_factory("yandex", ['{"answer": "yandex", "number": 1}'])
+    router = _router(settings, {"deepseek": deep, "yandex": yandex})
 
     result = await router.complete("card_author", [Message(role="user", content="привет")])
 
     assert result.usage.provider == "deepseek"
-    assert not giga.calls, "дешёвая модель не должна получать качественную стадию"
+    assert not yandex.calls, "резервный провайдер не должен получать стадию, пока основной жив"
 
 
-async def test_short_answer_stage_goes_to_free_provider(settings, fake_provider_factory):
-    """Стадии с коротким ответом идут на бесплатный GigaChat — это и есть экономия.
-
-    Длинный структурированный JSON ему не доверяем: живые прогоны показали, что
-    на плане поиска и батче оценок он обрывает ответ на середине.
-    """
-    giga = fake_provider_factory("gigachat")
+async def test_all_stages_default_to_deepseek(settings, fake_provider_factory):
+    """РЕШ-171: ГигаЧат выпилен, все стадии по умолчанию идут на DeepSeek —
+    двухпровайдерная экономия обслуживала путь, которым никто не пользовался
+    (на прогоне Э2-Е все 46 вызовов и так ушли на DeepSeek)."""
     deep = fake_provider_factory("deepseek")
-    router = _router(settings, {"gigachat": giga, "deepseek": deep})
+    yandex = fake_provider_factory("yandex")
+    router = _router(settings, {"deepseek": deep, "yandex": yandex})
 
     result = await router.complete("extractor", [Message(role="user", content="извлеки")])
 
-    assert result.usage.provider == "gigachat"
-    assert not deep.calls
+    assert result.usage.provider == "deepseek"
+    assert not yandex.calls
 
 
 async def test_falls_back_when_primary_fails(settings, fake_provider_factory):
-    """Отказ основного провайдера переводит стадию на резервный, а не роняет запрос."""
-    giga = fake_provider_factory("gigachat", fail_times=99)
-    deep = fake_provider_factory("deepseek", ['{"answer": "ok", "number": 3}'])
-    router = _router(settings, {"gigachat": giga, "deepseek": deep})
+    """Отказ основного провайдера переводит стадию на резервный YandexGPT, а не роняет запрос."""
+    deep = fake_provider_factory("deepseek", fail_times=99)
+    yandex = fake_provider_factory("yandex", ['{"answer": "ok", "number": 3}'])
+    router = _router(settings, {"deepseek": deep, "yandex": yandex})
 
     result = await router.complete("intake", [Message(role="user", content="?")], attempts_per_provider=1)
 
-    assert result.usage.provider == "deepseek"
+    assert result.usage.provider == "yandex"
 
 
 async def test_all_providers_down_raises(settings, fake_provider_factory):
-    giga = fake_provider_factory("gigachat", fail_times=99)
     deep = fake_provider_factory("deepseek", fail_times=99)
-    router = _router(settings, {"gigachat": giga, "deepseek": deep})
+    yandex = fake_provider_factory("yandex", fail_times=99)
+    router = _router(settings, {"deepseek": deep, "yandex": yandex})
 
     with pytest.raises(LLMError, match="все провайдеры отказали"):
         await router.complete("intake", [Message(role="user", content="?")], attempts_per_provider=1)
@@ -73,8 +71,8 @@ async def test_all_providers_down_raises(settings, fake_provider_factory):
 async def test_json_parsed_from_markdown_fence(settings, fake_provider_factory):
     """Дешёвые модели обрамляют JSON заборами из тройных кавычек — это не должно ломать разбор."""
     fenced = '```json\n{"answer": "да", "number": 7}\n```'
-    giga = fake_provider_factory("gigachat", [fenced])
-    router = _router(settings, {"gigachat": giga})
+    provider = fake_provider_factory("deepseek", [fenced])
+    router = _router(settings, {"deepseek": provider})
 
     payload = await router.complete_json("intake", [Message(role="user", content="?")], Payload)
 
@@ -84,16 +82,16 @@ async def test_json_parsed_from_markdown_fence(settings, fake_provider_factory):
 
 async def test_broken_json_is_repaired_once(settings, fake_provider_factory):
     """При несовпадении со схемой модель получает шанс починить ответ."""
-    giga = fake_provider_factory(
-        "gigachat",
+    provider = fake_provider_factory(
+        "deepseek",
         ['{"answer": "да"}', '{"answer": "да", "number": 5}'],  # первый ответ без обязательного поля
     )
-    router = _router(settings, {"gigachat": giga})
+    router = _router(settings, {"deepseek": provider})
 
     payload = await router.complete_json("intake", [Message(role="user", content="?")], Payload)
 
     assert payload.number == 5
-    assert len(giga.calls) == 2, "должен быть ровно один повтор с текстом ошибки"
+    assert len(provider.calls) == 2, "должен быть ровно один повтор с текстом ошибки"
 
 
 async def test_truncated_json_is_retried_with_bigger_budget(settings, fake_provider_factory):
@@ -103,22 +101,22 @@ async def test_truncated_json_is_retried_with_bigger_budget(settings, fake_provi
     с прежним лимитом, ответ обрежется на том же месте.
     """
     truncated = '{"answer": "да", "number'  # ответ оборвался на середине
-    giga = fake_provider_factory("gigachat", [truncated, '{"answer": "да", "number": 9}'])
-    router = _router(settings, {"gigachat": giga})
+    provider = fake_provider_factory("deepseek", [truncated, '{"answer": "да", "number": 9}'])
+    router = _router(settings, {"deepseek": provider})
 
     payload = await router.complete_json("intake", [Message(role="user", content="?")], Payload, max_tokens=100)
 
     assert payload.number == 9
     # Второй вызов — не «починка» с историей, а чистый повтор исходного запроса
-    assert len(giga.calls) == 2
-    assert len(giga.calls[1]) == 1, "при обрыве переспрашиваем заново, а не досылаем историю"
+    assert len(provider.calls) == 2
+    assert len(provider.calls[1]) == 1, "при обрыве переспрашиваем заново, а не досылаем историю"
 
 
 async def test_cost_limit_stops_runaway_request(settings, fake_provider_factory):
     """Стоп-кран: запрос не может обойтись дороже разрешённого лимита."""
     settings.cost_limit_rub_per_request = 0.015  # хватает ровно на один вызов
-    giga = fake_provider_factory("gigachat", ['{"answer": "a", "number": 1}'])
-    router = _router(settings, {"gigachat": giga})
+    provider = fake_provider_factory("deepseek", ['{"answer": "a", "number": 1}'])
+    router = _router(settings, {"deepseek": provider})
 
     await router.complete("intake", [Message(role="user", content="1")])
     with pytest.raises(CostLimitExceededError):
@@ -138,13 +136,13 @@ async def test_answer_is_picked_by_schema_not_by_size(settings, fake_provider_fa
         'которая заметно длиннее итогового ответа модели"}]\n'
         'Теперь вердикт: {"answer": "да", "number": 4}'
     )
-    giga = fake_provider_factory("gigachat", [reasoning])
-    router = _router(settings, {"gigachat": giga})
+    provider = fake_provider_factory("deepseek", [reasoning])
+    router = _router(settings, {"deepseek": provider})
 
     payload = await router.complete_json("intake", [Message(role="user", content="?")], Payload)
 
     assert payload.number == 4
-    assert len(giga.calls) == 1, "правильный блок должен находиться без повторного запроса"
+    assert len(provider.calls) == 1, "правильный блок должен находиться без повторного запроса"
 
 
 def test_extract_json_block_pulls_answer_out_of_reasoning():
@@ -293,10 +291,29 @@ async def test_cached_calls_counts_only_cached_of_several(deepseek_settings):
 
 
 def test_chain_puts_preferred_first(settings, fake_provider_factory):
-    providers = {name: fake_provider_factory(name) for name in ("gigachat", "deepseek", "yandex")}
+    providers = {name: fake_provider_factory(name) for name in ("deepseek", "yandex")}
     router = _router(settings, providers)
 
     assert router.chain_for("card_author")[0] == "deepseek"
-    assert router.chain_for("extractor")[0] == "gigachat"
-    # Неизвестная стадия обслуживается общим резервным порядком
-    assert router.chain_for("неизвестная") == ["gigachat", "deepseek", "yandex"]
+    assert router.chain_for("extractor")[0] == "deepseek"
+    # Неизвестная стадия обслуживается общим резервным порядком (РЕШ-171: DeepSeek, потом YandexGPT)
+    assert router.chain_for("неизвестная") == ["deepseek", "yandex"]
+
+
+def test_unknown_provider_name_in_routes_raises_readable_error(settings):
+    """Неизвестное имя провайдера в LLM_STAGE_ROUTES — читаемая ошибка, а не
+    тихий пропуск стадии (РЕШ-171): опечатка или упоминание выпиленного
+    провайдера обязаны быть замечены сразу при создании роутера."""
+    settings.llm_stage_routes = "intake:chatgpt"
+
+    with pytest.raises(LLMError, match="неизвестный провайдер"):
+        LLMRouter(settings)
+
+
+def test_unknown_provider_name_in_fallback_raises_readable_error(settings):
+    """Та же проверка для порядка резерва: пустой резерв или опечатка в нём
+    не должны молча выпадать из цепочки (мутация а карточки задачи)."""
+    settings.llm_fallback_order = "chatgpt"
+
+    with pytest.raises(LLMError, match="неизвестный провайдер"):
+        LLMRouter(settings)

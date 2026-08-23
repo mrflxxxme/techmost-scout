@@ -54,5 +54,5 @@ def format_active_run_params(settings: Settings) -> str:
         f"second_pass_relevance_max={settings.second_pass_relevance_max}; "
         f"маршруты стадий: {routes}; "
         f"порядок резерва: {fallback}; "
-        f"модели: gigachat={settings.gigachat_model}, deepseek={settings.deepseek_model}"
+        f"модели: deepseek={settings.deepseek_model}, yandex={settings.yandex_model}"
     )

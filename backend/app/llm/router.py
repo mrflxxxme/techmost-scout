@@ -1,10 +1,10 @@
 """Маршрутизатор моделей: какая стадия на какой модели считается.
 
-Логика минимальной себестоимости. Массовая механическая работа (уточняющие
-вопросы, план поиска, извлечение кандидатов, скоринг) идёт на бесплатный
-GigaChat Lite. Качественные стадии, где ошибка видна клиенту (сборка карточек,
-проверка утверждений, сводка), идут на DeepSeek — он платный, но копеечный.
-YandexGPT держим третьим на случай, если первые два недоступны.
+ГигаЧат выпилен (РЕШ-171): двухпровайдерная экономия обслуживала путь, которым
+никто не ходил — на прогоне Э2-Е все 46 вызовов ушли на DeepSeek. Главное
+требование к работе LLM теперь — качество, а не бесплатный тариф, поэтому все
+стадии по умолчанию считает DeepSeek — он платный, но копеечный. YandexGPT
+держим резервом на случай, если DeepSeek недоступен.
 
 Маршруты задаются строкой в настройках (LLM_STAGE_ROUTES), поэтому порядок
 меняется одной правкой .env без изменения кода.
@@ -23,13 +23,11 @@ from pydantic import BaseModel, ValidationError
 from app.config import Settings, get_settings
 from app.llm.base import LLMError, LLMProvider, LLMResult, Message, Usage, iter_json_candidates
 from app.llm.deepseek import DeepSeekProvider
-from app.llm.gigachat import GigaChatProvider
 from app.llm.yandex import YandexGPTProvider
 
 log = logging.getLogger(__name__)
 
 PROVIDER_CLASSES = {
-    "gigachat": GigaChatProvider,
     "deepseek": DeepSeekProvider,
     "yandex": YandexGPTProvider,
 }
@@ -118,7 +116,32 @@ class LLMRouter:
         }
         self._routes = self._settings.stage_routes()
         self._fallback = self._settings.fallback_order()
+        self._check_known_providers()
         self.cost = CostTracker(limit_rub=self._settings.cost_limit_rub_per_request)
+
+    def _check_known_providers(self) -> None:
+        """Проверить, что маршруты и резерв ссылаются на существующих провайдеров.
+
+        Раньше неизвестное имя (опечатка или удалённый провайдер вроде
+        выпиленного ГигаЧата, РЕШ-171) молча выпадало из цепочки в `chain_for`:
+        стадия просто уходила на резерв, а причина терялась. Сверяем со
+        статическим реестром `PROVIDER_CLASSES`, а не с `self._providers` —
+        тесты законно подменяют часть провайдеров заглушками и не обязаны
+        подсовывать их все.
+        """
+        known = set(PROVIDER_CLASSES)
+        bad_routes = {stage: name for stage, name in self._routes.items() if name and name not in known}
+        bad_fallback = [name for name in self._fallback if name not in known]
+        if bad_routes or bad_fallback:
+            raise LLMError(
+                "router",
+                (
+                    "неизвестный провайдер в настройках маршрутизации LLM: "
+                    f"маршруты {bad_routes}, резерв {bad_fallback}; "
+                    f"известные провайдеры: {sorted(known)}"
+                ),
+                retryable=False,
+            )
 
     # ── Выбор провайдера ────────────────────────────────────────────────────
     def chain_for(self, stage: str) -> list[str]:

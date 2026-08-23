@@ -823,9 +823,9 @@ _EXTRACT_JSON = json.dumps(
 
 
 def _extractor_router(settings, fake_provider_factory, responses: list[str] | None = None, **kwargs):
-    """Роутер с заглушкой на месте GigaChat: маршрут стадии — `extractor:gigachat`."""
-    provider = fake_provider_factory("gigachat", responses, **kwargs)
-    return LLMRouter(settings, providers={"gigachat": provider}), provider
+    """Роутер с заглушкой на месте DeepSeek: маршрут стадии — `extractor:deepseek`."""
+    provider = fake_provider_factory("deepseek", responses, **kwargs)
+    return LLMRouter(settings, providers={"deepseek": provider}), provider
 
 
 class _FakeWebAdapter(SearchAdapter):
@@ -938,8 +938,8 @@ async def test_extractor_просит_свой_лимит_токенов(setting
                 messages, model=model, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode
             )
 
-    provider = _Recording("gigachat", [_EXTRACT_JSON])
-    router = LLMRouter(settings, providers={"gigachat": provider})
+    provider = _Recording("deepseek", [_EXTRACT_JSON])
+    router = LLMRouter(settings, providers={"deepseek": provider})
 
     await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
 
@@ -1394,7 +1394,7 @@ async def test_журнал_стадии_поиска_несёт_трату_и_�
         await pipeline._run_stages(brief, 1, stage_log, [], [])
 
     record = next(item for item in stage_log if item.stage == "search")
-    assert record.provider == "gigachat", "платный вызов стадии extractor не отражён в журнале"
+    assert record.provider == "deepseek", "платный вызов стадии extractor не отражён в журнале"
     assert record.cost_rub > 0
     assert record.error and "ноль кандидатов" in record.error
 
@@ -1430,7 +1430,7 @@ async def test_журнал_стадии_поиска_несёт_фактиче�
 
     record = next(item for item in stage_log if item.stage == "search")
     цена_вызова = 0.01
-    assert record.provider == "gigachat"
+    assert record.provider == "deepseek"
     assert record.cost_rub == pytest.approx(цена_вызова), "в журнале не цена стадии, а другое число"
     assert router.cost.spent_rub == pytest.approx(цена_вызова * len(provider.calls))
     assert record.cost_rub < router.cost.spent_rub, "цена стадии подменена накопленным итогом прогона"
@@ -1590,10 +1590,10 @@ async def test_скоринг_просит_16000_а_планировщик_ос�
     держит обе стороны: 16000 у скоринга и нетронутые 8000 у планировщика.
     """
     scorer = _recording_provider(fake_provider_factory, "deepseek", [_SCORE_JSON])
-    planner = _recording_provider(fake_provider_factory, "gigachat", [_PLAN_WEB_JSON])
+    planner = _recording_provider(fake_provider_factory, "deepseek", [_PLAN_WEB_JSON])
 
     await stages.score_candidates(LLMRouter(settings, providers={"deepseek": scorer}), brief, [_candidate(1)])
-    await stages.plan_search(LLMRouter(settings, providers={"gigachat": planner}), brief)
+    await stages.plan_search(LLMRouter(settings, providers={"deepseek": planner}), brief)
 
     assert scorer.limits == [16000], "скоринг снова уходит на прежнем лимите — повтор остаётся штатным путём"
     assert planner.limits == [8000], "правка лимита расползлась на соседний вызов"

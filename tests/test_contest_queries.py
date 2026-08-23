@@ -175,8 +175,8 @@ def test_default_contest_queries_use_brief_keywords():
 
 
 async def _replan(brief, previous_plan, scored, plan_json, settings, fake_provider_factory):
-    provider = fake_provider_factory("gigachat", [plan_json])
-    router = LLMRouter(settings, providers={"gigachat": provider})
+    provider = fake_provider_factory("deepseek", [plan_json])
+    router = LLMRouter(settings, providers={"deepseek": provider})
     return await stages.replan_search(router, brief, previous_plan, scored)
 
 
