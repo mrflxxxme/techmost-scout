@@ -1,0 +1,177 @@
+=== Мутации З-1: обязаны убивать проверки ===
+
+--- (а) чистка после os.environ.update(TEST_ENV) ---
+Прицельный прогон: pytest -q tests/test_env_isolation.py tests/test_config.py
+.F............                                                           [100%]
+=================================== FAILURES ===================================
+_____________________ test_db_engine_uses_in_memory_sqlite _____________________
+
+    def test_db_engine_uses_in_memory_sqlite() -> None:
+        """Движок базы тестов — временная память, а не файл рабочей копии.
+    
+        Проверяет модульный `engine`, импортированный выше вместе с остальными
+        импортами файла — то есть на этапе сбора тестов, а не внутри тела этой
+        функции. Так страж не зависит от того, что какой-то другой тестовый файл
+        (например `tests/test_web_auth.py`, импортирующий `app.main`) успел
+        подтянуть `app.db` раньше и тем самым случайно подстраховал проверку под
+        узким прогоном одного этого файла.
+        """
+>       assert ":memory:" in str(engine.url), "движок базы тестов должен быть sqlite в памяти"
+E       AssertionError: движок базы тестов должен быть sqlite в памяти
+E       assert ':memory:' in 'sqlite+aiosqlite:////home/user/techmost-scout/.claude/worktrees/agent-a22c3e0ff532c5fc0/data/scout.db'
+E        +  where 'sqlite+aiosqlite:////home/user/techmost-scout/.claude/worktrees/agent-a22c3e0ff532c5fc0/data/scout.db' = str(sqlite+aiosqlite:////home/user/techmost-scout/.claude/worktrees/agent-a22c3e0ff532c5fc0/data/scout.db)
+E        +    where sqlite+aiosqlite:////home/user/techmost-scout/.claude/worktrees/agent-a22c3e0ff532c5fc0/data/scout.db = <sqlalchemy.ext.asyncio.engine.AsyncEngine object at 0x7f405180ced0>.url
+
+tests/test_env_isolation.py:54: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_env_isolation.py::test_db_engine_uses_in_memory_sqlite - As...
+1 failed, 13 passed in 0.35s
+
+--- (б) список имён захардкожен шестью именами (без ROSPATENT_API_KEY и др.) ---
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a22c3e0ff532c5fc0
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 14 items
+
+tests/test_env_isolation.py ...FF                                        [ 35%]
+tests/test_config.py .........                                           [100%]
+
+=================================== FAILURES ===================================
+_____________ test_purge_settings_env_removes_only_settings_names ______________
+
+    def test_purge_settings_env_removes_only_settings_names() -> None:
+        """`purge_settings_env` снимает ровно переменные настроек, не больше.
+    
+        Работает на обычном словаре, а не на `os.environ`: так проверка
+        независима от того, что уже стоит в окружении процесса, запустившего
+        pytest. Берём по одной боевой переменной на каждый из трёх видов имени
+        (с `validation_alias`, без него, и производную из `TEST_ENV`) плюс три
+        заведомо системных имени, которых чистка обязана не тронуть.
+        """
+        fake_environ: dict[str, str] = {
+            "GIGACHAT_AUTH_KEY": "боевой-ключ",  # поле с validation_alias
+            "ROSPATENT_API_KEY": "боевой-ключ",  # поле без validation_alias
+            "RELEVANCE_MIN": "4",  # поле без validation_alias, боевой порог
+            "PATH": "/usr/bin",
+            "HOME": "/home/user",
+            "HTTPS_PROXY": "http://proxy.example:8080",
+        }
+        removed = purge_settings_env(fake_environ)
+    
+>       assert set(removed) == {"GIGACHAT_AUTH_KEY", "ROSPATENT_API_KEY", "RELEVANCE_MIN"}
+E       AssertionError: assert {'RELEVANCE_MIN'} == {'GIGACHAT_AU...TENT_API_KEY'}
+E         
+E         Extra items in the right set:
+E         'ROSPATENT_API_KEY'
+E         'GIGACHAT_AUTH_KEY'
+E         Use -v to get more diff
+
+tests/test_env_isolation.py:103: AssertionError
+___________ test_process_env_settings_names_match_test_env_or_absent ___________
+
+    def test_process_env_settings_names_match_test_env_or_absent() -> None:
+        """Страж по имени файла: переменная поля `Settings` в окружении процесса
+        либо отсутствует, либо равна значению из `TEST_ENV`.
+    
+        В отличие от `test_settings_fields_trace_to_default_or_test_env` (который
+        сравнивает уже построенные объекты `Settings`), этот страж читает
+        `os.environ` напрямую и обходит `Settings.model_fields` целиком — тем же
+        способом, каким `purge_settings_env` вычисляет имена. Так проверка не
+        зависит ни от кэша `get_settings()`, ни от того, что вычисляет сам
+        `Settings`, и ловит саму дыру задачи З-1: боевую переменную процесса,
+        просочившуюся в окружение мимо `TEST_ENV`. Сообщение о провале называет
+        только имя переменной (инвариант №3); значения сравниваются как
+        `SecretStr`, чей `__repr__` их не раскрывает.
+        """
+        from pydantic import SecretStr
+    
+        mismatched: list[str] = []
+        for field_name, field_info in Settings.model_fields.items():
+            alias = field_info.validation_alias
+            name = (alias if isinstance(alias, str) else field_name).upper()
+            if name not in os.environ:
+                continue
+            expected = TEST_ENV.get(name)
+            if expected is None or SecretStr(os.environ[name]) != SecretStr(expected):
+                mismatched.append(name)
+>       assert not mismatched, f"переменные окружения процесса вне TEST_ENV: {mismatched}"
+E       AssertionError: переменные окружения процесса вне TEST_ENV: ['GIGACHAT_SCOPE', 'GIGACHAT_MODEL', 'GIGACHAT_VERIFY_SSL', 'GIGACHAT_CA_BUNDLE', 'DEEPSEEK_MODEL', 'DEEPSEEK_BASE_URL', 'YANDEX_IAM_TOKEN', 'YANDEX_MODEL', 'LLM_PROVIDER_TIMEOUT_SECONDS', 'FX_RATE_USD_TO_RUB', 'CROSSREF_MAILTO', 'OPENALEX_API_KEY', 'ROSPATENT_API_KEY', 'SEARCH_TIMEOUT_SECONDS', 'MAX_CANDIDATES_PER_QUERY', 'TARGET_CARDS']
+E       assert not ['GIGACHAT_SCOPE', 'GIGACHAT_MODEL', 'GIGACHAT_VERIFY_SSL', 'GIGACHAT_CA_BUNDLE', 'DEEPSEEK_MODEL', 'DEEPSEEK_BASE_URL', ...]
+
+tests/test_env_isolation.py:135: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_env_isolation.py::test_purge_settings_env_removes_only_settings_names
+FAILED tests/test_env_isolation.py::test_process_env_settings_names_match_test_env_or_absent
+========================= 2 failed, 12 passed in 0.37s =========================
+
+--- (в) снято обнуление env_file ---
+F.............                                                           [100%]
+=================================== FAILURES ===================================
+__________________ test_settings_model_config_has_no_env_file __________________
+
+    def test_settings_model_config_has_no_env_file() -> None:
+        """`Settings` не должна читать файл `.env` — конфигурация обнулена на
+        импорте `tests/conftest.py` (РЕШ-120)."""
+>       assert not Settings.model_config.get("env_file"), (
+            "Settings.model_config['env_file'] должен быть пустым: боевой файл .env не читается"
+        )
+E       AssertionError: Settings.model_config['env_file'] должен быть пустым: боевой файл .env не читается
+E       assert not (PosixPath('/home/user/techmost-scout/.claude/worktrees/agent-a22c3e0ff532c5fc0/.env'), PosixPath('/home/user/techmost-scout/.claude/worktrees/agent-a22c3e0ff532c5fc0/backend/.env'))
+E        +  where (PosixPath('/home/user/techmost-scout/.claude/worktrees/agent-a22c3e0ff532c5fc0/.env'), PosixPath('/home/user/techmost-scout/.claude/worktrees/agent-a22c3e0ff532c5fc0/backend/.env')) = <built-in method get of dict object at 0x7f0600f27ac0>('env_file')
+E        +    where <built-in method get of dict object at 0x7f0600f27ac0> = {'extra': 'ignore', 'arbitrary_types_allowed': True, 'validate_default': True, 'case_sensitive': False, ...}.get
+E        +      where {'extra': 'ignore', 'arbitrary_types_allowed': True, 'validate_default': True, 'case_sensitive': False, ...} = Settings.model_config
+
+tests/test_env_isolation.py:39: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_env_isolation.py::test_settings_model_config_has_no_env_file
+1 failed, 13 passed in 0.48s
+
+--- (г) purge_settings_env чистит всё окружение подряд ---
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a22c3e0ff532c5fc0
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 5 items
+
+tests/test_env_isolation.py ...F.                                        [100%]
+
+=================================== FAILURES ===================================
+_____________ test_purge_settings_env_removes_only_settings_names ______________
+
+    def test_purge_settings_env_removes_only_settings_names() -> None:
+        """`purge_settings_env` снимает ровно переменные настроек, не больше.
+    
+        Работает на обычном словаре, а не на `os.environ`: так проверка
+        независима от того, что уже стоит в окружении процесса, запустившего
+        pytest. Берём по одной боевой переменной на каждый из трёх видов имени
+        (с `validation_alias`, без него, и производную из `TEST_ENV`) плюс три
+        заведомо системных имени, которых чистка обязана не тронуть.
+        """
+        fake_environ: dict[str, str] = {
+            "GIGACHAT_AUTH_KEY": "боевой-ключ",  # поле с validation_alias
+            "ROSPATENT_API_KEY": "боевой-ключ",  # поле без validation_alias
+            "RELEVANCE_MIN": "4",  # поле без validation_alias, боевой порог
+            "PATH": "/usr/bin",
+            "HOME": "/home/user",
+            "HTTPS_PROXY": "http://proxy.example:8080",
+        }
+        removed = purge_settings_env(fake_environ)
+    
+>       assert set(removed) == {"GIGACHAT_AUTH_KEY", "ROSPATENT_API_KEY", "RELEVANCE_MIN"}
+E       AssertionError: assert {'GIGACHAT_AU...TENT_API_KEY'} == {'GIGACHAT_AU...TENT_API_KEY'}
+E         
+E         Extra items in the left set:
+E         'HOME'
+E         'PATH'
+E         'HTTPS_PROXY'
+E         Use -v to get more diff
+
+tests/test_env_isolation.py:103: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_env_isolation.py::test_purge_settings_env_removes_only_settings_names
+========================= 1 failed, 4 passed in 0.34s ==========================

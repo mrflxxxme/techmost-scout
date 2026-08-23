@@ -776,11 +776,13 @@ async def test_constraints_retry_cost_limit_propagates_and_persists_failed(
         assert requests[0].status == "failed"
         assert requests[0].error
 
-        # intake_stage_log в этом сценарии пуст: run_intake отработал успешно
-        # (успешная стадия своей строки журнала в cli._run не пишет - это
-        # делает оркестратор внутри пайплайна, которого здесь нет), а
-        # retry_constraints_if_missing замокан целиком и своей строки не
-        # оставил - проверка PipelineLog не про содержимое журнала, а про то,
-        # что запись requests вообще состоялась.
+        # З-8: успешный run_intake теперь тоже оставляет строку журнала (со
+        # своим снимком расхода, здесь нулевым - `fake_run_intake` не зовёт
+        # роутер вовсе), иначе его реальная трата на других сценариях нигде не
+        # видна (долг 8 аудита Э2-Г). retry_constraints_if_missing замокан
+        # целиком и своей строки не оставляет - в журнале ровно одна запись
+        # интейка, без ошибки.
         logs = (await session.execute(select(PipelineLog))).scalars().all()
-        assert logs == []
+        assert [row.stage for row in logs] == ["intake"]
+        assert logs[0].error is None
+        assert logs[0].cost_rub == 0.0

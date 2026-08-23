@@ -633,9 +633,13 @@ async def test_refine_brief_failure_keeps_owner_answers_in_own_field(
     assert brief.constraints == ["работа при 340 °C"], "ответы владельца не имеют права попадать в ограничения задачи"
     assert [(item.question, item.answer) for item in brief.owner_answers] == [("Какая температура процесса?", "380 °C")]
 
+    # З-8: успешный run_intake тоже оставляет строку журнала — перед отказавшим
+    # уточнением здесь запись `intake` без ошибки (сама стадия интейка прошла),
+    # затем `intake_refine` с причиной отказа.
     stage_log = _RecordingIntakePipeline.stage_logs[-1]
-    assert stage_log is not None and len(stage_log) == 1
-    assert stage_log[0].error
+    assert stage_log is not None and len(stage_log) == 2
+    assert stage_log[0].stage == "intake" and stage_log[0].error is None
+    assert stage_log[1].stage == "intake_refine" and stage_log[1].error
 
 
 async def test_refine_brief_failure_tells_the_client_the_brief_stayed_draft(
@@ -702,8 +706,14 @@ async def test_intake_and_refine_failures_are_told_apart_in_stage_log(
     monkeypatch.setattr("app.pipeline.stages.refine_brief", broken_refine_brief)
     await cli._run("сырой текст задачи", None, None, tmp_path / "report-b.md", True)
 
-    stages_logged = [log[0].stage for log in _RecordingIntakePipeline.stage_logs]
-    assert stages_logged == ["intake", "intake_refine"]
+    # З-8: успешный интейк второго прогона тоже оставляет запись, поэтому
+    # различать отказ надо по стадии, которая несёт ошибку, а не по первой
+    # строке журнала — во втором прогоне она теперь `intake` (успех), а отказ
+    # уточнения — второй строкой `intake_refine`.
+    failed_stages = [
+        next(record.stage for record in log if record.error) for log in _RecordingIntakePipeline.stage_logs
+    ]
+    assert failed_stages == ["intake", "intake_refine"]
 
 
 async def test_failed_intake_stage_carries_actual_cost_not_zero(monkeypatch, settings, fake_provider_factory, tmp_path):
@@ -899,9 +909,16 @@ async def test_cost_limit_on_refine_brief_leaves_failed_run_with_actual_cost(
         assert requests[0].status == "failed"
         assert requests[0].cost_rub == pytest.approx(99.0)
 
+        # З-8: успешный run_intake (здесь бесплатный - заглушка не зовёт
+        # роутер вовсе) тоже оставляет строку журнала перед стоп-краном
+        # уточнения.
         logs = (await session.execute(select(PipelineLog))).scalars().all()
-        assert [(row.stage, row.cost_rub) for row in logs] == [("intake_refine", pytest.approx(99.0))]
-        assert logs[0].error
+        assert [(row.stage, row.cost_rub) for row in logs] == [
+            ("intake", 0.0),
+            ("intake_refine", pytest.approx(99.0)),
+        ]
+        assert logs[0].error is None
+        assert logs[1].error
 
 
 async def test_cost_limit_exceeded_during_intake_propagates_and_run_fails(

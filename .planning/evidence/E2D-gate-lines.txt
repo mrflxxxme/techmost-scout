@@ -1,0 +1,52 @@
+=== Критерий 14: раскладка пакета pipeline и границы правок тестов ===
+--- строки всех файлов backend/app/pipeline/ ---
+     5 backend/app/pipeline/__init__.py
+    51 backend/app/pipeline/orchestrator.py
+    58 backend/app/pipeline/run_journal.py
+    59 backend/app/pipeline/run_cards.py
+    81 backend/app/pipeline/intake.py
+    82 backend/app/pipeline/pipeline_context.py
+    89 backend/app/pipeline/summary.py
+   109 backend/app/pipeline/pipeline_selection_flow.py
+   120 backend/app/pipeline/stages.py
+   125 backend/app/pipeline/selection.py
+   156 backend/app/pipeline/prompting.py
+   170 backend/app/pipeline/pipeline_enrichment.py
+   227 backend/app/pipeline/cards.py
+   231 backend/app/pipeline/constraints_guard.py
+   231 backend/app/pipeline/diversity.py
+   251 backend/app/pipeline/planning.py
+   332 backend/app/pipeline/extraction.py
+   338 backend/app/pipeline/persistence.py
+   367 backend/app/pipeline/scoring.py
+   417 backend/app/pipeline/pipeline_search.py
+   477 backend/app/pipeline/run_flow.py
+  3976 total
+
+--- фасад orchestrator.py: определений быть не должно ---
+0
+(0 = определений нет)
+
+--- страж раскладки ---
+6 passed in 0.25s
+
+--- какие файлы tests/ тронула волна целиком (0f6ffd3..HEAD) ---
+tests/conftest.py
+tests/test_cli_run.py
+tests/test_constraints_guard.py
+tests/test_env_isolation.py
+tests/test_extractor_fragment.py
+tests/test_fallback_without_guesses.py
+tests/test_partial_source_failure.py
+tests/test_pipeline_layout.py
+tests/test_pipeline_resilience.py
+tests/test_probe.py
+tests/test_run_accounting.py
+tests/test_run_visibility.py
+tests/test_search_yandex.py
+tests/test_stages.py
+
+=== Граница задачи З-10 отдельно (правка 3 аудита) ===
+$ git show --name-only --format= c05d949 -- tests/
+tests/test_pipeline_layout.py
+(единственный файл — страж раскладки; список из 14 файлов выше — это ВСЯ волна, девять задач)

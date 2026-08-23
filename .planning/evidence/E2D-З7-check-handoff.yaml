@@ -1,0 +1,35 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: З-7
+  did:
+    - "Проверены diff, применимые инварианты (№2,3,7,8,9) и границы задачи по PLAN.md"
+    - "Прогнаны pytest tests/test_run_visibility.py -v (5 passed), tests/test_export_markdown.py -q (33 passed), ruff check/format"
+    - "Независимо воспроизведены 2 из 5 мутаций (перенос печати после первой стадии; добавление значения ключа в строку) — обе ловятся ожидаемым тестом"
+    - "Разобрано расхождение чисел прогона: 660/9 в рабочей копии, 655/9 на базе 0f6ffd3 (тот же список отказов), 668/1 при очистке загрязнённого shell-env; правкой З-7 ни один отказ не вызван"
+  artifacts:
+    - .planning/evidence/E2D-З7-check.md (закоммичен до ответа)
+    - .planning/evidence/E2D-З7-check-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_run_visibility.py -v: 5 passed"
+    - "pytest tests/test_export_markdown.py -q: 33 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 117 files already formatted"
+    - "pytest -q (рабочая копия, окружение по умолчанию): 660 passed, 9 failed"
+    - "pytest -q (0f6ffd3, тот же env, отдельный worktree): 655 passed, 9 failed, тот же список"
+    - "pytest -q (5ca4ac8, env -u RELEVANCE_MIN -u SECOND_PASS_RELEVANCE_MAX -u YANDEX_SEARCH_API_KEY -u YANDEX_CATALOG_ID -u LLM_STAGE_ROUTES -u LLM_FALLBACK_ORDER): 668 passed, 1 failed (test_state_stays_short, вне задачи)"
+    - "git diff --name-only 0f6ffd3..HEAD: только orchestrator.py, test_run_visibility.py, evidence"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-7, строки 756-827)
+    - .planning/evidence/E2D-З7-check.md
+    - backend/app/pipeline/orchestrator.py (format_active_run_params)
+    - tests/test_run_visibility.py
+  notes: >-
+    Вердикт: ПРИНЯТЬ, цикл 1. Блокирующих находок нет. 9 базовых отказов
+    полного набора не связаны с задачей: 8 — утечка посторонних переменных
+    окружения shell в tests/conftest.py (известное ограничение, вне списка
+    файлов задачи), 1 — отставание .planning/STATE.md в этой рабочей копии от
+    main (вне списка файлов задачи). Значений секретов, включая утёкшие в
+    среде запуска, в отчёте нет (инвариант №3, РЕШ-155).

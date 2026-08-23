@@ -1,0 +1,4 @@
+=== Критерий 1: голая команда, без очистки окружения ===
+$ .venv/bin/python -m pytest -q
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+698 passed, 1 warning in 37.26s

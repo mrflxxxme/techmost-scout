@@ -94,17 +94,26 @@ SECRET_CHECKS: tuple[tuple[str, str, str], ...] = (
 
 
 def _intake_stage_record(
-    stage: str, *, started_at: datetime, cost_before: dict[str, float], router: LLMRouter, error: BaseException
+    stage: str,
+    *,
+    started_at: datetime,
+    cost_before: dict[str, float],
+    router: LLMRouter,
+    error: BaseException | None = None,
 ) -> StageRecord:
-    """Строка журнала об отказавшей стадии интейка — со снимком счётчика.
+    """Строка журнала стадии интейка — со снимком счётчика.
 
     Интейк выполняется в `cli._run`, до пайплайна, поэтому снимок счётчика
     вокруг вызова снимается здесь — тем же способом и той же функцией, что и в
     `orchestrator._run_stages` (П-4 аудита). Стадия платная (`intake:deepseek`
-    в других конфигурациях маршрутов, РЕШ-46), и отказавший интейк вполне мог
-    потратиться до отказа: `complete_json` делает оплаченный вызов, затем
-    оплаченный ремонтный при несходимости со схемой и только потом поднимает
-    ошибку. Нулевая стоимость в журнале приписывала эту трату никому.
+    в других конфигурациях маршрутов, РЕШ-46), и её расход — что на отказе,
+    что на успехе — обязан попасть в журнал: `complete_json` делает оплаченный
+    вызов, затем оплаченный ремонтный при несходимости со схемой, и раньше эта
+    трата на удачном пути нигде не оседала (долг 8 аудита Э2-Г: 0,51 ₽,
+    5,6% прогона, не были отнесены ни к какой стадии).
+
+    `error=None` — стадия завершилась успешно, запись всё равно нужна: иначе
+    построчный расход по журналу не сходится с фактической стоимостью прогона.
 
     `tokens_in`/`tokens_out` остаются нулями: `CostTracker` копит только рубли,
     вызовы и разбивку по провайдерам — токенов в счётчике нет вовсе, поэтому
@@ -120,7 +129,7 @@ def _intake_stage_record(
         finished_at=datetime.now(UTC),
         provider=provider,
         cost_rub=spent,
-        error=str(error),
+        error=str(error) if error is not None else None,
     )
 
 
@@ -385,6 +394,19 @@ async def _run(
             )
         )
         intake = None
+    else:
+        # Успешный интейк — тоже платный вызов, и его расход обязан попасть
+        # в журнал (долг 8 аудита Э2-Г), а не остаться только в счётчике
+        # роутера. `else` выполняется исключительно при отсутствии исключения
+        # — двойной записи вместе с веткой отказа не будет.
+        intake_stage_log.append(
+            _intake_stage_record(
+                STAGE_INTAKE,
+                started_at=intake_started,
+                cost_before=intake_cost_before,
+                router=router,
+            )
+        )
 
     brief: Brief
     intake_caveats: list[str] = []
@@ -458,6 +480,18 @@ async def _run(
                 # консоли и журнале: черновая постановка объясняет эксперту и
                 # клиенту, почему бриф выглядит менее собранным, чем ожидалось.
                 intake_caveats.append(REFINE_FALLBACK_CAVEAT)
+            else:
+                # Успешное уточнение — тоже платный вызов (долг 8 аудита
+                # Э2-Г): без этой записи расход по журналу расходился с
+                # фактической стоимостью прогона на сумму уточнения.
+                intake_stage_log.append(
+                    _intake_stage_record(
+                        STAGE_INTAKE_REFINE,
+                        started_at=refine_started,
+                        cost_before=refine_cost_before,
+                        router=router,
+                    )
+                )
         else:
             brief = intake.draft_brief
     else:

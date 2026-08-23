@@ -1,0 +1,52 @@
+handoff:
+  from: implementer-H
+  to: reviewer
+  task: З-8
+  did:
+    - "Правка backend/app/cli.py: _intake_stage_record принимает error: BaseException | None = None"
+    - "Удачный run_intake и удачный refine_brief пишут запись в intake_stage_log через try/except/else — error=None, provider и cost_rub из cost_delta"
+    - "Двойных записей нет: else срабатывает только при отсутствии исключения, ветки отказа не изменены"
+    - "Добавлены 3 теста в tests/test_run_accounting.py (раздел Ц-3): одна запись на удачном интейке + сумма сходится со счётчиком роутера; две записи на пути с уточнением; отказ по-прежнему одна запись с ошибкой"
+    - "run_intake/refine_brief в новых тестах НЕ подменены заглушками — вызываются по-настоящему через LLMRouter на FakeProvider, чтобы потраченные рубли были настоящими"
+    - "4 мутации из карточки прогнаны прицельно (test_run_accounting.py, где применимо — plus test_cli_run.py/test_pipeline_resilience.py для мутации г), все 4 убивают ожидаемые тесты, дерево между мутациями восстановлено (git diff чист после каждой)"
+  artifacts:
+    - backend/app/cli.py
+    - tests/test_run_accounting.py
+    - tests/test_cli_run.py
+    - tests/test_pipeline_resilience.py
+  self_audit: pass
+  checks:
+    - "pytest tests/test_run_accounting.py -v: 8 passed (5 существовавших + 3 новых)"
+    - "pytest -q (полный набор): 658 passed, 9 failed — те же 9 предсуществующих отказов, что и на голой ветке до правки (test_contest_gate_and_order.py x4, test_llm_router.py x2, test_pipeline_second_pass.py, test_probe.py, test_team_docs.py::test_state_stays_short); ни одного нового отказа"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 116 files already formatted"
+  escalate:
+    - >
+      Границы задачи ограничивали файлы cli.py и test_run_accounting.py, а
+      критерий 4 требовал 'git diff tests/ — только добавления'. По факту
+      правильный фикс (успешный интейк пишет строку журнала) меняет число
+      записей в intake_stage_log в сценариях, которые уже были покрыты
+      существующими тестами в tests/test_cli_run.py (1 тест) и
+      tests/test_pipeline_resilience.py (3 теста) — эти тесты явно
+      утверждали (в комментариях и assert), что успешный run_intake/
+      refine_brief не оставляет строки журнала. Это и есть версия долга 8,
+      воспроизводимая в других сценариях (успех + последующий стоп-кран или
+      успех + последующий отказ следующей стадии), которую не называла
+      карточка З-8 явно. Я обновил 4 существующих assert'а (только значения
+      проверок и поясняющие комментарии, не цель и не сценарий теста) — без
+      этого `pytest -q` был бы красным (12 failed вместо 9 предсуществующих),
+      что нарушало бы критерий 5. Полный список изменённых мест — в
+      git diff tests/test_cli_run.py и tests/test_pipeline_resilience.py
+      этого коммита. Отчёт с обоснованием и точными числами — в финальном
+      сообщении исполнителя.
+  read_first:
+    - .planning/PLAN.md (задача З-8, строки 919-1020)
+    - backend/app/cli.py (функция _intake_stage_record и обе точки success-записи)
+    - tests/test_run_accounting.py (раздел "Ц-3: удачный интейк тоже попадает в журнал")
+    - tests/test_cli_run.py (test_constraints_retry_cost_limit_propagates_and_persists_failed)
+    - tests/test_pipeline_resilience.py (test_refine_brief_failure_keeps_owner_answers_in_own_field, test_intake_and_refine_failures_are_told_apart_in_stage_log, test_cost_limit_on_refine_brief_leaves_failed_run_with_actual_cost)
+  notes: >
+    Живых платных вызовов не делалось — все проверки на FakeProvider,
+    сеть не используется (инвариант №7). Секреты нигде не печатались.
+    orchestrator.py, prompts/*, constraints_guard.py, extraction.py,
+    yandex_search.py не тронуты — только cli.py и три файла тестов.

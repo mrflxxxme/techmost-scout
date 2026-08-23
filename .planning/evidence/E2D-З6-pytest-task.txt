@@ -1,0 +1,16 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a9beb45407c921545
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+tests/test_partial_source_failure.py::test_частичный_отказ_доезжает_до_клиента PASSED [ 20%]
+tests/test_partial_source_failure.py::test_оговорка_не_задваивается_при_обоих_признаках PASSED [ 40%]
+tests/test_partial_source_failure.py::test_признак_оговорки_переживает_подмену_текста_константы PASSED [ 60%]
+tests/test_partial_source_failure.py::test_причина_отказа_в_журнале_стадии_search PASSED [ 80%]
+tests/test_partial_source_failure.py::test_текст_оговорки_совпадает_с_одобренной_редакцией_рош_129 PASSED [100%]
+
+============================== 5 passed in 0.57s ===============================

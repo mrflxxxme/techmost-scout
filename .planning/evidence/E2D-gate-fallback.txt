@@ -1,0 +1,6 @@
+=== Критерий 6: догадок адаптера в evidence нет (З-5) ===
+
+tests/test_fallback_without_guesses.py::test_откат_не_выдаёт_домен_и_modtime_за_org_и_year PASSED [ 50%]
+tests/test_fallback_without_guesses.py::test_откат_не_доносит_домен_до_промпта_карточки_и_до_отчёта PASSED [100%]
+
+============================== 2 passed in 0.38s ===============================

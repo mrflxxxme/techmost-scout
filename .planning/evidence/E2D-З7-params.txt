@@ -1,0 +1,13 @@
+З-7: фактическая строка активных параметров прогона (уровень INFO), как
+печатает `ScoutPipeline.run` первой строкой прогона — до первой платной стадии.
+Значения приведены на настройках по умолчанию из backend/app/config.py (без
+боевого .env, ключи фиктивные — как в tests/conftest.py:TEST_ENV):
+
+Параметры прогона: стоп-кран 10.00 ₽/запрос; relevance_min=0; second_pass_relevance_max=0; маршруты стадий: intake:gigachat, extractor:gigachat, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek; порядок резерва: gigachat→deepseek→yandex; модели: gigachat=GigaChat-2, deepseek=deepseek-v4-flash
+
+Получено вызовом app.pipeline.orchestrator.format_active_run_params(settings)
+на изолированных тестовых настройках (env_file отключён, TEST_ENV из
+tests/conftest.py). На боевом окружении значения relevance_min,
+second_pass_relevance_max, маршрутов стадий и модели могут отличаться —
+именно для того, чтобы это расхождение стало видно по выводу команды, а не
+по совпадению, задача и заведена (Б-2 аудита Э2-Г).

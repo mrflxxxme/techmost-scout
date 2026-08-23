@@ -788,6 +788,9 @@ _RAW_WEB = [
 
 #: Ответ модели: годный кандидат плюс запись без ссылки. `provider` и
 #: `source_type` в ответе намеренно чужие — код обязан навязать свои.
+#: `record_index` — номер записи в `_RAW_WEB` (проставляется кодом при отправке
+#: модели, здесь имитируем то, что модель называет в ответ); З-4 убрала из
+#: контракта дословный `snippet` — цитату теперь собирает код срезом записи.
 _EXTRACT_JSON = json.dumps(
     {
         "candidates": [
@@ -798,7 +801,7 @@ _EXTRACT_JSON = json.dumps(
                 "org": "ИПХФ РАН",
                 "authors": [],
                 "year": 2021,
-                "snippet": "В 2021 году в ИПХФ РАН разработан катализатор гидроочистки дизельных фракций.",
+                "record_index": 0,
                 "raw_id": None,
                 "provider": "модель-выдумщица",
             },
@@ -808,7 +811,7 @@ _EXTRACT_JSON = json.dumps(
                 "url": "",
                 "authors": [],
                 "year": None,
-                "snippet": "",
+                "record_index": 1,
                 "raw_id": None,
                 "provider": "yandex_search",
             },
@@ -1047,9 +1050,11 @@ async def test_стоп_кран_доезжает_до_записи_прогон
 # ── Н-1: текст вокруг JSON больше не обнуляет оплаченную выдачу ─────────────
 
 
-def _model_candidate(url: str, title: str) -> dict:
+def _model_candidate(url: str, title: str, *, record_index: int = 0) -> dict:
     """Кандидат в ответе модели. `provider` и `source_type` намеренно чужие —
-    код обязан навязать свои."""
+    код обязан навязать свои. `record_index` по умолчанию 0 — подходит любому
+    тесту с единственной сырой записью; тесты с несколькими записями называют
+    его явно, как назвала бы модель."""
     return {
         "source_type": "publication",
         "title": title,
@@ -1057,7 +1062,7 @@ def _model_candidate(url: str, title: str) -> dict:
         "org": "ИПХФ РАН",
         "authors": [],
         "year": 2021,
-        "snippet": "Дословная цитата со страницы.",
+        "record_index": record_index,
         "raw_id": None,
         "provider": "модель-выдумщица",
     }
@@ -1067,10 +1072,10 @@ def _model_batch(*candidates: dict, dropped: int = 0) -> str:
     return json.dumps({"candidates": list(candidates), "dropped_no_url": dropped}, ensure_ascii=False)
 
 
-#: Два годных кандидата — оба адреса есть в `_RAW_WEB`.
+#: Два годных кандидата — оба адреса есть в `_RAW_WEB`, номера записей верные.
 _EXTRACT_JSON_TWO = _model_batch(
-    _model_candidate("https://ipc.rssi.ru/lab/catalysis", "Лаборатория катализа ИПХФ РАН"),
-    _model_candidate("https://ipc.rssi.ru/news/", "Новости института"),
+    _model_candidate("https://ipc.rssi.ru/lab/catalysis", "Лаборатория катализа ИПХФ РАН", record_index=0),
+    _model_candidate("https://ipc.rssi.ru/news/", "Новости института", record_index=1),
 )
 
 
@@ -1104,9 +1109,9 @@ async def test_стадия_возвращает_всех_годных_канд�
     «первый» с «остальными» совпадали — мутация `return candidates[:1]`
     переживала весь набор (M8 аудита)."""
     ответ = _model_batch(
-        _model_candidate("https://ipc.rssi.ru/lab/catalysis", "Лаборатория катализа ИПХФ РАН"),
+        _model_candidate("https://ipc.rssi.ru/lab/catalysis", "Лаборатория катализа ИПХФ РАН", record_index=0),
         {"source_type": "web", "title": "Запись без ссылки", "url": "", "provider": "yandex_search"},
-        _model_candidate("https://ipc.rssi.ru/news/", "Новости института"),
+        _model_candidate("https://ipc.rssi.ru/news/", "Новости института", record_index=1),
         dropped=1,
     )
     router, _ = _extractor_router(settings, fake_provider_factory, [ответ])
@@ -1207,10 +1212,18 @@ async def test_кандидат_с_выдуманной_ссылкой_отбр�
     гарантия. Стадия поставила между источником и `evidence` языковую модель, и
     выдуманная ссылка проходит все машинные проверки: поле непустое, `HttpUrl`
     валиден, `evidence` непуст. Падает она там, где инвариант №1 проверяет
-    человек, — в отчёте клиенту."""
+    человек, — в отчёте клиенту.
+
+    З-4 ужесточает сверку бесплатно (мутация в): второй кандидат называет
+    ТОТ ЖЕ номер записи, что и первый (`record_index=0`), но со своим,
+    выдуманным адресом — раньше он прошёл бы, потому что его адрес не
+    совпадал ни с одним чужим адресом из ВСЕЙ выдачи; теперь адрес обязан
+    совпадать именно с адресом НАЗВАННОЙ записи."""
     ответ = _model_batch(
-        _model_candidate("https://ipc.rssi.ru/lab/catalysis", "Лаборатория катализа ИПХФ РАН"),
-        _model_candidate("https://ipc.rssi.ru/lab/catalysis/2021-report.pdf", "Отчёт, которого в выдаче не было"),
+        _model_candidate("https://ipc.rssi.ru/lab/catalysis", "Лаборатория катализа ИПХФ РАН", record_index=0),
+        _model_candidate(
+            "https://ipc.rssi.ru/lab/catalysis/2021-report.pdf", "Отчёт, которого в выдаче не было", record_index=0
+        ),
     )
     router, _ = _extractor_router(settings, fake_provider_factory, [ответ])
 
@@ -1218,7 +1231,7 @@ async def test_кандидат_с_выдуманной_ссылкой_отбр�
         found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
 
     assert [c.title for c in found] == ["Лаборатория катализа ИПХФ РАН"]
-    assert "нет в выдаче источника" in caplog.text
+    assert "не принадлежит записи" in caplog.text
 
 
 async def test_сверка_ссылок_не_придирается_к_оформлению(settings, fake_provider_factory):
@@ -1226,8 +1239,8 @@ async def test_сверка_ссылок_не_придирается_к_офор
     `www.` — оформление, а не выдумка. Иначе сверка выкашивала бы годных
     кандидатов, и её пришлось бы снять целиком."""
     ответ = _model_batch(
-        _model_candidate("https://IPC.rssi.ru/lab/catalysis/", "Лаборатория катализа ИПХФ РАН"),
-        _model_candidate("https://www.ipc.rssi.ru/news", "Новости института"),
+        _model_candidate("https://IPC.rssi.ru/lab/catalysis/", "Лаборатория катализа ИПХФ РАН", record_index=0),
+        _model_candidate("https://www.ipc.rssi.ru/news", "Новости института", record_index=1),
     )
     router, _ = _extractor_router(settings, fake_provider_factory, [ответ])
 
@@ -1324,7 +1337,7 @@ async def test_сверка_ссылок_симметрична(
         found = await stages.extract_candidates(SourceType.WEB, "yandex_search", _raw_one(сырой_адрес), router)
 
     assert [c.title for c in found] == (["Лаборатория катализа ИПХФ РАН"] if оставлен else [])
-    assert ("нет в выдаче источника" in caplog.text) is not оставлен
+    assert ("не принадлежит записи" in caplog.text) is not оставлен
 
 
 # ── П-2: трата и пробел стадии extractor видны в журнале стадий ─────────────

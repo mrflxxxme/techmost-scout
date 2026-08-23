@@ -93,11 +93,36 @@ async def test_разбирает_ответ_в_кандидатов(make_adapte
     assert card.provider == "yandex_search"
     # Подсветка <hlword> склеивается обратно в связный заголовок
     assert card.title == "Лаборатория про катализатор"
-    assert card.org == "pure.manchester.ac.uk"
-    assert card.year == 2024
+    # З-5 (находка В-2 аудита Э2-Г): раньше здесь стояло card.org ==
+    # "pure.manchester.ac.uk" и card.year == 2024 — это закрепляло дефект,
+    # из-за которого домен и время правки страницы уезжали в отчёт как
+    # подтверждённые «организация» и «год публикации» (инвариант №1). Разбор
+    # адаптера больше не строит догадки: обе догадки решает стадия extractor,
+    # а на её отказе честнее пустое поле, чем выдумка.
+    assert card.org is None
+    assert card.year is None
     assert card.snippet == "Первый фрагмент. Второй фрагмент."
     # Ключ склейки общий с другими веб-источниками
     assert card.raw_id == "pure.manchester.ac.uk/lab"
+
+
+@respx.mock
+async def test_search_raw_несёт_domain_и_modtime_для_стадии_extractor(make_adapter):
+    """Критерий 3 задачи З-5: пустые `org`/`year` у разбора адаптера не значат
+    потерю данных — сырые записи по-прежнему несут `domain` и `modtime`, из
+    которых стадия extractor вправе сделать вывод (`:442-446` — комментарий
+    у `_raw_records`, ради которого правка и делалась)."""
+    _mock_ok(_xml(_doc("https://pure.manchester.ac.uk/lab/", "Лаборатория", domain="pure.manchester.ac.uk")))
+    async with httpx.AsyncClient() as client:
+        candidates, raw = await make_adapter(client).search_raw(_query(), limit=10)
+
+    assert len(candidates) == 1
+    assert candidates[0].org is None and candidates[0].year is None
+
+    assert len(raw) == 1
+    assert raw[0]["domain"] == "pure.manchester.ac.uk"
+    assert raw[0]["modtime"] == "20240115T103000"
+    assert raw[0]["url"] == "https://pure.manchester.ac.uk/lab/"
 
 
 @pytest.mark.parametrize(

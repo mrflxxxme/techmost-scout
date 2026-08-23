@@ -1,0 +1,19 @@
+=== БАЗОВАЯ ЛИНИЯ ВОЛНЫ Э2-Д ===
+снято оркестратором до слияния первой задачи, вершина ветки: 4e1e888
+(первый замер поймал собственную регрессию оркестратора: STATE.md 4278 байт при пределе 4096 — исправлено до 3086 и перезамерено)
+
+--- команда с очисткой боевых переменных (пока З-1 не слита) ---
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+664 passed, 1 warning in 43.13s
+
+--- голая команда (дыра, которую закрывает З-1) ---
+FAILED tests/test_contest_gate_and_order.py::test_при_выключенной_отсечке_конкурсная_очередь_прежняя
+FAILED tests/test_contest_gate_and_order.py::test_сводка_собирается_до_конкурсной_секции
+FAILED tests/test_contest_gate_and_order.py::test_журнал_стадий_ставит_конкурсные_карточки_после_сводки
+FAILED tests/test_contest_gate_and_order.py::test_прогон_без_конкурсных_кандидатов_не_добавляет_строку_журнала
+FAILED tests/test_llm_router.py::test_short_answer_stage_goes_to_free_provider
+FAILED tests/test_llm_router.py::test_chain_puts_preferred_first - AssertionE...
+FAILED tests/test_pipeline_second_pass.py::test_при_выключенном_пороге_прогон_совпадает_с_прежним
+FAILED tests/test_probe.py::test_режим_поиска_без_ключа_не_падает_и_сообщает_причину
+FAILED tests/test_probe.py::test_режим_поиска_без_ключа_не_падает_и_сообщает_причину
+8 failed, 656 passed, 1 warning in 42.10s
