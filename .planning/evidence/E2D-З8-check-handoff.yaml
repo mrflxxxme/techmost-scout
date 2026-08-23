@@ -1,0 +1,33 @@
+handoff:
+  from: reviewer
+  to: verifier
+  task: З-8
+  did:
+    - "Сверены diff и handoff исполнителя с карточкой З-8 (PLAN.md, строки 919-1020)"
+    - "Проверены все 10 инвариантов способами из INVARIANTS.md, нарушений не найдено"
+    - "Поставлены и сняты 4 мутации карточки прицельным прогоном (а, б, в, г) — все убивают ожидаемые тесты, дерево чистое после каждой"
+    - "Разобраны цифры 658/9 vs 687/0: подтверждено, что 8 отказов — загрязнение окружения оболочки (боевые переменные среды сессии), 1 (test_state_stays_short) — предсуществующий баг вне задачи, воспроизведён и на 0f6ffd3"
+    - "Разобрана эскалация о выходе за границы (tests/test_cli_run.py, tests/test_pipeline_resilience.py): независимо подтверждено, что без правки этих 4 ассертов pytest -q даёт 12 failed вместо 9 — выход обоснован и раскрыт, не блокирует"
+    - "Прогнаны ruff check и ruff format --check — чисто"
+  artifacts:
+    - .planning/evidence/E2D-З8-check.md (закоммичен до ответа)
+    - .planning/evidence/E2D-З8-check-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_run_accounting.py -v: 8 passed"
+    - "pytest -q (чистое окружение): 666 passed, 1 failed (test_state_stays_short, предсуществующий, не относится к З-8)"
+    - "pytest -q (загрязнённое окружение сессии): 658 passed, 9 failed — совпадает с заявлением исполнителя"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 116 files already formatted"
+    - "мутации (а)(б)(в)(г): все 4 убивают ожидаемые тесты"
+  escalate: none
+  read_first:
+    - .planning/evidence/E2D-З8-check.md
+    - .planning/PLAN.md (задача З-8, строки 919-1020)
+    - backend/app/cli.py (_intake_stage_record и обе точки success-записи)
+  notes: >
+    Вердикт ПРИНЯТЬ. Роли ревью и верификации слиты (РЕШ-131): критерии
+    приёмки прогнаны лично, числа исполнителя не приняты на слово.
+    Это цикл 1, доработка не требуется. test_state_stays_short падает вне
+    зависимости от этой задачи — рост .planning/STATE.md, не в списке файлов
+    З-8 и не в зоне ответственности исполнителя (пишет только оркестратор).
