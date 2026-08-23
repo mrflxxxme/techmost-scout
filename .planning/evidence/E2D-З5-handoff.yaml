@@ -1,0 +1,45 @@
+handoff:
+  from: implementer-E
+  to: reviewer
+  task: "З-5"
+  did:
+    - "Адаптер backend/app/search/yandex_search.py больше не выдаёт org=домен и year=год из modtime за подтверждённые факты — оба поля Candidate теперь всегда None у разбора адаптера (места :425/:429 из находки В-2 аудита Э2-Г)"
+    - "Сырые записи _raw_records по-прежнему несут domain и modtime — стадия extractor вправе сделать вывод сама, поведение _raw_records не менялось"
+    - "Удалена мёртвая функция _year_from_modtime (единственный вызов убран вместе с year=... в _to_candidate)"
+    - "Диагностика health() пересчитана на уникальные хосты по raw_id вместо c.org (иначе доктор всегда показывал бы «доменов 0» — прямое следствие фикса, тот же файл)"
+    - "Новый сквозной тест tests/test_fallback_without_guesses.py (2 теста): respx отдаёт XML Яндекса, стадия extractor отказывает (невалидный JSON и на основном вызове, и на ремонтном) — проверены и разбор адаптера (org/year None, число кандидатов сохранено, лог и problems несут «беру/взят разбор адаптера»), и то, что домен не просачивается ни в промпт card_author (candidates_to_json отдаёт \"org\": null), ни в отрендеренный markdown-отчёт (там «не найдено»)"
+    - "tests/test_search_yandex.py: добавлен test_search_raw_несёт_domain_и_modtime_для_стадии_extractor (критерий 3); ожидания :96-97 (card.org == \"pure.manchester.ac.uk\", card.year == 2024) заменены на card.org is None / card.year is None с пояснением в коде, почему это сознательная правка, а не потеря покрытия"
+  artifacts:
+    - backend/app/search/yandex_search.py
+    - tests/test_search_yandex.py
+    - tests/test_fallback_without_guesses.py
+    - .planning/evidence/E2D-З5-pytest-fallback.txt
+    - .planning/evidence/E2D-З5-pytest-search-yandex.txt
+    - .planning/evidence/E2D-З5-pytest-full.txt
+    - .planning/evidence/E2D-З5-ruff-check.txt
+    - .planning/evidence/E2D-З5-ruff-format.txt
+    - .planning/evidence/E2D-З5-mutations.md
+  self_audit: pass
+  checks:
+    - "pytest tests/test_fallback_without_guesses.py -v: 2 passed"
+    - "pytest tests/test_search_yandex.py -v: 31 passed"
+    - "env -u RELEVANCE_MIN -u SECOND_PASS_RELEVANCE_MAX -u YANDEX_SEARCH_API_KEY -u YANDEX_CATALOG_ID -u LLM_STAGE_ROUTES -u LLM_FALLBACK_ORDER pytest -q --deselect tests/test_team_docs.py::test_state_stays_short: 666 passed, 1 deselected (базовая линия волны — 664)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 117 files already formatted"
+    - "4 мутации (а/б/в/г) прицельно убивают тесты — детали в .planning/evidence/E2D-З5-mutations.md; дерево восстановлено между ними, git status --short чист от посторонних файлов"
+    - "git diff --name-only: backend/app/search/yandex_search.py, tests/test_search_yandex.py — backend/app/pipeline/ не тронут"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (задача З-5, строки 684-755)"
+    - "docs/SPEC.md (раздел Э2-3, §0.1 «грабли»)"
+    - "backend/app/search/yandex_search.py (_to_candidate, _raw_records, health)"
+    - "tests/test_fallback_without_guesses.py"
+    - ".planning/evidence/E2D-З5-mutations.md"
+  notes: >
+    Живых вызовов не делал — всё на respx и заглушках провайдера. Health()
+    поправлен на подсчёт доменов по raw_id вместо org — без этого доктор
+    всегда показывал бы «доменов 0» как побочный эффект фикса; правка в том же
+    файле, задачи не расширяет. За пределами задачи: platform-подсказка
+    _card_platform в export/markdown.py тоже берёт хост из candidate_urls, а
+    не из org — уже безопасна и трогать её не пришлось, упоминаю на случай,
+    если ревьюер тоже отследит цепочку до неё.

@@ -1,0 +1,35 @@
+handoff:
+  from: reviewer
+  to: verifier-next-or-orchestrator
+  task: "З-5"
+  did:
+    - "Прочитаны PLAN.md (строки 684-755), INVARIANTS.md, CONVENTIONS.md §5/§7, diff и изменённые файлы целиком"
+    - "Прогнан diff-независимо: пересчитаны все команды критериев 1-6, ruff, полный набор pytest"
+    - "Прочитан tests/test_fallback_without_guesses.py целиком — проверка сквозная (до отрендеренного markdown), не подменена на слабую"
+    - "Проверены все десять инвариантов способами из INVARIANTS.md"
+    - "Независимо воспроизведены мутации (а) и (б); дерево восстановлено и сверено побайтово с HEAD"
+    - "Оценена правка health() (критерий г) — признана вынужденным следствием фикса, а не выходом за границы"
+  artifacts:
+    - .planning/evidence/E2D-З5-check.md (закоммичен до ответа)
+    - .planning/evidence/E2D-З5-check-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_fallback_without_guesses.py -v: 2 passed"
+    - "pytest tests/test_search_yandex.py -v: 31 passed"
+    - "pytest -q (полный набор, окружение без ключевых env, --deselect test_state_stays_short): 666 passed, 1 deselected"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 117 files already formatted"
+    - "мутация (а) org из домена: 4 failed"
+    - "мутация (б) year из modtime: 4 failed"
+    - "git status --porcelain после восстановления дерева: пусто"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-5, строки 684-755)
+    - .planning/evidence/E2D-З5-check.md
+    - backend/app/search/yandex_search.py
+    - tests/test_fallback_without_guesses.py
+  notes: >
+    Цикл 1, вердикт ПРИНЯТЬ. Блокирующих находок нет, два совета (пробел в
+    покрытии успешного пути health() — унаследованный, не введён этой задачей;
+    наблюдение исполнителя про _card_platform вне скоупа). Второго цикла для
+    этой задачи не требуется.

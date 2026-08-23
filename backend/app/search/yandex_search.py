@@ -177,7 +177,9 @@ class YandexSearchAdapter(SearchAdapter):
     min_interval_seconds = 0.5
     #: Выдача веб-поиска неструктурирована: заголовок и куски текста страницы.
     #: Организацию, год и авторов из неё достаёт стадия extractor (Э2-5), а не
-    #: разбор XML — домен и modtime это лишь самая честная догадка кода.
+    #: разбор XML — сам разбор оставляет `org`/`year` пустыми (находка В-2
+    #: аудита Э2-Г, инвариант №1, задача З-5): домен и время правки страницы
+    #: не доказывают ни организацию, ни год публикации.
     needs_extraction = True
 
     def __init__(
@@ -308,7 +310,11 @@ class YandexSearchAdapter(SearchAdapter):
             return False, f"{type(exc).__name__}: {exc}"
         if not found:
             return False, "ключ принят, но выдача пуста — проверьте биллинг и права сервисного аккаунта"
-        domains = {c.org for c in found if c.org}
+        # Считаем домены по `raw_id` (нормализованный адрес — `хост/путь`), а не
+        # по `org`: после З-5 `org` у разбора адаптера всегда пуст (домен
+        # больше не выдаётся за организацию), но для диагностики доктора счёт
+        # уникальных хостов остался нужен и берётся напрямую из ссылки.
+        domains = {(c.raw_id or "").split("/", 1)[0] for c in found if c.raw_id}
         return True, f"ок, мировой контур: ссылок {len(found)}, доменов {len(domains)}, 1 платный запрос"
 
     async def _run_search(self, text: str, *, search_type: str, limit: int) -> bytes | None:
@@ -420,13 +426,20 @@ class YandexSearchAdapter(SearchAdapter):
                 source_type=source_type,
                 title=title,
                 url=url,
-                # Домен — самая честная догадка о том, чья это разработка:
-                # pure.manchester.ac.uk говорит больше, чем заголовок страницы
-                org=(doc.findtext("domain") or "").strip() or None,
-                # modtime — время правки страницы, а не публикации работы.
-                # Другого сигнала у веб-страницы нет, поэтому берём его, но
-                # понимаем: свежая правка старой страницы даст свежий год.
-                year=_year_from_modtime(doc.findtext("modtime")),
+                # `org`/`year` умышленно не заполняются доменом и `modtime`
+                # (находка В-2 аудита Э2-Г, инвариант №1): домен — это
+                # предположение о владельце страницы, а не подтверждённое
+                # первоисточником имя организации, и `modtime` — время правки
+                # страницы, а не год публикации работы. Решать, что из них
+                # следует, обязана стадия `extractor` (см. `_raw_records` ниже);
+                # разбор адаптера — только запасной путь на её отказ, и в этом
+                # запасном пути пустое поле честнее выдумки: отчёт печатает
+                # «не найдено» вместо угаданного факта. Домен при этом не
+                # теряется — он всё ещё есть в `url` и в `raw_id`, а прежняя
+                # группировка карточек по `org` для веба и раньше сводилась к
+                # группировке по домену, значит поведение группировки не меняется.
+                org=None,
+                year=None,
                 snippet=snippet[:MAX_SNIPPET],
                 raw_id=normalize_url(url),
                 provider=self.name,
@@ -529,13 +542,3 @@ def _text_of(node: Any) -> str:
     if node is None:
         return ""
     return " ".join(" ".join(node.itertext()).split())
-
-
-def _year_from_modtime(value: str | None) -> int | None:
-    """modtime приходит как 20190627T045553 — год это первые четыре знака."""
-    if not value or len(value) < 4:
-        return None
-    try:
-        return int(value[:4])
-    except ValueError:
-        return None

@@ -1,0 +1,42 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a01cda7213544a046
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 31 items
+
+tests/test_search_yandex.py::test_разбирает_ответ_в_кандидатов PASSED    [  3%]
+tests/test_search_yandex.py::test_search_raw_несёт_domain_и_modtime_для_стадии_extractor PASSED [  6%]
+tests/test_search_yandex.py::test_контур_выбирается_по_языку_формулировки[ru-SEARCH_TYPE_RU] PASSED [  9%]
+tests/test_search_yandex.py::test_контур_выбирается_по_языку_формулировки[en-SEARCH_TYPE_COM] PASSED [ 12%]
+tests/test_search_yandex.py::test_метка_контура_совпадает_с_выбором_по_языку[ru-yandex-ru] PASSED [ 16%]
+tests/test_search_yandex.py::test_метка_контура_совпадает_с_выбором_по_языку[en-yandex-com] PASSED [ 19%]
+tests/test_search_yandex.py::test_предел_платных_запросов_на_прогон PASSED [ 22%]
+tests/test_search_yandex.py::test_грантовый_маркер_в_web_формулировке_сужает_до_реестров_только_в_ru PASSED [ 25%]
+tests/test_search_yandex.py::test_дубли_по_адресу_склеиваются PASSED     [ 29%]
+tests/test_search_yandex.py::test_отказ_внутри_xml_поднимает_searcherror PASSED [ 32%]
+tests/test_search_yandex.py::test_незавершившаяся_операция_поднимает_searcherror PASSED [ 35%]
+tests/test_search_yandex.py::test_поиск_не_запустился_поднимает_searcherror PASSED [ 38%]
+tests/test_search_yandex.py::test_опрос_операции_не_отвечает_поднимает_searcherror PASSED [ 41%]
+tests/test_search_yandex.py::test_ошибка_операции_возвращает_пусто PASSED [ 45%]
+tests/test_search_yandex.py::test_без_ключей_поиск_пуст_и_здоровье_отрицательно PASSED [ 48%]
+tests/test_search_yandex.py::test_источник_включается_только_с_обоими_настройками PASSED [ 51%]
+tests/test_search_yandex.py::test_страница_из_двух_поисковиков_склеивается_в_одного_кандидата PASSED [ 54%]
+tests/test_search_yandex.py::test_конкурсная_формулировка_с_якорем_итогов_уходит_без_сужения PASSED [ 58%]
+tests/test_search_yandex.py::test_contest_outcome_markers_состав_дословно_по_реш_117 PASSED [ 61%]
+tests/test_search_yandex.py::test_has_contest_outcome_marker_ловит_каждый_якорь_по_отдельности[\u043f\u043e\u0431\u0435\u0434\u0438\u0442\u0435\u043b] PASSED [ 64%]
+tests/test_search_yandex.py::test_has_contest_outcome_marker_ловит_каждый_якорь_по_отдельности[\u043f\u0440\u0438\u0437\u0451\u0440] PASSED [ 67%]
+tests/test_search_yandex.py::test_has_contest_outcome_marker_ловит_каждый_якорь_по_отдельности[\u043f\u0440\u0438\u0437\u0435\u0440] PASSED [ 70%]
+tests/test_search_yandex.py::test_has_contest_outcome_marker_ловит_каждый_якорь_по_отдельности[\u0438\u0442\u043e\u0433\u0438 \u0445\u0430\u043a\u0430\u0442\u043e\u043d\u0430] PASSED [ 74%]
+tests/test_search_yandex.py::test_has_contest_outcome_marker_ловит_каждый_якорь_по_отдельности[\u043f\u0440\u043e\u0435\u043a\u0442 \u043a\u043e\u043c\u0430\u043d\u0434\u044b] PASSED [ 77%]
+tests/test_search_yandex.py::test_has_contest_outcome_marker_false_без_единого_якоря PASSED [ 80%]
+tests/test_search_yandex.py::test_конкурсная_формулировка_доходит_до_адаптера_и_сужается_до_площадок PASSED [ 83%]
+tests/test_search_yandex.py::test_конкурсное_сужение_перечисляет_все_площадки PASSED [ 87%]
+tests/test_search_yandex.py::test_грантовая_формулировка_не_получает_конкурсных_площадок PASSED [ 90%]
+tests/test_search_yandex.py::test_конкурсная_формулировка_не_получает_грантовых_реестров PASSED [ 93%]
+tests/test_search_yandex.py::test_конкурсные_формулировки_не_поднимают_предел_платных_запросов PASSED [ 96%]
+tests/test_search_yandex.py::test_в_коде_нет_прямого_обращения_к_api_devpost PASSED [100%]
+
+============================== 31 passed in 8.34s ==============================
