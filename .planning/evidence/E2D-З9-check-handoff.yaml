@@ -1,0 +1,50 @@
+handoff:
+  from: reviewer
+  to: verifier-orchestrator
+  task: З-9
+  did:
+    - "Порядок §12 подтверждён историей git: 77189c4 (диагноз + падающий тест,
+       constraints_guard.py не тронут) до af0be76 (фикс); независимо
+       воспроизвёл падение теста из 77189c4 на коде того же коммита - 2
+       failed, 22 passed, дословно совпадает с evidence/E2D-З9-red.txt"
+    - "Числа диагноза сверены с data/scout.db в режиме ?mode=ro лично:
+       status='drafted', cost_rub=9.182, briefs пуст (0), solution_cards=5,
+       pipeline_logs без intake/intake_constraints - всё совпадает"
+    - "Цитаты отчётов E2G/E2V сверены грепом лично - совпадают дословно"
+    - "3 из 5 мутаций (а, б, г) воспроизведены независимо прицельным прогоном
+       tests/test_constraints_guard.py - все три убиты (4, 2 и 3 failed
+       соответственно), дерево восстановлено, git status --porcelain пуст"
+    - "Проверен пункт про цену: здоровый прогон (маркеры покрыты либо их нет)
+       не делает лишнего платного вызова - подтверждено тестом и повторным
+       прогоном"
+    - "Голая команда pytest в копии дала 659 passed/8 failed - разобрал
+       расхождение до причины: env-загрязнение (долг З-1, не влит в базу
+       копии) плюс отставание orchestrator.py от З-5/З-6; с очисткой env,
+       которую указал исполнитель, воспроизвёл дословно 667 passed/0 failed"
+    - "ruff check и ruff format --check зелёные; секреты не найдены и не
+       процитированы даже частично; границы файлов задачи соблюдены"
+  artifacts:
+    - .planning/evidence/E2D-З9-check.md (закоммичен до ответа)
+    - .planning/evidence/E2D-З9-check-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_constraints_guard.py -v: 24 passed"
+    - "pytest на коде коммита 77189c4 (тест того же коммита): 2 failed, 22 passed"
+    - "мутация (а) условие расширено: 4 failed"
+    - "мутация (б) слияние заменено затиранием: 2 failed"
+    - "мутация (г) вызовов стало два: 3 failed"
+    - "pytest -q (env очищен как в checks исполнителя) --deselect test_state_stays_short: 667 passed, 1 deselected"
+    - "pytest -q голой командой в копии: 659 passed, 8 failed, 1 deselected - расхождение объяснено (долг З-1 + отставание orchestrator.py от З-5/З-6, не дефект З-9)"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 116 files already formatted"
+    - "grep -rE 'sk-|gigachat|Api-Key' backend/ tests/: только имена переменных/классов, значений нет"
+    - "git diff --name-only 0f6ffd3..HEAD: только constraints_guard.py, test_constraints_guard.py, evidence/E2D-З9-*"
+  escalate: none
+  read_first:
+    - .planning/evidence/E2D-З9-check.md
+    - .planning/PLAN.md (задача З-9, строки 828-915)
+  notes: >-
+    Вердикт: ПРИНЯТЬ. Блокирующих находок нет. Единственный совет - не
+    блокирует: диагноз честно называет находку вне границ (пустая таблица
+    briefs) и не правит её, решение перенесено РЕШ-156 в план этапа 3. Это
+    цикл 1, второй не потребовался.
