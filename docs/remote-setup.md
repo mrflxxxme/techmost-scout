@@ -33,8 +33,7 @@
 
 | Переменная | Что даёт | Без неё |
 |---|---|---|
-| `GIGACHAT_AUTH_KEY` | основная модель, бесплатный тариф | падает интейк и разбор выдачи |
-| `DEEPSEEK_API_KEY` | качественные стадии: планировщик, скоринг, карточки, сводка | падает почти весь конвейер |
+| `DEEPSEEK_API_KEY` | основная модель, все восемь стадий (РЕШ-171: ГигаЧат выпилен из кода) | падает весь конвейер |
 | `YANDEX_SEARCH_API_KEY` + `YANDEX_CATALOG_ID` | платный поиск по русскому вебу | нет веб-кандидатов и всего конкурсного класса |
 | `ROSPATENT_API_KEY` | патенты Роспатента | нет патентных кандидатов (в воротном прогоне давали 20 из 147) |
 
@@ -56,7 +55,7 @@
 ```
 COST_LIMIT_RUB_PER_REQUEST=20     # боевой стоп-кран на запрос (РЕШ-46)
 SECOND_PASS_RELEVANCE_MAX=6       # порог второго прохода (РЕШ-103)
-LLM_STAGE_ROUTES=intake:deepseek,extractor:gigachat,planner:deepseek,replan:deepseek,scorer:deepseek,card_author:deepseek,verifier:deepseek,summary:deepseek
+LLM_STAGE_ROUTES=intake:deepseek,extractor:deepseek,planner:deepseek,replan:deepseek,scorer:deepseek,card_author:deepseek,verifier:deepseek,summary:deepseek
 ```
 
 **`GOOGLE_API_KEY` и `GOOGLE_CSE_ID` вносить не нужно** — источник удалён
@@ -83,9 +82,11 @@ python -m app.cli doctor
 python -m pytest -q
 ```
 
-Ожидаемое на вершине `main`: **664 passed**. Тесты изолированы от боевого
-окружения (задача З-1 подэтапа Э2-В): числа не меняются от присутствия `.env`
-рядом, и в рабочую базу тесты не пишут.
+Ожидаемое — не меньше базовой линии текущей волны (см.
+`.planning/evidence/E2J-baseline-pytest.txt`; на момент правки — 753 passed).
+Точное число растёт с каждой волной и не переписывается здесь вручную. Тесты
+изолированы от боевого окружения (задача З-1 подэтапа Э2-В): числа не
+меняются от присутствия `.env` рядом, и в рабочую базу тесты не пишут.
 
 ## Две ловушки, стоившие нам денег и времени
 
