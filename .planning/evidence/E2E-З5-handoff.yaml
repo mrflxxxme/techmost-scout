@@ -1,0 +1,57 @@
+handoff:
+  from: implementer-B
+  to: reviewer
+  task: З-5
+  did:
+    - "Строка активных параметров прогона (format_active_run_params) теперь печатается
+       в cli._run сразу после get_settings(), до init_db и до run_intake — отложенным
+       импортом из фасада app.pipeline.orchestrator, тем же приёмом, каким cli.py
+       уже берёт cost_delta."
+    - "Печать в ScoutPipeline.run (run_flow.py:88) не тронута: она нужна веб-прогону
+       и прямым вызовам пайплайна (тесты, scout serve). Задваивание строки в логе
+       scout run — сознательная цена, названа комментарием на месте правки."
+    - "Три новых теста в tests/test_cli_run.py: строка на стоп-кране интейка
+       (test_params_line_printed_when_intake_stops_on_cost_limit), порядок печати
+       до вызова run_intake с проверкой нулевого счётчика роутера
+       (test_params_line_printed_before_run_intake_is_called), отсутствие
+       задвоения на успешном прогоне (test_params_line_not_duplicated_by_pipeline_on_successful_run)."
+  artifacts:
+    - backend/app/cli.py
+    - tests/test_cli_run.py
+  self_audit: pass
+  checks:
+    - "pytest tests/test_cli_run.py -v: 22 passed"
+    - "pytest tests/test_run_visibility.py -v: 5 passed (файл не правился)"
+    - "pytest -q: 719 passed, 0 failed (базовая линия 716 + 3 новых теста)"
+    - "grep -n \"format_active_run_params\" backend/app/cli.py: строки 329, 331 — совпадение есть"
+    - "ruff check . && ruff format --check .: All checks passed, 132 files already formatted"
+    - "мутация (а) печать перенесена после run_intake: убивает оба критерия
+       (test_params_line_printed_when_intake_stops_on_cost_limit,
+       test_params_line_printed_before_run_intake_is_called) — восстановлено"
+    - "мутация (б) печать только в успешной ветке try: убивает критерий 1
+       (test_params_line_printed_when_intake_stops_on_cost_limit, assert 1 не выполнен) — восстановлено"
+    - "мутация (в) печать удалена из run_flow.py: убивает tests/test_run_visibility.py
+       (3 из 5 тестов) — восстановлено"
+    - "мутация (г) вместо format_active_run_params печатается своя строка: убивает
+       все три новых теста (запись не начинается с «Параметры прогона:») — восстановлено"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-5, строки 482-542)
+    - backend/app/cli.py (функция _run, правка вокруг строки 317-331)
+    - backend/app/pipeline/run_journal.py (format_active_run_params — не менялся)
+    - backend/app/pipeline/run_flow.py (строка 88 — не менялась)
+    - tests/test_cli_run.py (три новых теста в конце файла)
+  notes: >
+    Первым шагом обнаружено расхождение базы worktree с верхушкой ветки волны
+    (РЕШ-158): рабочая копия стояла на 87575fe (main), ветка волны
+    claude/remote-work-readiness-check-ze0wg3 ушла вперёд до 9d176ef (З-1, З-2
+    слиты). Подтянуто fast-forward перед первой строкой кода, базовая линия
+    после подтяжки — 716 passed (совпадает с постановкой). Во время мутационных
+    проверок один раз ошибочно вызвал git checkout -- на файле, который ещё не
+    был закоммичен, и потерял первую версию правки cli.py — правка была тут же
+    восстановлена по памяти и повторно проверена полным набором тестов и ruff,
+    после чего немедленно закоммичена (до дальнейших мутаций) — дальше все
+    мутации ставились и снимались уже безопасно (файл в git, checkout не
+    рискован). run_flow.py, run_journal.py, prompts/, history.py, export/ не
+    трогал. cli.py вырос с 656 до 669 строк (комментарий + отложенный импорт +
+    вызов) — дробление файла остаётся отдельным отложенным долгом, не моим.

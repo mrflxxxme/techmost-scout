@@ -1,0 +1,219 @@
+=== ВОРОТНЫЙ ПРОГОН Э2-Е, фарма (накопительный поиск, порог 3) ===
+старт: 2026-08-23T17:58:26Z
+app из: /home/user/techmost-scout/backend/app/__init__.py
+--- фактические переменные окружения, влияющие на прогон (только ИМЕНА и не-секретные значения) ---
+LLM_STAGE_ROUTES=intake:deepseek,extractor:deepseek ,planner:deepseek,replan:deepseek,scorer:deepseek,card_author:deepseek,verifier:deepseek,summary:deepseek
+LLM_FALLBACK_ORDER=gigachat,deepseek,yandex
+DEEPSEEK_MODEL=deepseek-v4-flash-vision-exp
+RELEVANCE_MIN=3 SECOND_PASS_RELEVANCE_MAX=6 COST_LIMIT_RUB_PER_REQUEST=20
+17:58:27 INFO    __main__ | Параметры прогона: стоп-кран 20.00 ₽/запрос; relevance_min=3; second_pass_relevance_max=6; маршруты стадий: intake:deepseek, extractor:deepseek, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek; порядок резерва: gigachat→deepseek→yandex; модели: gigachat=GigaChat-2, deepseek=deepseek-v4-flash-vision-exp
+17:58:28 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+17:59:29 WARNING app.llm.router | стадия intake: ответ обрезан по лимиту токенов, переспрашиваю с лимитом 16000
+17:59:31 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+Бриф: Нужно решение на базе ИИ для автоматического анализа УЗИ свиноматок, 
+определяющее супоросность, прохолост и микроаборт. Сейчас диагностика ведётся 
+вручную ветеринарами. Требуемая точность — 95–98%, TRL — от 6 до 9. 
+(свиноводство)
+
+18:00:26 INFO    app.pipeline.orchestrator | Параметры прогона: стоп-кран 20.00 ₽/запрос; relevance_min=3; second_pass_relevance_max=6; маршруты стадий: intake:deepseek, extractor:deepseek, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek; порядок резерва: gigachat→deepseek→yandex; модели: gigachat=GigaChat-2, deepseek=deepseek-v4-flash-vision-exp
+18:00:26 INFO    app.pipeline.orchestrator | из истории взято 330
+18:00:26 INFO    app.pipeline.orchestrator | [planner] Составляю план поиска
+  5% planner  Составляю план поиска
+18:00:27 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:01:28 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+18:01:28 INFO    app.llm.router | стадия planner: прошу модель починить JSON (ValidationError)
+18:01:29 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:01:53 INFO    app.pipeline.orchestrator | [planner] Формулировок в плане: 8
+ 10% planner  Формулировок в плане: 8
+18:01:53 INFO    app.pipeline.orchestrator | [search] Опрашиваю источники
+ 15% search   Опрашиваю источники
+18:01:53 INFO    app.search | источник google_search выключен: нет настроек google_api_key, google_cse_id
+18:01:53 INFO    app.search | активные источники: showcase, crossref, cyberleninka, arxiv, semanticscholar, rospatent, openalex, yandex_search
+18:01:53 INFO    app.pipeline.orchestrator | подключено источников: showcase, crossref, cyberleninka, arxiv, semanticscholar, rospatent, openalex, yandex_search
+18:01:53 INFO    httpx | HTTP Request: GET http://export.arxiv.org/api/query?search_query=all%3Adeep+AND+all%3Alearning+AND+all%3Aultrasound+AND+all%3Adiagnosis+AND+all%3Asow+AND+all%3Apregnancy&start=0&max_results=20 "HTTP/1.1 403 Forbidden"
+18:01:53 WARNING app.pipeline.orchestrator | источник arxiv не смог выполнить поиск «deep learning ultrasound diagnosis sow pregnancy embryonic resorption»: arxiv не ответил на «all:deep AND all:learning AND all:ultrasound AND all:diagnosis AND all:sow AND all:pregnancy»: Client error '403 Forbidden' for url 'http://export.arxiv.org/api/query?search_query=all%3Adeep+AND+all%3Alearning+AND+all%3Aultrasound+AND+all%3Adiagnosis+AND+all%3Asow+AND+all%3Apregnancy&start=0&max_results=20'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403
+18:01:53 INFO    httpx | HTTP Request: GET https://api.openalex.org/works?search=%D0%BC%D0%B0%D1%88%D0%B8%D0%BD%D0%BD%D0%BE%D0%B5+%D0%BE%D0%B1%D1%83%D1%87%D0%B5%D0%BD%D0%B8%D0%B5+%D1%83%D0%BB%D1%8C%D1%82%D1%80%D0%B0%D0%B7%D0%B2%D1%83%D0%BA%D0%BE%D0%B2%D0%B0%D1%8F+%D0%B4%D0%B8%D0%B0%D0%B3%D0%BD%D0%BE%D1%81%D1%82%D0%B8%D0%BA%D0%B0+%D1%81%D1%83%D0%BF%D0%BE%D1%80%D0%BE%D1%81%D0%BD%D0%BE%D1%81%D1%82%D1%8C+%D1%81%D0%B2%D0%B8%D0%BD%D0%BE%D0%BC%D0%B0%D1%82%D0%BA%D0%B8&filter=language%3Aru%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 429 Too Many Requests"
+18:01:53 WARNING app.pipeline.orchestrator | источник openalex не смог выполнить поиск «машинное обучение ультразвуковая диагностика супоросность свиноматки»: openalex не ответил на поиск «машинное обучение ультразвуковая диагностика супоросность свиноматки»: Client error '429 Too Many Requests' for url 'https://api.openalex.org/works?search=%D0%BC%D0%B0%D1%88%D0%B8%D0%BD%D0%BD%D0%BE%D0%B5+%D0%BE%D0%B1%D1%83%D1%87%D0%B5%D0%BD%D0%B8%D0%B5+%D1%83%D0%BB%D1%8C%D1%82%D1%80%D0%B0%D0%B7%D0%B2%D1%83%D0%BA%D0%BE%D0%B2%D0%B0%D1%8F+%D0%B4%D0%B8%D0%B0%D0%B3%D0%BD%D0%BE%D1%81%D1%82%D0%B8%D0%BA%D0%B0+%D1%81%D1%83%D0%BF%D0%BE%D1%80%D0%BE%D1%81%D0%BD%D0%BE%D1%81%D1%82%D1%8C+%D1%81%D0%B2%D0%B8%D0%BD%D0%BE%D0%BC%D0%B0%D1%82%D0%BA%D0%B8&filter=language%3Aru%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429
+18:01:53 INFO    httpx | HTTP Request: GET https://api.openalex.org/works?search=deep+learning+ultrasound+diagnosis+sow+pregnancy+embryonic+resorption&filter=language%3Aen%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 429 Too Many Requests"
+18:01:53 WARNING app.pipeline.orchestrator | источник openalex не смог выполнить поиск «deep learning ultrasound diagnosis sow pregnancy embryonic resorption»: openalex не ответил на поиск «deep learning ultrasound diagnosis sow pregnancy embryonic resorption»: Client error '429 Too Many Requests' for url 'https://api.openalex.org/works?search=deep+learning+ultrasound+diagnosis+sow+pregnancy+embryonic+resorption&filter=language%3Aen%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429
+18:01:53 INFO    httpx | HTTP Request: GET https://api.semanticscholar.org/graph/v1/paper/search?query=%D0%BC%D0%B0%D1%88%D0%B8%D0%BD%D0%BD%D0%BE%D0%B5+%D0%BE%D0%B1%D1%83%D1%87%D0%B5%D0%BD%D0%B8%D0%B5+%D1%83%D0%BB%D1%8C%D1%82%D1%80%D0%B0%D0%B7%D0%B2%D1%83%D0%BA%D0%BE%D0%B2%D0%B0%D1%8F+%D0%B4%D0%B8%D0%B0%D0%B3%D0%BD%D0%BE%D1%81%D1%82%D0%B8%D0%BA%D0%B0+%D1%81%D1%83%D0%BF%D0%BE%D1%80%D0%BE%D1%81%D0%BD%D0%BE%D1%81%D1%82%D1%8C+%D1%81%D0%B2%D0%B8%D0%BD%D0%BE%D0%BC%D0%B0%D1%82%D0%BA%D0%B8&limit=20&fields=title%2Cabstract%2Cyear%2Cauthors%2CexternalIds%2Curl%2CopenAccessPdf "HTTP/1.1 429 "
+18:01:53 WARNING app.pipeline.orchestrator | источник semanticscholar не смог выполнить поиск «машинное обучение ультразвуковая диагностика супоросность свиноматки»: semanticscholar: лимит запросов исчерпан (429), ключ не задан и пул общий
+18:01:54 INFO    httpx | HTTP Request: POST https://cyberleninka.ru/api/search "HTTP/1.1 200 OK"
+18:01:54 INFO    app.search.cyberleninka | cyberleninka: в ответе нет статей (found=0)
+18:01:54 INFO    httpx | HTTP Request: GET https://api.crossref.org/works?query.bibliographic=deep+learning+ultrasound+diagnosis+sow+pregnancy+embryonic+resorption&rows=20&filter=from-pub-date%3A2014-01-01&select=DOI%2Ctitle%2Ccontainer-title%2Cauthor%2Cissued%2Cabstract%2CURL&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 200 OK"
+18:01:54 INFO    httpx | HTTP Request: GET https://api.crossref.org/works?query.bibliographic=%D0%BC%D0%B0%D1%88%D0%B8%D0%BD%D0%BD%D0%BE%D0%B5+%D0%BE%D0%B1%D1%83%D1%87%D0%B5%D0%BD%D0%B8%D0%B5+%D1%83%D0%BB%D1%8C%D1%82%D1%80%D0%B0%D0%B7%D0%B2%D1%83%D0%BA%D0%BE%D0%B2%D0%B0%D1%8F+%D0%B4%D0%B8%D0%B0%D0%B3%D0%BD%D0%BE%D1%81%D1%82%D0%B8%D0%BA%D0%B0+%D1%81%D1%83%D0%BF%D0%BE%D1%80%D0%BE%D1%81%D0%BD%D0%BE%D1%81%D1%82%D1%8C+%D1%81%D0%B2%D0%B8%D0%BD%D0%BE%D0%BC%D0%B0%D1%82%D0%BA%D0%B8&rows=20&filter=from-pub-date%3A2014-01-01&select=DOI%2Ctitle%2Ccontainer-title%2Cauthor%2Cissued%2Cabstract%2CURL&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 200 OK"
+18:01:54 INFO    httpx | HTTP Request: GET https://api.semanticscholar.org/graph/v1/paper/search?query=deep+learning+ultrasound+diagnosis+sow+pregnancy+embryonic+resorption&limit=20&fields=title%2Cabstract%2Cyear%2Cauthors%2CexternalIds%2Curl%2CopenAccessPdf "HTTP/1.1 429 "
+18:01:54 WARNING app.pipeline.orchestrator | источник semanticscholar не смог выполнить поиск «deep learning ultrasound diagnosis sow pregnancy embryonic resorption»: semanticscholar: лимит запросов исчерпан (429), ключ не задан и пул общий
+18:01:54 INFO    httpx | HTTP Request: POST https://cyberleninka.ru/api/search "HTTP/1.1 200 OK"
+18:01:54 INFO    app.search.cyberleninka | cyberleninka: в ответе нет статей (found=0)
+18:01:54 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+18:01:55 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+18:01:55 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+18:01:55 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+18:01:56 INFO    httpx | HTTP Request: POST https://searchplatform.rospatent.gov.ru/patsearch/v0.2/search "HTTP/1.1 200 OK"
+18:01:58 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/spr683r36nhfrv350a3r "HTTP/1.1 200 OK"
+18:01:58 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/spre53qg40g1lvfecr0g "HTTP/1.1 200 OK"
+18:01:58 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/spr1qm5q74omg7tkkv06 "HTTP/1.1 200 OK"
+18:01:58 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/spr73d0upun8dlcqn5s9 "HTTP/1.1 200 OK"
+18:01:59 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:01:59 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:01:59 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:02:00 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:02:52 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+18:02:52 INFO    app.llm.router | стадия extractor: прошу модель починить JSON (ValidationError)
+18:02:53 INFO    app.llm.router | стадия extractor: deepseek ошибка (deepseek: пустой content: лимит токенов ушёл на рассуждения модели (finish_reason=length) — нужен больший max_tokens), повтор через 2 с
+18:02:53 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+18:02:53 INFO    app.llm.router | стадия extractor: прошу модель починить JSON (ValidationError)
+18:02:53 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:02:53 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+18:02:53 INFO    app.llm.router | стадия extractor: прошу модель починить JSON (ValidationError)
+18:02:54 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:02:54 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:02:56 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:03:41 INFO    app.pipeline.stages | extractor: yandex_search, сырых записей 20 → кандидатов 13
+18:03:41 INFO    app.pipeline.stages | extractor: yandex_search, сырых записей 20 → кандидатов 14
+18:03:44 INFO    app.pipeline.stages | extractor: yandex_search, сырых записей 20 → кандидатов 20
+18:03:56 INFO    app.llm.router | стадия extractor: gigachat ошибка (gigachat: сеть при авторизации: ), повтор через 2 с
+18:04:40 INFO    httpx | HTTP Request: POST https://llm.api.cloud.yandex.net/foundationModels/v1/completion "HTTP/1.1 200 OK"
+18:04:40 WARNING app.llm.router | стадия extractor выполнена резервным провайдером yandex
+18:04:40 INFO    app.pipeline.stages | extractor: yandex_search, сырых записей 20 → кандидатов 20
+18:04:40 INFO    app.pipeline.orchestrator | [search] Найдено кандидатов — arxiv: 0, crossref: 40, cyberleninka: 0, rospatent: 1, showcase: 0, yandex-com: 20, yandex-ru: 47
+ 40% search   Найдено кандидатов — arxiv: 0, crossref: 40, cyberleninka: 0, 
+rospatent: 1, showcase: 0, yandex-com: 20, yandex-ru: 47
+18:04:40 INFO    app.pipeline.orchestrator | [search] Не ответили: arxiv, openalex, semanticscholar
+ 42% search   Не ответили: arxiv, openalex, semanticscholar
+18:04:40 INFO    app.pipeline.stages | дедупликация убрала 1 дублей из 108
+18:04:40 INFO    app.pipeline.orchestrator | [dedup] После склейки дублей осталось 107
+ 45% dedup    После склейки дублей осталось 107
+18:04:41 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.14357/sait2019001 "HTTP/1.1 200 OK"
+18:04:41 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.31483/r-110191 "HTTP/1.1 200 OK"
+18:04:41 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.25136/review.32877 "HTTP/1.1 200 OK"
+18:04:41 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.65164/ks06te35 "HTTP/1.1 200 OK"
+18:04:41 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.18411/lj-11-2018-180 "HTTP/1.1 200 OK"
+18:04:42 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.24108/preprints-3112205 "HTTP/1.1 200 OK"
+18:04:42 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.12737/2184048 "HTTP/1.1 200 OK"
+18:04:42 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.17513/np.655 "HTTP/1.1 200 OK"
+18:04:43 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.7868/9785020409088 "HTTP/1.1 200 OK"
+18:04:43 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.31857/s0005231021060064 "HTTP/1.1 200 OK"
+18:04:43 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.34755/irok.2020.47.83.215 "HTTP/1.1 200 OK"
+18:04:43 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.14357/20718594180105 "HTTP/1.1 200 OK"
+18:04:44 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.14357/20718632200101 "HTTP/1.1 200 OK"
+18:04:44 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.31857/s0005231022060022 "HTTP/1.1 200 OK"
+18:04:44 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.18411/trnio-12-2022-491 "HTTP/1.1 200 OK"
+18:04:45 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.31483/a-10610 "HTTP/1.1 200 OK"
+18:04:45 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.3390/ani15030318 "HTTP/1.1 200 OK"
+18:04:45 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.37015/audt.2024.240023 "HTTP/1.1 200 OK"
+18:04:45 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.37015/audt.2023.230011 "HTTP/1.1 200 OK"
+18:04:45 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.37015/audt.2024.240026 "HTTP/1.1 200 OK"
+18:04:45 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.37015/audt.2018.180804 "HTTP/1.1 200 OK"
+18:04:46 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1002/uog.28017 "HTTP/1.1 200 OK"
+18:04:46 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1007/978-981-96-0531-6_16 "HTTP/1.1 200 OK"
+18:04:46 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1002/jum.70350 "HTTP/1.1 200 OK"
+18:04:46 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1097/ruq.0000000000000608 "HTTP/1.1 200 OK"
+18:04:46 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.33590/emjreprohealth/20-00100 "HTTP/1.1 200 OK"
+18:04:47 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1016/j.ultrasmedbio.2025.11.100 "HTTP/1.1 200 OK"
+18:04:47 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1109/ultsym.2019.8925698 "HTTP/1.1 200 OK"
+18:04:47 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.21516/2413-1458-2019-18-3-245-248 "HTTP/1.1 200 OK"
+18:04:47 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.4324/9780429462450-17 "HTTP/1.1 200 OK"
+18:04:47 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1016/j.ultrasmedbio.2019.07.426 "HTTP/1.1 200 OK"
+18:04:48 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.37015/audt.2023.230012 "HTTP/1.1 200 OK"
+18:04:48 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1201/9781003366249-7 "HTTP/1.1 200 OK"
+18:04:48 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1101/2024.05.23.24307329v1 "HTTP/1.1 404 Not Found"
+18:04:48 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.3389/fgwh.2025.1447579 "HTTP/1.1 200 OK"
+18:04:48 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1007/978-981-99-1839-3_5 "HTTP/1.1 200 OK"
+18:04:48 INFO    app.search.openalex | openalex: обогащено 35 DOI из 36 за 36 бесплатных lookup-запросов
+18:04:48 INFO    app.pipeline.orchestrator | обогащение: заполнен пустой org у 2 кандидатов из 92 (карточки группируются по точной строке org)
+18:04:48 INFO    app.pipeline.orchestrator | [enrich] Цитируемость известна у кандидатов: 35
+ 47% enrich   Цитируемость известна у кандидатов: 35
+18:04:48 INFO    app.pipeline.orchestrator | [scorer] Оцениваю кандидатов
+ 50% scorer   Оцениваю кандидатов
+18:04:49 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:05:54 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:07:02 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:08:41 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:10:10 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:11:31 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:12:54 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:13:58 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:14:51 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:15:30 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:15:55 INFO    app.pipeline.stages | скоринг: батчей 10, повторов по лимиту 0, время стадии 666.9 с
+18:15:55 INFO    app.pipeline.stages | второй проход не нужен: максимум relevance 7 не ниже порога 6
+18:15:55 INFO    app.pipeline.stages | калибровка relevance: кандидатов 326, оценок модели 326, min/медиана/max по оценкам модели 0/1/7, порог 3, отсечено 309; отсеклось бы по всему списку при 4: 318, при 5: 324, при 6: 324, при 7: 324; среди отобранных 12 (лимит 12) ниже порога 4: 4, 5: 10, 6: 10, 7: 10; нейтральных оценок 0 (не отсекаются никогда)
+18:15:55 INFO    app.pipeline.orchestrator | [scorer] Разнообразие (конкурсная очередь): заготовок до склейки 3, после 3, схлопнуто 0
+ 63% scorer   Разнообразие (конкурсная очередь): заготовок до склейки 3, после 
+3, схлопнуто 0
+18:15:55 INFO    app.pipeline.orchestrator | [scorer] Отобрано вариантов для карточек: 5
+ 60% scorer   Отобрано вариантов для карточек: 5
+18:15:55 INFO    app.pipeline.orchestrator | [scorer] Разнообразие (основная очередь): заготовок до склейки 6, после 5, схлопнуто 1
+ 61% scorer   Разнообразие (основная очередь): заготовок до склейки 6, после 5, 
+схлопнуто 1
+18:15:55 INFO    app.pipeline.orchestrator | [scorer] Конкурсный класс: кандидатов 96, заготовок карточек 3 (секция вне лимита 5–7)
+ 62% scorer   Конкурсный класс: кандидатов 96, заготовок карточек 3 (секция вне 
+лимита 5–7)
+18:15:55 INFO    app.pipeline.orchestrator | [cards] Собираю карточки решений
+ 65% cards    Собираю карточки решений
+18:15:56 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:15:57 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:15:57 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:16:45 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:16:50 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+18:16:50 INFO    app.llm.router | стадия card_author: прошу модель починить JSON (ValidationError)
+18:16:51 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+18:16:51 INFO    app.llm.router | стадия card_author: прошу модель починить JSON (ValidationError)
+18:16:51 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:16:52 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:17:11 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:17:13 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:17:32 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+18:17:33 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:17:44 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:18:12 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:18:39 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+18:18:39 INFO    app.llm.router | стадия card_author: прошу модель починить JSON (ValidationError)
+18:18:40 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:18:59 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+18:18:59 INFO    app.llm.router | стадия verifier: прошу модель починить JSON (ValidationError)
+18:19:00 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:19:33 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+18:19:34 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:20:08 INFO    app.pipeline.orchestrator | [cards] Готово карточек: 5, отброшено пустых: 0
+ 80% cards    Готово карточек: 5, отброшено пустых: 0
+18:20:08 INFO    app.pipeline.orchestrator | [summary] Составляю сводку и рекомендацию
+ 85% summary  Составляю сводку и рекомендацию
+18:20:09 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:20:56 INFO    app.llm.router | стадия summary: deepseek ошибка (deepseek: пустой content: лимит токенов ушёл на рассуждения модели (finish_reason=length) — нужен больший max_tokens), повтор через 2 с
+18:20:59 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:21:08 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+18:21:09 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:21:09 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:21:09 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:22:02 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:22:03 WARNING app.llm.router | стадия card_author: ответ обрезан по лимиту токенов, переспрашиваю с лимитом 14000
+18:22:04 WARNING app.llm.router | стадия card_author: ответ обрезан по лимиту токенов, переспрашиваю с лимитом 14000
+18:22:04 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:22:05 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:22:43 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:22:49 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+18:22:49 INFO    app.llm.router | стадия verifier: прошу модель починить JSON (ValidationError)
+18:22:50 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:23:01 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:23:29 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+18:23:29 INFO    app.llm.router | стадия verifier: прошу модель починить JSON (ValidationError)
+18:23:30 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+18:23:41 INFO    app.pipeline.orchestrator | [cards] Карточек конкурсного класса: 3, отброшено пустых: 0
+ 95% cards    Карточек конкурсного класса: 3, отброшено пустых: 0
+18:23:41 INFO    app.pipeline.orchestrator | [done] Отчёт готов. Стоимость запроса: 11.28 ₽
+100% done     Отчёт готов. Стоимость запроса: 11.28 ₽
+
+Отчёт сохранён: /home/user/techmost-scout/out/report-20260823-182341.md
+Стоимость запроса: 11.28 ₽; вызовов модели 46, из них с кэшем префикса 45 (кэш 
+считается только у DeepSeek; у остальных провайдеров всегда 0)
+Платные источники: OpenAlex — платный поиск: запросов 2, $0.002 по $0.001 за 
+запрос; суточная бесплатная норма $0.10, осталось $0.000 (0 запросов)
+финиш: 2026-08-23T18:23:41Z
+код выхода: 0

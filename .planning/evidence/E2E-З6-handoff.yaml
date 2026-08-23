@@ -1,0 +1,73 @@
+handoff:
+  from: implementer-C
+  to: reviewer
+  task: З-6 (волна Э2-Е) · Страж секретов покрывает пути search/ и llm/
+  did:
+    - Новый файл tests/test_secret_leak_guard.py: пять тестов, страж читает
+      фактический caplog/stdout/stderr перехваченного прогона, а не исходный
+      код (тот же метод РЕШ-124).
+    - Путь адаптера — критерий 1: настоящий YandexSearchAdapter с фиктивным
+      уникальным ключом, respx отвечает 401 и 500 (два параметра теста);
+      SearchError ловится пайплайном, adapter.queries_used проверяется явно
+      (мутация «список адаптеров пуст» иначе прошла бы тест молча).
+    - Путь модели — критерий 2: настоящий DeepSeekProvider с фиктивным
+      уникальным ключом, respx отвечает 401; второй провайдер резерва тоже
+      отказывает — роутер исчерпывает цепочку («перехожу к резерву», «все
+      провайдеры отказали»); оба сообщения проверены на отсутствие ключа.
+    - Отдельная ветка `scout doctor` (тот же приём подмены, что в
+      tests/test_openalex.py:_run_doctor): таблица ключей называет имена
+      переменных и статус «есть»/«нет», значения — нет.
+    - Контроль критерия 3: перманентный тест
+      test_страж_ловит_утечку_в_stdout_а_не_только_в_caplog внедряет `print`
+      фиктивного ключа в stdout (в обход логирования) и через
+      `pytest.raises(AssertionError)` доказывает, что страж это ловит.
+      Разовая демонстрация без обёртки (тест реально красный) захвачена в
+      evidence/E2E-З6-control.txt, после — обёртка восстановлена.
+    - caplog захватывается на уровне DEBUG, а не INFO: при первой попытке
+      контроля выяснилось, что `log.debug(...)` не виден стражу на уровне
+      INFO — поднял уровень захвата, иначе часть утечек (например, отладочный
+      `log.debug` с ключом) проходила бы мимо проверки.
+    - Воспроизведены обе мутации аудита Э2-Д (не закоммичены, только для
+      верификации, дерево восстановлено): (а) печать ключа в
+      format_active_run_params → tests/test_run_visibility.py даёт 1 failed
+      (страж на своём пути работает, как и раньше); (б) печать ключа в
+      YandexSearchAdapter._run_search и DeepSeekProvider.complete →
+      tests/test_run_visibility.py по-прежнему 5 passed (старый страж слеп,
+      как и нашёл аудит), но tests/test_secret_leak_guard.py даёт
+      3 failed, 2 passed — новый страж эту же утечку ловит. Полный протокол —
+      evidence/E2E-З6-audit-mutations.txt.
+    - Утечек в боевом коде search/llm не найдено — правка backend/ не
+      понадобилась, границы задачи (только tests/) не нарушены.
+  artifacts:
+    - tests/test_secret_leak_guard.py
+    - .planning/evidence/E2E-З6-control.txt
+    - .planning/evidence/E2E-З6-audit-mutations.txt
+    - .planning/evidence/E2E-З6-pytest-task.txt
+    - .planning/evidence/E2E-З6-pytest-full.txt
+    - .planning/evidence/E2E-З6-ruff-check.txt
+    - .planning/evidence/E2E-З6-ruff-format.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_secret_leak_guard.py -v: 5 passed"
+    - "pytest -q: 721 passed, 0 failed (базовая линия волны — 716)"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 133 files already formatted"
+    - "мутация (а) на format_active_run_params: tests/test_run_visibility.py — 1 failed"
+    - "мутация (б) на YandexSearchAdapter._run_search + DeepSeekProvider.complete: tests/test_run_visibility.py — 5 passed (старый страж слеп, как и в аудите); tests/test_secret_leak_guard.py — 3 failed, 2 passed (новый страж ловит)"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-6, строки 543-604)
+    - tests/test_secret_leak_guard.py
+    - .planning/evidence/E2E-З6-audit-mutations.txt
+    - .planning/evidence/E2E-З6-control.txt
+  notes: >-
+    Рабочая копия при старте была на устаревшей базе (87575fe, 698 passed) —
+    подтянута fast-forward до верхушки ветки волны (worktree-agent-a68fe98,
+    9d176ef, 716 passed) до первой правки, как требует РЕШ-158. Своих
+    коммитов в старой базе не было, конфликтов нет.
+    tests/test_run_visibility.py не тронут ни разу — все проверки нового
+    файла шли параллельно, границы задачи (только новый тестовый файл)
+    выдержаны. Совет плана «дешевле параметр к существующему сценарию»
+    (из постановки задачи оркестратором) я не выполнял буквально: PLAN.md
+    прямо запрещает править test_run_visibility.py и требует новый файл —
+    следовал плану, а не совету, как и предписано при расхождении.

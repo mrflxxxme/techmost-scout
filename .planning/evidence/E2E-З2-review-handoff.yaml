@@ -1,0 +1,39 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "З-2"
+  did:
+    - "Проверены diff, инварианты (в т.ч. №3 и №9), грабли §0.1, границы задачи"
+    - "Воспроизведены мутации (а) и (б) прицельным прогоном: обе убивают test_metrics_and_selection_agree_on_the_same_settings_threshold, дерево восстановлено"
+    - "Числа эффекта на data/scout.db пересчитаны независимым запросом (без кода исполнителя): запрос1 5/5, запрос2 2/9 — совпадает"
+    - "Оценена правка чужого теста test_failed_batch_does_not_change_max_and_share — вынужденная, покрытие не ослаблено"
+    - "Прогнаны pytest -q (700 passed), ruff check/format на файлах задачи (чисто), полный ruff check (15 замечаний вне задачи, docs/marketing)"
+    - "Найдено 0 блокирующих, 2 совета"
+  artifacts:
+    - ".planning/evidence/E2E-З2-review.md (закоммичен до ответа)"
+    - ".planning/evidence/E2E-З2-review-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest -q: 700 passed, 1 warning"
+    - "ruff check backend/app/metrics.py tests/test_metrics.py docs/remote-setup.md: All checks passed"
+    - "ruff format --check backend/app/metrics.py tests/test_metrics.py: 2 files already formatted"
+    - "grep -rnE RELEVANCE_MIN=[0-9] backend/app --include=*.py: без совпадений"
+    - "мутация (а): 1 failed (ожидаемый тест), дерево восстановлено git checkout"
+    - "мутация (б): 1 failed (тот же тест), дерево восстановлено git checkout"
+    - "эффект на data/scout.db (независимый пересчёт): request1 count>=3=5 count>=4=5; request2 count>=3=9 count>=4=2"
+    - "git show 55b26eb --stat: selection.py отсутствует"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (задача З-2, строки 311-386)"
+    - "backend/app/metrics.py"
+    - "backend/app/pipeline/selection.py"
+    - "tests/test_metrics.py"
+    - ".planning/evidence/E2E-З2-review.md"
+  notes: |
+    Вердикт: ПРИНЯТЬ. Это цикл 1, доработка не требуется. Единственная
+    неоднозначность — имя файла доказательств исполнителя
+    E2E-З2-check.md совпадает по смыслу с зарезервированным именем отчёта
+    проверяющего; отражено как совет, не блокирует. Документ docs/remote-setup.md
+    не врёт про код; фактическое окружение ревью (RELEVANCE_MIN=4) обновит
+    оркестратор перед воротным прогоном волны — это ожидаемо по постановке
+    задачи, не находка к исполнителю.

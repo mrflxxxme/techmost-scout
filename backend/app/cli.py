@@ -293,11 +293,19 @@ def run(
     plan_id: int = typer.Option(
         None, "--plan-id", help="Прогнать по сохранённому плану поиска (номер строки search_plans), не строя новый"
     ),
+    history_request_id: int = typer.Option(
+        None,
+        "--history-request-id",
+        help=(
+            "Учесть кандидатов прошлого прогона (номер строки requests) в накопительном поиске (РЕШ-163) — "
+            "явный путь признака «та же задача», когда её пересказали другими словами (РЕШ-166)"
+        ),
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Прогнать запрос через пайплайн и сохранить отчёт в markdown."""
     _setup_logging(verbose)
-    asyncio.run(_run(task, industry, maturity, out, interactive, plan_id))
+    asyncio.run(_run(task, industry, maturity, out, interactive, plan_id, history_request_id))
 
 
 async def _run(
@@ -307,6 +315,7 @@ async def _run(
     out: Path | None,
     interactive: bool,
     plan_id: int | None = None,
+    history_request_id: int | None = None,
 ) -> None:
     from app.db import init_db, session_scope
     from app.export.markdown import CONSTRAINTS_UNRESOLVED_NOTICE
@@ -316,6 +325,19 @@ async def _run(
 
     settings = get_settings()
     router = LLMRouter(settings)
+
+    # Строка активных параметров печатается здесь, а не только в
+    # `ScoutPipeline.run` (З-5, долг ворот Э2-Д): у команды `scout run` интейк
+    # живёт РАНЬШЕ пайплайна, и если прогон умрёт на нём (например, на
+    # стоп-кране), строка из `run_flow.py` в лог не попадёт вовсе — а разбирать
+    # окружение важнее всего именно на упавшем прогоне. Печать в `run_flow.py`
+    # намеренно не убрана: тот путь нужен веб-прогону и прямым вызовам
+    # пайплайна (тесты, `scout serve`), и туда эта функция не поднимается.
+    # Задваивание строки в логе `scout run` — сознательная цена: пропущенная
+    # строка стоит разбора вслепую, лишняя не стоит ничего.
+    from app.pipeline.orchestrator import format_active_run_params
+
+    log.info(format_active_run_params(settings))
 
     # Таблицы для минимальной записи прогона (Ф-8, РЕШ-40); фабрика сессий —
     # `session_scope`, тот же контракт, что и у `app.db.get_session`. Отказ
@@ -545,6 +567,10 @@ async def _run(
         session_factory=db_session_factory,
         preset_plan=preset_plan,
     )
+    # Именованный аргумент добавляется, только если флаг реально задан: так
+    # заглушка пайплайна в тестах, не знающая про накопительный поиск, не
+    # ловит TypeError на незнакомом ей keyword-параметре.
+    run_kwargs = {"history_request_id": history_request_id} if history_request_id is not None else {}
     try:
         report = await pipeline.run(
             brief,
@@ -552,6 +578,7 @@ async def _run(
             initial_stage_log=intake_stage_log,
             initial_caveats=intake_caveats,
             constraints_unresolved=constraints_unresolved,
+            **run_kwargs,
         )
     finally:
         await pipeline.aclose()

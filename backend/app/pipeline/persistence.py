@@ -46,6 +46,7 @@ from app.models import PipelineLog as PipelineLogRow
 from app.models import Request as RequestRow
 from app.models import SearchPlan as SearchPlanRow
 from app.models import SolutionCard as SolutionCardRow
+from app.pipeline.history import HistoryPool, HistoryRow, build_history_pool, normalize_task_text
 from app.schemas import Candidate, SearchPlan, SolutionCard
 
 log = logging.getLogger(__name__)
@@ -166,6 +167,76 @@ async def load_search_plan(session_factory: SessionFactory | None, plan_id: int)
         return SearchPlan.model_validate(stored)
     except ValidationError as exc:
         raise SearchPlanNotFoundError(f"план №{plan_id} в базе не читается схемой SearchPlan: {exc}") from exc
+
+
+class HistoryReadError(Exception):
+    """История прошлых прогонов не прочиталась.
+
+    Отдельный тип по образцу `SearchPlanNotFoundError`, но поведение
+    противоположное: `--plan-id` — явная команда оператора, и её отказ обязан
+    остановить прогон до первого платного вызова. Накопительный поиск —
+    необязательное усиление обычного прогона (инвариант №5), поэтому это
+    исключение никогда не покидает `load_history_pool` — вызывающий код в
+    `run_flow.py` гасит его, кладёт причину в лог и в журнал стадий, и прогон
+    продолжается без истории.
+    """
+
+
+async def load_history_pool(
+    session_factory: SessionFactory | None,
+    *,
+    raw_text: str,
+    explicit_request_id: int | None = None,
+) -> HistoryPool:
+    """Кандидаты прошлых прогонов ЭТОЙ ЖЕ задачи (РЕШ-163, РЕШ-166).
+
+    Признак «та же задача» — оба пути решения Р-1: явный номер прогона важнее
+    текста (оператор указал его руками, потому что задачу пересказали другими
+    словами и автоматическое опознание не сработает), иначе — совпадение
+    нормализованного текста среди прогонов, не закончившихся отказом
+    (`status != "failed"` — из упавшего прогона брать нечего, кроме случайных
+    строк с середины). Без фабрики сессий и без единого совпадения возвращается
+    пустой пул, а не исключение — это тот же обычный случай, что и «БД не
+    настроена» у `persist_run`, а не отказ.
+
+    Восстановление строк — чистая функция `app.pipeline.history.build_history_pool`,
+    здесь только чтение и сборка плоских `HistoryRow`.
+    """
+    if session_factory is None:
+        return HistoryPool()
+    try:
+        async with session_factory() as session:
+            if explicit_request_id is not None:
+                request_ids = [explicit_request_id]
+            else:
+                target = normalize_task_text(raw_text)
+                found = await session.execute(
+                    select(RequestRow.id, RequestRow.raw_text).where(RequestRow.status != "failed")
+                )
+                request_ids = [rid for rid, text in found.all() if normalize_task_text(text) == target]
+            if not request_ids:
+                return HistoryPool()
+            rows = await session.execute(select(CandidateRow).where(CandidateRow.request_id.in_(request_ids)))
+            history_rows = [
+                HistoryRow(
+                    source_type=row.source_type,
+                    provider=row.provider,
+                    title=row.title,
+                    url=row.url,
+                    org=row.org,
+                    authors=list(row.authors or []),
+                    year=row.year,
+                    snippet=row.snippet,
+                    raw_id=row.raw_id,
+                    dedup_key=row.dedup_key,
+                    score=dict(row.score or {}),
+                    request_id=row.request_id,
+                )
+                for row in rows.scalars().all()
+            ]
+    except Exception as exc:
+        raise HistoryReadError(f"история прошлых прогонов не прочиталась: {exc}") from exc
+    return build_history_pool(history_rows)
 
 
 async def persist_run(

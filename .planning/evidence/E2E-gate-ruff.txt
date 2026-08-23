@@ -1,0 +1,3 @@
+=== Критерий 2: линтер ===
+All checks passed!
+135 files already formatted

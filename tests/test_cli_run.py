@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -786,3 +787,93 @@ async def test_constraints_retry_cost_limit_propagates_and_persists_failed(
         assert [row.stage for row in logs] == ["intake"]
         assert logs[0].error is None
         assert logs[0].cost_rub == 0.0
+
+
+# ── З-5: строка активных параметров печатается в `cli._run` ДО интейка ──────
+#
+# Долг ворот Э2-Д: строка жила только в `ScoutPipeline.run` (`run_flow.py`),
+# а у команды `scout run` интейк выполняется раньше пайплайна. Прогон, упавший
+# на интейке — например, стоп-краном, — до `ScoutPipeline.run` не долетал
+# вовсе, и строки параметров в логе не оставалось (критерий 1 задачи).
+
+
+def _params_line_index(records: list[logging.LogRecord]) -> int | None:
+    """Индекс первой записи со строкой активных параметров среди перехваченных."""
+    return next((i for i, r in enumerate(records) if r.getMessage().startswith("Параметры прогона:")), None)
+
+
+async def test_params_line_printed_when_intake_stops_on_cost_limit(
+    monkeypatch, settings, fake_provider_factory, tmp_path, temp_db, caplog
+):
+    """Критерий 1: интейк отказывает стоп-краном (РЕШ-45) — строка активных
+    параметров всё равно попадает в caplog. Мутация (б) плана — печать стоит
+    только в успешной ветке — обязана ронять именно этот тест."""
+    caplog.set_level(logging.INFO)
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def failing_run_intake(router, task, *, industry_hint="не указана"):
+        raise CostLimitExceededError("запрос израсходовал 10.00 ₽ при лимите 10.00 ₽")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", failing_run_intake)
+
+    with pytest.raises(CostLimitExceededError):
+        await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False)
+
+    assert _params_line_index(caplog.records) is not None, (
+        "строка активных параметров обязана попасть в caplog, даже когда интейк "
+        "оборвался стоп-краном и до ScoutPipeline.run прогон не дошёл"
+    )
+
+
+async def test_params_line_printed_before_run_intake_is_called(
+    monkeypatch, settings, fake_provider_factory, tmp_path, caplog
+):
+    """Критерий 2: строка печатается ДО вызова `run_intake`, а не после.
+
+    Заглушка интейка сама оставляет метку в caplog в момент вызова — её индекс
+    обязан быть больше индекса строки параметров. Мутация (а) плана — печать
+    перенесена после `run_intake` — обязана ронять именно этот тест.
+
+    Заодно критерий 4: печать не тратит ни одного обращения к роутеру —
+    заглушка интейка роутер не зовёт, счётчик обязан остаться нулевым.
+    """
+    caplog.set_level(logging.INFO)
+    router = _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    marker_logger = logging.getLogger("test_cli_run.intake_marker")
+
+    async def marking_run_intake(router, task, *, industry_hint="не указана"):
+        marker_logger.info("интейк вызван")
+        return IntakeResult(questions=[], draft_brief=_draft_brief(industry="фарма"))
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", marking_run_intake)
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False)
+
+    params_index = _params_line_index(caplog.records)
+    intake_index = next(i for i, r in enumerate(caplog.records) if r.getMessage() == "интейк вызван")
+    assert params_index is not None, "строка активных параметров обязана попасть в caplog"
+    assert params_index < intake_index, "строка параметров обязана печататься раньше вызова run_intake"
+    assert router.cost.calls == 0, "печать параметров не должна добавлять обращений к роутеру"
+
+
+async def test_params_line_not_duplicated_by_pipeline_on_successful_run(
+    monkeypatch, settings, fake_provider_factory, tmp_path, caplog
+):
+    """Обычный успешный прогон печатает строку параметров ровно один раз:
+    `cli._run` печатает её сам и не должен провоцировать вторую печать из
+    `ScoutPipeline.run` — здесь пайплайн подменён заглушкой, которая строку не
+    печатает вовсе, поэтому лишняя запись в caplog доказывала бы задвоение
+    именно в `cli.py`."""
+    caplog.set_level(logging.INFO)
+    _patch_llm_router(monkeypatch, settings, fake_provider_factory)
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return IntakeResult(questions=[], draft_brief=_draft_brief(industry="фарма"))
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+
+    await cli._run("сырой текст задачи", None, None, tmp_path / "report.md", False)
+
+    matches = [r for r in caplog.records if r.getMessage().startswith("Параметры прогона:")]
+    assert len(matches) == 1, "cli._run обязан печатать строку параметров ровно один раз"

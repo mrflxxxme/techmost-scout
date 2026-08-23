@@ -1,0 +1,3 @@
+=== Критерий 1: голый pytest ===
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+747 passed, 1 warning in 42.93s

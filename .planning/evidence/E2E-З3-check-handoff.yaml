@@ -1,0 +1,43 @@
+handoff:
+  from: reviewer
+  to: verifier-orchestrator
+  task: З-3
+  did:
+    - Пересчитаны напрямую из data/scout.db (SQL + app.schemas + app.pipeline.selection,
+      минуя отчёт исполнителя) все ключевые числа: пулы 72/200, пересечение 6,
+      объединение 266, пороги 3/4 (5/9/13 и 5/2/7), заготовки карточек (5/6/6 и 5/2/6),
+      обе "семёрки" отсутствуют в пуле B, raw_text 690 символов идентичен побайтово —
+      расхождений с отчётом исполнителя нет.
+    - Подтверждено, что заготовки карточек считаются продуктовым кодом
+      (app.pipeline.selection.select_top/group_for_cards), а не копией — прямым чтением
+      кода и повторным независимым вызовом тех же функций.
+    - Проверены границы задачи (backend/ и tests/ не тронуты, diff = 4 файла из PLAN.md),
+      неизменность базы (размер/mtime до и после), отсутствие сети в скрипте,
+      отсутствие секретов, порядок "ожидание до результата" (текст ожидания дословно
+      из PLAN.md, закоммиченного на main раньше работы исполнителя).
+    - Прогнаны самостоятельно pytest -q (698 passed) и ruff (на файл задачи чисто;
+      15 замечаний на весь репозиторий — предсуществующие, в docs/marketing/deck,
+      вне задачи, устранены на main отдельным РЕШ-165).
+    - Найдена 1 некритичная неточность в скрипте (жёстко зашитый neutral=False в
+      metrics.count_at_least_relevance) — не влияет на числа этого прогона, вынесена
+      в советы, не блокирует.
+  artifacts:
+    - .planning/evidence/E2E-З3-check.md (закоммичен до ответа)
+    - .planning/evidence/E2E-З3-check-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q: 698 passed, 0 failed"
+    - "ruff check scripts/history_probe.py: All checks passed"
+    - "ruff format --check scripts/history_probe.py: 1 file already formatted"
+    - "независимый пересчёт SQL+schemas+selection: все числа совпали с отчётом"
+    - "git diff main --name-only: 4 файла, все в списке задачи, backend/ и tests/ не тронуты"
+    - "ls -l data/scout.db до/после: без изменений"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-3, строки 387-479)
+    - .planning/evidence/E2E-history-probe.md
+    - .planning/evidence/E2E-З3-check.md
+  notes: >
+    Вердикт ПРИНЯТЬ, цикл 1, блокирующих нет. Проба честно называет свои границы
+    (одна пара прогонов, частный случай дословного совпадения текста) и не выдаёт
+    рекомендацию за доказанный общий закон.

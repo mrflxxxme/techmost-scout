@@ -309,6 +309,7 @@ class SearchMixin:
         *,
         stage_log: list[StageRecord],
         plan_log: list[PlanRecord],
+        history: list[ScoredCandidate] | None = None,
     ) -> tuple[list[ScoredCandidate], list[str]]:
         """Второй проход поиска: новый план, повторный поиск, скоринг НОВЫХ кандидатов (РЕШ-81).
 
@@ -330,6 +331,10 @@ class SearchMixin:
           прогона, не получив ни одного нового кандидата. Новизна считается по
           ключу склейки через существующий `deduplicate`, которому отдаются обе
           выдачи сразу: так же схлопываются и дубли внутри второго прохода.
+          `history` — кандидаты, накопленные прошлыми прогонами той же задачи
+          (РЕШ-163): их ключи обязаны попасть в `known` наравне с первым
+          проходом, иначе второй проход, повторно найдя уже известного из
+          истории кандидата, переоценит его за деньги.
         * **Свои строки журнала стадий** — `replan`, вторые `search`, `enrich` и
           `scorer`: трата второго прохода обязана быть видна отдельно, а не
           растворяться в строках первого. Отдельность даёт поле `pass_no`
@@ -387,6 +392,7 @@ class SearchMixin:
         )
 
         known = {candidate.dedup_key() for candidate in first_pass}
+        known |= {item.candidate.dedup_key() for item in history or ()}
         merged = stages.deduplicate([*first_pass, *outcome.candidates])
         fresh = [candidate for candidate in merged if candidate.dedup_key() not in known]
         await self._notify(

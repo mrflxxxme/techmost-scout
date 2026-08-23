@@ -1,0 +1,8 @@
+=== Критерий 4: порог в одном месте ===
+$ grep -rnE 'RELEVANCE_MIN\s*=\s*[0-9]' backend/app
+(совпадений нет)
+
+--- строка параметров прогона несёт relevance_min=3: ---
+17:58:27 INFO    __main__ | Параметры прогона: стоп-кран 20.00 ₽/запрос; relevance_min=3; second_pass_relevance_max=6; маршруты стадий: intake:deepseek, e
+
+12 passed in 0.27s

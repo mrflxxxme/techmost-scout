@@ -1,0 +1,49 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: З-5
+  did:
+    - "Проверен diff задачи (изолирован коммитом 47e27e8^..47e27e8): только
+       backend/app/cli.py (+13) и tests/test_cli_run.py (+91), совпадает со
+       списком файлов карточки; границы (prompts/, history.py, export/,
+       run_flow.py, run_journal.py) не тронуты."
+    - "Прогнан главный тест смерти на интейке и обе его целевые мутации
+       (перенос печати после run_intake; печать только в успешной ветке) —
+       обе воспроизведены лично, целевые тесты краснеют, дерево возвращено."
+    - "Задвоение строки проверено как ожидаемое поведение (поправка
+       постановки от оркестратора, п.2 карточки): run_flow.py не тронут,
+       комментарий на месте правки есть, прямой вызов ScoutPipeline.run
+       печатает строку один раз, cli._run сам не задваивает (тест
+       test_params_line_not_duplicated_by_pipeline_on_successful_run,
+       len(matches)==1)."
+    - "tests/test_run_visibility.py подтверждён неправленым (diff пуст),
+       прогнан отдельно — 5 passed."
+    - "Секретная регрессия проверена вручную: дописанное в строку фиктивное
+       значение ключа не поймал ни один тест (27 passed) — риска не создаёт
+       (функция не менялась), отмечено советом, не блокирует."
+    - "Полный набор и статика прогнаны сам: 719 passed, ruff check/format —
+       чисто. Все десять инвариантов проверены способами из INVARIANTS.md."
+  artifacts:
+    - .planning/evidence/E2E-З5-review.md (закоммичен до ответа)
+    - .planning/evidence/E2E-З5-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q: 719 passed, 1 warning"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 132 files already formatted"
+    - "pytest tests/test_cli_run.py tests/test_run_visibility.py: 27 passed"
+    - "мутация (а) перенос после run_intake: 2 failed из 3 целевых — восстановлено"
+    - "мутация (б) печать только в успешной ветке: 2 failed из 3 целевых — восстановлено"
+    - "git status --porcelain после всех мутаций: пусто"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-5, строки 482-542)
+    - .planning/evidence/E2E-З5-review.md
+    - backend/app/cli.py (правка вокруг строк 317-331)
+    - tests/test_cli_run.py (три новых теста в конце файла)
+  notes: >
+    Вердикт: ПРИНЯТЬ, цикл 1. Постановка ревью содержала ошибочный пункт про
+    задвоение строки как блокирующее — оркестратор отменил его до сдачи
+    отчёта (карточка З-5 прямо предписывает обратное), разрешено в пользу
+    PLAN.md. Блокирующих находок нет. Один совет: нет зеркального теста-стража
+    секретов на пути cli._run (сегодня риска не создаёт, функция не менялась).
