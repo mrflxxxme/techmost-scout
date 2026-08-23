@@ -1,0 +1,16 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a7d5a19d80de0cd3e
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+tests/test_secret_leak_guard.py::test_отказ_yandex_search_не_печатает_ключ[401] PASSED [ 20%]
+tests/test_secret_leak_guard.py::test_отказ_yandex_search_не_печатает_ключ[500] PASSED [ 40%]
+tests/test_secret_leak_guard.py::test_отказ_deepseek_и_исчерпанный_резерв_не_печатают_ключ PASSED [ 60%]
+tests/test_secret_leak_guard.py::test_scout_doctor_называет_имена_ключей_а_не_значения PASSED [ 80%]
+tests/test_secret_leak_guard.py::test_страж_ловит_утечку_в_stdout_а_не_только_в_caplog PASSED [100%]
+
+============================== 5 passed in 3.61s ===============================
