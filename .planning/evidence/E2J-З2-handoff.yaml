@@ -1,7 +1,7 @@
 handoff:
   from: implementer-B
   to: reviewer
-  task: З-2 (волна Э2-Ж) — КиберЛенинка: короткий запрос вместо нулевой выдачи
+  task: "З-2 (волна Э2-Ж) — КиберЛенинка: короткий запрос вместо нулевой выдачи"
   did:
     - >
       backend/app/search/cyberleninka.py: при found=0 на исходной
@@ -26,22 +26,30 @@ handoff:
       съедает выдачу» с таблицей чисел (8 слов → 0, «супоросность свиноматок
       УЗИ», 3 слова → 21, контроль «гидроочистка дизельного топлива» → 720).
     - >
-      tests/test_search_cyberleninka.py: добавлено 6 тестов — повтор при
+      tests/test_search_cyberleninka.py: добавлено 7 тестов — повтор при
       found=0 с проверкой лога и повторного вызова из кэша, честный пустой
       список на обеих формах, SearchError на отказе повтора, пауза между
       запросами на повторе, детерминизм и сохранение порядка укорачивания,
-      неизменность уже короткого запроса.
+      неизменность уже короткого запроса, и (по совету ревью цикла 1)
+      интеграционный тест: короткая формулировка (short_text == text) с
+      found=0 даёт ровно один сетевой вызов — повтор не заводится сам с
+      собой.
+    - >
+      Правка по итогам ревью (цикл 1, инвариант №10): значение поля `task` в
+      этом handoff содержало незакавыченное двоеточие — YAML не разбирался
+      `yaml.safe_load`. Взято в кавычки, проверено отдельной командой.
   artifacts:
     - backend/app/search/cyberleninka.py
     - tests/test_search_cyberleninka.py
     - docs/sources.md
   self_audit: pass
   checks:
-    - "pytest tests/test_search_cyberleninka.py -v: 19 passed"
-    - "pytest -q: 755 passed (базовая линия 749 + 6 новых тестов задачи)"
+    - "pytest tests/test_search_cyberleninka.py -v: 20 passed"
+    - "pytest -q: 756 passed (базовая линия 749 + 7 новых тестов задачи)"
     - "ruff check .: All checks passed!"
     - "ruff format --check .: 137 files already formatted"
     - "wc -l backend/app/search/cyberleninka.py: 431 (лимит 500)"
+    - "python -c \"import yaml; yaml.safe_load(open('.planning/evidence/E2J-З2-handoff.yaml', encoding='utf-8'))\": без исключения"
   mutations_verified:
     - "(а) повтор минует _throttle → test_повтор_тоже_соблюдает_паузу падает (0.003с вместо ≥0.9с)"
     - "(б) кэш игнорирует q при хэшировании (ключ только по mode/size/from) → test_укорачивание_повторяет_запрос_при_нулевой_выдаче падает (найдено 0 вместо 1)"

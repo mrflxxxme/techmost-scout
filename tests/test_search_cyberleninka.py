@@ -310,6 +310,23 @@ def test_укорачивание_короткого_запроса_не_мен�
     assert _shorten_query("супоросность свиноматок узи") == "супоросность свиноматок узи"
 
 
+@respx.mock
+async def test_короткий_запрос_с_нулевой_выдачей_не_даёт_повтора(tmp_path):
+    """Краевой случай `short_text == text`: формулировка уже короче предела
+    укорачивания, `found=0` — повторять запрос тем же текстом нет смысла,
+    источник должен получить ровно один сетевой вызов (respx-счётчик), а не
+    два одинаковых подряд."""
+    short_query = "супоросность свиноматок узи"
+    assert _shorten_query(short_query) == short_query, "формулировка уже короче предела укорачивания"
+
+    route = respx.post(API_URL).mock(return_value=_response(found=0))
+    async with httpx.AsyncClient() as client:
+        found = await CyberLeninkaAdapter(client, cache_dir=tmp_path).search(_query(short_query), limit=5)
+
+    assert found == []
+    assert route.call_count == 1, "короткий запрос сам с собой повторяться не должен"
+
+
 # ── Отказы (инвариант №5, РЕШ-43) ───────────────────────────────────────────
 
 
