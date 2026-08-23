@@ -13,9 +13,20 @@
 нейтральной оценки, поэтому писатель и читатель формата не могут разойтись
 молча (тот же урок, что и с пометкой `NEUTRAL_SCORE_NOTE` в стадии скоринга).
 
+Порог предметного соответствия здесь не переоткрывается — но не потому, что
+зашит числом: до РЕШ-162 модуль держал собственную копию константы
+`RELEVANCE_MIN`, равную четырём, рядом с настройкой `Settings.relevance_min`,
+по которой на самом деле работает отбор (`select_top`, `app.pipeline.selection`),
+и сравнение двух прогонов держалось на том, что кто-то не забыл поправить обе
+константы разом. Копия снята: `count_at_least_relevance` и
+`share_at_least_relevance` без явного `minimum` читают тот же
+`get_settings().relevance_min`, тем же отложенным импортом, что и `select_top`,
+— единственный источник числа один на измеритель
+и на отбор.
+
 Главное правило всех измерителей: **считаем только по оценкам модели**.
 Нейтральные пятёрки — не измерение, а след отказа батча (`NeutralScoredCandidate`
-в `app.pipeline.stages`), и один такой отказ поднял бы «долю `relevance` ≥ 4» на
+в `app.pipeline.stages`), и один такой отказ поднял бы «долю `relevance` ≥ порог» на
 десять кандидатов, ничего при этом не измерив. Та же логика уже действует в
 журнале калибровки (`_model_relevance`, `stages.py`).
 
@@ -31,14 +42,26 @@ from typing import Any
 
 from app.schemas import ScoredCandidate
 
-#: Порог предметного соответствия, по которому считается доля годных кандидатов
-#: (РЕШ-74, подобран на калибровочном прогоне Т-10). Здесь он не переоткрывается:
-#: измеритель обязан считать по тому же числу, по которому работает отсечка
-#: отбора, иначе прогоны разных дней сравнивать нечем.
-RELEVANCE_MIN = 4
-
 #: Ключ признака «оценку поставил код, а не модель» в сохранённом `score`.
 NEUTRAL_KEY = "neutral"
+
+
+def _resolve_relevance_min(explicit: int | None) -> int:
+    """Разрешить порог предметного соответствия: явный аргумент важнее настроек.
+
+    Приём **дословно** тот же, что в `select_top` (`app.pipeline.selection`,
+    строки 40-49): отложенный импорт `get_settings` из `app.pipeline.stages`
+    развязывает цикл `stages` ⇄ `metrics` и позволяет тестам подменять настройки
+    через `monkeypatch.setattr(stages, "get_settings", …)` — та же подмена, что
+    видит `select_top`. Так у измерителя и у отбора один источник порога, а не
+    две константы, которые можно поправить порознь (РЕШ-162).
+    """
+    if explicit is not None:
+        return explicit
+
+    from app.pipeline.stages import get_settings
+
+    return get_settings().relevance_min
 
 
 def score_payload(item: ScoredCandidate, *, neutral: bool) -> dict[str, Any]:
@@ -93,26 +116,31 @@ def max_relevance(scores: Iterable[Mapping[str, Any]]) -> int | None:
     return max(values) if values else None
 
 
-def count_at_least_relevance(scores: Iterable[Mapping[str, Any]], *, minimum: int = RELEVANCE_MIN) -> int:
+def count_at_least_relevance(scores: Iterable[Mapping[str, Any]], *, minimum: int | None = None) -> int:
     """Сколько кандидатов набрали `relevance` не ниже порога (по оценкам модели).
 
     Второе число РЕШ-86 («число кандидатов не ниже порога выросло с 3»).
-    Сравнение нестрогое: порог 4 означает, что четвёрка проходит.
+    Сравнение нестрогое: кандидат ровно на пороге считается годным. Порог без
+    явного `minimum` берётся из `get_settings().relevance_min` —
+    `_resolve_relevance_min` читает его тем же приёмом, что и `select_top`.
     """
-    return sum(1 for value in model_relevance(scores) if value >= minimum)
+    threshold = _resolve_relevance_min(minimum)
+    return sum(1 for value in model_relevance(scores) if value >= threshold)
 
 
-def share_at_least_relevance(scores: Iterable[Mapping[str, Any]], *, minimum: int = RELEVANCE_MIN) -> float | None:
+def share_at_least_relevance(scores: Iterable[Mapping[str, Any]], *, minimum: int | None = None) -> float | None:
     """Доля кандидатов с `relevance` не ниже порога; `None` — оценок модели нет.
 
     Доля считается от числа оценок модели, а не от всех сохранённых строк:
     иначе отказавший батч разбавлял бы знаменатель и занижал долю, ничего при
-    этом не измерив.
+    этом не измерив. Порог без явного `minimum` — из настроек, тем же приёмом,
+    что и `select_top` (`_resolve_relevance_min`).
     """
     values = model_relevance(scores)
     if not values:
         return None
-    return sum(1 for value in values if value >= minimum) / len(values)
+    threshold = _resolve_relevance_min(minimum)
+    return sum(1 for value in values if value >= threshold) / len(values)
 
 
 def silent_sources_share(asked: Iterable[str], hits: Mapping[str, int]) -> float | None:

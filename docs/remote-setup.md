@@ -55,7 +55,7 @@
 
 ```
 COST_LIMIT_RUB_PER_REQUEST=20     # боевой стоп-кран на запрос (РЕШ-46)
-RELEVANCE_MIN=4                   # отсечка по предметному соответствию (РЕШ-74)
+RELEVANCE_MIN=3                   # отсечка по предметному соответствию (РЕШ-74, порог снижен РЕШ-162)
 SECOND_PASS_RELEVANCE_MAX=6       # порог второго прохода (РЕШ-103)
 LLM_STAGE_ROUTES=intake:deepseek,extractor:gigachat,planner:deepseek,replan:deepseek,scorer:deepseek,card_author:deepseek,verifier:deepseek,summary:deepseek
 ```
