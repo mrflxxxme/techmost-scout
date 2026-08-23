@@ -61,11 +61,13 @@ SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 class StageRecord:
     """Один элемент журнала стадий — оркестратор собирает их по ходу прогона.
 
-    Роутер моделей не считает стоимость и токены по стадиям, только по
-    запросу целиком, поэтому `provider`/`tokens_in`/`tokens_out`/`cost_rub`
-    заполняются оркестратором приблизительно, по снимкам счётчика до и после
-    вызова стадии; `sources_hit` — только для стадии поиска, из
-    `SearchOutcome.hits_by_provider`.
+    Роутер моделей не считает стоимость по стадиям, только по запросу целиком,
+    поэтому `provider`/`cost_rub` заполняются оркестратором приблизительно, по
+    снимкам счётчика до и после вызова стадии; `sources_hit` — только для
+    стадии поиска, из `SearchOutcome.hits_by_provider`.
+
+    Полей `tokens_in`/`tokens_out` здесь больше нет (РЕШ-174): счётчик
+    стоимости считает только рубли, токены никто не читал.
 
     `pass_no` — проход поиска, к которому относится стадия (РЕШ-81). Едет рядом
     со стадией по тому же доводу, что у планов (Т-19) и кандидатов (Т-20):
@@ -82,8 +84,6 @@ class StageRecord:
     finished_at: datetime
     pass_no: int = 1
     provider: str | None = None
-    tokens_in: int = 0
-    tokens_out: int = 0
     cost_rub: float = 0.0
     sources_hit: dict[str, int] = field(default_factory=dict)
     error: str | None = None
@@ -364,8 +364,6 @@ async def _write(
                 started_at=record.started_at,
                 finished_at=record.finished_at,
                 provider=record.provider,
-                tokens_in=record.tokens_in,
-                tokens_out=record.tokens_out,
                 cost_rub=record.cost_rub,
                 sources_hit=dict(record.sources_hit),
                 error=record.error,

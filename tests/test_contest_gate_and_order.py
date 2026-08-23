@@ -346,12 +346,16 @@ async def test_конкурсный_кандидат_на_пороге_до_ка
 async def test_при_выключенной_отсечке_конкурсная_очередь_прежняя(
     settings, brief, fake_provider_factory, stub_stages, monkeypatch
 ):
-    """Умолчание `RELEVANCE_MIN = 0` — отсечка выключена, и слабый конкурсный
-    кандидат доезжает до секции, как до правки."""
-    monkeypatch.setitem(CONTEST_RELEVANCE, 1, 1)
-    assert settings.relevance_min == 0, "умолчание отсечки изменилось — тест мерит не то"
+    """При явно выключенной отсечке (`RELEVANCE_MIN = 0`) слабый конкурсный
+    кандидат доезжает до секции, как до правки Ц-2.
 
-    report = await _run(settings, fake_provider_factory, brief, main=[1, 2], contest=[1])
+    Умолчание порога перестало быть нулём (РЕШ-174: рабочее значение 3
+    переехало в код по итогам калибровки), поэтому «выключено» здесь —
+    выбор настройки теста, а не Settings() без переменных окружения."""
+    monkeypatch.setitem(CONTEST_RELEVANCE, 1, 1)
+    tuned = settings.model_copy(update={"relevance_min": 0})
+
+    report = await _run(tuned, fake_provider_factory, brief, main=[1, 2], contest=[1])
 
     assert [card.title for card in report.contest_cards] == [_contest_candidate(1).title]
 

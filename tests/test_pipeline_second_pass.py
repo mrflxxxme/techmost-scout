@@ -436,23 +436,38 @@ async def test_нейтральные_оценки_отказавшего_бат
 
 
 # ── Критерий 2: выключенный порог не меняет прогон ──────────────────────────
-async def test_при_выключенном_пороге_прогон_совпадает_с_прежним(settings, brief, db_session_factory, caplog):
+async def test_при_выключенном_пороге_прогон_совпадает_с_прежним(
+    settings, brief, db_session_factory, caplog, monkeypatch
+):
     """Умолчание `SECOND_PASS_RELEVANCE_MAX = 0` — проход выключен: один план,
     одна стадия поиска и ровно пять вызовов модели, как до задачи.
 
     Пять — это эталон прогона без второго прохода: планировщик, скоринг одного
     батча, сборка карточки, её проверка, сводка. Безусловный второй проход
     добавил бы к ним минимум вызов `replan` и второй скоринг.
+
+    Отсечка `relevance_min` здесь выключена явно через окружение: умолчание
+    сменилось на 3 (РЕШ-174), а условие теста — оценка 1 у всех кандидатов
+    первой выдачи — завязано на прежнее поведение отбора, а не на второй
+    проход, который здесь и проверяется. `select_top` без явного аргумента
+    читает порог из закэшированного `get_settings()`, а не из объекта
+    `settings`, поэтому отключать нужно через переменную окружения — так же,
+    как это делает рабочий код.
     """
+    from app.config import get_settings
+
     caplog.set_level(logging.INFO, logger="app.pipeline.stages")
     assert settings.second_pass_relevance_max == 0, "по умолчанию второй проход обязан быть выключен"
+    monkeypatch.setenv("RELEVANCE_MIN", "0")
+    get_settings.cache_clear()
+    tuned = settings.model_copy(update={"relevance_min": 0})
     provider = _ScriptedProvider(_routes(first_relevance=1))
     report = await _run_pipeline(
-        settings,
+        tuned,
         brief,
         provider,
         db_session_factory,
-        threshold=settings.second_pass_relevance_max,
+        threshold=tuned.second_pass_relevance_max,
         first=list(range(1, 11)),
         second=[1, 2, 3, 11, 12],
     )

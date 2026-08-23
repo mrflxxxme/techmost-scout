@@ -1048,12 +1048,13 @@ async def test_здоровье_отличает_отказ_источника_�
 
 
 def test_таблица_ключей_доктора_знает_про_роспатент_и_patentsview():
-    """РЕШ-52.2: десять строк (ГигаЧат выпилен, РЕШ-171), включая два новых ключа."""
+    """РЕШ-52.2: восемь строк (ГигаЧат выпилен РЕШ-171, Google убран РЕШ-174),
+    включая два ключа патентных источников."""
     names = [env_name for env_name, _, _ in SECRET_CHECKS]
 
-    assert len(names) == 10
+    assert len(names) == 8
     assert "ROSPATENT_API_KEY" in names and "PATENTSVIEW_API_KEY" in names
-    assert len(set(names)) == 10, "дубли в таблице ключей"
+    assert len(set(names)) == 8, "дубли в таблице ключей"
 
 
 # ── Правки пост-аудита (Т-18) ───────────────────────────────────────────────
@@ -1273,17 +1274,10 @@ async def test_пайплайн_отдаёт_свои_источники_нар�
         assert ScoutPipeline(settings=settings, router=LLMRouter(settings)).adapters == []
 
 
-def test_таблица_ключей_доктора_честна_про_закрытый_доступ_к_google():
-    """Т-7: пояснение к ключам Google говорит правду, а не рекламирует закрытую дверь.
+def test_таблица_ключей_доктора_не_знает_про_google():
+    """Т-7 → РЕШ-174: Google убран из адаптеров и настроек — держать в докторе
+    строку «не используется» про несуществующие ключи незачем. История решения
+    закрытого доступа — в `docs/sources.md`."""
+    names = [env_name for env_name, _, _ in SECRET_CHECKS]
 
-    Прежнее «100 запросов в сутки бесплатно» читалось как рабочая возможность,
-    которой просто не воспользовались. На деле Custom Search JSON API закрыт для
-    новых клиентов и отключается 01.01.2027 (РЕШ-21), значения в `.env` очищены
-    (РЕШ-32): оператор мог часами добывать ключ, который отдаёт 403.
-    """
-    purposes = {env_name: purpose for env_name, _, purpose in SECRET_CHECKS}
-
-    for env_name in ("GOOGLE_API_KEY", "GOOGLE_CSE_ID"):
-        assert "не используется" in purposes[env_name], f"{env_name}: пояснение не говорит, что источник выключен"
-        assert "бесплатно" not in purposes[env_name], f"{env_name}: пояснение всё ещё рекламирует закрытый доступ"
-    assert "01.01.2027" in purposes["GOOGLE_API_KEY"], "не назван срок отключения API (РЕШ-21)"
+    assert "GOOGLE_API_KEY" not in names and "GOOGLE_CSE_ID" not in names
