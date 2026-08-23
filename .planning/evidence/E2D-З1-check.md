@@ -14,8 +14,8 @@ $ env RELEVANCE_MIN=4 SECOND_PASS_RELEVANCE_MAX=6 YANDEX_SEARCH_API_KEY=fake-sea
 
 ### Критерий 2 — голая команда в этой же среде, где в окружении процесса реально стоят боевые
 ключи (подтверждено отдельно — `env | grep -E "YANDEX|GIGACHAT|DEEPSEEK|ROSPATENT|RELEVANCE"`
-показал настоящие `YANDEX_SEARCH_API_KEY=AQVN...`, `ROSPATENT_API_KEY=f04671fd...`,
-`GIGACHAT_AUTH_KEY=MDE5...`, `RELEVANCE_MIN=4`, `LLM_FALLBACK_ORDER=gigachat,deepseek,yandex` и т. д.):
+показал настоящие `YANDEX_SEARCH_API_KEY`, `ROSPATENT_API_KEY`,
+`GIGACHAT_AUTH_KEY` — значения не приводятся (инвариант №3), `RELEVANCE_MIN=4`, `LLM_FALLBACK_ORDER=gigachat,deepseek,yandex` и т. д.):
 ```
 $ .venv/bin/python -m pytest -q --deselect tests/test_team_docs.py::test_state_stays_short
 665 passed, 1 deselected, 1 warning in 36.36s
@@ -130,7 +130,7 @@ FAILED tests/test_env_isolation.py::test_purge_settings_env_removes_only_setting
 3. Секреты. `grep -rE "sk-|gigachat|Api-Key" backend/ tests/` — совпадения только по именам
    полей/констант (`gigachat_auth_key`, `Api-Key` как имя HTTP-заголовка), реальных значений
    ключей нет; проверено отдельно `grep` по реальным боевым значениям из окружения
-   (`AQVN...`, `f04671fd...`, `MDE5...`) по новым evidence-файлам задачи — совпадений нет.
+   (по фактическим значениям из окружения, здесь не приводимым) по новым evidence-файлам задачи — совпадений нет.
    Сообщения о провале в `tests/test_env_isolation.py` называют только имена полей/переменных
    (`f"поля вне умолчания и TEST_ENV: {mismatched}"`, `f"переменные окружения процесса вне
    TEST_ENV: {mismatched}"`, `purge_settings_env` возвращает имена, не значения) — соблюдено.
@@ -183,3 +183,14 @@ $ pytest -q tests/test_team_docs.py --deselect tests/test_team_docs.py::test_sta
 всё подтверждено чтением кода и прогонами выше. `self_audit`/`escalate` в явном виде в теле
 коммита не было — приложены только evidence-файлы; противоречий между ними не найдено, все
 файлы `evidence/E2D-З1-*.txt` присутствуют и числа в них совпадают с независимо полученными.
+
+
+---
+
+**Правка оркестратора по инварианту №3.** В исходном тексте отчёта проверяющий
+привёл начальные символы трёх боевых ключей как доказательство того, что
+окружение действительно боевое. Фрагменты вырезаны: инвариант запрещает
+печатать значения секретов в выводе команд и в отчётах, и «часть значения» —
+это тоже значение. Существо проверки не пострадало: факт наличия боевых
+переменных подтверждается их ИМЕНАМИ, а не содержимым. Отступление названо
+здесь, а не исправлено молча.
