@@ -18,7 +18,7 @@ import respx
 from app.config import Settings
 from app.llm import CostLimitExceededError, LLMRouter
 from app.pipeline import stages
-from app.pipeline.orchestrator import ScoutPipeline
+from app.pipeline.orchestrator import ScoutPipeline, split_contest_candidates
 from app.pipeline.stages import (
     NEUTRAL_SCORE_NOTE,
     candidates_listing,
@@ -705,8 +705,8 @@ def test_mixed_group_with_contest_is_capped():
 
 def test_contest_does_not_count_towards_source_type_coverage():
     """Критерий 3: выдача из `publication`, `patent` и `contest` даёт покрытие 2,
-    а не 3 (РЕШ-85 п. 2). Иначе четвёртый тип метрики добирался бы конкурсами
-    вместо грантов и организаций."""
+    а не 3 (РЕШ-85 п. 2). Иначе четвёртый тип метрики («публикации, патенты,
+    гранты, веб», РЕШ-173) добирался бы конкурсами вместо гранта или веба."""
     candidates = [
         Candidate(source_type=SourceType.PUBLICATION, title="Статья", url="https://example.org/a", provider="crossref"),
         Candidate(source_type=SourceType.PATENT, title="Патент", url="https://example.org/b", provider="rospatent"),
@@ -764,6 +764,53 @@ def test_source_type_coverage_of_contests_only_is_zero():
     ]
 
     assert stages.count_source_type_coverage(candidates) == 0
+
+
+def test_grant_засчитывается_в_покрытие_как_четвёртый_тип():
+    """Критерий 2 задачи З-4 (РЕШ-173): пул из `publication` + `patent` +
+    `grant` + `web` даёт покрытие 4 — метрика ворот («≥ 4 из: публикации,
+    патенты, гранты, веб») достижима по построению. Без гранта тот же пул
+    даёт 3 — мутация (а) задачи (тип `grant` схлопнулся бы в `web`) обязана
+    ронять именно этот тест."""
+    with_grant = [
+        Candidate(source_type=SourceType.PUBLICATION, title="A", url="https://example.org/a", provider="crossref"),
+        Candidate(source_type=SourceType.PATENT, title="B", url="https://example.org/b", provider="rospatent"),
+        Candidate(source_type=SourceType.GRANT, title="C", url="https://rscf.ru/project/1", provider="yandex_search"),
+        Candidate(source_type=SourceType.WEB, title="D", url="https://example.org/d", provider="yandex_search"),
+    ]
+    without_grant = with_grant[:2] + with_grant[3:]
+
+    assert stages.count_source_type_coverage(with_grant) == 4
+    assert stages.count_source_type_coverage(without_grant) == 3
+
+
+def _grant_scored(
+    *, title: str = "Грант РНФ на разработку катализатора", url: str = "https://rscf.ru/project/1"
+) -> ScoredCandidate:
+    """Оценённый кандидат-грант: важен только `source_type` — критерий 3
+    задачи З-4 (РЕШ-173) проверяет, что он не уходит в конкурсную очередь и
+    не получает её потолок зрелости."""
+    return ScoredCandidate(
+        candidate=Candidate(source_type=SourceType.GRANT, title=title, url=url, provider="yandex_search"),
+        relevance=7,
+        maturity=7,
+        accessibility=8,
+        freshness=8,
+        completeness=6,
+    )
+
+
+def test_грант_идёт_в_основную_очередь_без_потолка_зрелости():
+    """Критерий 3 задачи З-4: грант — основная очередь (`split_contest_candidates`
+    делит только по `SourceType.CONTEST`), потолок зрелости конкурсного класса
+    (`cap_contest_maturity`) на него не распространяется."""
+    main, contest = split_contest_candidates([_grant_scored()])
+    assert len(main) == 1
+    assert contest == []
+
+    card = _card_with_maturity(MaturityStage.SERIES)
+    capped = stages.cap_contest_maturity(card, [_grant_scored()])
+    assert capped.maturity_stage is MaturityStage.SERIES
 
 
 # ── Стадия extractor: нормализация сырой выдачи моделью (Э2-5) ──────────────
