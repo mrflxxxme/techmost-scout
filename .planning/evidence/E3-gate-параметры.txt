@@ -1,0 +1,6 @@
+app.__file__ = /home/user/techmost-scout/backend/app/__init__.py
+маршруты стадий = intake:deepseek,extractor:deepseek,planner:deepseek,replan:deepseek,scorer:deepseek,card_author:deepseek,verifier:deepseek,summary:deepseek,dedup_judge:deepseek
+резерв = deepseek,yandex
+стоп-кран, руб = 20.0
+порог отсечки = 3 | второй проход max = 6
+модель deepseek = deepseek-v4-flash-vision-exp | модель yandex = yandexgpt-lite/latest

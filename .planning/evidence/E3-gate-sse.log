@@ -1,0 +1,2122 @@
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Составляю план поиска", "fraction": 0.05, "keepalive": true}
+
+data: {"stage": "planner", "message": "Формулировок в плане: 9", "fraction": 0.1}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Опрашиваю источники", "fraction": 0.15, "keepalive": true}
+
+data: {"stage": "search", "message": "Найдено кандидатов — arxiv: 0, crossref: 40, cyberleninka: 22, rospatent: 20, showcase: 0, yandex-com: 20, yandex-ru: 49", "fraction": 0.4}
+
+data: {"stage": "search", "message": "Не ответили: openalex, semanticscholar", "fraction": 0.42}
+
+data: {"stage": "dedup", "message": "После склейки дублей осталось 151", "fraction": 0.45}
+
+data: {"stage": "dedup", "message": "После склейки дублей осталось 151", "fraction": 0.45, "keepalive": true}
+
+data: {"stage": "dedup", "message": "После склейки дублей осталось 151", "fraction": 0.45, "keepalive": true}
+
+data: {"stage": "dedup", "message": "После склейки дублей осталось 151", "fraction": 0.45, "keepalive": true}
+
+data: {"stage": "dedup", "message": "После склейки дублей осталось 151", "fraction": 0.45, "keepalive": true}
+
+data: {"stage": "enrich", "message": "Цитируемость известна у кандидатов: 40", "fraction": 0.47}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Оцениваю кандидатов", "fraction": 0.5, "keepalive": true}
+
+data: {"stage": "scorer", "message": "Разнообразие (конкурсная очередь): заготовок до склейки 0, после 0, схлопнуто 0", "fraction": 0.63}
+
+data: {"stage": "dedup_judge", "message": "Спрашиваю судью дублей по отобранным кандидатам", "fraction": 0.58}
+
+data: {"stage": "dedup_judge", "message": "Спрашиваю судью дублей по отобранным кандидатам", "fraction": 0.58, "keepalive": true}
+
+data: {"stage": "dedup_judge", "message": "Спрашиваю судью дублей по отобранным кандидатам", "fraction": 0.58, "keepalive": true}
+
+data: {"stage": "dedup_judge", "message": "Спрашиваю судью дублей по отобранным кандидатам", "fraction": 0.58, "keepalive": true}
+
+data: {"stage": "dedup_judge", "message": "Спрашиваю судью дублей по отобранным кандидатам", "fraction": 0.58, "keepalive": true}
+
+data: {"stage": "dedup_judge", "message": "Спрашиваю судью дублей по отобранным кандидатам", "fraction": 0.58, "keepalive": true}
+
+data: {"stage": "dedup_judge", "message": "Спрашиваю судью дублей по отобранным кандидатам", "fraction": 0.58, "keepalive": true}
+
+data: {"stage": "dedup_judge", "message": "Спрашиваю судью дублей по отобранным кандидатам", "fraction": 0.58, "keepalive": true}
+
+data: {"stage": "dedup_judge", "message": "Спрашиваю судью дублей по отобранным кандидатам", "fraction": 0.58, "keepalive": true}
+
+data: {"stage": "dedup_judge", "message": "Спрашиваю судью дублей по отобранным кандидатам", "fraction": 0.58, "keepalive": true}
+
+data: {"stage": "dedup_judge", "message": "Судья дублей: групп не найдено, склейки нет", "fraction": 0.588}
+
+data: {"stage": "scorer", "message": "Отобрано вариантов для карточек: 6", "fraction": 0.6}
+
+data: {"stage": "scorer", "message": "Разнообразие (основная очередь): заготовок до склейки 6, после 6, схлопнуто 0", "fraction": 0.61}
+
+data: {"stage": "scorer", "message": "Конкурсный класс: кандидатов 29, заготовок карточек 0 (секция вне лимита 5–7)", "fraction": 0.62}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Собираю карточки решений", "fraction": 0.65, "keepalive": true}
+
+data: {"stage": "cards", "message": "Готово карточек: 5, отброшено пустых: 0", "fraction": 0.8}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "summary", "message": "Составляю сводку и рекомендацию", "fraction": 0.85, "keepalive": true}
+
+data: {"stage": "cards", "message": "Карточек конкурсного класса: 0, отброшено пустых: 0", "fraction": 0.95}
+
+data: {"stage": "done", "message": "Отчёт готов. Стоимость запроса: 11.28 ₽", "fraction": 1.0}
+
