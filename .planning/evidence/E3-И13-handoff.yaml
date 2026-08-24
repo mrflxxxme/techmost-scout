@@ -1,0 +1,55 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: "И-13"
+  did:
+    - "Новый tests/test_web_flow_e2e.py: один тест проводит весь путь оператора одним ASGI-клиентом (httpx.AsyncClient + ASGITransport) с basic auth — форма задачи → уточняющий вопрос → бриф без подтверждения → подтверждённый бриф → запуск фонового прогона → GET /requests/{id}/progress с проверкой всех стадий (planner, search, scorer, cards, summary, done) в потоке → отчёт с двумя карточками → правка заголовка через POST /cards/{id}/edit → повторный GET отчёта показывает правку, пометка «ЧЕРНОВИК — не проверено экспертом» на месте"
+    - "Одна из двух карточек фейкового отчёта — без evidence: сквозной сценарий проверяет инвариант №1 (плашка «Нельзя показывать клиенту: нет подтверждений», скрытые стадия зрелости и TRL) не изолированным тестом, а прямо на пути оператора"
+    - "Подмены: app.pipeline.stages.run_intake/refine_brief (приём tests/test_web_intake.py), app.web.routes.run.ScoutPipeline — заглушка _FakeScoutPipeline (приём tests/test_web_run.py), пишущая report_json и строки solution_cards напрямую и зовущая прогресс-хук по стадиям; временная база на tmp_path через монки app.db.session_scope. Сети нет, платных вызовов не было (инвариант №7)"
+    - "Долг классов из handoff волны 2 (единственный названный — И-10, стиль <select>): backend/app/web/static/theme.css — select добавлен в тот же селектор, что textarea/input[text]/input[password], и в :focus-правило; расходов на новый цвет/размер нет, только переиспользование токенов"
+    - "Расхождение разметки между экранами устранено разметкой без новых классов: форма правки карточки (_card.html, задача И-12) была голыми <label>+<input>/<textarea> без общего ритма отступов — переведена на .brief-form/.brief-field/.brief-row, которые уже определены в theme.css задачей И-10 и используются формой подтверждения брифа (_brief_confirm.html). Только обёртка полей в div; текстов, id, name, значений полей не менял"
+    - "Тексты интерфейса не переписывались — новых клиентских фраз в задаче нет"
+  artifacts:
+    - tests/test_web_flow_e2e.py
+    - backend/app/web/static/theme.css
+    - backend/app/web/templates/_card.html
+    - .planning/evidence/E3-И13-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_flow_e2e.py -v: 1 passed"
+    - "pytest -q: 960 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 173 files already formatted"
+    - "grep -rn 'style=' backend/app/web/templates: нет совпадений"
+    - "grep -rnE '#[0-9a-fA-F]{3,6}' backend/app/web/templates: нет совпадений"
+    - "pytest tests/test_web_templates.py tests/test_tests_layout.py tests/test_backend_layout.py -v: 11 passed"
+    - "wc -l tests/test_web_flow_e2e.py: 328 (предел 500, запись в test_tests_layout.py не требовалась)"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (раздел И-13)"
+    - "docs/SPEC.md строки 573-608"
+    - "tests/test_web_flow_e2e.py"
+    - "backend/app/web/static/theme.css (разделы «Форма» и «Форма и поля брифа»)"
+    - "backend/app/web/templates/_card.html (форма правки)"
+  notes: |
+    Долг классов волны 2 — ровно один пункт, найден по грепу handoff'ов
+    задач И-10/И-11/И-12: И-10 назвала недостающий стиль <select> (закрыт),
+    И-12 явно написала «нехватки классов не обнаружено, эскалации к И-13
+    нет», И-11 упомянула только долг брокера прогресса (app/web/progress.py,
+    каналы не чистятся после done) — это не долг классов, файл не в списке
+    задачи И-13, в границы не входит (в постановке оркестратора это тоже
+    отдельно исключено). Обоснованных отказов по долгам классов нет — все
+    названные закрыты.
+
+    Унификация разметки трёх экранов сделана только там, где было реальное
+    расхождение (форма правки карточки vs форма брифа) — остальные элементы
+    (кнопки .btn/.btn.ghost, плашки .notice/.notice.danger, .bezel/.core)
+    уже были общими до этой задачи, трогать их незачем.
+
+    Живых вызовов модели и платных источников не было — весь сквозной тест
+    на подменах. База — временный файл SQLite на tmp_path, тот же приём, что
+    в tests/test_web_run.py/tests/test_web_report.py.
+
+    Полный набор pytest прогонялся дважды (до и после ruff format) — оба
+    раза 960 passed, регрессий от переноса классов в _card.html нет
+    (tests/test_web_report.py, 15 тестов, зелёные без изменений).
