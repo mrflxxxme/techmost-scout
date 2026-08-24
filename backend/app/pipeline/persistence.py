@@ -1,10 +1,10 @@
-"""Запись прогона в БД: запросы, план поиска, кандидаты с оценками, карточки,
-журнал стадий (Ф-8, РЕШ-40, РЕШ-83, РЕШ-84).
+"""Запись прогона в БД: запросы, брифы, план поиска, кандидаты с оценками,
+карточки, журнал стадий (Ф-8, РЕШ-40, РЕШ-83, РЕШ-84, РЕШ-146/156).
 
-Минимально достаточный набор — пять таблиц из восьми существующих в
-`app.models`: `requests`, `search_plans`, `candidates`, `solution_cards`,
-`pipeline_logs`. Полная персистентность (брифы, вердикты, витрина) — задача
-этапа 3.
+Шесть таблиц из восьми существующих в `app.models`: `requests`, `briefs`,
+`search_plans`, `candidates`, `solution_cards`, `pipeline_logs` — и сам отчёт
+целиком, дампом в `requests.report_json`. Вердикты и витрина партнёров —
+задача этапа 3–4, им запись здесь не нужна.
 
 Кандидаты с оценками добавлены сюда в Т-20 (РЕШ-84): оценки скоринга жили
 только в строке журнала калибровки, то есть умирали вместе с прогоном, и
@@ -41,13 +41,14 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models import Brief as BriefRow
 from app.models import Candidate as CandidateRow
 from app.models import PipelineLog as PipelineLogRow
 from app.models import Request as RequestRow
 from app.models import SearchPlan as SearchPlanRow
 from app.models import SolutionCard as SolutionCardRow
 from app.pipeline.history import HistoryPool, HistoryRow, build_history_pool, normalize_task_text
-from app.schemas import Candidate, SearchPlan, SolutionCard
+from app.schemas import Brief, Candidate, Report, SearchPlan, SolutionCard
 
 log = logging.getLogger(__name__)
 
@@ -169,6 +170,48 @@ async def load_search_plan(session_factory: SessionFactory | None, plan_id: int)
         raise SearchPlanNotFoundError(f"план №{plan_id} в базе не читается схемой SearchPlan: {exc}") from exc
 
 
+class ReportNotFoundError(Exception):
+    """Отчёт запроса не нашёлся, не читается схемой `Report` или база недоступна.
+
+    Отдельный тип, а не общий `Exception`, по тому же доводу, что у
+    `SearchPlanNotFoundError`: экран отчёта (Э3-5) отказывает оператору понятно
+    и один раз, а не наполовину отрисованной страницей. Текст исключения на
+    русском и называет причину — печатается как есть.
+    """
+
+
+async def load_report(session_factory: SessionFactory | None, request_id: int) -> Report:
+    """Прочитать отчёт запроса №`request_id` из `requests.report_json` (РЕШ-146/156).
+
+    Обратная операция для записи `report_json` в `_write`: JSON, сложенный туда
+    `Report.model_dump_json()`, читается назад той же схемой одним вызовом
+    `Report.model_validate_json`, без собственного разбора полей — тем же
+    приёмом, что и `load_search_plan` для `search_plans.queries`.
+
+    Отказ здесь НЕ гасится (в отличие от `persist_run`): чтение — по прямому
+    запросу экрана отчёта, продолжать без него нечем, а не необязательное
+    усиление обычного прогона.
+    """
+    if session_factory is None:
+        raise ReportNotFoundError(f"база недоступна, прочитать отчёт запроса №{request_id} нечем")
+    try:
+        async with session_factory() as session:
+            found = await session.execute(select(RequestRow).where(RequestRow.id == request_id))
+            row = found.scalars().one_or_none()
+            stored = row.report_json if row is not None else None
+    except Exception as exc:
+        raise ReportNotFoundError(f"отчёт запроса №{request_id} не удалось прочитать из базы: {exc}") from exc
+
+    if not stored:
+        raise ReportNotFoundError(
+            f"отчёта запроса №{request_id} в базе нет — report_json пуст (прогон не дошёл до сборки отчёта)"
+        )
+    try:
+        return Report.model_validate_json(stored)
+    except ValidationError as exc:
+        raise ReportNotFoundError(f"отчёт запроса №{request_id} в базе не читается схемой Report: {exc}") from exc
+
+
 class HistoryReadError(Exception):
     """История прошлых прогонов не прочиталась.
 
@@ -251,6 +294,8 @@ async def persist_run(
     plans: list[PlanRecord] | None = None,
     candidates: list[CandidateRecord] | None = None,
     error: str | None = None,
+    brief: Brief | None = None,
+    report: Report | None = None,
 ) -> int | None:
     """Записать прогон одной транзакцией: запрос, кандидаты, карточки, журнал стадий.
 
@@ -264,6 +309,20 @@ async def persist_run(
     журналы проходов (РЕШ-89): умолчание сделало бы потерю целой секции
     незаметной для тестов, а это ровно тот класс дефекта, ради которого
     заведена Т-33. В базе секции различаются колонкой `solution_cards.is_contest`.
+
+    `brief` — структурированная постановка задачи (РЕШ-146/156): строка
+    `briefs` пишется на КАЖДОМ прогоне, где бриф уже собран, — успешном и
+    упавшем на любой стадии после интейка, — а не только на успешном. Таблица
+    была мертва (РЕШ-156), ничего в неё не писало ни разу; ответы оператора
+    (`Brief.owner_answers`) пусты в авто-режиме, но строка всё равно есть.
+
+    `report` — готовый отчёт (РЕШ-146): дампится в `requests.report_json`
+    целиком через `Report.model_dump_json()`. Передаётся только на успешном
+    прогоне (на отказе стадии отчёта ещё не существует). `report.request_id`
+    на момент вызова ещё не исправлен на настоящий номер — `_write` кладёт в
+    базу копию с уже подставленным `request_id`, а сам переданный объект не
+    трогает: вызывающий код (`run_flow.ScoutPipeline.run`) сам присваивает
+    `report.request_id` после этого вызова.
 
     Фабрика не передана (тесты, веб до Э3) — запись не выполняется, прогон не
     меняется ни на шаг, номера нет: возвращается `None`. Любой отказ самой
@@ -286,6 +345,8 @@ async def persist_run(
                 plans=plans or [],
                 candidates=candidates or [],
                 error=error,
+                brief=brief,
+                report=report,
             )
     except Exception:
         log.warning("запись прогона в БД не удалась — отчёт сохранён без неё", exc_info=True)
@@ -304,6 +365,8 @@ async def _write(
     plans: list[PlanRecord],
     candidates: list[CandidateRecord],
     error: str | None,
+    brief: Brief | None = None,
+    report: Report | None = None,
 ) -> int:
     request_row = RequestRow(raw_text=raw_text, status=status, cost_rub=cost_rub, error=error)
     session.add(request_row)
@@ -311,6 +374,32 @@ async def _write(
     # Снимаем номер сразу значением: после выхода из `session_scope` сессия
     # закрыта, и обращение к атрибуту ORM-объекта уже полезло бы в базу.
     request_id = int(request_row.id)
+
+    if report is not None:
+        # Копия с исправленным request_id, а не мутация переданного объекта:
+        # на момент этого вызова `report.request_id` у вызывающего кода ещё
+        # нулевой (номер появляется только сейчас) — в базу должен попасть
+        # отчёт с настоящим номером, а не с нулём (см. докстроку persist_run).
+        request_row.report_json = report.model_copy(update={"request_id": request_id}).model_dump_json()
+
+    if brief is not None:
+        # Бриф пишется независимо от report: он существует уже к моменту
+        # отказа любой стадии после интейка, а отчёт — только на успехе.
+        session.add(
+            BriefRow(
+                request_id=request_id,
+                industry=brief.industry,
+                task_summary=brief.task_summary,
+                constraints=list(brief.constraints),
+                owner_answers=[item.model_dump(mode="json") for item in brief.owner_answers],
+                target_maturity=brief.target_maturity.value if brief.target_maturity is not None else None,
+                geography=brief.geography,
+                budget_hint=brief.budget_hint,
+                timeline_hint=brief.timeline_hint,
+                keywords_ru=list(brief.keywords_ru),
+                keywords_en=list(brief.keywords_en),
+            )
+        )
 
     # План поиска — в той же транзакции, что и строка запроса (РЕШ-83): план,
     # записанный отдельно от прогона, не с чем сопоставить.
