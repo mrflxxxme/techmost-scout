@@ -1,6 +1,11 @@
 """Готовые страницы веб-интерфейса: главная, история, витрина.
 
-Перенесено из `web/routes.py` без изменения поведения (РЕШ-143 п. 5).
+Перенесено из `web/routes.py` без изменения поведения (РЕШ-143 п. 5). Список
+запросов дополнен задачей И-11 (SPEC Э3-3): строка со статусом `searching`,
+чья фоновая задача не пережила перезапуск процесса, несёт плашку «прогон
+прерван перезапуском» — тот же признак (`run.is_run_active`), что у хаба
+запроса, чтобы список и хаб не разошлись в том, что считать прерванным
+прогоном.
 """
 
 from __future__ import annotations
@@ -12,7 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.models import Request as RequestRow
-from app.models import ShowcaseItem
+from app.models import RequestStatus, ShowcaseItem
+from app.web.routes.run import is_run_active
 
 router = APIRouter()
 
@@ -40,10 +46,11 @@ async def index(request: Request, session: AsyncSession = Depends(get_session)):
 async def list_requests(request: Request, session: AsyncSession = Depends(get_session)):
     """История запросов со статусами."""
     rows = (await session.execute(select(RequestRow).order_by(desc(RequestRow.created_at)).limit(100))).scalars().all()
+    interrupted_ids = {row.id for row in rows if row.status == RequestStatus.SEARCHING and not is_run_active(row.id)}
     return _templates(request).TemplateResponse(
         request=request,
         name="history.html",
-        context={"rows": rows},
+        context={"rows": rows, "interrupted_ids": interrupted_ids},
     )
 
 
