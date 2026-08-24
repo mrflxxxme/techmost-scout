@@ -1,0 +1,54 @@
+handoff:
+  from: reviewer
+  to: verifier
+  task: "Д-5 (волна Э2-З)"
+  did:
+    - "Проверены три коммита покоммитно (0fa7b5f, a5b4575, 7579ed6) как чистый
+       перенос: у вынесенных функций openalex_parse.py/yandex_parse.py
+       изменились только сигнатуры (явные provider/source_type вместо self),
+       логика скопирована посимвольно"
+    - "Стоп-словари ДО/ПОСЛЕ сравнены скриптом по множествам слов: RU
+       (cyberleninka/rospatent → query_shortening.RU_STOP_WORDS, 51 слово) и
+       EN (arxiv → EN_STOP_WORDS, 15 слов) идентичны дословно — объединение
+       поведение не меняет, доказано, не только именем"
+    - "scripts/probe.py и tests/test_backend_layout.py оценены: правка probe.py
+       минимальна и необходима (метод исчез при дроблении), запись cli.py в
+       страже сознательно не тронута — конфликт с параллельной Д-4 корректно
+       оставлен оркестратору"
+    - "showcase.py:_STOPWORDS подтверждён как отдельный механизм (стемм-подбор
+       для витрины), не пропущенная четвёртая копия query_shortening"
+    - "Прогнаны pytest -q (787 passed), точечные наборы адаптеров (157 passed),
+       ruff check и ruff format --check, инварианты 1, 3, 4, 5, 6, 8, 9, 10"
+    - "Найдено 0 блокирующих, 2 совета (стиль)"
+  artifacts:
+    - .planning/evidence/E2Z-Д5-review.md (закоммичен до ответа)
+    - .planning/evidence/E2Z-Д5-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q (копия agent-ae0b211c01f4848cd): 787 passed, 0 failed"
+    - "pytest tests/test_search_cyberleninka.py tests/test_rospatent.py tests/test_search_arxiv.py tests/test_openalex.py tests/test_search_yandex.py -q: 157 passed"
+    - "pytest tests/test_prompts.py -q: 44 passed"
+    - "pytest tests/test_search_failures.py tests/test_pipeline_counters.py -q: 23 passed"
+    - "pytest tests/test_team_docs.py -q: 35 passed"
+    - "pytest tests/test_probe.py -q: 10 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 143 files already formatted"
+    - "wc -l всех новых/фасадных файлов: 412/219/326/289/116/359/343/207 — все ≤ 500"
+    - "grep -rE sk-|gigachat|Api-Key backend/ tests/: только заголовки и фиктивные тестовые значения, боевых секретов нет"
+    - "grep -rln httpx backend/app вне разрешённых слоёв: пусто (инвариант №6)"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача Д-5 волны Э2-З)
+    - .planning/evidence/E2Z-Д5-review.md
+    - .planning/evidence/E2Z-Д2-review.md (источник совета про query_shortening.py)
+    - backend/app/search/query_shortening.py
+    - tests/test_backend_layout.py
+  notes: >
+    Вердикт ПРИНЯТЬ, цикл 1, второго не потребовалось. Единственный спорный
+    момент — консолидация трёх стоп-словарей в query_shortening.py формально
+    вне буквы карточки Д-5 из PLAN.md, но это прямая, явно названная
+    рекомендация из ревью Д-2 («один из следующих Д-4/Д-5 по духу»), и задача
+    волны в постановке прямо называется «...+ общий помощник укорачивания» —
+    граница не нарушена. Оставшаяся запись cli.py в _EXCEPTIONS
+    test_backend_layout.py — ожидаемое пересечение с параллельной Д-4,
+    оркестратор опустошит список при слиянии волны.
