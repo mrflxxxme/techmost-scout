@@ -109,7 +109,23 @@ class CostTracker:
 class LLMRouter:
     """Выбирает провайдера по стадии и уходит на резерв при отказе."""
 
-    def __init__(self, settings: Settings | None = None, providers: dict[str, LLMProvider] | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        providers: dict[str, LLMProvider] | None = None,
+        *,
+        initial_spent_rub: float = 0.0,
+    ) -> None:
+        """`initial_spent_rub` — с чего стартует счётчик трат (РЕШ-193 п. 1).
+
+        Веб-путь заводит свой `LLMRouter` на каждой фазе (интейк, сбор брифа,
+        прогон): без этого параметра счётчик каждой фазы начинал бы с нуля, и
+        стоп-кран `COST_LIMIT_RUB_PER_REQUEST` фактически действовал бы на
+        фазу, а не на запрос целиком (до трёх фаз — до трёх лимитов). Значение
+        передаёт вызывающий код — уже потраченное по строке `requests.cost_rub`
+        на момент создания роутера этой фазы. CLI и первый вызов веб-пути
+        передают умолчание `0.0` — там считать не с чего.
+        """
         self._settings = settings or get_settings()
         self._providers: dict[str, LLMProvider] = providers or {
             name: cls(self._settings) for name, cls in PROVIDER_CLASSES.items()
@@ -117,7 +133,7 @@ class LLMRouter:
         self._routes = self._settings.stage_routes()
         self._fallback = self._settings.fallback_order()
         self._check_known_providers()
-        self.cost = CostTracker(limit_rub=self._settings.cost_limit_rub_per_request)
+        self.cost = CostTracker(limit_rub=self._settings.cost_limit_rub_per_request, spent_rub=initial_spent_rub)
 
     def _check_known_providers(self) -> None:
         """Проверить, что маршруты и резерв ссылаются на существующих провайдеров.

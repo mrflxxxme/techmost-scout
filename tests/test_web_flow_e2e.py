@@ -134,7 +134,11 @@ class _FakeScoutPipeline:
         async with self._session_factory() as session:
             row = await session.get(RequestRow, request_id)
             row.status = RequestStatus.DRAFTED
-            row.cost_rub = report.cost_rub
+            # Сложение, не перезапись (РЕШ-193 п. 1, П-1 аудита Э3): строка
+            # уже несёт трату интейка и сбора брифа с прошлых шагов сценария —
+            # тем же выражением, что `persistence_write._write` на ветке
+            # обновления существующей строки.
+            row.cost_rub = (row.cost_rub or 0.0) + report.cost_rub
             row.report_json = report.model_dump_json()
             for position, card in enumerate(report.cards):
                 session.add(

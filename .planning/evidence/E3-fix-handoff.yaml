@@ -1,0 +1,79 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: "Э3-аудит-цикл-1"
+  did:
+    - "П-1(а): persistence_write.py — на ветке обновления существующей строки requests cost_rub складывается с уже стоящим значением, а не перезаписывается; создание новой строки (CLI-путь) не тронуто"
+    - "П-1(б): LLMRouter/CostTracker получили параметр initial_spent_rub — счёт трат веб-пути теперь сквозной на весь запрос: каждая фаза (интейк create_request, сбор брифа _draft_brief_from_answers, прогон run._run_pipeline) заводит роутер с уже потраченным по requests.cost_rub, а не с нуля; CLI не тронут (initial_spent_rub=0.0 по умолчанию)"
+    - "П-2: обезличивание проверяется в create_request ДО первого платного вызова — риск без accept_risks не создаёт строку requests и не вызывает модель, отдаёт фрагмент _deidentification_warning.html с кнопкой «Отправить как есть»; прежний показ предупреждения ПОСЛЕ интейка убран из _intake_questions.html"
+    - "П-3: routes/run.py start_run отказывает запросу в статусе drafted/validated/exported текстом со ссылкой на отчёт (REFUSAL_ALREADY_DONE, 409), пайплайн не запускается; failed и searching без задачи по-прежнему перезапускаются"
+    - "П-4: pipeline/summary.py fallback_summary переводит стадию зрелости и уверенность через MATURITY_RU/CONFIDENCE_RU из app.export.markdown (импорт, не дубликат словаря); циклического импорта нет (export.markdown зависит только от app.schemas)"
+    - "П-5: новые тесты в tests/test_web_report.py — templates.env.autoescape включён для html, заголовок карточки с <script> экранируется в отчёте; мутация autoescape=False проверена вручную (main.py временно правился и откатывался, в diff не попало) — оба теста ловят её"
+    - "Обновлены тесты, закреплявшие перезапись cost_rub как контракт: tests/test_web_run.py (_FakePipeline и тест ~204), tests/test_web_flow_e2e.py (~137, _FakeScoutPipeline)"
+    - "tests/test_tests_layout.py: поднят зафиксированный размер test_persistence.py 1416 → 1447 (новый тест на сложение cost_rub)"
+  artifacts:
+    - backend/app/llm/router.py
+    - backend/app/pipeline/persistence_write.py
+    - backend/app/pipeline/summary.py
+    - backend/app/web/routes/intake.py
+    - backend/app/web/routes/run.py
+    - backend/app/web/templates/_intake_questions.html
+    - backend/app/web/templates/_deidentification_warning.html
+    - tests/test_persistence.py
+    - tests/test_pipeline_summary.py
+    - tests/test_tests_layout.py
+    - tests/test_web_flow_e2e.py
+    - tests/test_web_intake.py
+    - tests/test_web_report.py
+    - tests/test_web_run.py
+  self_audit: pass
+  checks:
+    - "pytest -q: 969 passed, 1 warning (evidence/E3-fix-pytest.txt)"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 174 files already formatted"
+    - "pytest tests/test_web_intake.py tests/test_web_run.py tests/test_web_flow_e2e.py tests/test_persistence.py tests/test_pipeline_summary.py tests/test_web_report.py -q: 90 passed"
+    - "Мутация autoescape=False (временная правка main.py, откачена): test_templates_env_autoescape_is_enabled_for_html и test_card_title_with_script_tag_is_escaped_in_report_html — оба упали, поймали мутацию"
+  escalate: none
+  read_first:
+    - ".planning/evidence/audit-Э3.md"
+    - ".planning/DECISIONS.md (РЕШ-193, последняя запись)"
+    - "backend/app/web/routes/intake.py (докстрока модуля — порядок проверки обезличенности)"
+    - "backend/app/web/routes/run.py (REFUSAL_ALREADY_DONE, _ALREADY_DONE_STATUSES)"
+    - "backend/app/pipeline/persistence_write.py (докстрока _write — сложение cost_rub)"
+    - "backend/app/llm/router.py (LLMRouter.__init__ — initial_spent_rub)"
+  notes: |
+    Новые клиентские фразы этого цикла — на визу владельца:
+    - «Отправить как есть» (кнопка на _deidentification_warning.html) — уже
+      одобрена РЕШ-193 п. 2 дословно.
+    - «Отчёт по этому запросу уже готов. Открыть отчёт.» (REFUSAL_ALREADY_DONE
+      в run.py) — новая, требует визы (в постановке цикла помечена как «на
+      визу»).
+    - Предупреждение DEIDENTIFICATION_WARNING_TEMPLATE перефразировано
+      (убран хвост «отправка всё равно доступна», раз теперь она недоступна
+      без accept_risks) — тоже требует визы, смысл тот же, слова другие.
+
+    Отклонения от постановки:
+    - П-2: строку requests при отклонённой попытке решил НЕ создавать (один
+      из двух вариантов, разрешённых постановкой) — истории не мусорим,
+      кнопка «Отправить как есть» просто повторяет исходный POST.
+    - П-4: test_export_markdown.py проверен грепом заранее — fallback-таблицу
+      (summary.py) он не тестирует вовсе (значения `prototype` там не
+      закреплены), поэтому правил summary.py напрямую, а не веб-рендер;
+      файл не тронут.
+    - Тест на «фаза падает стоп-краном почти сразу» (П-1б) написан на фазе
+      сбора брифа (POST /brief), а не на create_request: create_request
+      всегда создаёт новую строку requests с cost_rub=0, разогнать её до
+      19.9 ₽ до первого вызова нечем — семантика та же, сцена другая.
+    - Пример чисел из аудита (0.18 → 11.28 → 11.46) воспроизведён отдельным
+      тестом test_persist_run_sums_web_intake_cost_with_pipeline_cost в
+      tests/test_persistence.py, а не в существующем тесте на 0.01/1.23 —
+      оставил оба, они проверяют один и тот же контракт на разных числах.
+    - tests/test_web_flow_e2e.py::test_full_operator_path_form_to_report_and_edit
+      падает на "search" не встретилась в потоке при запуске ВМЕСТЕ с другими
+      файлами (test_web_run.py, test_web_intake.py, test_persistence.py) —
+      воспроизвёл на HEAD ветки ДО своих правок (git stash), тот же результат.
+      Похоже на утечку состояния progress-брокера между тестовыми модулями
+      (совпадение request_id между отдельными временными БД разных файлов).
+      Полный `pytest -q` без выборочного набора файлов проходит зелёным
+      (969 passed) — в отчёте это не считаю своей правкой, но фиксирую как
+      находку за границами задачи: не правил.

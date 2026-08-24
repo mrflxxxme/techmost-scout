@@ -1178,7 +1178,9 @@ async def test_load_search_plan_raises_when_database_is_broken():
 
 async def test_persist_run_with_request_id_updates_existing_row_without_second_insert(db_session_factory):
     """Критерий 1: повторная запись по тому же `request_id` не создаёт вторую
-    строку `requests` и обновляет статус, стоимость и текст ошибки."""
+    строку `requests`, обновляет статус и текст ошибки, а стоимость
+    складывает с уже стоящей (РЕШ-193 п. 1, П-1 аудита Э3) — единый счёт
+    трат на запрос, а не перезапись последней фазы."""
     first_id = await persist_run(
         db_session_factory,
         raw_text="текст задачи, которую перезапишут",
@@ -1212,8 +1214,37 @@ async def test_persist_run_with_request_id_updates_existing_row_without_second_i
     assert len(after) == 1, "повторная запись по request_id завела вторую строку requests"
     assert after[0].id == first_id
     assert after[0].status == "failed"
-    assert after[0].cost_rub == 1.23
+    assert after[0].cost_rub == pytest.approx(1.24)  # 0.01 (интейк) + 1.23 (эта запись) — сложение, не перезапись
     assert after[0].error == "повторный прогон отказал на скоринге"
+
+
+async def test_persist_run_sums_web_intake_cost_with_pipeline_cost(db_session_factory):
+    """Веб-сценарий из аудита Э3 (П-1): интейк записал строку `requests` с
+    0,18 ₽ (без `persist_run` — веб пишет расход интейка напрямую в
+    `row.cost_rub`), затем прогон приносит `persist_run(request_id=…,
+    cost_rub=11.28)` — в строке обязано остаться 11,46 ₽, а не 11,28
+    (перезапись, найденная аудитом)."""
+    async with db_session_factory() as session:
+        row = RequestRow(raw_text="задача веб-сценария из аудита", status="briefing", cost_rub=0.18)
+        session.add(row)
+        await session.flush()
+        request_id = int(row.id)
+
+    persisted_id = await persist_run(
+        db_session_factory,
+        raw_text="задача веб-сценария из аудита",
+        status="drafted",
+        cost_rub=11.28,
+        cards=[_card()],
+        contest_cards=[],
+        stages=[],
+        request_id=request_id,
+    )
+    assert persisted_id == request_id
+
+    async with db_session_factory() as session:
+        row_after = await session.get(RequestRow, request_id)
+    assert row_after.cost_rub == pytest.approx(11.46)
 
 
 async def test_persist_run_with_request_id_updates_report_json(db_session_factory):

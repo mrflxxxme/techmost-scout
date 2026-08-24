@@ -4,10 +4,6 @@
     <p class="kicker">Запрос №{{ request_id }} создан</p>
     <h2>Уточняющие вопросы</h2>
 
-    {% if deidentification_warning %}
-    <div class="notice mb-md">{{ deidentification_warning }}</div>
-    {% endif %}
-
     {% if questions %}
     <p class="hint">
       Ответ «не знаю» допустим на любой вопрос — просто оставьте поле пустым.
