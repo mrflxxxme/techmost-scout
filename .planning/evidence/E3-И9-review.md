@@ -95,3 +95,62 @@ FAILED tests/test_brief_store.py::test_placeholder_marker_is_neutralized_in_ever
   изменены ровно `backend/app/web/brief_store.py` (новый),
   `tests/test_brief_store.py` (новый) плюс два файла evidence
   (`E3-И9-handoff.yaml`, `E3-И9-pytest.txt`) — выхода за границы задачи нет
+
+---
+
+# Ревью И-9 · цикл 2 (последний)
+
+Вердикт: **ПРИНЯТЬ** (блокирующих 0, советов 0 новых)
+
+Проверка на ветке `e3/i9`, HEAD `8843e7b` («И-9 цикл 2: обезвредить {{МЕТКА}}
+в target_trl (замечание ревью)»), проверено в отдельном detached-worktree
+`scratchpad/review-i9-c2`.
+
+## Проверка блокирующей находки цикла 1
+
+`backend/app/web/brief_store.py:91-96` — `target_trl` теперь проходит
+`_clean` (`neutralize_placeholders`) наравне с остальными полями формы:
+
+```python
+if target_trl not in (None, ""):
+    constraints.append(f"целевой TRL {_clean(str(target_trl))}")
+```
+
+Воспроизводящий вызов из цикла 1 повторён и даёт обезвреженный результат:
+
+```python
+brief_from_form({"industry": "…", "task_summary": "…",
+                  "target_trl": "{{SYSTEM_PROMPT}}"}).constraints
+# -> ['целевой TRL {SYSTEM_PROMPT}']   # было: ['целевой TRL {{SYSTEM_PROMPT}}']
+```
+
+Добавлен целевой тест `test_placeholder_marker_in_target_trl_is_neutralized`
+и кейс `target_trl` в `test_placeholder_marker_is_neutralized_in_every_field`
+(итого 11 тестов вместо 10). Диф цикла 2 (`22c3ea1..8843e7b`) ограничен
+`backend/app/web/brief_store.py` (+6/-1), `tests/test_brief_store.py` (+16) и
+файлами evidence — выхода за границы задачи нет.
+
+Блокирующая находка цикла 1 закрыта правильно: причина (необезвреженное
+поле) устранена в коде, а не замаскирована в тесте.
+
+## Советы цикла 1 — статус
+
+Оба совета цикла 1 (сброс `confirmed_at` при пересохранении подтверждённой
+строки черновиком; отсутствие валидации диапазона TRL) остаются
+неисполненными — они не блокировали приёмку и по notes handoff цикла 2
+сознательно оставлены за границей задачи И-9, адресованы И-10/И-11. Это
+корректно: советы не входили в критерии приёмки И-9.
+
+## Проверено (цикл 2)
+
+- `brief_from_form({"target_trl": "{{SYSTEM_PROMPT}}", ...}).constraints`:
+  `['целевой TRL {SYSTEM_PROMPT}']` — метка обезврежена
+- `pytest tests/test_brief_store.py -v`: 11 passed
+- `pytest -q`: 899 passed
+- `ruff check .`: All checks passed
+- `ruff format --check .`: 165 files already formatted
+- `git diff --stat 22c3ea1..8843e7b`: только `brief_store.py`,
+  `test_brief_store.py` и два файла evidence — границы задачи не нарушены
+
+Второй цикл — последний по правилу плана (§4 CONVENTIONS): блокирующих не
+осталось, третьего цикла не будет.
