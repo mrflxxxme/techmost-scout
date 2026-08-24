@@ -31,7 +31,12 @@ _EXCEPTIONS: dict[str, int] = {
     "test_contest_section_flow.py": 542,
     "test_history_reuse.py": 797,
     "test_openalex.py": 1283,
-    "test_persistence.py": 1164,
+    # 1164 → 1416: задача И-5 (РЕШ-145, долг DLG-3) добавила семь тестов
+    # `persist_run(request_id=…)` (обновление строки вместо второй вставки,
+    # отсутствие дублей карточек и брифа, откат на вставку при неизвестном
+    # номере, ветка отказа через настоящий ScoutPipeline.run()) — рост
+    # сознательный, тем же классом правки, что у test_pipeline_second_pass.py.
+    "test_persistence.py": 1416,
     "test_pipeline_resilience.py": 991,
     # 784 → 791: задача Д-6 той же волны провела судью дублей через тест
     # второго прохода (5 → 6 вызовов модели) — рост сознательный, влит

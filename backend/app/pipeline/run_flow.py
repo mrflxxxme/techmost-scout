@@ -77,6 +77,14 @@ class ScoutPipeline(
         а не в `_run_stages`: стадии карточек к этому моменту уже отработали
         по тому `brief`, что был передан на вход, — флаг только про то, что
         клиент увидит в отчёте.
+
+        `request_id` — сквозной номер существующей строки `requests` (РЕШ-145,
+        долг DLG-3): если он не нулевой, обе записи прогона —
+        успешная и на ветке `except` — идут в `persist_run(..., request_id=…)`
+        и обновляют эту строку вместо того, чтобы завести вторую. Умолчание
+        `0` — прежнее поведение (`scout run` без веба, новая строка на каждый
+        прогон): ноль не бывает настоящим id (SQLite считает первичные ключи
+        с единицы), поэтому в вызов записи он передаётся как `None`.
         """
         # Печатается первой строкой прогона, до вызова его стадий (критерий 1
         # З-7): обязана попасть в лог и тогда, когда первая же стадия прогона
@@ -110,6 +118,12 @@ class ScoutPipeline(
         history_pool = await history.load_and_log(
             self._session_factory, raw_text=raw_text, explicit_request_id=history_request_id, stage_log=stage_log
         )
+        # 0 — умолчание параметра, не настоящий номер строки (SQLite считает
+        # первичные ключи с единицы): в запись он идёт как None, иначе
+        # `persist_run` искала бы в базе несуществующую строку №0 на каждом
+        # прогоне без веба и молча откатывалась на вставку — работало бы, но
+        # лишний запрос к базе на пустом месте.
+        persist_request_id = request_id or None
         try:
             report = await self._run_stages(brief, request_id, stage_log, plan_log, candidate_log, history_pool)
         except Exception as exc:
@@ -125,6 +139,7 @@ class ScoutPipeline(
                 candidates=candidate_log,
                 error=str(exc),
                 brief=brief,  # РЕШ-146/156: briefs пишется и на отказавшем прогоне
+                request_id=persist_request_id,  # РЕШ-145: та же строка requests, не вторая
             )
             raise
         if initial_caveats:
@@ -163,6 +178,7 @@ class ScoutPipeline(
             error=None,
             brief=brief,
             report=report,  # РЕШ-146/156: briefs и report_json — для экрана Э3-5
+            request_id=persist_request_id,  # РЕШ-145: та же строка requests, не вторая
         )
         if persisted_id is not None:
             # Номер прогона появляется только в момент записи: до неё строки
