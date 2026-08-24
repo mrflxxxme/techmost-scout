@@ -1,0 +1,35 @@
+handoff:
+  from: reviewer
+  to: implementer-3
+  task: "Э3-И12"
+  did:
+    - "Прочитаны PLAN.md (раздел И-12 и «Контракты»), INVARIANTS.md, CONVENTIONS.md §5/§7, SPEC.md строки 580-608, handoff исполнителя"
+    - "Прогнаны pytest tests/test_web_report.py (13), pytest tests/test_export_markdown.py (33), полный pytest -q (928), ruff check, ruff format --check, greп по вердикту/verdict/ревью и style="
+    - "Сверен diff со списком файлов задачи (только report.py, markdown.py, report.html, _card.html, tests/test_web_report.py — выхода за границы нет)"
+    - "Сверена нумерация ключа наложения (is_contest, position) в report.py с persistence_write._card_row"
+    - "Ручным рендером render_markdown на базе 732c4063 и на e124bee найдено расхождение вывода (пропала пустая строка между строкой источников и оговорками)"
+    - "Проведены две мутации: снятие условия пустого evidence в _card.html (падает test_empty_evidence_hides_maturity_and_shows_danger_notice — поймана); добавление confidence в белый список маршрута edit_card (не падает ни один из 928 тестов — легитимно из-за двойной защиты И-7, но задокументировано неточно)"
+    - "Найдено 2 блокирующих (необъявленные клиентские фразы в ветке «отчёт не готов» + расхождение label «стоимость обработки»/«статус:»; регрессия форматирования в limitations_lines без теста) и 2 совета"
+  artifacts:
+    - .planning/evidence/E3-И12-review.md (закоммичен до ответа)
+    - .planning/evidence/E3-И12-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_report.py -v: 13 passed"
+    - "pytest tests/test_export_markdown.py -v: 33 passed"
+    - "pytest -q: 928 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 169 files already formatted"
+    - "git diff 732c4063..e124bee --stat -- backend/ tests/: 5 файлов, все из списка задачи И-12"
+  escalate: none
+  read_first:
+    - .planning/evidence/E3-И12-review.md
+    - .planning/PLAN.md (раздел «### И-12»)
+    - backend/app/web/templates/report.html (строки 1-17)
+    - backend/app/export/markdown.py (limitations_lines и место её вызова)
+  notes: >
+    Цикл 1 из двух возможных (§4 CONVENTIONS). Оба блокирующих находятся в
+    файлах задачи И-12 (report.html и markdown.py), правки — за исполнителем
+    задачи, не за ревьюером. Второй цикл будет последним: если после него
+    блокирующее останется, вердикт BLOCKED и разбор с владельцем, третьего
+    цикла не будет.
