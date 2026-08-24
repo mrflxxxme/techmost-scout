@@ -3,58 +3,55 @@ handoff:
   to: reviewer
   task: "Д-1"
   did:
-    - "models.py: Request.report_json (Text, nullable) — дамп schemas.Report.model_dump_json() целиком; Brief.owner_answers (JSON, default=list) — оживление мёртвой таблицы briefs ответами владельца"
-    - "pipeline/persistence.py: persist_run/_write принимают опциональные brief и report; строка briefs пишется независимо от report (на успехе и на отказе после интейка); report_json пишется копией отчёта с уже исправленным request_id (на момент вызова у report.request_id ещё ноль)"
-    - "pipeline/persistence.py: новая load_report(session_factory, request_id) — чтение report_json обратно типизированным Report через model_validate_json, по образцу load_search_plan; ReportNotFoundError на отсутствии фабрики, строки, пустом report_json или битом JSON"
-    - "pipeline/run_flow.py: оба вызова persist_run (успех и падение стадии) получили brief=brief; успешный вызов дополнительно report=report — правка уместилась в лимит 500 строк (файл был 498, стал ровно 500) за счёт сжатия одного соседнего комментария на 1 строку"
-    - "Живая база data/scout.db НЕ тронута — ALTER не выполнялся; синтаксис команд проверен на временной копии файла (не на оригинале), md5 оригинала не изменился"
+    - "Цикл 1: models.py — Request.report_json (Text, nullable), Brief.owner_answers (JSON, default=list); persistence.py — persist_run/_write принимают опциональные brief/report, briefs пишется независимо от report; новая load_report(session_factory, request_id) читает report_json типизированным Report (ReportNotFoundError по образцу load_search_plan); run_flow.py — оба вызова persist_run получили brief=brief, успешный — report=report"
+    - "Цикл 2 (ответ на блокирующее ревью, инвариант №8): добавлен tests/test_persistence.py::test_pipeline_failure_persists_brief_row_via_real_run — реальный отказ стадии ЧЕРЕЗ ScoutPipeline.run() (не прямой вызов persist_run) проверяет строку в BriefRow. Мутация ревьюера (снять brief=brief из except-ветки) воспроизведена вручную (sed -i '126d' в run_flow.py) — новый тест падает (0 == 1); строка восстановлена — тест снова зелёный, полный набор 763 passed, git status чист"
+    - "Цикл 2 (совет 1 ревью): run_flow.py упирался в лимит 500 строк ровно на границе — вынесены _run_stages/_empty_report в новый backend/app/pipeline/run_stages.py (класс RunStagesMixin, 359 строк), тем же приёмом дробления оркестратора (РЕШ-151), что и SearchMixin/EnrichmentMixin/CardAssemblyMixin. run_flow.py сжался до 175 строк. Логгер оставлен строкой 'app.pipeline.orchestrator' (не __name__) — на неё завязан caplog-фильтр tests/test_fallback_without_guesses.py. Публичная поверхность ScoutPipeline не изменилась, фасад orchestrator.py не тронут"
+    - "Живая база data/scout.db НЕ тронута — ALTER выполняет оркестратор при слиянии, точные команды и обоснование в E2Z-Д1-alter.sql"
   artifacts:
     - backend/app/models.py
     - backend/app/pipeline/persistence.py
     - backend/app/pipeline/run_flow.py
+    - backend/app/pipeline/run_stages.py
     - tests/test_persistence.py
     - tests/test_report_persistence.py
-    - .planning/evidence/E2Z-Д1-pytest.txt
+    - .planning/evidence/E2Z-Д1-pytest.txt (цикл 1)
+    - .planning/evidence/E2Z-Д1-pytest-cycle2.txt (цикл 2, 763 passed)
     - .planning/evidence/E2Z-Д1-pytest-criteria.txt
     - .planning/evidence/E2Z-Д1-ruff.txt
     - .planning/evidence/E2Z-Д1-alter.sql
+    - .planning/evidence/E2Z-Д1-review.md (отчёт ревьюера цикла 1)
   self_audit: pass
   checks:
-    - "pytest -q (полный набор): 762 passed, 0 failed (база волны 753 + 9 новых тестов задачи)"
-    - "pytest tests/test_report_persistence.py tests/test_persistence.py -v: 38 passed"
+    - "pytest -q (полный набор, после цикла 2): 763 passed, 0 failed (753 база волны + 8 test_report_persistence.py + 2 test_persistence.py)"
+    - "pytest tests/test_persistence.py::test_pipeline_failure_persists_brief_row_via_real_run -v: 1 passed"
+    - "мутация блокирующего №1 (снять brief=brief из except-ветки run_flow.py): новый тест падает — AssertionError: briefs пуста после реального отказа стадии, assert 0 == 1; строка восстановлена, git diff совпадает с намерением"
     - "ruff check .: All checks passed"
-    - "ruff format --check .: 137 files already formatted"
-    - "wc -l backend/app/pipeline/persistence.py: 496 строк (было 407, лимит 500 — страж test_backend_layout.py и пипелайновый test_pipeline_layout.py зелёные, файл не в списке исключений)"
-    - "wc -l backend/app/pipeline/run_flow.py: 500 строк ровно (было 498, лимит 500 — не в списке исключений)"
-    - "тест сериализации test_report_round_trips_through_json_without_field_loss: Report со всеми полями непустыми (карточка со всеми полями, owner_answers, contest_cards, sources_unavailable, constraints_unresolved) — model_dump_json → model_validate_json → model_dump(mode=json) совпадает побайтово"
-    - "тест test_successful_run_persists_report_json_and_brief_row (полный ScoutPipeline.run на подменах): report.request_id > 0, load_report(request_id) отдаёт Report с isinstance-проверкой и совпадающий с report.model_dump(mode=json), briefs > 0 строк, owner_answers == [] в авто-режиме"
+    - "ruff format --check .: 138 files already formatted"
+    - "wc -l backend/app/pipeline/run_flow.py: 175 (было 500 ровно — совет 1 закрыт)"
+    - "wc -l backend/app/pipeline/run_stages.py: 359 (новый модуль, лимит 500)"
+    - "pytest tests/test_backend_layout.py tests/test_pipeline_layout.py -v: 9 passed"
   escalate: none
   read_first:
+    - .planning/evidence/E2Z-Д1-review.md (отчёт ревьюера цикла 1 — блокирующее и советы)
     - .planning/PLAN.md (задача Д-1, критерии и мутации)
-    - docs/SPEC.md (§0.1 «Грабли», особенно п.7 про max_tokens — не трогал; и раздел про data/scout.db ALTER из шапки волны Э2-З)
-    - backend/app/pipeline/persistence.py (persist_run/_write, load_report)
-    - tests/test_report_persistence.py (новый файл, круговой перегон и чтение)
-    - .planning/evidence/E2Z-Д1-alter.sql (точные ALTER-команды для живой базы — выполняет оркестратор при слиянии)
+    - backend/app/pipeline/run_flow.py (осталась только run(), 175 строк)
+    - backend/app/pipeline/run_stages.py (новый — RunStagesMixin, _run_stages/_empty_report)
+    - tests/test_persistence.py (новый тест test_pipeline_failure_persists_brief_row_via_real_run — закрывает блокирующее)
+    - .planning/evidence/E2Z-Д1-alter.sql (точные ALTER-команды для живой базы)
   notes: >
-    Живая база: ALTER TABLE requests ADD COLUMN report_json TEXT; ALTER TABLE
-    briefs ADD COLUMN owner_answers JSON NOT NULL DEFAULT '[]' — обе команды
-    безопасны (requests непуста, 4 строки на 24.08.2026, но колонка nullable;
-    briefs пуста — 0 строк, РЕШ-156). Полный текст и обоснование — в
-    E2Z-Д1-alter.sql. Резервную копию базы перед ALTER снять по уроку Э2-Ж.
+    Это цикл 2, ответ на ДОРАБОТАТЬ. Оба пункта ревью закрыты: блокирующее
+    (тест через реальный run(), мутация показана) и совет 1 (дробление
+    run_flow.py). Совет 2 (значения по умолчанию Confidence.MEDIUM/geography
+    "РФ" в тесте сериализации совпадают со схемными умолчаниями) и совет 3
+    (отдельный коммит handoff в цикле 1) не блокировали — оставлены как есть,
+    не трогал тест сериализации, чтобы не расширять диф сверх запрошенного
+    ревьюером. Если ревьюер хочет совет 2 как отдельную придирку — правка
+    дешёвая (заменить на Confidence.HIGH и geography="США" в _full_card/
+    _full_report tests/test_report_persistence.py), но сама по себе не
+    блокировала цикл 1 и явно не запрошена в сообщении оркестратора для
+    цикла 2.
 
 
-    Сессия обрывалась один раз на сетевой ошибке в процессе написания тестов
-    (после того как models.py/persistence.py/run_flow.py уже были
-    отредактированы, но не закоммичены); продолжено с той же рабочей копии по
-    указанию оркестратора — незакоммиченные правки трёх файлов подтвердились
-    исправными (git diff совпал с ожиданиями), тесты дописаны без переделки
-    уже готового кода.
-
-
-    За границами задачи: веб-маршруты (Э3-5) не трогал, экспорт markdown
-    остаётся первичным артефактом CLI — report_json пока только читается
-    новой функцией, никто её ещё не вызывает из cli.py/routes.py (это работа
-    следующей волны). Отдельно нашёл, но не правил (не в границах Д-1):
-    порядок колонки owner_answers после ALTER (позиция 12, в конце таблицы)
-    отличается от порядка в models.py (после constraints) — на работу ORM не
-    влияет, но при ручном просмотре pragma table_info это может смутить.
+    Коммит цикла 2 (5dd538d) идёт поверх 884549b в той же ветке
+    worktree-agent-a3ca04dde202b8c7e, третьего коммита для handoff не будет —
+    handoff обновляется этим же ответом, следующим коммитом сразу после кода.
