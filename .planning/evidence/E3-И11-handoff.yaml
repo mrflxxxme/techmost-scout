@@ -1,0 +1,83 @@
+handoff:
+  from: implementer-2
+  to: reviewer
+  task: "И-11"
+  did:
+    - "POST /requests/{id}/start (backend/app/web/routes/run.py): читает подтверждённый бриф через brief_store.load_brief, проверяет confirmed_at, ставит RequestStatus.SEARCHING и запускает ScoutPipeline.run фоновой задачей asyncio.create_task с session_factory=session_scope (отложенный импорт, РЕШ-189 п.10) и progress=hook в брокер И-2"
+    - "Замок РЕШ-147 в реестре dict[int, asyncio.Task] _active_runs: тот же запрос при активной своей задаче — фрагмент текущего прогресса без второго прогона; другой запрос при активном где-либо прогоне — отказ 409 человеческим текстом; протухшие задачи подчищаются перед проверкой замка"
+    - "GET /requests/{id} (request_hub): бриф, прогресс/плашка «прогон прерван перезапуском» с кнопкой «Запустить заново» при searching без задачи в реестре, ссылка на отчёт и стоимость при drafted/validated/exported, кнопка «Начать поиск» при подтверждённом брифе без старта"
+    - "GET /requests/{id}/progress: SSE из брокера app.web.progress, JSON {stage, message, fraction}; keepalive помечается сравнением ссылки на объект события (брокер возвращает тот же ProgressEvent повторно, без правки protocol.py); в демо-режиме (settings.demo_mode_default) хвост «Стоимость запроса: N ₽» вырезается из сообщения done на этом же слое сериализации"
+    - "backend/app/web/routes/pages.py: список /requests получает набор interrupted_ids (searching без активной задачи) через is_run_active из run.py; backend/app/web/templates/history.html показывает плашку и кнопку «Запустить заново» для таких строк"
+    - "Новые шаблоны request.html (хаб) и _progress.html (фрагмент прогресса, используется и как ответ POST /start, и внутри хаба через {% with request_id=row.id %}); новый backend/app/web/static/progress.js (41 строка, ванильный EventSource, без htmx-SSE)"
+    - "Тесты tests/test_web_run.py (8 штук) — пайплайн подменён управляемой заглушкой _FakePipeline на asyncio.Event, база — временный файл SQLite с подменой app.db.session_scope; tests/test_web_progress_stream.py (7 штук) — только HTTP-слой поверх реального брокера, без пайплайна и без БД"
+  artifacts:
+    - backend/app/web/routes/run.py
+    - backend/app/web/routes/pages.py
+    - backend/app/web/templates/request.html
+    - backend/app/web/templates/_progress.html
+    - backend/app/web/templates/history.html
+    - backend/app/web/static/progress.js
+    - tests/test_web_run.py
+    - tests/test_web_progress_stream.py
+    - .planning/evidence/E3-И11-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_run.py -v: 8 passed"
+    - "pytest tests/test_web_progress_stream.py -v: 7 passed"
+    - "pytest -q (весь набор): 930 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 170 files already formatted"
+    - "wc -l backend/app/web/routes/run.py: 264 (лимит 500)"
+    - "wc -l backend/app/web/static/progress.js: 41 (лимит 60, ориентир 30)"
+    - "grep -rniE celery|redis backend/ --include=*.py: нет совпадений"
+    - "pytest tests/test_backend_layout.py tests/test_tests_layout.py -v: 6 passed"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «И-11»)
+    - docs/SPEC.md (строки 557–589, Э3-3/Э3-4)
+    - backend/app/web/routes/run.py
+    - backend/app/web/progress.py (И-2, не правился)
+    - tests/test_web_run.py
+    - tests/test_web_progress_stream.py
+  notes: |
+    Новые клиентские фразы этой задачи — на визу владельца (РЕШ-143 п.7):
+    1. «Бриф ещё не подтверждён. Вернитесь к шагу подтверждения и нажмите
+       «Подтвердить и продолжить».» — отказ старта без подтверждённого брифа.
+    2. «Сейчас выполняется другой запрос (№{other_id}). Дождитесь его
+       завершения и запустите этот запрос заново.» — отказ замка РЕШ-147.
+    3. «Запрос №{id} не найден.» — защитный ответ на несуществующий id
+       (не в списке критериев, добавлено для устойчивости маршрута).
+    4. «Прогон прерван перезапуском. Фоновая задача не пережила перезапуск
+       сервиса — сам запрос и бриф сохранены.» + кнопка «Запустить заново» —
+       плашка на хабе и в списке запросов (history.html).
+    5. «Прогон завершился отказом.» + кнопка «Запустить заново» — блок хаба
+       при статусе failed.
+    6. «Бриф подтверждён и готов к поиску.» + кнопка «Начать поиск» —
+       переиспользует уже одобренный текст кнопки из постановки И-10/РЕШ-190
+       п.3 («Начать поиск»), сама фраза-подводка новая.
+    7. «Черновик отчёта готов. Стоимость запроса: N ₽» + «Открыть отчёт» —
+       блок хаба при готовом отчёте.
+    8. «Идёт поиск» — заголовок фрагмента прогресса.
+
+    Технические замечания:
+    - Критерий 3 плана (grep -rn "hx-ext|sse-connect" backend/app/web) на
+      сегодняшней базе даёт ложное совпадение НЕ из-за этой задачи: строка
+      "hx-ext" встречается внутри вендорного backend/app/web/static/htmx.min.js
+      (собственный код библиотеки работы с атрибутом hx-ext), это было в базе
+      732c406 уже до этой задачи (проверено `git show 732c406:...htmx.min.js
+      | grep -c hx-ext` → 1). Ни один файл этой задачи (progress.js, request.html,
+      _progress.html, history.html, run.py, pages.py) совпадений не даёт —
+      см. отдельную проверку в evidence. Отмечаю, чтобы верификатор не
+      блокировал по формальному прогону критерия целиком на backend/app/web.
+    - Известный долг брокера (не мой файл, не правил): app.web.progress не
+      освобождает буфер `_channels[request_id]` после события done — растёт в
+      памяти процесса на масштабе месяца некритично, но публичный метод
+      очистки стоит завести в И-13 или отдельным долгом; docstring run.py это
+      фиксирует.
+    - session.get(BriefRow.confirmed_at) читается в run.py напрямую (минуя
+      brief_store.load_brief, который confirmed_at не отдаёт) — единственное
+      обращение к сырой колонке БД в этой задаче, полноценный Brief по-прежнему
+      собирается только через brief_store (единственный писатель/читатель
+      структуры брифа, задача И-9).
+    - Живой прогон пайплайна не делался — только заглушки и брокер, платных
+      вызовов не было.

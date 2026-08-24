@@ -1,0 +1,126 @@
++ echo '=== pytest tests/test_web_run.py -v ==='
+=== pytest tests/test_web_run.py -v ===
++ /home/user/techmost-scout/.venv/bin/python -m pytest tests/test_web_run.py -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a31c6b3d977fd27ee
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 8 items
+
+tests/test_web_run.py::test_start_changes_status_and_creates_one_task PASSED [ 12%]
+tests/test_web_run.py::test_repeated_start_same_request_reuses_task PASSED [ 25%]
+tests/test_web_run.py::test_start_other_request_refuses_while_one_active PASSED [ 37%]
+tests/test_web_run.py::test_completion_writes_report_to_same_request_id PASSED [ 50%]
+tests/test_web_run.py::test_pipeline_failure_sets_failed_status_and_error PASSED [ 62%]
+tests/test_web_run.py::test_hub_shows_banner_when_searching_without_registered_task PASSED [ 75%]
+tests/test_web_run.py::test_start_without_confirmed_brief_refuses PASSED [ 87%]
+tests/test_web_run.py::test_hub_shows_cost_and_report_link_when_drafted PASSED [100%]
+
+============================== 8 passed in 1.04s ===============================
++ echo
+
++ echo '=== pytest tests/test_web_progress_stream.py -v ==='
+=== pytest tests/test_web_progress_stream.py -v ===
++ /home/user/techmost-scout/.venv/bin/python -m pytest tests/test_web_progress_stream.py -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a31c6b3d977fd27ee
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 7 items
+
+tests/test_web_progress_stream.py::test_content_type_is_event_stream PASSED [ 14%]
+tests/test_web_progress_stream.py::test_events_carry_stage_message_fraction PASSED [ 28%]
+tests/test_web_progress_stream.py::test_unavailable_sources_message_reaches_stream_verbatim PASSED [ 42%]
+tests/test_web_progress_stream.py::test_keepalive_marks_repeated_event PASSED [ 57%]
+tests/test_web_progress_stream.py::test_done_event_closes_stream PASSED  [ 71%]
+tests/test_web_progress_stream.py::test_demo_mode_hides_cost_but_keeps_ready_notice PASSED [ 85%]
+tests/test_web_progress_stream.py::test_demo_mode_off_keeps_cost_visible PASSED [100%]
+
+============================== 7 passed in 0.55s ===============================
++ echo
+
++ echo '=== pytest -q (весь набор) ==='
+=== pytest -q (весь набор) ===
++ /home/user/techmost-scout/.venv/bin/python -m pytest -q
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 23%]
+........................................................................ [ 30%]
+........................................................................ [ 38%]
+........................................................................ [ 46%]
+........................................................................ [ 54%]
+........................................................................ [ 61%]
+........................................................................ [ 69%]
+........................................................................ [ 77%]
+........................................................................ [ 85%]
+........................................................................ [ 92%]
+..................................................................       [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+930 passed, 1 warning in 55.51s
++ echo
+
++ echo '=== ruff check . ==='
+=== ruff check . ===
++ /home/user/techmost-scout/.venv/bin/ruff check .
+All checks passed!
++ echo
+
++ echo '=== ruff format --check . ==='
+=== ruff format --check . ===
++ /home/user/techmost-scout/.venv/bin/ruff format --check .
+170 files already formatted
++ echo
+
++ echo '=== wc -l backend/app/web/routes/run.py backend/app/web/static/progress.js ==='
+=== wc -l backend/app/web/routes/run.py backend/app/web/static/progress.js ===
++ wc -l backend/app/web/routes/run.py backend/app/web/static/progress.js
+  264 backend/app/web/routes/run.py
+   41 backend/app/web/static/progress.js
+  305 total
++ echo
+
++ echo '=== grep celery|redis backend/ (*.py) ==='
+=== grep celery|redis backend/ (*.py) ===
++ grep -rniE 'celery|redis' backend/ '--include=*.py'
++ echo 'нет совпадений'
+нет совпадений
++ echo
+
++ echo '=== grep hx-ext|sse-connect в файлах задачи И-11 ==='
+=== grep hx-ext|sse-connect в файлах задачи И-11 ===
++ grep -n 'hx-ext\|sse-connect' backend/app/web/static/progress.js backend/app/web/templates/request.html backend/app/web/templates/_progress.html backend/app/web/templates/history.html backend/app/web/routes/run.py backend/app/web/routes/pages.py
++ echo 'нет совпадений'
+нет совпадений
++ echo
+
++ echo '=== pytest tests/test_backend_layout.py tests/test_tests_layout.py -v ==='
+=== pytest tests/test_backend_layout.py tests/test_tests_layout.py -v ===
++ /home/user/techmost-scout/.venv/bin/python -m pytest tests/test_backend_layout.py tests/test_tests_layout.py -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a31c6b3d977fd27ee
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items
+
+tests/test_backend_layout.py::test_backend_app_stays_within_line_limit PASSED [ 16%]
+tests/test_backend_layout.py::test_exceptions_do_not_grow_unnoticed PASSED [ 33%]
+tests/test_backend_layout.py::test_backend_app_directory_is_not_empty PASSED [ 50%]
+tests/test_tests_layout.py::test_new_test_files_stay_within_line_limit PASSED [ 66%]
+tests/test_tests_layout.py::test_exceptions_do_not_grow_unnoticed PASSED [ 83%]
+tests/test_tests_layout.py::test_tests_directory_is_not_empty PASSED     [100%]
+
+============================== 6 passed in 0.04s ===============================
