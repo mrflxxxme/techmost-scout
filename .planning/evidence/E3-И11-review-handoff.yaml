@@ -1,0 +1,41 @@
+handoff:
+  from: reviewer
+  to: implementer-2
+  task: "И-11"
+  did:
+    - "Прочитаны PLAN.md (раздел И-11 + Контракты), INVARIANTS.md, handoff исполнителя, diff a189849 против базы 732c4063 целиком"
+    - "Прогнаны tests/test_web_run.py -v (8 passed), tests/test_web_progress_stream.py -v (7 passed), pytest -q весь набор (930 passed), ruff check ., ruff format --check ., wc -l, grep-критерии плана — числа исполнителя воспроизведены"
+    - "Проверена гонка двойного клика POST /start контролируемым конкурентным тестом (asyncio.gather, управляемая задержка внутри brief_store.load_brief): подтверждено, что пайплайн запускается дважды на один request_id — TOCTOU-окно между проверкой замка и его установкой, два await между ними"
+    - "Проверено поведение GET /requests/{id} для несуществующего запроса: возвращает application/json {\"detail\": \"...\"} вместо HTML вопреки response_class=HTMLResponse — новое поведение задачи, без теста"
+    - "Проведены обе предписанные мутации (снять проверку замка; снять keepalive) — оба мутанта пойманы соответствующими тестами, откат подтверждён чистым git diff"
+    - "Проверены десять инвариантов; №8 нарушен находкой 2, остальные применимые — соблюдены"
+  artifacts:
+    - .planning/evidence/E3-И11-review.md (закоммичен до ответа)
+    - .planning/evidence/E3-И11-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_run.py -v: 8 passed"
+    - "pytest tests/test_web_progress_stream.py -v: 7 passed"
+    - "pytest -q: 930 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 170 files already formatted"
+    - "мутация замка (снята проверка 'другой прогон активен'): test_start_other_request_refuses_while_one_active падает (200 вместо 409)"
+    - "мутация keepalive (снята простановка keepalive=true): test_keepalive_marks_repeated_event падает (KeyError: keepalive)"
+    - "конкурентный POST /start на один request_id (доп. проверка, вне штатного набора): пайплайн запущен 2 раза вместо 1 — гонка подтверждена"
+  escalate: none
+  read_first:
+    - .planning/evidence/E3-И11-review.md (блокирующие находки 1 и 2, с местами в коде и воспроизведением)
+    - .planning/PLAN.md (раздел «И-11», РЕШ-147)
+    - backend/app/web/routes/run.py (start_run строки 176–204; request_hub строка 217)
+  notes: |
+    Цикл 1 из двух. Находка 1 (гонка замка, РЕШ-147) — самая серьёзная: деньги,
+    двойной прогон пайплайна на один запрос при конкурентных POST /start,
+    включая обычный повторный клик пользователя по кнопке. Находка 2 (голый
+    JSON вместо HTML на несуществующем request_id в request_hub) — второй по
+    значимости дефект, тоже в файлах задачи, тоже без теста.
+    Оба чинятся в границах уже открытого файла run.py, выхода за границы
+    задачи не требуют. Три совета в отчёте не блокируют, но совет 3 (стыковка
+    confirmed_at на границе И-9/И-10/И-11) стоит держать в поле зрения при
+    слиянии волны 2 — до слияния И-10 в эту ветку проверить нельзя.
+    Второй цикл ревью — последний: если блокирующее останется, дальше не
+    третий цикл, а разбор с владельцем (§4 CONVENTIONS).
