@@ -2,38 +2,36 @@ handoff:
   from: implementer-2
   to: reviewer
   task: "И-7"
+  cycle: 2
   did:
-    - "Реализована чистая функция apply_overrides в backend/app/report_overrides.py (66 строк): наложение editor_overrides на Report по ключу (is_contest, position)"
-    - "Белый список полей EDITABLE_FIELDS — ровно восемь текстовых полей из раздела «Контракты» плана (title, essence, applicability, next_step, risks, contact_leads, developer_org, developer_team); confidence, requirement_checks, unsourced_claims нигде не читаются из overrides"
-    - "evidence_removed фильтрует строки evidence по URL; добавить строку evidence через overrides невозможно — ключ evidence не входит в белый список и нигде не читается"
-    - "Наложение делает report.model_copy(deep=True) первым шагом — исходный Report не мутируется"
-    - "Тесты tests/test_report_overrides.py, 10 штук (план требовал не меньше 7): побайтовое совпадение при пустых правках, немутируемость исходника, независимость секций по позиции, игнор confidence/requirement_checks/unsourced_claims, удаление ровно одной строки evidence, невозможность добавить evidence, применение всех восьми полей белого списка, игнор правки по несуществующему ключу"
+    - "Цикл 1: реализована чистая функция apply_overrides в backend/app/report_overrides.py (66 строк): наложение editor_overrides на Report по ключу (is_contest, position)"
+    - "Цикл 1: белый список полей EDITABLE_FIELDS — ровно восемь текстовых полей из раздела «Контракты» плана (title, essence, applicability, next_step, risks, contact_leads, developer_org, developer_team); confidence, requirement_checks, unsourced_claims нигде не читаются из overrides"
+    - "Цикл 1: evidence_removed фильтрует строки evidence по URL; добавить строку evidence через overrides невозможно"
+    - "Цикл 2 (доработка по блокирующей находке ревью): добавлен тест test_untouched_card_nested_fields_do_not_leak_into_source в tests/test_report_overrides.py — доказывает, что model_copy(deep=True) защищает вложенные изменяемые поля (risks) непереписанной карточки: result.cards[1] is not report.cards[1], result.cards[1].risks is not report.cards[1].risks, мутация result.cards[1].risks не протекает в report.cards[1].risks"
+    - "Цикл 2: код backend/app/report_overrides.py не менялся (ревьюер подтвердил, что он верен) — git diff по модулю пуст"
+    - "Цикл 2: самопроверка мутацией — временная замена deep=True на deep=False уронила ровно новый тест (1 failed, 10 passed), после чего deep=True возвращён"
   artifacts:
     - backend/app/report_overrides.py
     - tests/test_report_overrides.py
     - .planning/evidence/E3-I7-pytest.txt
   self_audit: pass
   checks:
-    - "pytest tests/test_report_overrides.py -v: 10 passed"
-    - "pytest -q (полный набор): 898 passed, 1 warning (посторонний StarletteDeprecationWarning, не от задачи)"
+    - "pytest tests/test_report_overrides.py -v: 11 passed (было 10 в цикле 1, +1 новый тест на неразделяемость вложенных полей)"
+    - "pytest -q (полный набор): 899 passed, 1 warning (посторонний StarletteDeprecationWarning, не от задачи)"
     - "ruff check .: All checks passed!"
     - "ruff format --check .: 165 files already formatted"
-    - "grep -nE 'sqlalchemy|app.db|httpx' backend/app/report_overrides.py: совпадений нет"
-    - "wc -l backend/app/report_overrides.py: 66 строк (ориентир плана — 80)"
+    - "самопроверка мутацией (deep=True→deep=False): 1 failed, 10 passed — новый тест единственный поймал мутацию; deep=True возвращён, git diff backend/app/report_overrides.py пуст"
   escalate: none
   read_first:
     - ".planning/PLAN.md (раздел «### И-7»)"
     - ".planning/DECISIONS.md (РЕШ-186, РЕШ-148)"
-    - "backend/app/schemas.py (класс SolutionCard, строки 237-278)"
+    - "git show review/i7:\".planning/evidence/E3-И7-review.md\" (отчёт ревью цикла 1)"
     - "backend/app/report_overrides.py"
     - "tests/test_report_overrides.py"
   notes: >-
-    Имена полей белого списка из плана (title, essence, applicability, next_step,
-    risks, contact_leads, developer_org, developer_team) дословно совпали с
-    полями schemas.SolutionCard — расхождений с планом не найдено, ничего
-    подгонять под фактическую схему не пришлось. Ключ overrides — позиция карточки
-    внутри своей секции с нуля (0-based), как в pipeline/persistence_write.py
-    (_card_row, enumerate cards/contest_cards отдельно) — модуль сам БД не читает,
-    сборку словаря {(is_contest, position): overrides} по строкам solution_cards
-    делает вызывающий код (маршрут И-11), это за границами этой задачи. Живых
-    вызовов моделей и сети в задаче нет вовсе.
+    Блокирующая находка ревью цикла 1 закрыта добавлением одного теста —
+    рецепт ревьюера выполнен дословно. Три совета ревьюера (валидация типов
+    из overrides — дело маршрута И-12; поведение evidence_removed при
+    дублирующихся URL — учесть при проектировании формы И-12; уточнение
+    докстроки модуля) сознательно не тронуты по указанию оркестратора: они
+    не блокирующие и уйдут в постановки волны 2 и журнал, а не в эту задачу.

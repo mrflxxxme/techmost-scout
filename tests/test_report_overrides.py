@@ -65,6 +65,24 @@ def test_original_report_is_not_mutated(brief):
     assert report.cards[0].title == "Исходный заголовок"
 
 
+def test_untouched_card_nested_fields_do_not_leak_into_source(brief):
+    """`model_copy(deep=True)` защищает вложенные изменяемые поля непереписанной
+    карточки: правка карточки 0 не должна оставлять `result.cards[1]` тем же
+    объектом, что `report.cards[1]`, иначе мутация результата бесшумно портит
+    исходный отчёт (найдено ревью цикла 1, критерий приёмки 1)."""
+    untouched = _make_card(title="Вторая карточка", risks=["исходный риск"])
+    report = _make_report([_make_card(title="Первая карточка"), untouched], brief=brief)
+
+    result = apply_overrides(report, {(False, 0): {"title": "Правка первой"}})
+
+    assert result.cards[1] is not report.cards[1]
+    assert result.cards[1].risks is not report.cards[1].risks
+
+    result.cards[1].risks.append("мутация результата")
+
+    assert report.cards[1].risks == ["исходный риск"]
+
+
 def test_contest_card_at_same_position_is_untouched(brief):
     """Ключ — пара (is_contest, position): правка обычной карточки не задевает
     конкурсную карточку с тем же порядковым номером."""
