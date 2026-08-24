@@ -1,38 +1,34 @@
 handoff:
   from: reviewer
-  to: implementer-1
+  to: orchestrator
   task: "Д-3"
   did:
-    - "Проверены diff (3ab180b) и хендофф (bba3c02), все десять инвариантов, критерии приёмки задачи и грабли §0.1"
-    - "Прогнан полный pytest в копии (760 passed, 0 failed), ruff check и ruff format --check (чисто), pytest --collect-only на копии и на базовом коммите 9228adb (760 vs 753 — сходится с заявленными +7)"
-    - "Воспроизведены мутации: битая схема БД (5 тестов _schema_drift), утечка ключа в format_active_run_params через cli._run (тест-мутация внутри набора уже показывает pytest.raises(AssertionError))"
-    - "Найдено 1 блокирующее: критерий приёмки «Settings().second_pass_relevance_max == 6 (тест)» не закрыт — старая проверка умолчания (== 0) удалена, новая не добавлена, ни один тест не фиксирует число 6"
-    - "1 совет: страж схемы ожидаемо покраснеет на живой базе после слияния Д-1 до ALTER оркестратора — не дефект Д-3, зафиксировано для ворот"
+    - "Цикл 2 (последний): проверен diff bba3c02..3afdc1e — только tests/test_config.py и handoff, продукт не тронут"
+    - "Прочитан новый тест test_second_pass_relevance_max_умолчание_шесть — форма как у соседнего теста, ссылка на РЕШ-103 и на находку ревью цикла 1 есть"
+    - "Мутация воспроизведена самостоятельно в копии: default 6→0 в config.py — падает ровно новый тест (assert 0 == 6), остальные 10 тестов файла целы; значение восстановлено, git status после восстановления чист"
+    - "Прогнан полный pytest -q в копии: 761 passed, 0 failed; ruff check и ruff format --check — чисто; pytest --collect-only — 761 (760 цикла 1 + 1 новый)"
+    - "Единственная блокирующая находка цикла 1 закрыта; новых находок нет"
   artifacts:
-    - .planning/evidence/E2Z-Д3-review.md (закоммичен до ответа)
+    - .planning/evidence/E2Z-Д3-review.md (раздел «цикл 2», закоммичен до ответа)
     - .planning/evidence/E2Z-Д3-review-handoff.yaml
   self_audit: pass
   checks:
-    - "pytest -q (копия): 760 passed, 0 failed"
-    - "pytest --collect-only -q (копия): 760 tests collected"
-    - "pytest --collect-only -q (база 9228adb): 753 tests collected"
+    - "git diff bba3c02..3afdc1e --stat (копия): только tests/test_config.py (+17) и handoff.yaml"
+    - "pytest tests/test_config.py -q с мутацией default=0: 1 failed, 10 passed (assert 0 == 6)"
+    - "git status --short (копия) после восстановления мутации: пусто"
+    - "pytest -q (копия): 761 passed, 0 failed"
+    - "pytest --collect-only -q (копия): 761 tests collected"
     - "ruff check .: All checks passed"
     - "ruff format --check .: 137 files already formatted"
-    - "pytest tests/test_secret_leak_guard.py -q: 7 passed"
-    - "pytest tests/test_cli_doctor_schema_guard.py tests/test_backend_layout.py tests/test_stage_token_budgets.py -q: 12 passed"
-    - "pytest tests/test_team_docs.py -q: 35 passed"
-    - "_schema_drift на живой data/scout.db (основное дерево, код задачи): [] — чисто"
-    - "Settings(_env_file=None).second_pass_relevance_max == 6 — подтверждено вручную, тестом не покрыто"
   escalate: none
   read_first:
-    - .planning/PLAN.md (задача Д-3, волна Э2-З)
-    - backend/app/config.py (second_pass_relevance_max, строка 125)
-    - tests/test_pipeline_second_pass.py (удалённая проверка умолчания)
-    - .planning/evidence/E2Z-Д3-review.md (блокирующая находка №1)
+    - .planning/evidence/E2Z-Д3-review.md (раздел «цикл 2» — вердикт и разбор)
+    - tests/test_config.py (test_second_pass_relevance_max_умолчание_шесть)
+    - .planning/evidence/E2Z-Д3-handoff.yaml (раздел про цикл 2 в notes)
   notes: |
-    Это цикл 1. Единственная блокирующая находка чинится одной строкой —
-    тестом, фиксирующим Settings(_env_file=None).second_pass_relevance_max == 6
-    (например, в tests/test_config.py рядом с
-    test_маршруты_по_умолчанию_все_стадии_на_deepseek_резерв_yandex). Второй
-    цикл — последний по правилам ревью; в третий раз доводов для эскалации
-    владельцу это не даёт, задача маленькая и правка точечная.
+    Вердикт: ПРИНЯТЬ. Это был второй (последний) цикл ревью — правка точечная,
+    единственная находка цикла 1 закрыта тестом и подтверждена воспроизведённой
+    мутацией. Задача Д-3 готова к слиянию волны Э2-З; напоминание в отчёте
+    цикла 1 остаётся в силе как совет (не блокирует): после слияния Д-1 в ту
+    же волну страж _schema_drift ожидаемо покраснеет на живой data/scout.db до
+    ALTER оркестратора — это следствие порядка слияния, не дефект Д-3.
