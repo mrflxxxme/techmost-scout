@@ -1,0 +1,50 @@
+handoff:
+  from: implementer-Д2
+  to: reviewer
+  task: "Д-2"
+  did:
+    - "rospatent.py: повтор при < 3 кандидатов на исходной формулировке — один повтор укороченной формой (первые 3–4 содержательных слова, свой _shorten_query по образцу cyberleninka), лог обеих форм и обоих счётов на INFO"
+    - "arxiv.py: повтор при found==0 — рефакторинг _build_search_query в _content_words + _query_from_words, короткая форма (SHORT_QUERY_WORDS=4) всегда идёт фразовым поиском, даже если исходная шла как AND; лог обеих форм и обоих found на INFO"
+    - "rospatent.py: лог отсева _to_candidate (запись без title/number) поднят с debug на info, с причиной отсева в тексте (долг З-6, Долг-2)"
+    - "tests/test_rospatent.py: 15 новых тестов (повтор при бедной выдаче, богатая выдача без повтора, обе формы бедны, короткая формулировка без повтора, отказ на повторе, пауза на повторе, детерминизм укорачивания, INFO-лог отсева)"
+    - "tests/test_search_arxiv.py: новый файл, 7 тестов тем же составом критериев для arXiv"
+    - ".planning/evidence/E2Z-cyberleninka-разбор.md: разбор «21 без карточек» по логу и коду (БД прогона 1 не существует — инцидент Э2-Ж); доказано число 21=20+1 и потеря видоспецифичного слова при укорачивании; честно названа граница — по-кандидатная оценка relevance недоступна без следующего успешно записавшегося прогона, дан точный SQL-запрос для него"
+  artifacts:
+    - backend/app/search/rospatent.py
+    - backend/app/search/arxiv.py
+    - tests/test_rospatent.py
+    - tests/test_search_arxiv.py
+    - .planning/evidence/E2Z-cyberleninka-разбор.md
+  self_audit: pass
+  checks:
+    - "pytest tests/test_rospatent.py -v: 25 passed"
+    - "pytest tests/test_search_arxiv.py -v: 7 passed"
+    - "pytest -q: 769 passed, 0 failed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 137 files already formatted"
+    - "мутация (а) rospatent — безусловный второй повтор: test_повтор_при_бедной_выдаче_укороченной_формулировкой падает (route.call_count 3 != 2)"
+    - "мутация (б) rospatent — повтор без учёта богатства выдачи: test_богатая_выдача_повтора_не_даёт падает (route.call_count 2 != 1)"
+    - "мутация (а) arxiv — безусловный второй повтор: test_повтор_при_пустой_выдаче_укороченной_формулировкой падает (route.call_count 3 != 2)"
+    - "мутация (б) arxiv — повтор без учёта богатства выдачи: test_богатая_выдача_повтора_не_даёт падает (route.call_count 2 != 1)"
+    - "wc -l backend/app/search/rospatent.py: 410; backend/app/search/arxiv.py: 217 — оба ≤ 500"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (задача Д-2, волна Э2-З)"
+    - "backend/app/search/cyberleninka.py (образец приёма, не тронут)"
+    - "backend/app/search/rospatent.py"
+    - "backend/app/search/arxiv.py"
+    - ".planning/evidence/E2Z-cyberleninka-разбор.md"
+    - ".planning/evidence/E2J-rospatent-разбор.md (диагноз, живые числа 1→20)"
+  notes: >-
+    Темп источников не смягчён: min_interval_seconds не менялся ни у rospatent
+    (1.0 с), ни у arxiv (3.0 с) — есть страж-тест на константу arxiv. Порог
+    повтора rospatent — «< 3», как явно указано в карточке задачи (не «< 5»,
+    как предполагал долг З-6 — в задаче явно закреплено «< 3»). Разбор
+    «21 без карточек» доказывает состав 21=20+1 и правдоподобную причину
+    (потеря слова «свиноматок» при укорачивании до 4 слов на 5-словной RU
+    формулировке; языковой промах EN-формы на русскоязычном источнике) из
+    лога и кода без обращения к сети и без БД; по-кандидатная оценка
+    relevance для этих конкретных 21 записей недоступна — БД прогона 1
+    физически не существует (инцидент Э2-Ж, транзакция откатилась), а
+    scoring.py логирует только агрегаты. Это честно зафиксировано как
+    граница разбора и наблюдение в ворота, не как решённый вопрос.
