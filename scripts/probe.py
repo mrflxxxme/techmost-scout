@@ -136,6 +136,7 @@ async def probe_query(text: str, source_type: str, lang: str) -> int:
     from app.config import get_settings
     from app.schemas import SearchQuery, SourceType
     from app.search import build_adapters
+    from app.search.yandex_parse import search_type_for
     from app.search.yandex_search import YandexSearchAdapter, _with_site_filter
 
     settings = get_settings()
@@ -157,7 +158,7 @@ async def probe_query(text: str, source_type: str, lang: str) -> int:
             print("yandex_search недоступен: нет ключа YANDEX_SEARCH_API_KEY или каталога YANDEX_CATALOG_ID")
             return 1
 
-        search_type = YandexSearchAdapter._search_type(query)
+        search_type = search_type_for(query)
         narrowed = _with_site_filter(query, search_type)
         print(f"итоговый запрос после сужения: {narrowed}")
 
