@@ -45,6 +45,7 @@ from app.models import Brief as BriefRow
 from app.models import Candidate as CandidateRow
 from app.models import PipelineLog as PipelineLogRow
 from app.models import Request as RequestRow
+from app.models import RequestStatus
 from app.models import SearchPlan as SearchPlanRow
 from app.models import SolutionCard as SolutionCardRow
 from app.pipeline.history import HistoryPool, HistoryRow, build_history_pool, normalize_task_text
@@ -237,7 +238,7 @@ async def load_history_pool(
     текста (оператор указал его руками, потому что задачу пересказали другими
     словами и автоматическое опознание не сработает), иначе — совпадение
     нормализованного текста среди прогонов, не закончившихся отказом
-    (`status != "failed"` — из упавшего прогона брать нечего, кроме случайных
+    (`status != RequestStatus.FAILED` — из упавшего прогона брать нечего, кроме случайных
     строк с середины). Без фабрики сессий и без единого совпадения возвращается
     пустой пул, а не исключение — это тот же обычный случай, что и «БД не
     настроена» у `persist_run`, а не отказ.
@@ -254,7 +255,7 @@ async def load_history_pool(
             else:
                 target = normalize_task_text(raw_text)
                 found = await session.execute(
-                    select(RequestRow.id, RequestRow.raw_text).where(RequestRow.status != "failed")
+                    select(RequestRow.id, RequestRow.raw_text).where(RequestRow.status != RequestStatus.FAILED)
                 )
                 request_ids = [rid for rid, text in found.all() if normalize_task_text(text) == target]
             if not request_ids:

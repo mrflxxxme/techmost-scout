@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.models import Request as RequestRow
-from app.models import ShowcaseItem
+from app.models import RequestStatus, ShowcaseItem
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -54,13 +54,13 @@ async def create_request(
     """Создать запрос и перейти к уточняющим вопросам.
 
     Этап 3 спецификации. Контракт:
-    1. Сохранить RequestRow(raw_text, status="intake").
+    1. Сохранить RequestRow(raw_text, status=RequestStatus.INTAKE).
     2. Вызвать stages.run_intake, отдать фрагмент с вопросами (шаблон
        _intake_questions.html) для HTMX-подстановки.
     3. Ответы принять в POST /requests/{id}/brief, собрать Brief через
        refine_brief, показать его на подтверждение.
     """
-    row = RequestRow(raw_text=raw_text.strip(), status="intake")
+    row = RequestRow(raw_text=raw_text.strip(), status=RequestStatus.INTAKE)
     session.add(row)
     await session.flush()
     log.info("создан запрос №%s", row.id)

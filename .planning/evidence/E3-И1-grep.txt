@@ -1,0 +1,7 @@
+=== grep статусов-литералов (критерий 2) ===
+$ grep -rnE '(status=|status = )"(intake|briefing|searching|drafted|validated|exported|failed)"' backend/app --include='*.py'
+backend/app/cli_run.py:143:        status="failed",
+
+=== grep {{ row.status }} в шаблонах (критерий 3) ===
+$ grep -rn "{{ row.status }}" backend/app/web/templates
+(нет совпадений — exit 1)
