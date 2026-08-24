@@ -315,3 +315,72 @@ tr:hover td { background: var(--shell); }
   h1 { font-size: 27px; }
   .masthead { flex-direction: column; align-items: flex-start; gap: 12px; }
 }
+
+/* ── Утилиты отступов ────────────────────────────────────────────────────── */
+/* Заменяют вычищенные инлайновые style= (И-8) и закрывают точечные нужды
+   экранов волны 2, чтобы те не правили общий файл параллельно. */
+.mt-sm { margin-top: 8px; }
+.mt-md { margin-top: 14px; }
+.mt-lg { margin-top: 20px; }
+.mt-xl { margin-top: 28px; }
+.mb-sm { margin-bottom: 8px; }
+.mb-md { margin-bottom: 14px; }
+.mb-lg { margin-bottom: 20px; }
+.mb-xl { margin-bottom: 28px; }
+.mr-sm { margin-right: 6px; }
+
+/* Карточка-обёртка без внутренних отступов — таблица сама задаёт паддинги ячеек. */
+.core.flush { padding: 0; }
+
+/* ── Карточка витрины партнёров (showcase.html) ─────────────────────────── */
+.showcase-title { margin: 14px 0 8px; font-size: 17px; color: var(--navy); }
+.showcase-org { margin: 0 0 10px; }
+.showcase-desc { font-size: 14px; }
+.showcase-tags { margin-top: 12px; }
+
+/* ── Форма и поля брифа — экран И-10 «уточняющие вопросы и подтверждение» ── */
+.brief-form { display: grid; gap: var(--gap); }
+.brief-field { display: flex; flex-direction: column; gap: 8px; }
+.brief-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--gap); }
+
+/* ── Журнал прогресса — экран И-11, наложение поверх готового .progress-line ─ */
+.progress-log { display: flex; flex-direction: column; gap: 4px; }
+.progress-line.done { opacity: 0.6; }
+.progress-line .stage-label { flex: 1; font-size: 14px; }
+.progress-line .stage-fraction { font-size: 12px; color: var(--muted); }
+
+/* ── Плашка «нет подтверждений» — экран И-12, отчёт с карточками ─────────── */
+/* Палитра совпадает с .badge.low: тот же смысл «низкое/недопустимо», не
+   новый цвет, а повторное использование уже определённого в файле. */
+.notice.danger {
+  border-left-color: #a3413f;
+  background: #fdf1f1;
+  color: #a3413f;
+}
+
+/* ── Шапка «ЧЕРНОВИК» — экран И-12, отчёт до валидации эксперта ──────────── */
+.draft-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  margin-bottom: var(--gap);
+  border-radius: var(--radius-inner);
+  background: var(--ink);
+  color: var(--ice);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.draft-banner .dot { color: var(--gold); }
+
+/* ── Сравнительная таблица — экран И-12, сводка отчёта (FR-11) ───────────── */
+.table-wrap { overflow-x: auto; }
+.compare-table tr.recommended td { background: rgba(201, 162, 75, 0.06); }
+.compare-table td.lead-col { font-weight: 600; color: var(--navy); }
+
+/* ── Режим правки карточки — экран И-12, `POST /cards/{card_id}/edit` ────── */
+.card-edit { border: 1px dashed var(--gold); }
+.card-edit .edit-actions { display: flex; gap: 10px; margin-top: var(--gap); }
