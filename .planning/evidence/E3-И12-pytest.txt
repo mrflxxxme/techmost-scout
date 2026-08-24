@@ -1,0 +1,48 @@
+Задача Э3-И12 — доказательства проверок
+
+=== pytest tests/test_web_report.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-ae6898b13173a484c
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+collected 13 items
+
+tests/test_web_report.py::test_report_renders_from_report_json_without_solution_cards_rows PASSED [  7%]
+tests/test_web_report.py::test_draft_banner_present_at_drafted_status PASSED [ 15%]
+tests/test_web_report.py::test_draft_banner_survives_edit PASSED         [ 23%]
+tests/test_web_report.py::test_empty_evidence_hides_maturity_and_shows_danger_notice PASSED [ 30%]
+tests/test_web_report.py::test_edit_title_persists_and_report_json_unchanged PASSED [ 38%]
+tests/test_web_report.py::test_edit_ignores_confidence_and_cannot_add_evidence PASSED [ 46%]
+tests/test_web_report.py::test_edit_removes_evidence_line PASSED         [ 53%]
+tests/test_web_report.py::test_comparison_table_and_recommendation_from_summary PASSED [ 61%]
+tests/test_web_report.py::test_limitations_block_matches_limitations_lines PASSED [ 69%]
+tests/test_web_report.py::test_evidence_links_are_clickable PASSED       [ 76%]
+tests/test_web_report.py::test_edit_with_garbage_request_does_not_500 PASSED [ 84%]
+tests/test_web_report.py::test_edit_unknown_card_returns_404 PASSED      [ 92%]
+tests/test_web_report.py::test_unknown_request_returns_404 PASSED        [100%]
+
+======================== 13 passed, 1 warning in 1.37s =========================
+
+=== git diff --stat tests/test_export_markdown.py (критерий 2 — файл теста не правился) ===
+(пусто — файл не изменён)
+
+=== grep -rniE "вердикт|verdict|ревью" backend/app/web/templates/report.html backend/app/web/templates/_card.html (критерий 3) ===
+(совпадений нет, код возврата grep — 1)
+
+=== wc -l backend/app/web/routes/report.py backend/app/export/markdown.py (критерий 4) ===
+  203 backend/app/web/routes/report.py
+  301 backend/app/export/markdown.py
+
+=== pytest (полный набор) ===
+............................................................................ [ ... ]
+928 passed, 1 warning in 55.36s
+
+=== ruff check . ===
+All checks passed!
+
+=== ruff format --check . ===
+169 files already formatted
+
+=== pytest tests/test_web_templates.py tests/test_backend_layout.py tests/test_export_markdown.py tests/test_report_overrides.py -q ===
+52 passed, 1 warning in 0.64s

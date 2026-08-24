@@ -1,0 +1,83 @@
+handoff:
+  from: implementer-3
+  to: reviewer
+  task: "Э3-И12"
+  did:
+    - "Реализован GET /requests/{request_id}/report в backend/app/web/routes/report.py: читает отчёт через persistence.load_report (из requests.report_json, а не из solution_cards — РЕШ-189 п. 4), находит id и editor_overrides строк solution_cards по ключу (is_contest, position) и накладывает их через app.report_overrides.apply_overrides (И-7)"
+    - "Реализован POST /cards/{card_id}/edit: белый список текстовых полей (title, essence, applicability, next_step, developer_org, developer_team) плюс risks/contact_leads (список строк — форма собирает их textarea по строке на пункт и разбирает построчно перед записью); confidence, requirement_checks, unsourced_claims в параметрах обработчика нет вовсе — прислать их нельзя даже случайно; добавить новую строку evidence нельзя, можно только удалить существующую по URL (evidence_removed, накопительно между правками)"
+    - "Вход формы валидируется в маршруте (isinstance(str)) — заметка ревью И-7 учтена: мусорный/пустой POST не роняет обработчик 500-й"
+    - "Новые шаблоны report.html и _card.html: пометка «ЧЕРНОВИК — не проверено экспертом» до валидации (не снимается сохранением правки — РЕШ-189 п. 6), .maturity на четырёх засечках, .badge/.badge.low для уверенности, обязательный блок «Чем подтверждено», красная плашка «Нельзя показывать клиенту: нет подтверждений» и скрытие стадии зрелости и TRL при пустом evidence (инвариант №1), сравнительная таблица (.table-wrap/.compare-table) и рекомендация из summary, ссылки evidence — кликабельные href"
+    - "backend/app/export/markdown.py: строки блока «Ограничения этого поиска» вынесены в новую функцию limitations_lines(report) без новых формулировок; render_markdown и страница отчёта используют один и тот же вывод (РЕШ-189 п. 5)"
+    - "Все использованные на странице человекочитаемые тексты подтверждений/полей карточки (Разработчик, Применимость к задаче, Следующий шаг, Риски, Как выйти на связь, Сверка с требованиями задачи, Господдержка, Не подтверждено проверкой, Чем подтверждено, Требования и ограничения, Сравнение вариантов, Варианты решений, Рекомендация) — дословные повторы уже существующих формулировок backend/app/export/markdown.py, новых слов в них нет"
+    - "Тесты tests/test_web_report.py, 13 штук: страница из report_json без строк solution_cards; черновик и его выживание после правки; пустой evidence прячет зрелость/TRL и даёт плашку; правка title видна после перезагрузки при неизменном report_json; попытка прислать confidence/новый evidence игнорируется; удаление строки evidence; таблица сравнения и рекомендация из summary; блок ограничений совпадает построчно с limitations_lines; кликабельные ссылки; мусорная форма и несуществующая карточка/запрос не роняют обработчик"
+  artifacts:
+    - backend/app/web/routes/report.py
+    - backend/app/web/templates/report.html
+    - backend/app/web/templates/_card.html
+    - backend/app/export/markdown.py
+    - tests/test_web_report.py
+    - .planning/evidence/E3-И12-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_report.py -v: 13 passed"
+    - "pytest -q (полный набор): 928 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 169 files already formatted"
+    - "git diff --stat tests/test_export_markdown.py: пусто (критерий 2, файл теста не правился)"
+    - "pytest tests/test_export_markdown.py -q: 33 passed"
+    - "grep -rniE вердикт|verdict|ревью backend/app/web/templates/report.html backend/app/web/templates/_card.html: совпадений нет (критерий 3)"
+    - "wc -l backend/app/web/routes/report.py backend/app/export/markdown.py: 203 и 301 строк — оба меньше 500"
+    - "pytest tests/test_backend_layout.py tests/test_web_templates.py -v: зелёно"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел И-12)
+    - docs/SPEC.md (строки 591-608)
+    - backend/app/web/routes/report.py
+    - backend/app/web/templates/report.html
+    - backend/app/web/templates/_card.html
+    - backend/app/report_overrides.py
+  notes: >
+    Работа не блокирована, escalate: none — но по правилу волны (РЕШ-143 п. 7)
+    новые клиентские фразы собираются здесь, и оркестратор несёт их владельцу
+    одним списком перед воротами Э3, а не эта задача поодиночке.
+
+    Новые клиентские фразы (критерий 6 задачи И-12), которых не было в коде до
+    этой задачи — списком для визы владельца. Уже одобренные тексты
+    («ЧЕРНОВИК — не проверено экспертом», «Нельзя показывать клиенту: нет
+    подтверждений») использованы дословно, в список ниже не входят.
+
+    Заголовки и подписи страницы: «Отчёт» (kicker), «Подбор решений — запрос
+    №N» (h1), «Задача:» (метка перед task_summary — в markdown то же самое
+    печаталось заголовком «## Задача», здесь как инлайн-метка),
+    «Пригодных вариантов не найдено.» (markdown-версия была курсивом и с
+    подчёркиванием смысла «_..._», здесь обычный текст — смысл тот же).
+
+    Подписи полей формы правки карточки: «Название», «Суть», «Применимость к
+    задаче» (без двоеточия — как подпись поля, не как метка чтения),
+    «Следующий шаг» (то же), «Риски (по одному на строку)», «Как выйти на
+    связь (по одному на строку)», «Организация-разработчик», «Команда
+    разработчика».
+
+    Управляющие элементы: «Убрать подтверждение из карточки:» (подпись у
+    списка чекбоксов удаления evidence), «Править карточку» (заголовок
+    сворачиваемого блока правки, <details><summary>), «Сохранить правки»
+    (текст кнопки отправки формы).
+
+    Ссылка на PDF: «Полный текст (PDF)» — в markdown было «Полный текст:
+    [PDF](url)», здесь текст ссылки объединён в одну фразу без отдельного
+    слова перед скобкой.
+
+    Решения по границам задачи: POST /cards/{card_id}/edit возвращает
+    RedirectResponse (303) на GET-страницу отчёта того же запроса — простой
+    паттерн post-redirect-get без HTMX, укладывается в контракт волны (HTMX
+    здесь не требовался явно, инлайновый style= не заводился, hex-цветов нет).
+    Плашка «отчёт ещё не готов» на случай отсутствия report_json — за рамками
+    девяти обязательных критериев, добавлена для отказоустойчивости страницы
+    (не 500, а понятная страница), тестом покрыта частично (test_unknown_request_returns_404
+    проверяет отсутствие самой строки requests; случай «строка есть, report_json
+    пуст» уже проверяется существующим ReportNotFoundError в persistence.py,
+    отдельного теста на него в этом файле нет — граница между «сделано» и
+    «страховка сверх критериев»). theme.css не тронут — все нужные классы уже
+    были заведены задачей И-8 (.draft-banner, .notice.danger, .table-wrap,
+    .compare-table, .card-edit, .maturity, .badge/.badge.low); нехватки классов
+    не обнаружено, эскалации к И-13 нет.

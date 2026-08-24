@@ -66,6 +66,27 @@ CONSTRAINTS_UNRESOLVED_NOTICE = (
 PAID_LIMIT_NOTICE = "Часть поисковых формулировок не была выполнена — выдача по этой теме может быть неполной."
 
 
+def limitations_lines(report: Report) -> list[str]:
+    """Тело блока «Ограничения этого поиска» — без заголовка (РЕШ-189 п. 5).
+
+    Единственное место, где собираются эти строки: markdown-экспорт и
+    веб-страница отчёта (задача И-12) печатают дословно один и тот же вывод —
+    расхождение форматов было бы незаметным способом разойтись с клиентским
+    текстом. Пустой список означает, что ни недоступных источников, ни
+    оговорок нет: тогда сам блок (вместе с заголовком) не печатается нигде.
+    """
+    lines: list[str] = []
+    if report.sources_unavailable:
+        lines.append(
+            "Не ответили источники: "
+            + ", ".join(report.sources_unavailable)
+            + ". Выдача могла быть полнее — стоит повторить запрос позже."
+        )
+    if report.summary.caveats:
+        lines.extend(f"- {caveat}" for caveat in report.summary.caveats)
+    return lines
+
+
 def render_markdown(report: Report, *, validated: bool = False, reviewer: str = "") -> str:
     """Собрать отчёт. До валидации экспертом на нём стоит пометка «черновик».
 
@@ -142,20 +163,12 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
     # источникам, и на здоровом прогоне оговорка (отказ интейка, отказ сводки)
     # выпадала в конец отчёта голым пунктом списка — клиент видел висящую
     # строку непонятно к чему.
-    if report.sources_unavailable or report.summary.caveats:
+    limit_lines = limitations_lines(report)
+    if limit_lines:
         lines.append("## Ограничения этого поиска")
         lines.append("")
-        if report.sources_unavailable:
-            lines.append(
-                "Не ответили источники: "
-                + ", ".join(report.sources_unavailable)
-                + ". Выдача могла быть полнее — стоит повторить запрос позже."
-            )
-            lines.append("")
-        if report.summary.caveats:
-            for caveat in report.summary.caveats:
-                lines.append(f"- {caveat}")
-            lines.append("")
+        lines.extend(limit_lines)
+        lines.append("")
 
     lines.append("---")
     lines.append("")

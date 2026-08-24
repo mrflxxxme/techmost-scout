@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Отчёт по запросу №{{ row.id }} — ТехМост Скаут{% endblock %}
+
+{% block content %}
+{% if report is none %}
+<p class="kicker">Отчёт</p>
+<h1>Отчёт запроса №{{ row.id }}</h1>
+<div class="notice danger">Отчёт ещё не готов: {{ error }}</div>
+{% else %}
+
+{% if is_draft %}
+<div class="draft-banner"><span class="dot">●</span> ЧЕРНОВИК — не проверено экспертом</div>
+{% endif %}
+
+<p class="kicker">Отчёт</p>
+<h1>Подбор решений — запрос №{{ row.id }}</h1>
+<p class="muted">Отрасль: {{ report.brief.industry }} · статус: {{ row.status_label }} · стоимость обработки {{ "%.2f"|format(report.cost_rub) }} ₽</p>
+
+<div class="bezel">
+  <div class="core">
+    <p><strong>Задача:</strong> {{ report.brief.task_summary }}</p>
+    {% if report.constraints_unresolved %}
+    <p class="notice danger mt-sm">Требования задачи не выделены из постановки — построчная сверка карточек не проводилась.</p>
+    {% endif %}
+    {% if report.brief.constraints %}
+    <p class="mt-sm"><strong>Требования и ограничения:</strong> {{ report.brief.constraints|join("; ") }}</p>
+    {% endif %}
+    <h2 class="mt-lg">Рекомендация</h2>
+    <p>{{ report.summary.recommendation }}</p>
+  </div>
+</div>
+
+{% if report.summary.comparison_rows %}
+<h2 class="mt-xl">Сравнение вариантов</h2>
+<div class="table-wrap">
+  <table class="compare-table">
+    <thead>
+      <tr>
+        {% for key in report.summary.comparison_rows[0].keys() %}<th>{{ key }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for comp_row in report.summary.comparison_rows %}
+      <tr>
+        {% for key in report.summary.comparison_rows[0].keys() %}<td>{{ comp_row.get(key, "") }}</td>{% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<h2 class="mt-xl">Варианты решений</h2>
+{% if not cards_with_ids %}
+<p class="muted">Пригодных вариантов не найдено.</p>
+{% endif %}
+<div class="grid two">
+  {% for num, card, card_id in cards_with_ids %}
+  {% include "_card.html" %}
+  {% endfor %}
+</div>
+
+{% if contest_with_ids %}
+<h2 class="mt-xl">{{ contest_heading }}</h2>
+<div class="grid two">
+  {% for num, card, card_id in contest_with_ids %}
+  {% include "_card.html" %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if limitation_lines %}
+<h2 class="mt-xl">Ограничения этого поиска</h2>
+<div class="notice mb-lg">
+  {% for line in limitation_lines %}
+  <p>{{ line }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}
