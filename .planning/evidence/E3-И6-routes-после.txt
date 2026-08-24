@@ -1,0 +1,16 @@
+ОШИБКА (известная особенность FastAPI 0.141 — include_router оборачивается в _IncludedRouter без path): AttributeError("'_IncludedRouter' object has no attribute 'path'")
+
+Развёрнутый список маршрутов (рекурсивно через original_router, для сверки, вне буквального критерия):
+  / index
+  /api/docs swagger_ui_html
+  /api/openapi.json openapi
+  /cards/{card_id}/verdict submit_verdict
+  /docs/oauth2-redirect swagger_ui_redirect
+  /health health
+  /redoc redoc_html
+  /requests create_request
+  /requests list_requests
+  /requests/{request_id}/progress progress_stream
+  /requests/{request_id}/report show_report
+  /showcase showcase
+  /static static

@@ -1,0 +1,84 @@
+Задача И-6 · routes.py дробится на пакет app/web/routes/
+Проверки критериев приёмки, выполнены в worktree ветки e3/i6.
+
+=== Критерий 1: pytest tests/test_web_auth.py -v (без правок файла) ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a693d9ce1fa5572b0
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+tests/test_web_auth.py::test_routes_require_auth[/] PASSED               [ 20%]
+tests/test_web_auth.py::test_routes_require_auth[/requests] PASSED       [ 40%]
+tests/test_web_auth.py::test_routes_require_auth[/showcase] PASSED       [ 60%]
+tests/test_web_auth.py::test_health_is_open PASSED                       [ 80%]
+tests/test_web_auth.py::test_require_auth_verdicts PASSED                [100%]
+
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+========================= 5 passed, 1 warning in 0.47s =========================
+
+=== git diff --stat tests/test_web_auth.py (должен быть пуст) ===
+(пусто)
+
+=== Критерий 3: grep backend/app/web/routes.py в pyproject.toml (должен быть пуст) ===
+(совпадений нет)
+
+=== ruff check . ===
+All checks passed!
+
+=== Критерий 4: wc -l backend/app/web/routes/*.py (не длиннее 500 строк) ===
+  28 backend/app/web/routes/__init__.py
+  58 backend/app/web/routes/intake.py
+  60 backend/app/web/routes/pages.py
+  32 backend/app/web/routes/report.py
+  23 backend/app/web/routes/run.py
+ 201 total
+
+=== pytest tests/test_backend_layout.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a693d9ce1fa5572b0
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 3 items
+
+tests/test_backend_layout.py::test_backend_app_stays_within_line_limit PASSED [ 33%]
+tests/test_backend_layout.py::test_exceptions_do_not_grow_unnoticed PASSED [ 66%]
+tests/test_backend_layout.py::test_backend_app_directory_is_not_empty PASSED [100%]
+
+============================== 3 passed in 0.03s ===============================
+
+=== Критерий 5: pytest целиком ===
+........................................................................ [  8%]
+........................................................................ [ 16%]
+........................................................................ [ 24%]
+........................................................................ [ 32%]
+........................................................................ [ 41%]
+........................................................................ [ 49%]
+........................................................................ [ 57%]
+........................................................................ [ 65%]
+........................................................................ [ 74%]
+........................................................................ [ 82%]
+........................................................................ [ 90%]
+........................................................................ [ 98%]
+...........                                                              [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+875 passed, 1 warning in 54.01s
+
+=== ruff format --check . ===
+160 files already formatted
