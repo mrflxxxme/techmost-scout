@@ -1,65 +1,44 @@
 handoff:
   from: reviewer
-  to: owner
+  to: orchestrator
   task: "аудит-фикс-Э3"
+  cycle: 2
   did:
-    - "Проверены diff, все десять инвариантов, грабли §0.1 SPEC.md, прогнаны pytest (дважды подряд, полный набор), ruff check, ruff format --check"
-    - "Каждая из пяти правок (П-1..П-5) проверена по существу отдельно, не только по наличию теста"
-    - "Найден живой П-1: воспроизведён реальной цепочкой продакшн-кода (LLMRouter.initial_spent_rub + persistence_write._write), не моком — двойной учёт стоимости на веб-пути (11.64 ₽ вместо требуемых аудитом 11.46 ₽), компаундится на каждом повторном прогоне"
-    - "Подтверждена причина, почему тесты остались зелёными: новый тест test_persist_run_sums_web_intake_cost_with_pipeline_cost проверяет persist_run на входных данных, не соответствующих тому, что передаёт реальный run_flow.py; фейки ScoutPipeline в test_web_run.py и test_web_flow_e2e.py делают одно сложение вместо двух настоящих механизмов переноса"
-    - "П-2, П-3, П-4, П-5 проверены по существу (сценарии, включая ручную мутацию autoescape=False) — блокирующих не найдено"
-    - "Отмечены две клиентские фразы без визы владельца (REFUSAL_ALREADY_DONE, перефразированный DEIDENTIFICATION_WARNING_TEMPLATE) — обе честно перечислены исполнителем в notes handoff, виза не запрошена этим циклом"
+    - "Цикл 1 (см. раздел «Цикл 1» отчёта): нашёл живой П-1 — двойной учёт стоимости на веб-пути (11.64 ₽ вместо 11.46), вердикт BLOCKED, эскалация владельцу с развилкой А/Б"
+    - "Оркестратор принял вариант А (РЕШ-194); проверен цикл 2 на ветке e3/audit-fix, HEAD 7390dc4 (поверх 76028c2)"
+    - "Повторил собственный репро-сценарий цикла 1 (настоящий CostTracker + persist_run, без моков) на новом коде: 11.46 и 10.18 (было 11.64 и 15.72) — двойной учёт устранён по существу"
+    - "Прогнал интеграционный тест test_web_path_llm_router_and_persist_run_together_do_not_double_count -v: passed; своими руками вернул сложение в persistence_write.py._write (мутация) — тест упал на 11.64, откатил"
+    - "Полный pytest -q дважды подряд: 969 passed оба раза; ruff check и ruff format --check — чисто; wc -l tests/test_persistence.py = 1531, совпадает со стражем"
+    - "Проверил, что диф цикла 2 (76028c2..7390dc4) не выходит за П-1 — П-2..П-5 не тронуты"
+    - "Дописан раздел «Цикл 2» в E3-fix-review.md, вердикт ПРИНЯТЬ"
   artifacts:
-    - .planning/evidence/E3-fix-review.md (закоммичен до ответа)
+    - .planning/evidence/E3-fix-review.md (разделы «Цикл 1» и «Цикл 2», закоммичены до ответа)
     - .planning/evidence/E3-fix-review-handoff.yaml
   self_audit: pass
   checks:
-    - "pytest -q (1-й прогон): 969 passed, 1 warning"
+    - "pytest -q (1-й прогон, HEAD 7390dc4): 969 passed, 1 warning"
     - "pytest -q (2-й прогон): 969 passed, 1 warning"
+    - "pytest tests/test_persistence.py -k \"double_count or updates_existing_row_without_second_insert\" -v: 2 passed"
+    - "Мутация (возврат сложения в _write, вручную): оба целевых теста упали на 11.64 == 11.46 ± 1.1e-05; мутация откачена, diff пуст"
+    - "Репро продакшн-цепочки цикла 1 (не мок) на новом коде: 11.46 и 10.18 — совпадает с честной арифметикой"
     - "ruff check .: All checks passed"
     - "ruff format --check .: 174 files already formatted"
-    - "pytest tests/test_persistence.py tests/test_pipeline_summary.py tests/test_web_intake.py tests/test_web_run.py tests/test_web_report.py tests/test_web_flow_e2e.py -v: 84 passed, 1 failed (тот же флак воспроизведён и на базе f1e199f7 тем же частичным набором — не внесён этим циклом, полный набор зелёный дважды)"
-    - "pytest tests/test_prompts.py -q: 51 passed"
-    - "pytest tests/test_team_docs.py -q: 35 passed"
-    - "grep -rE \"sk-|gigachat|Api-Key\" backend/ tests/: только докстроки и фиктивные тестовые значения, секретов нет"
-    - "Ручная мутация autoescape=False (main.py, откачена): оба теста П-5 упали, поймали"
-    - "Репро П-1 (реальный CostTracker + persist_run, не мок): row.cost_rub = 11.64 вместо ожидаемых аудитом 11.46; на двух прогонах подряд — 15.72 вместо честных 10.18"
-  escalate: |
-    Развилка: как закрывать двойной учёт стоимости на веб-пути (П-1) —
-    цикл правки внутри аудита исчерпан (§4 CONVENTIONS.md: "Правки внутри
-    аудита — 1 цикл, дальше вердикт BLOCKED"), сама правка вводит дефект
-    хуже исходного (двойной учёт вместо потери 0,18 ₽), второго цикла
-    правок для аудита не предусмотрено.
-    Вариант А: в persistence_write.py._write вернуть присваивание
-    request_row.cost_rub = cost_rub (убрать сложение) — LLMRouter с
-    initial_spent_rub уже отдаёт кумулятивную сумму, присваивание и есть
-    верный перенос, тем же приёмом, что уже работает в intake.py.
-    Вариант Б: оставить сложение в persistence_write.py, но в run_flow.py
-    передавать в persist_run дельту фазы (router.cost.spent_rub минус
-    initial_spent_rub), а не кумулятивный report.cost_rub целиком —
-    требует развести "число для отчёта" и "число для persist_run".
-    Рекомендую: А — меньше механизмов, единообразно с intake.py, CLI не
-    затрагивает.
-    Обратимость: обратима.
-    Блокирует: подпись ворот Э3 целиком (условие аудита "не подписывать
-    до закрытия П-1 и П-2"). Задачи вне Э3 не блокирует.
-    Отдельно (не блокирует П-1, но территория владельца по §9 п.4): две
-    новые клиентские фразы без визы — REFUSAL_ALREADY_DONE ("Отчёт по
-    этому запросу уже готов. Открыть отчёт.") и перефразированный
-    DEIDENTIFICATION_WARNING_TEMPLATE (виза РЕШ-192 была на старый текст).
-    Обе перечислены в notes handoff исполнителя, решение за владельцем.
+    - "wc -l tests/test_persistence.py: 1531 (совпадает с test_tests_layout.py)"
+    - "git diff 76028c2..7390dc4 --stat: только П-1 (persistence_write.py, test_persistence.py, test_tests_layout.py, test_web_run.py, test_web_flow_e2e.py, E3-fix-handoff.yaml, E3-fix-pytest.txt) — П-2..П-5 не тронуты"
+  escalate: none
   read_first:
-    - .planning/evidence/E3-fix-review.md
-    - .planning/evidence/audit-Э3.md (условие подписи, П-1 в исходной формулировке)
-    - .planning/evidence/E3-fix-handoff.yaml (notes — флак e2e и фразы на визу)
-    - backend/app/pipeline/persistence_write.py (_write, строка сложения cost_rub)
-    - backend/app/llm/router.py (initial_spent_rub)
-    - backend/app/pipeline/run_flow.py (строки 130-171, откуда cost_rub уходит в persist_run)
+    - .planning/evidence/E3-fix-review.md (раздел «Цикл 2» — итог; раздел «Цикл 1» — исходная находка и развилка)
+    - .planning/DECISIONS.md (РЕШ-194 — принятый вариант А)
+    - backend/app/pipeline/persistence_write.py (докстрока _write — единственный механизм переноса)
+    - tests/test_persistence.py::test_web_path_llm_router_and_persist_run_together_do_not_double_count
   notes: |
-    Это ревью единственного разрешённого цикла правок аудита (§4
-    CONVENTIONS.md). Третьего/второго цикла для правок аудита нет по
-    правилу — вердикт BLOCKED и разбор с владельцем, не возврат
-    исполнителю на ещё одну попытку в рамках этого процесса.
-    П-2, П-3, П-4, П-5 проверены по существу и закрыты, блокирующих в них
-    нет — переоткрывать их не нужно, если владелец выберет вариант правки
-    П-1 из развилки выше.
+    Вердикт: ПРИНЯТЬ. П-1 закрыт содержательно (проверено репро и мутацией
+    самостоятельно, не по слову исполнителя), П-2..П-5 закрыты ещё циклом 1
+    и в этом цикле не трогались. Циклов правок для задачи «аудит-фикс-Э3»
+    было два (§4 CONVENTIONS.md — «Ревью нашло, что править: 2 цикла»), оба
+    использованы. Третьего цикла нет и не требуется — дальше вердикт
+    аудитора по всей волне Э3.
+
+    Не закрыто ревью (не блокирует П-1, территория владельца по §9 п.4,
+    без изменений с цикла 1): две клиентские фразы без визы —
+    REFUSAL_ALREADY_DONE и перефразированный DEIDENTIFICATION_WARNING_TEMPLATE.
