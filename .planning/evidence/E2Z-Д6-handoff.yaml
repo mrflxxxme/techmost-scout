@@ -3,14 +3,15 @@ handoff:
   to: reviewer
   task: "Д-6"
   did:
-    - "Проба scripts/dedup_judge_probe.py (256 строк, вне поставки): дословные заголовки Э2-Г из evidence/E2G-З6-similarity.md (фарма 5, нефтегаз 6) с готовой ручной разметкой (фарма 3-4 дубль, 1-5 не дубль; нефтегаз группа 2-3-4-5 дубли, 1 и 6 контрольные недубли), точность считается по всем C(n,2) парам обоих наборов против промпта-судьи. Живой прогон НЕ делал (инвариант №7 для исполнителя) — только --dry-run, доказательство в evidence/E2Z-Д6-probe-dry-run.txt"
+    - "ЦИКЛ 2 (правка по блокирующей находке ревью цикла 1, E2Z-Д6-review.md): scripts/dedup_judge_probe.py обогащён — ProbeItem(number, title, org, snippet) вместо голых заголовков; org/snippet взяты дословно из карточек evidence/E2V-gate-фарма.md и evidence/E2B-gate-нефтегаз.md (номер исходной строки — в комментарии рядом с каждым ProbeItem), org=None честно там, где карточка сама пишет «Разработчик: не найдено» (5 из 6 нефтегаза, 3 из 5 фармы), snippet — первый содержательный абзац карточки, явно названный в докстроке приближением, а не настоящим поисковым сниппетом. Промпт prompts/dedup_judge.md НЕ трогал (по прямому указанию ревью — решение о правиле про организацию и калибровке правила 6 откладывается до чисел повторного живого прогона)"
+    - "Проба scripts/dedup_judge_probe.py (387 строк, вне поставки): карточки Э2-Г из evidence/E2V-gate-фарма.md и evidence/E2B-gate-нефтегаз.md (фарма 5, нефтегаз 6) с готовой ручной разметкой (фарма 3-4 дубль, 1-5 не дубль; нефтегаз группа 2-3-4-5 дубли, 1 и 6 контрольные недубли), точность считается по всем C(n,2) парам обоих наборов против промпта-судьи. Живой прогон НЕ делал (инвариант №7 для исполнителя) — только --dry-run, доказательство в evidence/E2Z-Д6-probe-dry-run.txt (видно org/snippet у каждого кандидата)"
     - "Промпт prompts/dedup_judge.md (версия 1.0): системная часть — правила семантического сравнения (номера, не переписывать тексты; предел размера группы против переклейки по теме — правило 6); метка {{CANDIDATES_LISTING}} в конце (кэш префикса), заполняется render_prompt. Запись в prompts/CHANGELOG.md"
     - "tests/test_prompts.py: dedup_judge добавлен в EXPECTED_PLACEHOLDERS ({CANDIDATES_LISTING}) и в параметризацию test_prompt_has_error_section"
     - "backend/app/pipeline/dedup_judge.py (229 строк, новый модуль, БЕЗ обращений к БД): judge_duplicate_groups(router, candidates) — один вызов модели (max_tokens=6000, замок test_stage_token_budgets проходит автоматически — он сканирует весь пакет app.pipeline), меньше 2 кандидатов — вызова нет; CostLimitExceededError пробрасывается нетронутым (стоп-кран РЕШ-45), любой другой отказ — деградация до None с логом. _sanitize — предел размера группы JUDGE_MAX_GROUP_SIZE=6 (половина лимита кандидатов 12) и защита от пересекающихся групп. apply_judge_groups — union-find по личности объекта кандидата: сливает заготовки group_for_cards, не задваивая кандидата в двух заготовках (наивная склейка через merge_duplicate_groups так делает — тест это ловит)"
     - "backend/app/pipeline/run_stages.py: вызов судьи вставлен перед group_for_cards ОСНОВНОЙ очереди (после second_pass, до конкурсной ветки — она признаком не проверяется, +1 вызов на прогон, не +2); StageRecord 'dedup_judge' пишется только когда вызов реально состоялся (len(selected)>=2), поэтому однокандидатные сценарии существующих тестов не задеты"
     - "backend/app/config.py: llm_stage_routes default += dedup_judge:deepseek"
     - "tests/test_dedup_judge.py (18 тестов): judge_duplicate_groups — успех/пустой вердикт/отказ провайдера/кривой JSON/стоп-кран/лимит кандидатов; _sanitize — предел группы (мутация б), одиночка, номера вне диапазона, пересечение; apply_judge_groups — склейка без задваивания, пустой вердикт, кандидат вне заготовок; сквозной ScoutPipeline.run — вердикт доезжает до карточек, отказ не роняет прогон (мутация а), пустой вердикт карточек не меняет"
-    - "tests/test_dedup_judge_probe.py (12 тестов): разметка, all_pairs/judged_pairs/score, сухой прогон, живой прогон на FakeProvider (идеальный и отказавший)"
+    - "tests/test_dedup_judge_probe.py (16 тестов, +4 в цикле 2): разметка, org/snippet кандидатов (замок против регрессии к голым заголовкам — test_кандидаты_несут_org_и_snippet_из_воротных_карточек, test_org_none_только_там_где_карточка_честно_говорит_не_найдено, test_все_кандидаты_несут_непустой_snippet, test_to_candidates_переносит_org_и_snippet_в_scored_candidate), all_pairs/judged_pairs/score, сухой прогон (теперь проверяет и org/snippet в выводе), живой прогон на FakeProvider (идеальный и отказавший)"
     - "Существующие тесты, реально задетые новым вызовом (только там, где selected содержит >=2 кандидатов): tests/test_pipeline_second_pass.py::test_при_выключенном_пороге_прогон_совпадает_с_прежним (5→6 вызовов, стадия dedup_judge в списке журнала — судья отвечает мимо ScriptedProvider и честно деградирует, что и требовалось показать) и docstring-примечания в tests/test_contest_gate_and_order.py (без изменения проверяемого поведения — там selected схлопывается до одного кандидата отсечкой relevance_min, судья не вызывается)"
   artifacts:
     - backend/app/pipeline/dedup_judge.py
@@ -31,11 +32,11 @@ handoff:
     - .planning/evidence/E2Z-Д6-probe-dry-run.txt
   self_audit: pass
   checks:
-    - "pytest tests/test_dedup_judge.py tests/test_dedup_judge_probe.py -v: 30 passed"
-    - "pytest -q: 822 passed, 0 failed (787 базовых + 35 новых/изменённых параметризаций)"
+    - "pytest tests/test_dedup_judge.py tests/test_dedup_judge_probe.py -v: 34 passed (цикл 2, было 30)"
+    - "pytest -q: 826 passed, 0 failed (787 базовых + 39 новых/изменённых параметризаций, цикл 2 добавил 4 к циклу 1)"
     - "ruff check .: All checks passed"
     - "ruff format --check .: 145 files already formatted"
-    - "scripts/dedup_judge_probe.py --dry-run: печатает оба набора и разметку без единого вызова модели (см. evidence/E2Z-Д6-probe-dry-run.txt)"
+    - "scripts/dedup_judge_probe.py --dry-run: печатает оба набора с org/snippet у каждого кандидата, разметку, без единого вызова модели (см. evidence/E2Z-Д6-probe-dry-run.txt — блокирующая находка цикла 1 закрыта)"
     - "мутация (а) вручную: except Exception → raise RuntimeError в judge_duplicate_groups — упали tests/test_dedup_judge.py::test_отказ_судьи_не_роняет_прогон, tests/test_pipeline_second_pass.py::test_при_выключенном_пороге_прогон_совпадает_с_прежним, tests/test_dedup_judge_probe.py::test_живой_прогон_отказ_судьи_не_роняет_пробу; правка отменена, diff пуст"
     - "мутация (б) вручную: проверка JUDGE_MAX_GROUP_SIZE в _sanitize закомментирована — упал tests/test_dedup_judge.py::test_группа_больше_предела_отбрасывается; правка отменена"
     - "мутация «вердикт судьи игнорируется» вручную: apply_judge_groups не вызывается в run_stages.py — упал tests/test_dedup_judge.py::test_вердикт_судьи_доезжает_до_карточек (3 карточки вместо 2); правка отменена"
@@ -76,11 +77,29 @@ handoff:
     писать строку, включая "пропущено, кандидатов меньше двух") разошлась
     бы с этим прецедентом и добавила бы вторую форму той же информации.
 
-    Сниппетов и организаций в evidence/E2G-З6-similarity.md нет (только
-    заголовки) — проба подаёт судье заголовки без вспомогательных полей,
-    это НАЗВАНО в докстроке скрипта как более трудный случай, чем в бою.
-
     Файлы, тронутые за пределами исходного списка задачи (все —
     консеквенциальные, не по инициативе): tests/test_pipeline_second_pass.py
     и tests/test_contest_gate_and_order.py — оба уже перечислены в did/
     artifacts выше с точным объяснением, почему и где именно.
+
+    ЦИКЛ 2 (правка по ревью, вердикт ВЕРНУТЬ, 1 блокирующая находка).
+    Живой прогон цикла 1 (evidence/E2Z-Д6-probe-live.md, 0,1444 ₽) показал
+    нефтегаз 80% (группа [3,4,5] верна, 0 ложных склеек) и фарма 10% (судья
+    слил все 5 в одну группу — в бою эту группу отбросит
+    JUDGE_MAX_GROUP_SIZE, деградация безопасна, но само число не доказывало
+    качество промпта на боевом составе полей). Ревьюер нашёл код-причину:
+    scripts/dedup_judge_probe.py::to_candidates строил Candidate с org=None,
+    snippet="" — беднее, чем боевая _listing(), которая всегда показывает
+    судье реальные org/snippet кандидата. Правка: org/snippet взяты из тех
+    же воротных отчётов, откуда пришли заголовки (evidence/E2V-gate-фарма.md,
+    evidence/E2B-gate-нефтегаз.md) — по прямому указанию ревью, честно, без
+    выдумывания там, где карточка сама пишет «не найдено». ПРОМПТ НЕ
+    ПРАВИЛ — оба совета ревью (правило про организацию, калибровка правила 6)
+    ждут чисел повторного живого прогона, чтобы не подгонять промпт и пробу
+    одновременно; это прямое условие ревью, а не моё решение. Живой ретест
+    после этого коммита — работа оркестратора (та же граница инварианта №7,
+    что и раньше), не моя.
+
+    Тронуты только scripts/dedup_judge_probe.py и tests/test_dedup_judge_probe.py
+    — ни prompts/dedup_judge.md, ни backend/app/pipeline/dedup_judge.py, ни
+    run_stages.py в цикле 2 не менялись (git diff по ним пуст, проверено).

@@ -44,19 +44,75 @@ def _load_module() -> ModuleType:
 
 def test_разметка_фармы_совпадает_с_постановкой() -> None:
     module = _load_module()
-    assert len(module.PHARMA_TITLES) == 5
+    assert len(module.PHARMA_ITEMS) == 5
+    assert [item.number for item in module.PHARMA_ITEMS] == [1, 2, 3, 4, 5]
     assert frozenset({frozenset({3, 4})}) == module.PHARMA_TRUE_DUP_PAIRS
 
 
 def test_разметка_нефтегаза_совпадает_с_постановкой() -> None:
     module = _load_module()
-    assert len(module.OILGAS_TITLES) == 6
+    assert len(module.OILGAS_ITEMS) == 6
+    assert [item.number for item in module.OILGAS_ITEMS] == [1, 2, 3, 4, 5, 6]
     expected = frozenset(frozenset(pair) for pair in [(2, 3), (2, 4), (2, 5), (3, 4), (3, 5), (4, 5)])
     assert expected == module.OILGAS_TRUE_DUP_PAIRS
     # Карточки 1 и 6 — контрольные недубли, ни в одной паре разметки их нет.
     flat = {n for pair in module.OILGAS_TRUE_DUP_PAIRS for n in pair}
     assert 1 not in flat
     assert 6 not in flat
+
+
+# ── org/snippet: главная находка ревью цикла 1 (E2Z-Д6-review.md) ───────────
+
+
+def test_кандидаты_несут_org_и_snippet_из_воротных_карточек() -> None:
+    """Блокирующая находка ревью цикла 1: проба подавала судье голые
+    заголовки (`org=None`, `snippet=""`), боевая стадия — реальные поля.
+    Кандидат 3 фармы — организация известна (`Kangwon National University`,
+    названа в ревью дословно); кандидат 2 фармы — организация честно
+    неизвестна (`org=None`), но `snippet` не пуст."""
+    module = _load_module()
+    pharma_3 = next(item for item in module.PHARMA_ITEMS if item.number == 3)
+    assert pharma_3.org is not None
+    assert "Kangwon National University" in pharma_3.org
+    assert pharma_3.snippet
+
+    pharma_2 = next(item for item in module.PHARMA_ITEMS if item.number == 2)
+    assert pharma_2.org is None
+    assert pharma_2.snippet
+
+
+def test_org_none_только_там_где_карточка_честно_говорит_не_найдено() -> None:
+    """Нефтегаз: организация известна только у карточки 6 (Instituto Federal
+    do Piauí) — у остальных пяти `Разработчик: не найдено` дословно."""
+    module = _load_module()
+    orgs = {item.number: item.org for item in module.OILGAS_ITEMS}
+    assert orgs[6] == "Instituto Federal do Piauí"
+    assert all(orgs[n] is None for n in (1, 2, 3, 4, 5))
+
+
+def test_все_кандидаты_несут_непустой_snippet() -> None:
+    module = _load_module()
+    for item in module.PHARMA_ITEMS + module.OILGAS_ITEMS:
+        assert item.snippet, f"кандидат {item.number} набора без snippet"
+
+
+def test_to_candidates_переносит_org_и_snippet_в_scored_candidate() -> None:
+    """То, что реально уходит в `judge_duplicate_groups` (и дальше в
+    `_listing`), обязано нести те же `org`/`snippet`, что и `ProbeItem` —
+    иначе обогащение полей осталось бы только в докстроке, а не в вызове."""
+    module = _load_module()
+    candidates = module.to_candidates(module.PHARMA_ITEMS)
+
+    assert len(candidates) == 5
+    by_title = {c.candidate.title: c.candidate for c in candidates}
+    kangwon = by_title["ИИ-система диагностики супоросности свиноматок по ультразвуковым изображениям"]
+    assert kangwon.org is not None
+    assert "Kangwon National University" in kangwon.org
+    assert kangwon.snippet
+
+    no_org = by_title["ИИ-система анализа ультразвуковых исследований беременности свиноматок"]
+    assert no_org.org is None
+    assert no_org.snippet
 
 
 # ── all_pairs / judged_pairs / score: чистая арифметика точности ────────────
@@ -134,6 +190,13 @@ async def test_сухой_прогон_не_создаёт_router_и_печат�
     assert "Фарма" in out and "Нефтегаз" in out
     assert "ИИ-система определения беременности свиноматок по УЗИ" in out
     assert "керамической мембраны" in out
+    # Блокирующая находка ревью цикла 1: дословный вывод обязан нести org и
+    # snippet, а не только заголовки — иначе регрессия к «голым» кандидатам
+    # прошла бы этот тест незамеченной.
+    assert "org: Kangwon National University" in out or "Kangwon National University" in out
+    assert "org: Instituto Federal do Piauí" in out
+    assert "org: не найдено" in out
+    assert "snippet: Исследователи RDA разработали программу" in out
 
 
 def test_help_называет_параметр_dry_run() -> None:
