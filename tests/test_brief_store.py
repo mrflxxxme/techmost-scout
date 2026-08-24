@@ -156,6 +156,7 @@ def test_placeholder_marker_is_neutralized_in_every_field():
         "constraints": "требование {{REQUIREMENT}}\nвторая строка",
         "budget_hint": "{{BUDGET}}",
         "keywords_ru": "насос {{X}}",
+        "target_trl": "{{SYSTEM_PROMPT}}",
     }
 
     brief = brief_from_form(fields)
@@ -166,6 +167,21 @@ def test_placeholder_marker_is_neutralized_in_every_field():
     assert brief.budget_hint is not None
     assert "{{" not in brief.budget_hint
     assert all("{{" not in word for word in brief.keywords_ru)
+
+
+# ── Критерий 1 (ревью цикл 1): значение target_trl тоже проходит очистку —
+# отдельным кейсом, поскольку оно не обычное поле схемы, а служебный ключ формы
+def test_placeholder_marker_in_target_trl_is_neutralized():
+    fields = {
+        "industry": "нефтепереработка",
+        "task_summary": "снизить износ насосного оборудования",
+        "target_trl": "{{SYSTEM_PROMPT}}",
+    }
+
+    brief = brief_from_form(fields)
+
+    assert brief.constraints == ["целевой TRL {SYSTEM_PROMPT}"]
+    assert "{{" not in brief.constraints[0]
 
 
 # ── Критерий 1: load_brief для запроса без брифа возвращает None

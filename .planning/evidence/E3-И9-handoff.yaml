@@ -2,22 +2,24 @@ handoff:
   from: implementer-3
   to: reviewer
   task: "И-9"
+  cycle: 2
   did:
     - "Создан backend/app/web/brief_store.py — единственное место, где веб пишет и читает бриф"
-    - "brief_from_form(fields): собирает schemas.Brief из полей формы (поля формы = поля схемы, РЕШ-143 п. 4); значение target_trl дописывается строкой «целевой TRL N» в constraints, пустое значение строку не добавляет (РЕШ-185, схема и база не меняются); весь пришедший текст (скалярные и списковые поля, включая owner_answers) проходит neutralize_placeholders (инвариант №4); списковые поля (constraints, keywords_ru, keywords_en) принимают и строку textarea с переносами, и уже готовый список"
+    - "brief_from_form(fields): собирает schemas.Brief из полей формы (поля формы = поля схемы, РЕШ-143 п. 4); значение target_trl дописывается строкой «целевой TRL N» в constraints, пустое значение строку не добавляет (РЕШ-185, схема и база не меняются); весь пришедший текст (скалярные и списковые поля, включая owner_answers и target_trl) проходит neutralize_placeholders (инвариант №4); списковые поля (constraints, keywords_ru, keywords_en) принимают и строку textarea с переносами, и уже готовый список"
     - "save_brief(session, request_id, brief, *, confirmed): upsert строки briefs по unique(request_id) — та же форма записи полей, что у app.pipeline.persistence_write._brief_row/_apply_brief (И-5), поэтому веб и прогон не расходятся форматом и не конфликтуют при повторной записи; confirmed=True всегда проставляет confirmed_at текущим временем, confirmed=False колонку не трогает (у новой строки она и так NULL)"
     - "load_brief(session, request_id): обратное преобразование строки briefs в schemas.Brief, None для запроса без брифа"
-    - "10 тестов в tests/test_brief_store.py: круговой обход записи-чтения (model_dump совпадает), повторная запись не задваивает строку (count=1) и обновляет её, confirmed_at при True/False, TRL строкой в constraints, пустой TRL без строки, обезвреживание {{МЕТКА}} во всех полях формы, load_brief → None без брифа, список/строка для textarea-полей дают одинаковый результат, минимальный набор полей не роняет сборку"
+    - "11 тестов в tests/test_brief_store.py: круговой обход записи-чтения (model_dump совпадает), повторная запись не задваивает строку (count=1) и обновляет её, confirmed_at при True/False, TRL строкой в constraints, пустой TRL без строки, обезвреживание {{МЕТКА}} во всех полях формы (включая target_trl отдельным кейсом), load_brief → None без брифа, список/строка для textarea-полей дают одинаковый результат, минимальный набор полей не роняет сборку"
+    - "ЦИКЛ 2 (правка блокирующего замечания ревью): значение target_trl в brief_from_form (brief_store.py:91-96) теперь проходит через _clean (neutralize_placeholders) наравне с остальными полями формы — раньше оно подставлялось в constraints напрямую строкой f\"целевой TRL {str(target_trl).strip()}\" и метка вида {{SYSTEM_PROMPT}} уезжала в Brief необезвреженной. Добавлен тест test_placeholder_marker_in_target_trl_is_neutralized и кейс target_trl в test_placeholder_marker_is_neutralized_in_every_field. Мутация проверена вручную (временный no-op _clean валит оба теста, остальные 9 проходят) и откачена — git diff --stat пуст."
   artifacts:
     - backend/app/web/brief_store.py
     - tests/test_brief_store.py
     - .planning/evidence/E3-И9-pytest.txt
   self_audit: pass
   checks:
-    - "pytest tests/test_brief_store.py -v: 10 passed"
+    - "pytest tests/test_brief_store.py -v: 11 passed (цикл 2, было 10)"
     - "pytest tests/test_persistence.py -v: 38 passed (запись брифа вебом и пайплайном не конфликтуют)"
     - "grep -in trl backend/app/models.py: только models.py:215 trl_estimate — в Brief полей TRL нет и не появилось"
-    - "pytest -q: 898 passed"
+    - "pytest -q: 899 passed (цикл 2, было 898)"
     - "ruff check .: All checks passed"
     - "ruff format --check .: 165 files already formatted"
   escalate: none
@@ -28,6 +30,7 @@ handoff:
     - "backend/app/pipeline/persistence_write.py (_brief_row/_apply_brief — с чем согласован формат колонок)"
     - "backend/app/web/brief_store.py"
     - "tests/test_brief_store.py"
+    - ".planning/evidence/E3-И9-review.md (ветка review/i9, замечание цикла 1)"
   notes: >-
     Контракт fields для brief_from_form определён этой задачей (в плане сигнатура
     не расписана до уровня формата значений): скалярные поля (industry,
@@ -36,7 +39,12 @@ handoff:
     строк ИЛИ уже готовый список, оба варианта дают одинаковый результат;
     owner_answers — список объектов OwnerAnswer или словарей с ключами
     question/answer; target_trl — отдельный ключ формы, не поле схемы, только
-    для строки constraints. Задача И-10 (форма подтверждения брифа) должна
-    следовать этому контракту при сборке словаря fields из данных запроса.
+    для строки constraints, и он тоже проходит обезвреживание меток (цикл 2).
+    Задача И-10 (форма подтверждения брифа) должна следовать этому контракту
+    при сборке словаря fields из данных запроса.
+    Советы ревьюера цикла 1 (сброс confirmed_at при пересохранении черновиком
+    поверх подтверждённой строки; валидация диапазона TRL) не исполнены по
+    указанию оркестратора — они не блокирующие и относятся к постановке
+    будущих задач И-10/И-11, а не к границам И-9.
     Живых вызовов модели и сети не было — весь модуль детерминированный, без
     внешних вызовов.

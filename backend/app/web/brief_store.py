@@ -91,7 +91,11 @@ def brief_from_form(fields: Mapping[str, Any]) -> Brief:
     constraints = _clean_list(fields.get("constraints"))
     target_trl = fields.get("target_trl")
     if target_trl not in (None, ""):
-        constraints.append(f"целевой TRL {str(target_trl).strip()}")
+        # `target_trl` — то же поле формы, что и остальные: значение проходит
+        # `_clean` наравне с ними, прежде чем уйти в constraints строкой
+        # (иначе метка `{{...}}` в этом поле осталась бы необезвреженной —
+        # ревью цикла 1, инвариант №4).
+        constraints.append(f"целевой TRL {_clean(str(target_trl))}")
 
     target_maturity_raw = fields.get("target_maturity") or None
     target_maturity = MaturityStage(target_maturity_raw) if target_maturity_raw else None
