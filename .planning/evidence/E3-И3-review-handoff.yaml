@@ -1,0 +1,34 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "И-3"
+  did:
+    - "Проверен diff e3/i3 (940a007 к базе ba86bf2f): состав файлов точно совпадает со списком задачи И-3 из PLAN.md"
+    - "Прогнаны pytest tests/test_anonymize.py -v (17 passed), pytest -q целиком (853 passed), ruff check . и ruff format --check . (чисто)"
+    - "Регулярки прогнаны на реальных и каверзных формулировках брифов (химические формулы NaOH/KOH, ГОСТ Р, pH, TRL 6, ИП Иванов, кавычки-ёлочки без юрформы, дефисные названия с юрформой и без) — ложных срабатываний не найдено"
+    - "Мутация (удалена альтернатива НАО из _LEGAL_FORMS) поймана целевым тестом (1 failed из test_finds_known_positive_cases), файл возвращён без изменений"
+    - "Проверены все десять инвариантов способами из INVARIANTS.md; нарушений нет"
+    - "Проверен handoff исполнителя (E3-И3-handoff.yaml): артефакты существуют, checks воспроизведены и совпали, self_audit/escalate не противоречат друг другу"
+  artifacts:
+    - .planning/evidence/E3-И3-review.md (закоммичен до ответа)
+    - .planning/evidence/E3-И3-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_anonymize.py -v: 17 passed"
+    - "pytest -q: 853 passed, 1 warning"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 153 files already formatted"
+    - "grep -nE 'httpx|LLMRouter|async def' backend/app/anonymize.py: пусто"
+    - "grep -n anonymize backend/app/schemas.py: строка 91, ссылка на app.anonymize"
+    - "мутация (удалена альтернатива НАО): 1 failed, 16 passed — целевой тест сработал"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «И-3»)
+    - .planning/evidence/E3-И3-review.md
+    - backend/app/anonymize.py
+    - tests/test_anonymize.py
+  notes: >-
+    Вердикт: ПРИНЯТЬ. Блокирующих находок нет, два совета не требуют
+    доработки (опечатка в докстроке теста и регистрочувствительность
+    юрформ — оба не критерии приёмки этой задачи). Цикл 1, второго не
+    потребовалось.
