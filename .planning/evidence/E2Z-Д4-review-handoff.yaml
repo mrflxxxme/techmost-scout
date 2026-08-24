@@ -1,0 +1,32 @@
+handoff:
+  from: reviewer
+  to: verifier-orchestrator
+  task: "Д-4"
+  did:
+    - "Сверен построчно перенос тел _doctor/_schema_drift/SECRET_CHECKS в cli_doctor.py и _run/_intake_stage_record/_persist_intake_stop/_normalize_owner_answer в cli_run.py против базы f41beab: diff по извлечённым блокам показал только докстроки и строку отложенного импорта — поведение не менялось"
+    - "Проверен приём отложенного импорта from app.cli import ... внутри _doctor()/_run(): cli.py импортирует cli_doctor/cli_run на уровне модуля обычным импортом, обратный импорт из app.cli — только внутри функций; цикла нет, подтверждено запуском python -c \"import app.cli\" и python -m app.cli --help в самой копии (PYTHONPATH на backend/ worktree)"
+    - "Проверен страж: cli.py ушёл из _EXCEPTIONS, записи search/openalex.py (593) и search/yandex_search.py (558) не тронуты — конфликта с Д-5 нет"
+    - "Прогнаны в копии: pytest -q полный (787 passed), прицельные test_backend_layout/test_cli_run/test_cli_doctor_schema_guard/test_prompts (74 passed), test_cli_run.py отдельно (22 passed), ruff check и ruff format --check (чисто), wc -l трёх файлов (176/184/487, все ≤500)"
+    - "Подтверждена находка исполнителя про устаревший пример httpx в docs/team/INVARIANTS.md (пункт 6): буквальный прогон паттерна теперь называет cli_doctor.py; не нарушение по сути, адресовано Д-7 (документная задача той же волны)"
+  artifacts:
+    - .planning/evidence/E2Z-Д4-review.md (закоммичен до ответа)
+    - .planning/evidence/E2Z-Д4-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q (копия): 787 passed, 1 warning"
+    - "pytest -q tests/test_backend_layout.py tests/test_cli_run.py tests/test_cli_doctor_schema_guard.py tests/test_prompts.py: 74 passed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 142 files already formatted"
+    - "wc -l backend/app/cli.py backend/app/cli_doctor.py backend/app/cli_run.py: 176 / 184 / 487"
+    - "python -m app.cli --help (код копии, PYTHONPATH на её backend/): команды печатаются без ошибок"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача Д-4, волна Э2-З)
+    - .claude/worktrees/agent-a7c66d160ef00fd18/backend/app/cli.py (докстрока объясняет карту дробления)
+    - docs/team/INVARIANTS.md (пункт 6 — пример устарел, чинит Д-7)
+  notes: |
+    Вердикт ПРИНЯТЬ. Блокирующих находок нет. Один совет (избыточные имена в
+    __all__ без потребителя в тестах) и одна переданная дальше находка вне
+    границ задачи (пример httpx в INVARIANTS.md, п.6) — адресована Д-7,
+    исполнитель Д-4 корректно её не тронул и честно записал в notes своего
+    handoff. Это цикл 1, второй цикл не требуется.
