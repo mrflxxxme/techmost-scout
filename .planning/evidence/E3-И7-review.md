@@ -103,3 +103,66 @@
 `tests/test_report_overrides.py`, `.planning/evidence/E3-I7-pytest.txt`,
 `.planning/evidence/E3-И7-handoff.yaml`), `checks` в handoff воспроизведены
 дословно и подтверждены здесь заново.
+
+---
+
+# Ревью И-7 · цикл 2
+Вердикт: **ПРИНЯТЬ** (блокирующих 0, советов 3 — те же, что в цикле 1, не блокируют)
+
+Второй цикл — последний (§4 CONVENTIONS); третьего не будет.
+
+## Проверка закрытия блокирующей находки цикла 1
+
+Исполнитель сдал `e3/i7` @ `03f867c` (родитель `37b47d4`). Заявлено: код
+модуля не менялся, добавлен один тест
+`test_untouched_card_nested_fields_do_not_leak_into_source`, самопроверка
+мутацией `deep=False` ловится этим тестом.
+
+- `git diff 37b47d4..03f867c -- backend/app/report_overrides.py` — пусто,
+  подтверждено: модуль правда не тронут.
+- `git diff 37b47d4..03f867c --stat` — изменены только
+  `tests/test_report_overrides.py` (+18 строк, новый тест) и файлы
+  `.planning/evidence/` исполнителя — вне границ задачи ничего не добавлено.
+- Новый тест `test_untouched_card_nested_fields_do_not_leak_into_source`
+  прочитан целиком: собирает `Report` с двумя карточками, правит только
+  карточку 0, проверяет `result.cards[1] is not report.cards[1]` и
+  `result.cards[1].risks is not report.cards[1].risks`, затем мутирует
+  `result.cards[1].risks` и проверяет, что `report.cards[1].risks` не
+  изменился. Это ровно тот тест, который требовался.
+- `pytest tests/test_report_overrides.py -v` — 11 passed (было 10 + 1 новый).
+- Мутация цикла 1 повторена на этом коде: заменил
+  `report.model_copy(deep=True)` на `deep=False` —
+  `pytest tests/test_report_overrides.py -v` даёт **1 failed, 10 passed**,
+  падает ровно новый тест `test_untouched_card_nested_fields_do_not_leak_into_source`
+  (см. трассировку: `assert result.cards[1] is not report.cards[1]` не
+  выполняется). Блокирующая находка закрыта именно тем тестом, который был
+  нужен — не побочным эффектом. Правка отменена (`git checkout --
+  backend/app/report_overrides.py`), дерево снова чистое.
+- `pytest -q` (полный набор): **899 passed**, 1 посторонний warning
+  (StarletteDeprecationWarning, не от задачи).
+- `ruff check .`: All checks passed!; `ruff format --check .`: 165 files
+  already formatted.
+
+## Советы
+
+Три совета из цикла 1 (типы значений overrides без валидации — граница
+И-12; каскадное удаление evidence при повторяющемся URL — заложено планом;
+докстрока могла бы явно объяснять цель `deep=True`) остаются в силе как
+советы, не блокируют — они не были предметом блокирующей находки и не
+требовали правки в этом цикле.
+
+## Проверено (цикл 2)
+
+- `git diff 37b47d4..03f867c -- backend/app/report_overrides.py`: пусто
+- `pytest tests/test_report_overrides.py -v`: 11 passed
+- Мутация `deep=True → deep=False`: 1 failed (ровно новый тест), 10 passed —
+  находка закрыта тестом по адресу
+- `pytest -q`: 899 passed, 1 посторонний warning
+- `ruff check .`: All checks passed!
+- `ruff format --check .`: 165 files already formatted
+
+## Итог
+
+Блокирующая находка цикла 1 закрыта точным тестом на то поведение, которое
+и было предметом претензии. Новых блокирующих находок в цикле 2 нет.
+Вердикт: **ПРИНЯТЬ**.

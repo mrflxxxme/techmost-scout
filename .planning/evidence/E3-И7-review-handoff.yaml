@@ -1,41 +1,30 @@
 handoff:
   from: reviewer
-  to: implementer-2
+  to: orchestrator
   task: "И-7"
   did:
-    - "Прочитаны PLAN.md (раздел «И-7» и блок «Ключ наложения правок»), INVARIANTS.md, CONVENTIONS.md §5/§7, diff 74f603ad..37b47d4 целиком"
-    - "Прогнаны pytest tests/test_report_overrides.py -v (10 passed), pytest -q (898 passed), ruff check ., ruff format --check ."
-    - "Сверены глазами белый список EDITABLE_FIELDS со schemas.SolutionCard и ключ (is_contest, position) с pipeline/persistence_write.py._card_row — совпадений расхождений нет"
-    - "Прогнаны две мутации: добавление confidence в EDITABLE_FIELDS (ловится, 2 теста падают), замена model_copy(deep=True) на deep=False (не ловится ни целевым, ни полным набором — 898 тестов зелёные)"
-    - "Найдено 1 блокирующее (инвариант №8 / критерий приёмки 1 — тест на немутируемость не проверяет вложенные поля непереписанных карточек) и 3 совета"
+    - "Цикл 1: найдено 1 блокирующее (инвариант №8 / критерий приёмки 1 — тест на немутируемость не проверял вложенные поля непереписанной карточки) и 3 совета; вердикт ДОРАБОТАТЬ"
+    - "Цикл 2: проверен e3/i7 @ 03f867c (родитель 37b47d4) — код модуля не менялся (git diff пуст), добавлен тест test_untouched_card_nested_fields_do_not_leak_into_source"
+    - "Повторена мутация deep=True -> deep=False на коде цикла 2: падает ровно новый тест (1 failed из 11), находка закрыта точным тестом, а не побочно"
+    - "Прогнаны pytest tests/test_report_overrides.py -v (11 passed), pytest -q (899 passed), ruff check ., ruff format --check . — все чисто"
+    - "Вердикт цикла 2: ПРИНЯТЬ, блокирующих 0; второй цикл последний, третьего не будет"
   artifacts:
-    - ".planning/evidence/E3-И7-review.md (закоммичен до ответа)"
+    - ".planning/evidence/E3-И7-review.md (цикл 1 и цикл 2, закоммичен до ответа)"
     - ".planning/evidence/E3-И7-review-handoff.yaml"
   self_audit: pass
   checks:
-    - "pytest tests/test_report_overrides.py -v: 10 passed"
-    - "pytest -q: 898 passed, 1 warning (посторонний, не от задачи)"
+    - "git diff 37b47d4..03f867c -- backend/app/report_overrides.py: пусто"
+    - "pytest tests/test_report_overrides.py -v: 11 passed"
+    - "мутация deep=True -> deep=False: 1 failed (ровно новый тест), 10 passed"
+    - "pytest -q: 899 passed, 1 warning (посторонний)"
     - "ruff check .: All checks passed!"
     - "ruff format --check .: 165 files already formatted"
-    - "pytest tests/test_backend_layout.py tests/test_tests_layout.py -q: 6 passed"
-    - "pytest tests/test_team_docs.py -q: 35 passed"
-    - "grep -nE 'sqlalchemy|app.db|httpx' backend/app/report_overrides.py: совпадений нет"
-    - "мутация confidence в EDITABLE_FIELDS: 2 теста упали (поймана)"
-    - "мутация deep=True -> deep=False: 0 тестов упало из 898 (не поймана — блокирующая находка)"
   escalate: none
   read_first:
-    - ".planning/PLAN.md (раздел «### И-7»)"
-    - ".planning/evidence/E3-И7-review.md"
-    - "backend/app/report_overrides.py:37-54 (apply_overrides, model_copy(deep=True))"
-    - "tests/test_report_overrides.py:59-65 (test_original_report_is_not_mutated)"
+    - ".planning/evidence/E3-И7-review.md (раздел «Цикл 2»)"
+    - "backend/app/report_overrides.py"
+    - "tests/test_report_overrides.py (test_untouched_card_nested_fields_do_not_leak_into_source)"
   notes: >-
-    Это цикл 1 из двух возможных (§4 CONVENTIONS). Единственная блокирующая
-    находка — недостающий тест, а не дефект кода: строка deep=True в коде
-    сейчас правильная и реально защищает от мутации (проверено прямым
-    воспроизведением), но ни один тест этого не доказывает, и полный набор
-    не поймает будущую регрессию. Достаточно добавить один тест: собрать
-    Report с двумя карточками, наложить правку только на карточку 0, затем
-    смутировать вложенный изменяемый список (risks/evidence/contact_leads)
-    у result.cards[1] (непереписанной) и убедиться, что report.cards[1]
-    не изменился — либо явно проверить result.cards[1] is not
-    report.cards[1] для непереписанных карточек. Второй цикл — последний.
+    Задача И-7 принята по итогам цикла 2 (последнего). Три совета из цикла 1
+    остаются несрочными записями, не блокируют слияние. Ветка e3/i7 готова
+    к слиянию оркестратором.
