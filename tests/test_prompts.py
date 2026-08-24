@@ -34,6 +34,9 @@ EXPECTED_PLACEHOLDERS = {
     "summary": {"BRIEF_JSON", "CARDS_JSON"},
     "extractor": {"SOURCE_TYPE", "PROVIDER", "RAW_RESULTS"},
     "scorer": set(),
+    # Д-6 волны Э2-З (РЕШ-152): семантический судья дублей — список отобранных
+    # кандидатов номером, заголовком, организацией и фрагментом одной меткой.
+    "dedup_judge": {"CANDIDATES_LISTING"},
 }
 
 
@@ -154,7 +157,9 @@ def test_render_prompt_fails_loudly_on_missing_value():
         render_prompt("verifier", CARD_JSON="{}")
 
 
-@pytest.mark.parametrize("name", ["intake", "planner", "replanner", "card_author", "verifier", "summary", "scorer"])
+@pytest.mark.parametrize(
+    "name", ["intake", "planner", "replanner", "card_author", "verifier", "summary", "scorer", "dedup_judge"]
+)
 def test_prompt_has_error_section(name: str):
     """У каждого промпта есть раздел про ошибки: дешёвые модели без него врут."""
     text = load_prompt(name).lower()

@@ -19,7 +19,7 @@ import logging
 from datetime import UTC, datetime
 
 from app.llm import CostLimitExceededError
-from app.pipeline import diversity, history, stages
+from app.pipeline import dedup_judge, diversity, history, stages
 from app.pipeline.persistence import CandidateRecord, PlanRecord, StageRecord
 from app.pipeline.pipeline_selection_flow import CONTEST_CARDS_TARGET, candidate_records, split_contest_candidates
 from app.pipeline.run_journal import cost_delta
@@ -216,7 +216,47 @@ class RunStagesMixin:
         if history_pool.scored:
             # Пункт 6: свой вызов с pass_no=0, судьба — по ЭТОМУ прогону.
             candidate_log.extend(candidate_records(history_pool.scored, picked, pass_no=history.HISTORY_PASS_NO))
+        # Семантический судья дублей (Д-6 Э2-З, РЕШ-152): лексика заголовков
+        # дубли не разделяет (расчёт по обеим отраслям —
+        # `.planning/evidence/E2G-З6-similarity.md`), поэтому перед группировкой
+        # ОСНОВНОЙ очереди спрашивается модель — один вызов на прогон, только по
+        # уже отобранным кандидатам. Конкурсная очередь этим признаком не
+        # проверяется — «+1 вызов модели на прогон», а не «+2» (граница задачи).
+        # Меньше двух кандидатов — дублировать нечего, вызов модели того не стоит
+        # (та же причина, что у пропуска строки журнала конкурсной секции ниже).
+        judge_groups: list[list[int]] | None = None
+        if len(selected) >= 2:
+            await self._notify("dedup_judge", "Спрашиваю судью дублей по отобранным кандидатам", 0.58)
+            started = datetime.now(UTC)
+            cost_before = dict(self._router.cost.by_provider)
+            judge_groups = await dedup_judge.judge_duplicate_groups(self._router, selected)
+            stage_cost, provider = cost_delta(cost_before, dict(self._router.cost.by_provider))
+            judge_ok = judge_groups is not None
+            stage_log.append(
+                StageRecord(
+                    stage="dedup_judge",
+                    started_at=started,
+                    finished_at=datetime.now(UTC),
+                    provider=provider,
+                    cost_rub=stage_cost,
+                    error=None if judge_ok else "судья дублей недоступен, группировка идёт без семантической склейки",
+                )
+            )
+            await self._notify(
+                "dedup_judge",
+                f"Судья дублей: групп найдено {len(judge_groups)}"
+                if judge_ok
+                else "Судья дублей недоступен, иду без семантической склейки",
+                0.585,
+            )
+
         groups_raw = stages.group_for_cards(selected, target=target)
+        if judge_groups:
+            # Вердикт судьи скармливается той же машинерии склейки, что и
+            # лексический порог (РЕШ-132 п. 2, граница задачи Д-6: порог 0.65 не
+            # трогать) — она остаётся страховкой ПОСЛЕ семантической склейки.
+            judge_input = selected[: dedup_judge.JUDGE_CANDIDATE_LIMIT]
+            groups_raw = dedup_judge.apply_judge_groups(groups_raw, judge_groups, judge_input)
         # Склейка заготовок до сборки карточек (З-6, РЕШ-132 п. 2) — та же
         # причина, что у конкурсной очереди: дублирующая заготовка не должна
         # доезжать до платного вызова модели.
