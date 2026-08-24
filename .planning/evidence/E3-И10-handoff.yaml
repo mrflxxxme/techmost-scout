@@ -1,0 +1,86 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: "И-10"
+  did:
+    - "Живой поток вместо заглушки в backend/app/web/routes/intake.py: POST /requests создаёт запрос (RequestStatus.INTAKE), прогоняет текст через app.anonymize.find_deidentification_risks и через app.pipeline.intake_flow.run_intake_stage, отдаёт фрагмент _intake_questions.html с уточняющими вопросами и необязательным предупреждением об обезличивании"
+    - "POST /requests/{id}/brief работает в двух состояниях по полю формы confirm: без confirm — refine_brief_stage + resolve_constraints_stage, save_brief(confirmed=False), статус briefing, фрагмент _brief_confirm.html с редактируемыми полями схемы, полем TRL и ответами оператора (только чтение); с confirm — brief_from_form + save_brief(confirmed=True), тот же фрагмент с кнопкой «Начать поиск» на POST /requests/{id}/start"
+    - "Отказ run_intake повторяет CLI: запасной бриф и оговорка INTAKE_FALLBACK_CAVEAT, сразу фрагмент подтверждения (диалог провести не из чего)"
+    - "Исчерпание стоп-крана (CostLimitExceededError) на любой из трёх стадий интейка ловится в маршруте: строка requests получает статус failed и человеческий текст, исключение наружу не пробрасывается"
+    - "TRL из формы валидируется в маршруте (число 1-9), а не в brief_store: мусорный ввод не подставляется в constraints, оператор видит предупреждение TRL_INVALID_NOTICE"
+    - "Залипший confirmed_at (замечание ревью волны 1) не протекает в кнопку старта: она есть только в ответе confirm-ветки, ветка без confirm всегда отдаёт редактируемую форму — тест test_stale_confirmation_does_not_leak_start_button"
+    - "Новые шаблоны backend/app/web/templates/_intake_questions.html и _brief_confirm.html; удалена заглушка _stage_todo.html"
+    - "tests/test_web_templates.py: снято временное исключение _stage_todo.html у стража инлайновых style="
+    - "Новые тесты tests/test_web_intake.py, 10 штук, модель подменена на уровне app.pipeline.stages.run_intake/refine_brief, сети нет"
+  artifacts:
+    - backend/app/web/routes/intake.py
+    - backend/app/web/templates/_intake_questions.html
+    - backend/app/web/templates/_brief_confirm.html
+    - tests/test_web_intake.py
+    - tests/test_web_templates.py
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_intake.py -v: 10 passed"
+    - "pytest tests/test_web_templates.py -v: 5 passed"
+    - "pytest -q: 925 passed (база волны 1 — 915, плюс 10 новых)"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 169 files already formatted"
+    - "wc -l backend/app/web/routes/intake.py: 351 (предел 500)"
+    - "grep -rn _stage_todo backend/app: нет совпадений"
+    - "grep -rn run_intake|refine_brief backend/app/web: только через app.pipeline.intake_flow (run_intake_stage, refine_brief_stage)"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (раздел И-10)"
+    - "docs/SPEC.md строки 530-556"
+    - "backend/app/web/routes/intake.py"
+    - "backend/app/web/templates/_brief_confirm.html"
+    - "tests/test_web_intake.py"
+  notes: |
+    Новые клиентские фразы для визы владельца (критерий 6, РЕШ-143 п. 7) — список:
+    1. Предупреждение обезличивания (не блокирует отправку): "В тексте похоже на
+       название компании или бренда: {fragments}. Рекомендуем заменить обезличенной
+       формулировкой — отправка всё равно доступна."
+    2. Текст отказа при стоп-кране: "Запрос остановлен: расход на разбор задачи
+       превысил лимит на один запрос. Попробуйте сократить текст задачи и
+       отправить его заново."
+    3. Предупреждение о некорректном TRL: "Целевой TRL указан некорректно
+       (ожидается число от 1 до 9) — требование не добавлено."
+    4. Подписи полей формы брифа (не фразы-предупреждения, но новые надписи
+       интерфейса): "Отрасль", "Суть задачи", "Ограничения и требования (по
+       одному на строку)", "География внедрения", "Желаемая стадия готовности",
+       "Целевой уровень готовности технологии (TRL, 1-9)", "Ориентир по бюджету",
+       "Ориентир по срокам", "Ключевые слова, рус. (по одному на строку)",
+       "Ключевые слова, en (по одному на строку)", "Ответы на уточняющие вопросы
+       (только чтение)".
+    5. Тексты кнопок: "Собрать бриф", "Подтвердить бриф и продолжить",
+       "Начать поиск" (последняя дословно из постановки плана, уже одобрена).
+    6. Заголовки фрагментов: "Уточняющие вопросы", "Проверьте бриф перед
+       поиском", "Бриф подтверждён".
+    7. Служебный текст "Запрос №N не найден." (маршрут без вебхука) и
+       "Черновик брифа не найден — опишите задачу заново." — оба на путь,
+       который в штатном сценарии не встречается (нужны только на прямое
+       обращение к несуществующему запросу).
+
+    Границы: backend/app/web/static/theme.css не правился. Не хватает стилей
+    для <select> и input[type=text][inputmode=numeric] (в файле есть правила
+    только для input[type="text"]/input[type="password"]/textarea) — строка
+    "select" не оформлена ни разу нигде в theme.css. TRL-поле сделано как
+    input type="text" inputmode="numeric" (наследует уже существующий стиль
+    текстового поля), а вот <select> у target_maturity останется неоформленным
+    браузерным виджетом. Это долг для И-13 — либо владелец добавит правило для
+    select в theme.css, либо это осознанный отказ (нативный select — тоже
+    решение).
+
+    backend/app/web/templates/index.html оставлен без изменений: форма уже
+    постила на /requests с hx-target="#stage", это совпадает с новым потоком
+    без правок; таблица "Последние запросы" уже печатает row.status_label
+    (задача И-1), новые статусы intake/briefing отображаются русской меткой
+    без доработок.
+
+    Живых вызовов модели не делалось — весь набор идёт на подменах
+    app.pipeline.stages.run_intake/refine_brief, платных вызовов нет.
+
+    Замечено за границами задачи (не правил): brief_store.save_brief не
+    сбрасывает confirmed_at при confirmed=False — уже задокументированное
+    поведение И-9, обработано на экране (см. did п. 6), в сам brief_store не
+    лез, как и предписано постановкой.

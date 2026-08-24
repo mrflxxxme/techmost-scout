@@ -1,10 +1,10 @@
 """Страж вёрстки: инлайновые `style=` и hex-цвета запрещены в шаблонах.
 
 Все цвета и размеры живут в `backend/app/web/static/theme.css` — страницы
-пользуются только классами (SPEC Э3-2, РЕШ-189 п. 14). Единственное временное
-исключение — `_stage_todo.html`: заглушку нереализованной стадии убирает
-задача И-10 вместе с этим исключением из стража (см. `.planning/PLAN.md`,
-раздел И-10, критерий 2).
+пользуются только классами (SPEC Э3-2, РЕШ-189 п. 14). Временное исключение
+`_stage_todo.html` снято задачей И-10 вместе с самим файлом: заглушка
+нереализованной стадии заменена живым потоком (`_intake_questions.html`,
+`_brief_confirm.html`) — см. `.planning/PLAN.md`, раздел И-10, критерий 2.
 
 Дополнительно проверяется, что три готовые страницы рендерятся без ошибок
 через ASGI-клиент FastAPI (обёртку над httpx) с basic auth — без обращения
@@ -24,10 +24,6 @@ from app import main
 
 _TEMPLATES_DIR = Path(main.WEB_DIR) / "templates"
 
-#: Заглушка нереализованной стадии — её инлайновые `style=` не в зоне
-#: ответственности задачи И-8, исключение снимает И-10 вместе с файлом.
-_EXEMPT_INLINE_STYLE = {"_stage_todo.html"}
-
 _HEX_COLOR = re.compile(r"#[0-9a-fA-F]{3,6}\b")
 
 
@@ -37,11 +33,9 @@ def _template_files() -> list[Path]:
 
 
 def test_no_inline_style_outside_exempt_file():
-    """Ни один шаблон, кроме заглушки стадии, не содержит атрибута `style=`."""
+    """Ни один шаблон не содержит атрибута `style=`."""
     violations: list[str] = []
     for path in _template_files():
-        if path.name in _EXEMPT_INLINE_STYLE:
-            continue
         lines = path.read_text(encoding="utf-8").splitlines()
         for lineno, line in enumerate(lines, start=1):
             if "style=" in line:

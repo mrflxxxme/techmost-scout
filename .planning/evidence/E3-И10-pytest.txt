@@ -1,0 +1,95 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-ae48e3f14358f4207
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 10 items
+
+tests/test_web_intake.py::test_create_request_returns_questions_fragment_and_intake_status PASSED [ 10%]
+tests/test_web_intake.py::test_create_request_flags_deidentification_risk_but_form_stays_submittable PASSED [ 20%]
+tests/test_web_intake.py::test_answer_i_dont_know_is_accepted PASSED     [ 30%]
+tests/test_web_intake.py::test_brief_without_confirm_saves_draft_and_sets_briefing_status PASSED [ 40%]
+tests/test_web_intake.py::test_brief_with_confirm_sets_confirmed_at_and_returns_start_button PASSED [ 50%]
+tests/test_web_intake.py::test_run_intake_failure_falls_back_with_caveat PASSED [ 60%]
+tests/test_web_intake.py::test_cost_limit_exceeded_marks_request_failed PASSED [ 70%]
+tests/test_web_intake.py::test_target_trl_is_added_to_constraints_string PASSED [ 80%]
+tests/test_web_intake.py::test_invalid_trl_is_rejected_without_polluting_constraints PASSED [ 90%]
+tests/test_web_intake.py::test_stale_confirmation_does_not_leak_start_button PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 10 passed, 1 warning in 0.69s =========================
+
+=== pytest tests/test_web_templates.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-ae48e3f14358f4207
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+tests/test_web_templates.py::test_no_inline_style_outside_exempt_file PASSED [ 20%]
+tests/test_web_templates.py::test_no_hex_colors_in_templates PASSED      [ 40%]
+tests/test_web_templates.py::test_page_renders_without_errors[/] PASSED  [ 60%]
+tests/test_web_templates.py::test_page_renders_without_errors[/requests] PASSED [ 80%]
+tests/test_web_templates.py::test_page_renders_without_errors[/showcase] PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+========================= 5 passed, 1 warning in 0.56s =========================
+
+=== pytest -q (полный набор) ===
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 23%]
+........................................................................ [ 31%]
+........................................................................ [ 38%]
+........................................................................ [ 46%]
+........................................................................ [ 54%]
+........................................................................ [ 62%]
+........................................................................ [ 70%]
+........................................................................ [ 77%]
+........................................................................ [ 85%]
+........................................................................ [ 93%]
+.............................................................            [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+925 passed, 1 warning in 55.44s
+
+=== ruff check . ===
+All checks passed!
+
+=== ruff format --check . ===
+169 files already formatted
+
+=== wc -l backend/app/web/routes/intake.py ===
+351 backend/app/web/routes/intake.py
+
+=== grep _stage_todo backend/app (критерий 2) ===
+exit=1
+
+=== grep run_intake|refine_brief backend/app/web (критерий 3) ===
+backend/app/web/routes/intake.py:11:восстановить контекст для повторного вызова `refine_brief` между двумя
+backend/app/web/routes/intake.py:17:  если вопросов не было): бриф собирается через `refine_brief_stage`,
+backend/app/web/routes/intake.py:60:    refine_brief_stage,
+backend/app/web/routes/intake.py:62:    run_intake_stage,
+backend/app/web/routes/intake.py:156:    Отказ `run_intake` — сразу фрагмент подтверждения брифа
+backend/app/web/routes/intake.py:173:        outcome = await run_intake_stage(
+backend/app/web/routes/intake.py:209:    # заново звать платный run_intake, чтобы восстановить контекст диалога.
+backend/app/web/routes/intake.py:241:            outcome = await refine_brief_stage(
