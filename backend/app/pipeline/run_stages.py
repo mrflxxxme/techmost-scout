@@ -23,6 +23,12 @@ from app.pipeline import dedup_judge, diversity, history, stages
 from app.pipeline.persistence import CandidateRecord, PlanRecord, StageRecord
 from app.pipeline.pipeline_selection_flow import CONTEST_CARDS_TARGET, candidate_records, split_contest_candidates
 from app.pipeline.run_journal import cost_delta
+
+# Импорт напрямую из selection.py, а не через фасад `stages` (РЕШ-181 п. 4):
+# `stages.py` держит жёсткий лимит 120 строк только на реэкспорт, а
+# `group_candidates`/`cut_to_target` нужны исключительно здесь — судье дублей,
+# чтобы срез до `target` уходил ПОСЛЕ склейки его вердикта.
+from app.pipeline.selection import cut_to_target, group_candidates
 from app.schemas import Brief, Report, ReportSummary, ScoredCandidate, SolutionCard
 
 #: Логгер намеренно не по `__name__` — см. пояснение в `pipeline_context.py`:
@@ -225,6 +231,7 @@ class RunStagesMixin:
         # Меньше двух кандидатов — дублировать нечего, вызов модели того не стоит
         # (та же причина, что у пропуска строки журнала конкурсной секции ниже).
         judge_groups: list[list[int]] | None = None
+        judge_input: list[ScoredCandidate] = []
         if len(selected) >= 2:
             await self._notify("dedup_judge", "Спрашиваю судью дублей по отобранным кандидатам", 0.58)
             started = datetime.now(UTC)
@@ -242,24 +249,48 @@ class RunStagesMixin:
                     error=None if judge_ok else "судья дублей недоступен, группировка идёт без семантической склейки",
                 )
             )
-            await self._notify(
-                "dedup_judge",
-                f"Судья дублей: групп найдено {len(judge_groups)}"
-                if judge_ok
-                else "Судья дублей недоступен, иду без семантической склейки",
-                0.585,
-            )
+            if judge_ok:
+                judge_input = selected[: dedup_judge.JUDGE_CANDIDATE_LIMIT]
+            else:
+                await self._notify("dedup_judge", "Судья дублей недоступен, иду без семантической склейки", 0.585)
 
-        groups_raw = stages.group_for_cards(selected, target=target)
+        # Группировка по организации идёт БЕЗ среза до target (РЕШ-181 п. 4,
+        # совет аудита пост-аудита волны Э2-З): судья обязан сливать заготовки
+        # раньше, чем часть из них обрежется, иначе освободившееся после
+        # склейки место не достаётся следующему по счёту кандидату, а
+        # пропадает вместе со срезанной заготовкой. Прежний порядок (срез
+        # внутри `group_for_cards`, судья — после) отправлял под срез не
+        # спрошенного судьёй кандидата — живой пример из аудита: пара
+        # №1062/№1069 (5.6 и 5.55), вторая карточка ушла под срез незамеченной.
+        groups_all = group_candidates(selected)
+        groups_before_judge = len(groups_all)
         if judge_groups:
             # Вердикт судьи скармливается той же машинерии склейки, что и
-            # лексический порог (РЕШ-132 п. 2, граница задачи Д-6: порог 0.65 не
-            # трогать) — она остаётся страховкой ПОСЛЕ семантической склейки.
-            judge_input = selected[: dedup_judge.JUDGE_CANDIDATE_LIMIT]
-            groups_raw = dedup_judge.apply_judge_groups(groups_raw, judge_groups, judge_input)
+            # лексический порог (РЕШ-132 п. 2, граница задачи Д-6: порог 0.65
+            # не трогать) — она остаётся страховкой ПОСЛЕ семантической
+            # склейки, только теперь тоже ДО среза (ниже).
+            groups_all = dedup_judge.apply_judge_groups(groups_all, judge_groups, judge_input)
+            groups_after_judge = len(groups_all)
+            # Правка 2 пост-аудита Э2-З: состав групп и число слитых заготовок
+            # — отдельной строкой журнала, согласованной с МОМЕНТОМ применения
+            # вердикта (сразу после `apply_judge_groups`), чтобы вклад судьи
+            # читался из лога прогона без поднятия базы.
+            await self._notify(
+                "dedup_judge",
+                f"Судья дублей: {dedup_judge.describe_groups(judge_groups, judge_input)}; "
+                f"заготовок до склейки {groups_before_judge}, после {groups_after_judge}, "
+                f"схлопнуто {groups_before_judge - groups_after_judge}",
+                0.588,
+            )
+        elif judge_groups is not None:
+            # Судья ответил и дублей не нашёл — тоже исход, а не молчание.
+            await self._notify("dedup_judge", "Судья дублей: групп не найдено, склейки нет", 0.588)
+
+        groups_raw = cut_to_target(groups_all, target=target)
         # Склейка заготовок до сборки карточек (З-6, РЕШ-132 п. 2) — та же
         # причина, что у конкурсной очереди: дублирующая заготовка не должна
-        # доезжать до платного вызова модели.
+        # доезжать до платного вызова модели. Лексический порог остаётся
+        # страховкой уже ПОСЛЕ среза до target — он ловит то, что срез оставил.
         groups = diversity.merge_duplicate_groups(groups_raw)
         await self._notify("scorer", f"Отобрано вариантов для карточек: {len(groups)}", 0.6)
         await self._notify(
