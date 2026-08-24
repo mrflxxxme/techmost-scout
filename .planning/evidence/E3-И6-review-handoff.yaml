@@ -1,0 +1,41 @@
+handoff:
+  from: "reviewer"
+  to: "orchestrator"
+  task: "И-6"
+  did:
+    - "Проверены diff, все десять инвариантов, вывод pytest/ruff прогнан лично"
+    - "Независимо воспроизведена сверка маршрутов (критерий 2): 13 маршрутов идентичны до и после дробления, побайтово; буквальная команда падает на FastAPI 0.141.1 одинаково на базе и после — подтверждено собственным git worktree на 8122125"
+    - "Оценено отклонение (стабы build_brief/start_run/request_hub/edit_card не созданы): цель контракта достигнута без них, признано приемлемым отклонением, не блокирует"
+    - "Мутация __init__.py (убран include_router) — test_web_auth.py ловит поломку (3 из 5 упали), тест не зелёный по неверной причине"
+    - "Найдено 0 блокирующих, 1 совет"
+  artifacts:
+    - ".planning/evidence/E3-И6-review.md (закоммичен до ответа)"
+    - ".planning/evidence/E3-И6-review-handoff.yaml"
+  self_audit: "pass"
+  checks:
+    - "pytest tests/test_web_auth.py -v: 5 passed"
+    - "git diff --stat tests/test_web_auth.py (8122125..e3/i6): пусто"
+    - "pytest -q (полный набор): 875 passed, 1 warning"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 160 files already formatted"
+    - "wc -l backend/app/web/routes/*.py: 28/58/60/32/23"
+    - "pytest tests/test_backend_layout.py -v: 3 passed"
+    - "grep -rn 'backend/app/web/routes.py' pyproject.toml: совпадений нет"
+    - "git diff backend/app/main.py (8122125..e3/i6): пусто"
+    - "git diff backend/app/web/templates/ (8122125..e3/i6): пусто"
+    - "grep -rE 'sk-|gigachat|Api-Key' backend/app/web/routes/ pyproject.toml .planning/evidence/E3-И6-*: совпадений нет"
+    - "grep -rln httpx backend/app (карта инварианта №6): пусто вне легитимных модулей"
+    - "pytest tests/test_team_docs.py -q: 35 passed"
+    - "мутация __init__.py: 3 из 5 тестов test_web_auth.py упали, файл восстановлен"
+  escalate: "none"
+  read_first:
+    - ".planning/PLAN.md (задача И-6)"
+    - ".planning/evidence/E3-И6-review.md"
+    - "docs/team/INVARIANTS.md (№9)"
+  notes: >-
+    Вердикт ПРИНЯТЬ. Единственная неоднозначность — отсутствие стабов
+    build_brief/start_run/request_hub/edit_card, явно названных в разделе
+    «Файлы» плана; рассмотрена как особый вопрос 2 и признана приемлемым
+    отклонением, не блокирует: цель контракта (И-10/И-11/И-12 не встречаются
+    в __init__.py) достигнута без них. Отмечена советом, не блокирующей
+    находкой. Ветку review/i6 оркестратор переключит сам.
