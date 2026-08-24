@@ -3,9 +3,11 @@
 
 {% block content %}
 {% if report is none %}
+{# Внутренний текст исключения (ReportNotFoundError) на страницу не идёт — это
+   служебная диагностика для лога, а не фраза для клиента. #}
 <p class="kicker">Отчёт</p>
-<h1>Отчёт запроса №{{ row.id }}</h1>
-<div class="notice danger">Отчёт ещё не готов: {{ error }}</div>
+<h1>Подбор решений — запрос №{{ row.id }}</h1>
+<div class="notice danger">Отчёт по этому запросу ещё не готов — прогон не завершился или закончился отказом.</div>
 {% else %}
 
 {% if is_draft %}
@@ -14,7 +16,7 @@
 
 <p class="kicker">Отчёт</p>
 <h1>Подбор решений — запрос №{{ row.id }}</h1>
-<p class="muted">Отрасль: {{ report.brief.industry }} · статус: {{ row.status_label }} · стоимость обработки {{ "%.2f"|format(report.cost_rub) }} ₽</p>
+<p class="muted">Отрасль: {{ report.brief.industry }} · статус: {{ row.status_label }} · стоимость машинной обработки {{ "%.2f"|format(report.cost_rub) }} ₽</p>
 
 <div class="bezel">
   <div class="core">

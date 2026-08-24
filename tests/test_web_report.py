@@ -332,6 +332,58 @@ def test_limitations_block_matches_limitations_lines(client, db_session_factory,
         assert line in response.text
 
 
+def test_limitations_lines_keep_separator_between_sources_and_caveats(brief):
+    """Регрессия ревью цикла 1 (инвариант №8): вынос блока «Ограничения этого
+    поиска» в `limitations_lines` обязан быть переносом без изменений —
+    пустая строка-разделитель между абзацем «Не ответили источники…» и
+    списком оговорок должна остаться на месте, когда оба присутствуют
+    одновременно. Раньше (цикл 1) она пропадала, и `render_markdown` менял
+    байтовый вывод при том же входе. Тест — на самой функции `render_markdown`,
+    `tests/test_export_markdown.py` не тронут (критерий 2 задачи И-12)."""
+    from app.export.markdown import render_markdown
+
+    report = _make_report(
+        [_make_card()],
+        brief=brief,
+        sources_unavailable=["Роспатент"],
+        summary=ReportSummary(recommendation="Начать с варианта №1.", caveats=["Оговорка 1", "Оговорка 2"]),
+    )
+
+    text = render_markdown(report)
+
+    assert (
+        "Не ответили источники: Роспатент. Выдача могла быть полнее — стоит повторить запрос позже.\n\n- Оговорка 1"
+        in text
+    ), "разделитель между абзацем и списком оговорок обязан остаться пустой строкой"
+
+
+def test_report_not_found_shows_human_text_without_raw_exception(client, db_session_factory, brief):
+    """Строка `requests` есть, но `report_json` пуст (прогон не дошёл до
+    сборки отчёта или отчёт не читается схемой) — страница обязана показать
+    человеческую фразу без текста внутреннего исключения (замечание ревью
+    цикла 2, РЕШ-143 п. 7): в тексте `ReportNotFoundError` есть слова
+    `report_json` и «схемой», которых на странице быть не должно."""
+
+    async def _seed_without_report() -> int:
+        async with db_session_factory() as session:
+            row = RequestRow(raw_text="задача без готового отчёта", status=RequestStatus.SEARCHING, report_json=None)
+            session.add(row)
+            await session.flush()
+            return int(row.id)
+
+    request_id = asyncio.run(_seed_without_report())
+
+    with client:
+        response = client.get(f"/requests/{request_id}/report", auth=_AUTH)
+
+    assert response.status_code == 404
+    assert "Подбор решений — запрос" in response.text
+    assert "report_json" not in response.text
+    assert "схемой" not in response.text
+    assert "Traceback" not in response.text
+    assert "Отчёт по этому запросу ещё не готов" in response.text
+
+
 def test_evidence_links_are_clickable(client, db_session_factory, brief):
     report = _make_report([_make_card()], brief=brief)
     request_id = asyncio.run(_seed_request(db_session_factory, report=report))

@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -29,6 +30,7 @@ from app.models import SolutionCard as SolutionCardRow
 from app.pipeline.persistence import ReportNotFoundError, load_report
 from app.report_overrides import OverrideMap, apply_overrides
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 
 #: Ключ строки правок (И-7) — секция карточки и её позиция внутри секции.
@@ -91,10 +93,13 @@ async def show_report(request_id: int, request: Request, session: AsyncSession =
     try:
         raw_report = await load_report(lambda: _keep_session_open(session), request_id)
     except ReportNotFoundError as exc:
+        # Текст исключения — только в лог; клиенту уходит человеческая фраза
+        # без внутренностей (замечание ревью цикла 2, РЕШ-143 п. 7).
+        log.info("отчёт запроса №%s недоступен: %s", request_id, exc)
         return _templates(request).TemplateResponse(
             request=request,
             name="report.html",
-            context={"row": row, "report": None, "error": str(exc)},
+            context={"row": row, "report": None},
             status_code=404,
         )
 
@@ -114,7 +119,6 @@ async def show_report(request_id: int, request: Request, session: AsyncSession =
         context={
             "row": row,
             "report": report,
-            "error": None,
             "is_draft": row.status not in (RequestStatus.VALIDATED, RequestStatus.EXPORTED),
             "cards_with_ids": cards_with_ids,
             "contest_with_ids": contest_with_ids,
@@ -144,9 +148,12 @@ async def edit_card(
 
     `confidence`, `requirement_checks`, `unsourced_claims` среди параметров
     обработчика нет вообще — этим маршрутом их не прислать даже случайно,
-    лишние поля формы FastAPI молча отбрасывает. Добавить новую строку
-    `evidence` тем же путём нельзя: единственная операция над подтверждениями
-    здесь — удаление уже показанных на странице URL.
+    лишние поля формы FastAPI молча отбрасывает; у обработчика нет и
+    параметра для нового URL `evidence` — единственная операция над
+    подтверждениями здесь — удаление уже показанных на странице. Что именно
+    это гарантирует независимо от параметров обработчика (белый список полей,
+    невозможность добавить `evidence`) — свойство самого наложения, оно
+    держится в `app.report_overrides.apply_overrides`, не здесь.
 
     `apply_overrides` не проверяет типы значений (он только накладывает уже
     готовый словарь) — проверка входа формы здесь: значение, пришедшее не
