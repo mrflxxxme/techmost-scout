@@ -1,0 +1,41 @@
+handoff:
+  from: reviewer
+  to: implementer-2
+  task: "И-7"
+  did:
+    - "Прочитаны PLAN.md (раздел «И-7» и блок «Ключ наложения правок»), INVARIANTS.md, CONVENTIONS.md §5/§7, diff 74f603ad..37b47d4 целиком"
+    - "Прогнаны pytest tests/test_report_overrides.py -v (10 passed), pytest -q (898 passed), ruff check ., ruff format --check ."
+    - "Сверены глазами белый список EDITABLE_FIELDS со schemas.SolutionCard и ключ (is_contest, position) с pipeline/persistence_write.py._card_row — совпадений расхождений нет"
+    - "Прогнаны две мутации: добавление confidence в EDITABLE_FIELDS (ловится, 2 теста падают), замена model_copy(deep=True) на deep=False (не ловится ни целевым, ни полным набором — 898 тестов зелёные)"
+    - "Найдено 1 блокирующее (инвариант №8 / критерий приёмки 1 — тест на немутируемость не проверяет вложенные поля непереписанных карточек) и 3 совета"
+  artifacts:
+    - ".planning/evidence/E3-И7-review.md (закоммичен до ответа)"
+    - ".planning/evidence/E3-И7-review-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_report_overrides.py -v: 10 passed"
+    - "pytest -q: 898 passed, 1 warning (посторонний, не от задачи)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 165 files already formatted"
+    - "pytest tests/test_backend_layout.py tests/test_tests_layout.py -q: 6 passed"
+    - "pytest tests/test_team_docs.py -q: 35 passed"
+    - "grep -nE 'sqlalchemy|app.db|httpx' backend/app/report_overrides.py: совпадений нет"
+    - "мутация confidence в EDITABLE_FIELDS: 2 теста упали (поймана)"
+    - "мутация deep=True -> deep=False: 0 тестов упало из 898 (не поймана — блокирующая находка)"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (раздел «### И-7»)"
+    - ".planning/evidence/E3-И7-review.md"
+    - "backend/app/report_overrides.py:37-54 (apply_overrides, model_copy(deep=True))"
+    - "tests/test_report_overrides.py:59-65 (test_original_report_is_not_mutated)"
+  notes: >-
+    Это цикл 1 из двух возможных (§4 CONVENTIONS). Единственная блокирующая
+    находка — недостающий тест, а не дефект кода: строка deep=True в коде
+    сейчас правильная и реально защищает от мутации (проверено прямым
+    воспроизведением), но ни один тест этого не доказывает, и полный набор
+    не поймает будущую регрессию. Достаточно добавить один тест: собрать
+    Report с двумя карточками, наложить правку только на карточку 0, затем
+    смутировать вложенный изменяемый список (risks/evidence/contact_leads)
+    у result.cards[1] (непереписанной) и убедиться, что report.cards[1]
+    не изменился — либо явно проверить result.cards[1] is not
+    report.cards[1] для непереписанных карточек. Второй цикл — последний.
