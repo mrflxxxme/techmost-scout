@@ -1,0 +1,40 @@
+handoff:
+  from: reviewer
+  to: verifier
+  task: "Д-7 (волна Э2-З)"
+  did:
+    - "Сверил diff (d26fbe6..8792ccc, 10 файлов) с картой задачи Д-7 в PLAN.md"
+    - "Сверил правку prompts/replanner.md с рамкой визы РЕШ-180: только перенос гранта из web в свой тип grant, формулировочные требования правила 9 сохранены дословно, симметрия с planner.md 2.6 подтверждена построчным чтением"
+    - "Оценил минимальность правки tests/test_plan_types.py (вне буквального перечня файлов задачи) — прямое следствие правки промпта, арифметика planner/replanner по-прежнему реально сверяется"
+    - "Воспроизвёл обе мутации test_tests_layout.py вручную (рост зафиксированного файла, новый файл сверх лимита) — страж ловит обе, файлы восстановлены"
+    - "Сверил зафиксированные размеры _EXCEPTIONS с wc -l — все 10 совпадают"
+    - "Прогнал grep инварианта №6 (старая формула ломается после Д-4, новая — 0 совпадений)"
+    - "Сверил число 14000 в SPEC §0.1 п.7 с backend/app/pipeline/summary.py:58 и остальные бюджеты max_tokens построчно"
+    - "Прогнал полный pytest (790 passed), ruff check и ruff format --check в worktree"
+    - "Проверил handoff исполнителя: self_audit/escalate непротиворечивы, artifacts существуют, checks воспроизведены"
+  artifacts:
+    - .planning/evidence/E2Z-Д7-review.md (закоммичен до ответа)
+    - .planning/evidence/E2Z-Д7-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q (worktree agent-aa8d197ff85aee3c1): 790 passed, 1 warning"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 146 files already formatted"
+    - "pytest tests/test_tests_layout.py -q: 3 passed (плюс 2 ручные мутации — обе пойманы)"
+    - "pytest tests/test_plan_types.py -q: 11 passed"
+    - "pytest tests/test_stage_token_budgets.py -q: 4 passed"
+    - "pytest tests/test_team_docs.py tests/test_prompts.py -q: 79 passed"
+    - "grep -rln httpx backend/app --include='*.py' | grep -vE '...cli_doctor\\.py$...': пусто"
+    - "grep -rE 'sk-|gigachat|Api-Key' backend/ tests/: только легитимные совпадения, боевых секретов нет"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача Д-7 волны Э2-З)
+    - .planning/evidence/E2Z-Д7-review.md
+    - prompts/replanner.md
+    - tests/test_tests_layout.py
+  notes: >
+    Вердикт ПРИНЯТЬ, блокирующих находок нет, два совета не блокируют.
+    Цикл 1, второй не потребовался. Два файла вне буквального перечня задачи
+    (tests/test_plan_types.py, docs/team/INVARIANTS.md) признаны обоснованными
+    прямыми следствиями задачи «документы под слитый код», не выходом за
+    границы — обоснование в отчёте, п.2 и п.5.
