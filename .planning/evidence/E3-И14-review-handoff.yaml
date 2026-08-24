@@ -1,20 +1,22 @@
 handoff:
   from: "reviewer"
-  to: "implementer-2"
+  to: "orchestrator"
   task: "Э3-И14"
+  cycle: 2
   did:
-    - "Прочитан diff docs/SPEC.md построчно целиком (git diff 9bac4252..e3/i14), сверен с PLAN.md разделом «### И-14» и РЕШ-183"
-    - "Воспроизведены оба грепа критериев, git diff --stat, pytest tests/test_team_docs.py -v, полный pytest -q, ruff check и ruff format --check"
-    - "Сверены списки файлов Э3-2..Э3-5 с git ls-files, проверена граница задачи (STATE.md/JOURNAL.md/DECISIONS.md/CLAUDE.md не тронуты)"
-    - "Найдена 1 блокирующая находка (битая внутренняя ссылка «см. намётку ниже» в docs/SPEC.md на несуществующий в этом файле раздел) и 2 совета"
+    - "Цикл 1: прочитан diff docs/SPEC.md построчно целиком, воспроизведены все критерии, найдена 1 блокирующая находка (битая ссылка «см. намётку ниже») и 2 совета"
+    - "Цикл 2: git checkout f4d0d11 в своей рабочей копии, прочитан diff cca8458..f4d0d11 построчно — ровно три точечные правки, смысл требований не изменился"
+    - "Цикл 2: воспроизведены grep «намётку ниже», grep «растут записи», grep «web/routes.py», git diff --stat, pytest tests/test_team_docs.py -v, полный pytest -q, ruff check и ruff format --check"
+    - "Подтверждено: блокирующая находка цикла 1 закрыта, оба совета выполнены, новых блокирующих находок нет"
   artifacts:
-    - ".planning/evidence/E3-И14-review.md (закоммичен до ответа)"
+    - ".planning/evidence/E3-И14-review.md (разделы «цикл 1» и «цикл 2», закоммичены до ответа)"
     - ".planning/evidence/E3-И14-review-handoff.yaml"
   self_audit: "pass"
   checks:
+    - 'grep -n "намётку ниже" docs/SPEC.md: пусто'
     - 'grep -n "растут записи" docs/SPEC.md: пусто'
     - 'grep -n "web/routes.py" docs/SPEC.md: пусто'
-    - "git diff 9bac4252..e3/i14 --stat: docs/SPEC.md + 2 файла evidence (handoff и протокол проверок)"
+    - "git diff cca8458..f4d0d11 --stat: только docs/SPEC.md (6 insertions, 6 deletions)"
     - "pytest tests/test_team_docs.py -v: 35 passed"
     - "pytest -q: 960 passed, 1 warning"
     - "ruff check .: All checks passed"
@@ -22,12 +24,8 @@ handoff:
   escalate: "none"
   read_first:
     - ".planning/evidence/E3-И14-review.md"
-    - ".planning/PLAN.md (раздел «### И-14»)"
-    - "docs/SPEC.md строки 517-627 (после правки)"
+    - "docs/SPEC.md строки 517-627 (после цикла 2)"
   notes: >-
-    Цикл 1. Второй цикл — последний, дальше третьего не будет. Находка
-    точечная (четыре одинаковые строки со ссылкой на несуществующий
-    в docs/SPEC.md раздел «намётка»): либо убрать «(см. намётку ниже)»,
-    либо заменить на явный адрес .planning/PLAN.md с оговоркой, что это
-    другой документ. Само решение добавить оговорку к отметкам ✅ вместо
-    голого чекбокса ревью считает уместным и не просит менять.
+    Вердикт цикла 2 — ПРИНЯТЬ, блокирующих 0. Это последний цикл по
+    правилам (§4 CONVENTIONS), третьего не будет. Задача Э3-И14 закрыта,
+    дальше — верификация/слияние оркестратором.
