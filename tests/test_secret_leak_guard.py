@@ -18,18 +18,22 @@ from __future__ import annotations
 import io
 import json
 import logging
+from datetime import UTC, datetime
 
 import httpx
 import pytest
 import respx
 from rich.console import Console
 
+import app.pipeline as pipeline_pkg
 from app import cli
 from app.config import Settings, get_settings
 from app.llm import LLMRouter
 from app.llm.base import LLMError, LLMProvider, LLMResult, Message
 from app.llm.deepseek import DeepSeekProvider
 from app.pipeline.orchestrator import ScoutPipeline
+from app.pipeline.orchestrator import format_active_run_params as _real_format_active_run_params
+from app.schemas import Brief, IntakeResult, Report, ReportSummary
 from app.search.yandex_search import SEARCH_ASYNC_URL, YandexSearchAdapter
 
 log = logging.getLogger(__name__)
@@ -40,6 +44,7 @@ log = logging.getLogger(__name__)
 _FAKE_YANDEX_SEARCH_KEY = "FAKE-YANDEX-SEARCH-KEY-guard-e91cf047"
 _FAKE_DEEPSEEK_KEY = "FAKE-DEEPSEEK-KEY-guard-771ba4d9"
 _FAKE_YANDEX_LLM_KEY = "FAKE-YANDEX-LLM-KEY-guard-06c9e2b3"
+_FAKE_CLI_RUN_DEEPSEEK_KEY = "FAKE-DEEPSEEK-KEY-guard-cli-run-4b21f6a0"
 
 #: Формулировка веб-плана: тип `web`, чтобы формулировка реально ушла в
 #: `YandexSearchAdapter` (у него `source_types = (WEB, CONTEST)`; формулировка
@@ -250,3 +255,110 @@ async def test_страж_ловит_утечку_в_stdout_а_не_только
     captured = capsys.readouterr()
     with pytest.raises(AssertionError):
         _assert_no_secrets((_FAKE_YANDEX_SEARCH_KEY,), caplog.text, captured.out, captured.err)
+
+
+# ── Критерий 4 (РЕШ-168): путь cli._run / format_active_run_params ──────────
+#
+# Прежний набор проверял только адаптер поиска и провайдера модели — оба
+# вызываются ИЗНУТРИ пайплайна. Строка активных параметров прогона печатается
+# раньше: `cli._run` зовёт `format_active_run_params(settings)` до интейка и
+# до первого платного вызова (З-5, `run_journal.py`). Страж этот путь не
+# видел вовсе: утечка ключа именно в этой строке прошла бы мимо всех тестов
+# выше.
+
+
+class _FakeCliRunPipeline:
+    """Пайплайн-заглушка для проверки `cli._run`: без сети и без модели,
+    только собирает минимальный отчёт — тот же приём, что в `test_cli_run.py`.
+    Здесь важен не пайплайн, а строка параметров, которую `cli._run` печатает
+    ДО его создания."""
+
+    def __init__(self, **kwargs: object) -> None:
+        del kwargs
+
+    async def run(self, brief: Brief, **kwargs: object) -> Report:
+        del kwargs
+        return Report(
+            request_id=0,
+            brief=brief,
+            cards=[],
+            summary=ReportSummary(recommendation="тест: пайплайн подменён заглушкой"),
+            generated_at=datetime.now(UTC),
+        )
+
+    async def aclose(self) -> None:
+        pass
+
+
+def _draft_brief_for_cli_run() -> Brief:
+    return Brief(industry="нефтепереработка", task_summary="Катализатор гидроочистки теряет активность.")
+
+
+async def _run_cli_with_fake_deepseek_key(monkeypatch, tmp_path, *, fake_key: str) -> Settings:
+    """Прогнать `cli._run` с фиктивным `DEEPSEEK_API_KEY` в окружении.
+
+    Пайплайн и интейк подменены заглушками (как в `test_cli_run.py`) — цель
+    проверки не поведение пайплайна, а строка параметров, которую `cli._run`
+    печатает через `format_active_run_params` до его создания.
+    """
+    monkeypatch.setenv("DEEPSEEK_API_KEY", fake_key)
+    monkeypatch.setenv("YANDEX_API_KEY", "test")
+    monkeypatch.setenv("YANDEX_CATALOG_ID", "b1gguardtest")
+    monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+    monkeypatch.setenv("COST_LIMIT_RUB_PER_REQUEST", "10.0")
+    get_settings.cache_clear()
+    fake_settings = Settings()
+    monkeypatch.setattr(cli, "get_settings", lambda: fake_settings)
+    monkeypatch.setattr(pipeline_pkg, "ScoutPipeline", _FakeCliRunPipeline)
+
+    async def fake_init_db() -> None:
+        return None
+
+    monkeypatch.setattr("app.db.init_db", fake_init_db)
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        del router, task, industry_hint
+        return IntakeResult(questions=[], draft_brief=_draft_brief_for_cli_run())
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+
+    await cli._run("сырой текст задачи про катализатор", None, None, tmp_path / "report.md", False)
+    return fake_settings
+
+
+async def test_cli_run_строка_параметров_не_содержит_ключ(monkeypatch, tmp_path, caplog, capsys):
+    """`cli._run` печатает `format_active_run_params(settings)` через
+    `log.info` до интейка (см. `test_cli_run.py::test_params_line_printed_*`).
+    Ни в caplog, ни в перехваченных `stdout`/`stderr` значения фиктивного
+    ключа быть не должно."""
+    caplog.set_level(logging.DEBUG)
+
+    await _run_cli_with_fake_deepseek_key(monkeypatch, tmp_path, fake_key=_FAKE_CLI_RUN_DEEPSEEK_KEY)
+
+    captured = capsys.readouterr()
+    _assert_no_secrets((_FAKE_CLI_RUN_DEEPSEEK_KEY,), caplog.text, captured.out, captured.err)
+
+
+async def test_cli_run_страж_ловит_утечку_ключа_в_строке_параметров(monkeypatch, tmp_path, caplog, capsys):
+    """Контроль плана (критерий 4): мутация, дописывающая значение ключа в
+    строку активных параметров прямо внутри `format_active_run_params`
+    (путь `cli._run`), обязана провалить проверку выше. Подмена временная и
+    живёт только внутри этого теста — `run_journal.py` она не трогает."""
+    caplog.set_level(logging.DEBUG)
+
+    def leaking_format_active_run_params(settings: Settings) -> str:
+        # Мутация РЕШ-168: значение ключа дописано в строку параметров —
+        # ровно то, чего боевой код никогда не делает (см. докстроку
+        # `format_active_run_params`).
+        return (
+            f"{_real_format_active_run_params(settings)}; "
+            f"DEEPSEEK_API_KEY={settings.deepseek_api_key.get_secret_value()}"
+        )
+
+    monkeypatch.setattr("app.pipeline.orchestrator.format_active_run_params", leaking_format_active_run_params)
+
+    await _run_cli_with_fake_deepseek_key(monkeypatch, tmp_path, fake_key=_FAKE_CLI_RUN_DEEPSEEK_KEY)
+
+    captured = capsys.readouterr()
+    with pytest.raises(AssertionError):
+        _assert_no_secrets((_FAKE_CLI_RUN_DEEPSEEK_KEY,), caplog.text, captured.out, captured.err)

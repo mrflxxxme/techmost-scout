@@ -1,0 +1,36 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "Д-1"
+  did:
+    - "Цикл 1: проверены diff, все 10 инвариантов, ALTER на копии живой базы, 2 обязательные мутации (а/б); найдено 1 блокирующее (инвариант №8) и 3 совета — вердикт ДОРАБОТАТЬ"
+    - "Цикл 2: подтверждено закрытие блокирующего — мутация воспроизведена лично, ловится ровно новым тестом test_pipeline_failure_persists_brief_row_via_real_run; проверено дробление run_flow.py→run_stages.py как чистый перенос без изменения логики (color-moved + построчный diff тела); проверены списки стражей (run_stages.py не в _ORCH_MODULES_UNDER_LIMIT — не дыра, покрыт рекурсивным test_backend_layout.py, 359 ≤ 500); ALTER-файл и живая база data/scout.db не тронуты между циклами"
+    - "Итоговый вердикт: ПРИНЯТЬ (цикл 2, последний)"
+  artifacts:
+    - .planning/evidence/E2Z-Д1-review.md (оба цикла, закоммичен до ответа)
+    - .planning/evidence/E2Z-Д1-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q: 763 passed, 0 failed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 138 files already formatted"
+    - "мутация (снять brief=brief из except-ветки run_flow.py): ровно новый тест падает (assert 0 == 1), 762 остальных зелёные; восстановлено, git status чист"
+    - "git diff 884549b 5dd538d --color-moved=zebra + построчный diff тела _run_stages/_empty_report: перенос чист, единственное отличие — консолидация импорта ReportSummary (был локальным, стал модульным)"
+    - "pytest tests/test_backend_layout.py tests/test_pipeline_layout.py -v: 9 passed"
+    - "md5/размер/mtime data/scout.db не изменились между циклами (2621440 байт, Aug 24 00:13)"
+    - "мутации цикла 1 (а: report_json не пишется; б: dict вместо Report) остаются в силе — код persistence.py в этих местах цикл 2 не тронул"
+  escalate: none
+  read_first:
+    - .planning/evidence/E2Z-Д1-review.md (полный отчёт, оба цикла)
+    - backend/app/pipeline/run_stages.py (новый модуль, RunStagesMixin)
+    - tests/test_persistence.py::test_pipeline_failure_persists_brief_row_via_real_run
+    - .planning/evidence/E2Z-Д1-alter.sql (точные ALTER-команды — выполняет оркестратор при слиянии)
+  notes: >
+    Цикл 2 — последний, третьего не будет. Задача Д-1 готова к слиянию.
+    Живая база data/scout.db не тронута — ALTER выполняет оркестратор при
+    слиянии (урок Э2-Ж: снять резервную копию перед ALTER). Советы 2
+    (Confidence.MEDIUM/geography="РФ" совпадают со схемными умолчаниями в
+    тесте round-trip) и 3 (раздельные коммиты кода и handoff в цикле 1 —
+    реанимация после сетевого обрыва) из цикла 1 не блокировали и осознанно
+    оставлены исполнителем как есть — годятся на заметку следующей правке,
+    сами по себе не требуют повторного цикла.

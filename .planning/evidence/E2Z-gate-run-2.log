@@ -1,0 +1,247 @@
+=== app.__file__ и активные параметры (до старта) ===
+app.__file__ = /home/user/techmost-scout/backend/app/__init__.py
+Параметры прогона: стоп-кран 20.00 ₽/запрос; relevance_min=3; second_pass_relevance_max=6; маршруты стадий: intake:deepseek, extractor:deepseek, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek, dedup_judge:deepseek; порядок резерва: deepseek→yandex; модели: deepseek=deepseek-v4-flash-vision-exp, yandex=yandexgpt-lite/latest
+старт: 2026-08-24T12:22:52Z
+12:22:53 INFO    app.cli_run | Параметры прогона: стоп-кран 20.00 ₽/запрос; relevance_min=3; second_pass_relevance_max=6; маршруты стадий: intake:deepseek, extractor:deepseek, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek, dedup_judge:deepseek; порядок резерва: deepseek→yandex; модели: deepseek=deepseek-v4-flash-vision-exp, yandex=yandexgpt-lite/latest
+12:22:54 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+Бриф: На установке гидроочистки дизельного топлива требуется обеспечить 
+содержание серы на выходе не более 10 ppm. Действующий катализатор теряет 
+активность за 8 месяцев вместо паспортных 24. (нефтепереработка)
+
+12:23:54 INFO    app.pipeline.orchestrator | Параметры прогона: стоп-кран 20.00 ₽/запрос; relevance_min=3; second_pass_relevance_max=6; маршруты стадий: intake:deepseek, extractor:deepseek, planner:deepseek, replan:deepseek, scorer:deepseek, card_author:deepseek, verifier:deepseek, summary:deepseek, dedup_judge:deepseek; порядок резерва: deepseek→yandex; модели: deepseek=deepseek-v4-flash-vision-exp, yandex=yandexgpt-lite/latest
+12:23:54 INFO    app.pipeline.orchestrator | из истории взято 165
+12:23:54 INFO    app.pipeline.orchestrator | [planner] Составляю план поиска
+  5% planner  Составляю план поиска
+12:23:55 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:24:23 INFO    app.pipeline.orchestrator | [planner] Формулировок в плане: 9
+ 10% planner  Формулировок в плане: 9
+12:24:23 INFO    app.pipeline.orchestrator | [search] Опрашиваю источники
+ 15% search   Опрашиваю источники
+12:24:23 INFO    app.search | активные источники: showcase, crossref, cyberleninka, arxiv, semanticscholar, rospatent, openalex, yandex_search
+12:24:23 INFO    app.pipeline.orchestrator | подключено источников: showcase, crossref, cyberleninka, arxiv, semanticscholar, rospatent, openalex, yandex_search
+12:24:23 INFO    httpx | HTTP Request: GET https://api.openalex.org/works?search=%D0%B4%D0%B5%D0%B7%D0%B0%D0%BA%D1%82%D0%B8%D0%B2%D0%B0%D1%86%D0%B8%D1%8F+%D0%BA%D0%B0%D1%82%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%82%D0%BE%D1%80%D0%B0+%D0%B3%D0%B8%D0%B4%D1%80%D0%BE%D0%BE%D1%87%D0%B8%D1%81%D1%82%D0%BA%D0%B8+%D0%B4%D0%B8%D0%B7%D0%B5%D0%BB%D1%8C%D0%BD%D0%BE%D0%B3%D0%BE+%D1%82%D0%BE%D0%BF%D0%BB%D0%B8%D0%B2%D0%B0&filter=language%3Aru%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 429 Too Many Requests"
+12:24:23 WARNING app.pipeline.orchestrator | источник openalex не смог выполнить поиск «дезактивация катализатора гидроочистки дизельного топлива»: openalex не ответил на поиск «дезактивация катализатора гидроочистки дизельного топлива»: Client error '429 Too Many Requests' for url 'https://api.openalex.org/works?search=%D0%B4%D0%B5%D0%B7%D0%B0%D0%BA%D1%82%D0%B8%D0%B2%D0%B0%D1%86%D0%B8%D1%8F+%D0%BA%D0%B0%D1%82%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%82%D0%BE%D1%80%D0%B0+%D0%B3%D0%B8%D0%B4%D1%80%D0%BE%D0%BE%D1%87%D0%B8%D1%81%D1%82%D0%BA%D0%B8+%D0%B4%D0%B8%D0%B7%D0%B5%D0%BB%D1%8C%D0%BD%D0%BE%D0%B3%D0%BE+%D1%82%D0%BE%D0%BF%D0%BB%D0%B8%D0%B2%D0%B0&filter=language%3Aru%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429
+12:24:24 INFO    httpx | HTTP Request: GET https://api.crossref.org/works?query.bibliographic=hydrotreating+catalyst+deactivation+diesel+fuel&rows=20&filter=from-pub-date%3A2014-01-01&select=DOI%2Ctitle%2Ccontainer-title%2Cauthor%2Cissued%2Cabstract%2CURL&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 200 OK"
+12:24:24 INFO    httpx | HTTP Request: GET https://api.semanticscholar.org/graph/v1/paper/search?query=%D0%B4%D0%B5%D0%B7%D0%B0%D0%BA%D1%82%D0%B8%D0%B2%D0%B0%D1%86%D0%B8%D1%8F+%D0%BA%D0%B0%D1%82%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%82%D0%BE%D1%80%D0%B0+%D0%B3%D0%B8%D0%B4%D1%80%D0%BE%D0%BE%D1%87%D0%B8%D1%81%D1%82%D0%BA%D0%B8+%D0%B4%D0%B8%D0%B7%D0%B5%D0%BB%D1%8C%D0%BD%D0%BE%D0%B3%D0%BE+%D1%82%D0%BE%D0%BF%D0%BB%D0%B8%D0%B2%D0%B0&limit=20&fields=title%2Cabstract%2Cyear%2Cauthors%2CexternalIds%2Curl%2CopenAccessPdf "HTTP/1.1 429 "
+12:24:24 WARNING app.pipeline.orchestrator | источник semanticscholar не смог выполнить поиск «дезактивация катализатора гидроочистки дизельного топлива»: semanticscholar: лимит запросов исчерпан (429), ключ не задан и пул общий
+12:24:24 INFO    httpx | HTTP Request: GET https://api.crossref.org/works?query.bibliographic=%D0%B4%D0%B5%D0%B7%D0%B0%D0%BA%D1%82%D0%B8%D0%B2%D0%B0%D1%86%D0%B8%D1%8F+%D0%BA%D0%B0%D1%82%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%82%D0%BE%D1%80%D0%B0+%D0%B3%D0%B8%D0%B4%D1%80%D0%BE%D0%BE%D1%87%D0%B8%D1%81%D1%82%D0%BA%D0%B8+%D0%B4%D0%B8%D0%B7%D0%B5%D0%BB%D1%8C%D0%BD%D0%BE%D0%B3%D0%BE+%D1%82%D0%BE%D0%BF%D0%BB%D0%B8%D0%B2%D0%B0&rows=20&filter=from-pub-date%3A2014-01-01&select=DOI%2Ctitle%2Ccontainer-title%2Cauthor%2Cissued%2Cabstract%2CURL&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 200 OK"
+12:24:24 INFO    httpx | HTTP Request: GET https://export.arxiv.org/api/query?search_query=ti%3A%22hydrotreating+catalyst+deactivation+diesel+fuel%22+OR+abs%3A%22hydrotreating+catalyst+deactivation+diesel+fuel%22&start=0&max_results=20 "HTTP/1.1 200 OK"
+12:24:24 INFO    httpx | HTTP Request: GET https://api.openalex.org/works?search=hydrotreating+catalyst+deactivation+diesel+fuel&filter=language%3Aen%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com "HTTP/1.1 429 Too Many Requests"
+12:24:24 WARNING app.pipeline.orchestrator | источник openalex не смог выполнить поиск «hydrotreating catalyst deactivation diesel fuel»: openalex не ответил на поиск «hydrotreating catalyst deactivation diesel fuel»: Client error '429 Too Many Requests' for url 'https://api.openalex.org/works?search=hydrotreating+catalyst+deactivation+diesel+fuel&filter=language%3Aen%2Cfrom_publication_date%3A2021-01-01&per-page=20&select=id%2Cdisplay_name%2Cpublication_year%2Cdoi%2Ctype%2Cprimary_location%2Cbest_oa_location%2Cabstract_inverted_index%2Cauthorships&mailto=uklonskiy.k%40gmail.com'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429
+12:24:24 INFO    httpx | HTTP Request: POST https://cyberleninka.ru/api/search "HTTP/1.1 200 OK"
+12:24:24 INFO    app.search.cyberleninka | cyberleninka: «дезактивация катализатора гидроочистки дизельного топлива» → found=43
+12:24:24 INFO    httpx | HTTP Request: GET https://api.semanticscholar.org/graph/v1/paper/search?query=hydrotreating+catalyst+deactivation+diesel+fuel&limit=20&fields=title%2Cabstract%2Cyear%2Cauthors%2CexternalIds%2Curl%2CopenAccessPdf "HTTP/1.1 429 "
+12:24:24 WARNING app.pipeline.orchestrator | источник semanticscholar не смог выполнить поиск «hydrotreating catalyst deactivation diesel fuel»: semanticscholar: лимит запросов исчерпан (429), ключ не задан и пул общий
+12:24:24 INFO    httpx | HTTP Request: POST https://cyberleninka.ru/api/search "HTTP/1.1 200 OK"
+12:24:24 INFO    app.search.cyberleninka | cyberleninka: «hydrotreating catalyst deactivation diesel fuel» → found=12
+12:24:24 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+12:24:25 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+12:24:25 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+12:24:25 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+12:24:26 INFO    httpx | HTTP Request: POST https://searchapi.api.cloud.yandex.net/v2/web/searchAsync "HTTP/1.1 200 OK"
+12:24:26 INFO    httpx | HTTP Request: GET https://export.arxiv.org/api/query?search_query=ti%3A%22hydrotreating+catalyst+deactivation+diesel%22+OR+abs%3A%22hydrotreating+catalyst+deactivation+diesel%22&start=0&max_results=20 "HTTP/1.1 200 OK"
+12:24:26 INFO    app.search.arxiv | arxiv: «ti:"hydrotreating catalyst deactivation diesel fuel" OR abs:"hydrotreating catalyst deactivation diesel fuel"» → found=0; повтор укороченной «ti:"hydrotreating catalyst deactivation diesel" OR abs:"hydrotreating catalyst deactivation diesel"» → found=0
+12:24:27 INFO    httpx | HTTP Request: POST https://searchplatform.rospatent.gov.ru/patsearch/v0.2/search "HTTP/1.1 200 OK"
+12:24:27 INFO    app.search.rospatent | rospatent: «способ регенерации катализатора гидроочистки дизельного топлива» → кандидатов=20
+12:24:28 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/spr743sfj0pj9efanhsf "HTTP/1.1 200 OK"
+12:24:28 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/spro24ubo61d38i1dcih "HTTP/1.1 200 OK"
+12:24:28 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/spropu45rknjqtusdes6 "HTTP/1.1 200 OK"
+12:24:29 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/sprbrqjjpps2nnvbp0ol "HTTP/1.1 200 OK"
+12:24:29 INFO    httpx | HTTP Request: GET https://operation.api.cloud.yandex.net/operations/sprr11hcp5bt43jcu0hs "HTTP/1.1 200 OK"
+12:24:29 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:24:29 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:24:30 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:24:30 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:24:30 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:25:29 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:25:29 INFO    app.llm.router | стадия extractor: прошу модель починить JSON (ValidationError)
+12:25:29 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:25:29 INFO    app.llm.router | стадия extractor: прошу модель починить JSON (ValidationError)
+12:25:30 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:25:30 INFO    app.llm.router | стадия extractor: прошу модель починить JSON (ValidationError)
+12:25:30 INFO    app.llm.router | стадия extractor: deepseek ошибка (deepseek: пустой content: лимит токенов ушёл на рассуждения модели (finish_reason=length) — нужен больший max_tokens), повтор через 2 с
+12:25:30 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:25:30 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:25:30 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:25:30 INFO    app.llm.router | стадия extractor: прошу модель починить JSON (ValidationError)
+12:25:31 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:25:32 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:25:33 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:26:15 WARNING app.pipeline.stages | extractor: кандидат отброшен (yandex_search) — адрес https://codenrock.com/blog/kak-s-pomoshhyu-hakatonov-sozdayutsya-innovaczii/ не принадлежит записи №6 (https://codenrock.com/blog/?p=1816)
+12:26:15 INFO    app.pipeline.stages | extractor: yandex_search, сырых записей 20 → кандидатов 19
+12:26:29 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:26:29 WARNING app.pipeline.orchestrator | extractor: стадия не удалась для yandex_search («опытно-промышленные испытания катализатора гидроочистки»): router: стадия extractor: ответ не сходится со схемой ExtractedBatch: 1 validation error for ExtractedBatch
+  Input should be a valid dictionary or instance of ExtractedBatch [type=model_type, input_value=['Нуруллаева З...риллоев Ш. С.'], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/model_type — беру разбор адаптера
+12:26:30 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:26:30 WARNING app.pipeline.orchestrator | extractor: стадия не удалась для yandex_search («итоги хакатона победитель проект команды катализатор гидроочистки»): router: стадия extractor: ответ не сходится со схемой ExtractedBatch: parser: ответ не содержит валидный JSON: Мы должны вернуть JSON, который соответствует схеме. Схема: объект с ключом "candidates" (список) и "dropped_no_url" (число). Но ошибочно мы вернули пустой список? Возможно, в предыдущем ответе мы выд… — беру разбор адаптера
+12:26:30 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:26:30 WARNING app.pipeline.orchestrator | extractor: стадия не удалась для yandex_search («hydrotreating catalyst pilot plant trials»): router: стадия extractor: ответ не сходится со схемой ExtractedBatch: parser: ответ не содержит валидный JSON: Мы получили сообщение об ошибке схемы: "Input should be a valid dictionary or instance of ExtractedBatch". Это означает, что предыдущий ответ (который мы не видим, но пользователь говорит, что он не п… — беру разбор адаптера
+12:26:33 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:26:33 INFO    app.llm.router | стадия extractor: прошу модель починить JSON (ValidationError)
+12:26:34 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:27:33 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:27:33 WARNING app.pipeline.orchestrator | extractor: стадия не удалась для yandex_search («грант РНФ катализатор гидроочистки дизельное топливо»): router: стадия extractor: ответ не сходится со схемой ExtractedBatch: 1 validation error for ExtractedBatch
+  Input should be a valid dictionary or instance of ExtractedBatch [type=model_type, input_value=[], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/model_type — беру разбор адаптера
+12:27:33 INFO    app.pipeline.orchestrator | [search] Найдено кандидатов — arxiv: 0, crossref: 40, cyberleninka: 32, rospatent: 20, showcase: 0, yandex-com: 20, yandex-ru: 78
+ 40% search   Найдено кандидатов — arxiv: 0, crossref: 40, cyberleninka: 32, 
+rospatent: 20, showcase: 0, yandex-com: 20, yandex-ru: 78
+12:27:33 INFO    app.pipeline.orchestrator | [search] Не ответили: openalex, semanticscholar
+ 42% search   Не ответили: openalex, semanticscholar
+12:27:33 INFO    app.pipeline.stages | дедупликация убрала 3 дублей из 190
+12:27:33 INFO    app.pipeline.orchestrator | [dedup] После склейки дублей осталось 187
+ 45% dedup    После склейки дублей осталось 187
+12:27:33 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.37816/2713-0789-2022-2-2(4)-50-63 "HTTP/1.1 200 OK"
+12:27:33 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.31857/s0040357120060202 "HTTP/1.1 200 OK"
+12:27:34 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.48081/vgcj1519 "HTTP/1.1 200 OK"
+12:27:34 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.7868/s3034554525080051 "HTTP/1.1 200 OK"
+12:27:34 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.36629/2686-9896/2019-1-1-7-8 "HTTP/1.1 200 OK"
+12:27:34 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.32935/1815-2600-2020-130-5-18-25 "HTTP/1.1 200 OK"
+12:27:34 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.33184/bulletin-bsu-2026.2.7 "HTTP/1.1 200 OK"
+12:27:35 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.37657/vniipo.avpb.2025.32.54.002 "HTTP/1.1 200 OK"
+12:27:35 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.37657/vniipo.pb.2025.4.121.005 "HTTP/1.1 200 OK"
+12:27:35 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.33184/bulletin-bsu-2024.4.8 "HTTP/1.1 200 OK"
+12:27:35 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.32935/1815-2600-2021-136-5-8-13 "HTTP/1.1 200 OK"
+12:27:35 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.24143/2072-9502-2021-1-7-15 "HTTP/1.1 200 OK"
+12:27:36 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.31857/s0028242122010063 "HTTP/1.1 200 OK"
+12:27:36 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.25206/1813-8225-2018-160-174-178 "HTTP/1.1 200 OK"
+12:27:36 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.31857/s0028242122060235 "HTTP/1.1 200 OK"
+12:27:36 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.18411/svfu-2017-183 "HTTP/1.1 200 OK"
+12:27:36 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.17223/9785946218412/504 "HTTP/1.1 200 OK"
+12:27:36 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.7868/s0032874x22030036 "HTTP/1.1 200 OK"
+12:27:37 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1021/acs.energyfuels.8b02442 "HTTP/1.1 200 OK"
+12:27:37 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1016/j.fuproc.2018.01.008 "HTTP/1.1 200 OK"
+12:27:37 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1016/j.fuel.2017.10.015 "HTTP/1.1 200 OK"
+12:27:37 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1016/j.fuproc.2025.108186 "HTTP/1.1 200 OK"
+12:27:37 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1016/j.fuel.2022.126074 "HTTP/1.1 200 OK"
+12:27:37 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1016/j.fuel.2024.131665 "HTTP/1.1 200 OK"
+12:27:38 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.1016/j.fuel.2024.133897 "HTTP/1.1 200 OK"
+12:27:38 INFO    httpx | HTTP Request: GET https://api.openalex.org/works/doi:10.17122/ogbus-2017-2-90-109 "HTTP/1.1 200 OK"
+12:27:38 INFO    app.search.openalex | openalex: обогащено 26 DOI из 26 за 26 бесплатных lookup-запросов
+12:27:38 INFO    app.pipeline.orchestrator | обогащение: заполнен пустой org у 0 кандидатов из 143 (карточки группируются по точной строке org)
+12:27:38 INFO    app.pipeline.orchestrator | [enrich] Цитируемость известна у кандидатов: 26
+ 47% enrich   Цитируемость известна у кандидатов: 26
+12:27:38 INFO    app.pipeline.orchestrator | [scorer] Оцениваю кандидатов
+ 50% scorer   Оцениваю кандидатов
+12:27:39 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:29:09 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:31:22 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:33:14 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:34:38 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:36:04 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:37:17 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:38:42 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:40:30 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:41:25 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:42:30 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:44:04 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:46:17 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:47:53 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:49:19 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:49:31 INFO    app.pipeline.stages | скоринг: батчей 15, повторов по лимиту 0, время стадии 1313.3 с
+12:49:31 INFO    app.pipeline.stages | второй проход не нужен: максимум relevance 9 не ниже порога 6
+12:49:31 INFO    app.pipeline.stages | калибровка relevance: кандидатов 248, оценок модели 248, min/медиана/max по оценкам модели 0/2/9, порог 3, отсечено 129; отсеклось бы по всему списку при 4: 165, при 5: 209, при 6: 214, при 7: 224; среди отобранных 12 (лимит 12) ниже порога 4: 0, 5: 0, 6: 1, 7: 2; нейтральных оценок 0 (не отсекаются никогда)
+12:49:31 INFO    app.pipeline.orchestrator | [scorer] Разнообразие (конкурсная очередь): заготовок до склейки 3, после 3, схлопнуто 0
+ 63% scorer   Разнообразие (конкурсная очередь): заготовок до склейки 3, после 
+3, схлопнуто 0
+12:49:31 INFO    app.pipeline.orchestrator | [dedup_judge] Спрашиваю судью дублей по отобранным кандидатам
+ 57% dedup_judge Спрашиваю судью дублей по отобранным кандидатам
+12:49:32 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:50:24 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:50:24 INFO    app.llm.router | стадия dedup_judge: прошу модель починить JSON (ValidationError)
+12:50:25 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:50:41 INFO    app.pipeline.orchestrator | [dedup_judge] Судья дублей: (№2 «Эффект птицы Феникс: как наши НПЗ научил…», №3 «Катализатор Газпром нефти для гидроочист…», №4 «Структура презентации для СД_розница»); (№5 ««Газпром нефть» успешно испытала на Омск…», №6 «Производство катализаторов — Газпром неф…»); (№7 «СПОСОБ ОБНОВЛЕНИЯ КАТАЛИЗАТОРА ГИДРООЧИС…», №8 «СПОСОБ ОБНОВЛЕНИЯ КАТАЛИЗАТОРА ГИДРООЧИС…»); заготовок до склейки 10, после 7, схлопнуто 3
+ 58% dedup_judge Судья дублей: (№2 «Эффект птицы Феникс: как наши НПЗ научил…», 
+№3 «Катализатор Газпром нефти для гидроочист…», №4 «Структура презентации для 
+СД_розница»); (№5 ««Газпром нефть» успешно испытала на Омск…», №6 «Производство 
+катализаторов — Газпром неф…»); (№7 «СПОСОБ ОБНОВЛЕНИЯ КАТАЛИЗАТОРА ГИДРООЧИС…»,
+№8 «СПОСОБ ОБНОВЛЕНИЯ КАТАЛИЗАТОРА ГИДРООЧИС…»); заготовок до склейки 10, после 
+7, схлопнуто 3
+12:50:41 INFO    app.pipeline.orchestrator | [scorer] Отобрано вариантов для карточек: 5
+ 60% scorer   Отобрано вариантов для карточек: 5
+12:50:41 INFO    app.pipeline.orchestrator | [scorer] Разнообразие (основная очередь): заготовок до склейки 6, после 5, схлопнуто 1
+ 61% scorer   Разнообразие (основная очередь): заготовок до склейки 6, после 5, 
+схлопнуто 1
+12:50:41 INFO    app.pipeline.orchestrator | [scorer] Конкурсный класс: кандидатов 60, заготовок карточек 3 (секция вне лимита 5–7)
+ 62% scorer   Конкурсный класс: кандидатов 60, заготовок карточек 3 (секция вне 
+лимита 5–7)
+12:50:41 INFO    app.pipeline.orchestrator | [cards] Собираю карточки решений
+ 65% cards    Собираю карточки решений
+12:50:42 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:50:42 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:50:42 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:51:42 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:51:42 INFO    app.llm.router | стадия card_author: прошу модель починить JSON (ValidationError)
+12:51:42 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:51:42 INFO    app.llm.router | стадия card_author: прошу модель починить JSON (ValidationError)
+12:51:43 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:51:43 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:51:43 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:52:18 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:52:24 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:52:32 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:53:10 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:53:18 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:53:18 INFO    app.llm.router | стадия card_author: прошу модель починить JSON (ValidationError)
+12:53:19 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:53:24 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:53:24 INFO    app.llm.router | стадия verifier: прошу модель починить JSON (ValidationError)
+12:53:25 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:53:48 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:54:11 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:54:11 INFO    app.llm.router | стадия card_author: прошу модель починить JSON (ValidationError)
+12:54:12 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:55:10 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:56:02 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:56:02 INFO    app.llm.router | стадия verifier: прошу модель починить JSON (ValidationError)
+12:56:03 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:56:54 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:56:54 WARNING app.pipeline.orchestrator | проверка карточки не удалась (router: стадия verifier: ответ не сходится со схемой VerifyResult: 1 validation error for VerifyResult
+  Input should be a valid dictionary or instance of VerifyResult [type=model_type, input_value=['Климов О.В., Б... об аналогах'], input_type=list]
+    For further information visit https://errors.pydantic.dev/2.13/v/model_type), понижаю уверенность
+12:56:54 INFO    app.pipeline.orchestrator | [cards] Готово карточек: 5, отброшено пустых: 0
+ 80% cards    Готово карточек: 5, отброшено пустых: 0
+12:56:54 INFO    app.pipeline.orchestrator | [summary] Составляю сводку и рекомендацию
+ 85% summary  Составляю сводку и рекомендацию
+12:56:55 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:58:52 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:58:53 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:58:53 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:58:53 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:59:53 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:59:53 INFO    app.llm.router | стадия card_author: прошу модель починить JSON (ValidationError)
+12:59:54 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:59:54 INFO    app.llm.router | стадия card_author: прошу модель починить JSON (ValidationError)
+12:59:54 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+12:59:54 INFO    app.llm.router | стадия card_author: прошу модель починить JSON (ValidationError)
+12:59:54 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:59:55 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+12:59:55 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:00:13 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:00:13 INFO    app.pipeline.stages | конкурсная карточка «Собственный катализатор гидроочистки дизельного топлива Газпром нефти»: стадия series понижена до потолка prototype (РЕШ-79 п. 2)
+13:00:15 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:00:27 INFO    app.pipeline.stages | конкурсная карточка «Катализатор гидроочистки для тяжелых и легких видов сырья»: стадия series понижена до потолка prototype (РЕШ-79 п. 2)
+13:00:28 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:01:05 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+13:01:05 INFO    app.llm.router | стадия verifier: прошу модель починить JSON (ValidationError)
+13:01:06 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:01:06 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+13:01:06 INFO    app.llm.router | стадия verifier: прошу модель починить JSON (ValidationError)
+13:01:07 INFO    httpx | HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+13:01:20 WARNING app.llm.deepseek | DeepSeek: content пуст, беру ответ из reasoning_content
+13:01:42 INFO    app.pipeline.orchestrator | [cards] Карточек конкурсного класса: 3, отброшено пустых: 0
+ 95% cards    Карточек конкурсного класса: 3, отброшено пустых: 0
+13:01:42 INFO    app.pipeline.orchestrator | [done] Отчёт готов. Стоимость запроса: 14.25 ₽
+100% done     Отчёт готов. Стоимость запроса: 14.25 ₽
+
+Отчёт сохранён: /home/user/techmost-scout/out/report-20260824-130142.md
+Стоимость запроса: 14.25 ₽; вызовов модели 57, из них с кэшем префикса 53 (кэш 
+считается только у DeepSeek; у остальных провайдеров всегда 0)
+Платные источники: OpenAlex — платный поиск: запросов 2, $0.002 по $0.001 за 
+запрос; суточная бесплатная норма $0.10, осталось $0.000 (0 запросов)
+финиш: 2026-08-24T13:01:42Z
+код выхода: 0

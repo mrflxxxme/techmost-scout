@@ -1,0 +1,59 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: "Д-4"
+  did:
+    - "Дробление backend/app/cli.py (726 строк) по образцу orchestrator.py (З-10 Э2-Д, РЕШ-151): фасад typer + два соседних модуля"
+    - "backend/app/cli.py (726 → 176 строк): остаётся точкой входа — app/console/log, декларации команд doctor/run/serve/showcase, _setup_logging, _import_showcase; реэкспортирует _doctor/_schema_drift/SECRET_CHECKS из cli_doctor.py и _run/INTAKE_FALLBACK_CAVEAT/REFINE_FALLBACK_CAVEAT/STAGE_INTAKE*/UNKNOWN_ANSWER/UNSPECIFIED_REQUIREMENT из cli_run.py; __all__ фиксирует реэкспорт явно"
+    - "backend/app/cli_doctor.py (новый, 184 строки): SECRET_CHECKS, _schema_drift, _doctor — вся тяжёлая часть команды doctor, включая httpx.AsyncClient доктора источников"
+    - "backend/app/cli_run.py (новый, 487 строк): константы интейка, _intake_stage_record, _persist_intake_stop, _normalize_owner_answer, _run, _paid_source_notes — вся тяжёлая часть команды run"
+    - "Приём совместимости с существующими тестами: _doctor и _run НЕ импортируют console/get_settings/LLMRouter на уровне модуля cli_doctor.py/cli_run.py, а делают `from app.cli import console, get_settings, LLMRouter` ОТЛОЖЕННЫМ импортом внутри самой функции (тот же приём, что pipeline_context.py/run_flow.py читают build_adapters/persist_run из orchestrator.py). Это нужно потому, что 8 существующих тестов патчат именно `monkeypatch.setattr(cli, \"LLMRouter\"/\"get_settings\"/\"console\", ...)` — атрибут модуля app.cli, а не app.cli_run/app.cli_doctor"
+    - "tests/test_backend_layout.py: запись \"cli.py\" убрана из _EXCEPTIONS; комментарий у search/openalex.py и search/yandex_search.py поправлен — обе записи теперь названы долгом задачи Д-5 той же волны, после которой список должен опустеть"
+    - "Существующие тесты CLI НЕ переписывались — только тест-страж test_backend_layout.py (изменение входило в критерии задачи)"
+  artifacts:
+    - backend/app/cli.py
+    - backend/app/cli_doctor.py
+    - backend/app/cli_run.py
+    - tests/test_backend_layout.py
+  self_audit: pass
+  checks:
+    - "wc -l backend/app/cli.py backend/app/cli_doctor.py backend/app/cli_run.py: 176 / 184 / 487 (все ≤ 500)"
+    - "python -m app.cli --help и python -m app.cli run --help: команды и опции печатаются без ошибок (без сети)"
+    - ".venv/bin/scout --help: рабочий entrypoint из pyproject.toml (scout = \"app.cli:app\")"
+    - "pytest -q: 787 passed, 0 failed (база волны — тоже 787, регрессий нет)"
+    - "pytest tests/test_backend_layout.py tests/test_cli_run.py tests/test_cli_doctor_schema_guard.py tests/test_prompts.py -v: 74 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 142 files already formatted"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача Д-4, волна Э2-З)
+    - backend/app/pipeline/orchestrator.py (образец дробления, докстрока объясняет приём отложенного импорта)
+    - backend/app/cli.py (докстрока модуля объясняет карту дробления и почему реэкспорт)
+    - backend/app/cli_doctor.py / backend/app/cli_run.py (докстроки объясняют отложенный импорт console/get_settings/LLMRouter)
+    - tests/test_cli_run.py, tests/test_cli_doctor_schema_guard.py (кто именно патчит cli.get_settings/cli.LLMRouter/cli.console)
+  notes: |
+    Копия worktree на старте оказалась ПОЗАДИ базы волны: HEAD был на 5d6e3f0
+    (слияние Э2-Ж), тогда как база волны 1 задачи Д-4 — f41beab (после
+    слияния Д-1/Д-2/Д-3 волны Э2-З, 726 строк в cli.py). f41beab не был
+    предком HEAD — РЕШ-158 подтверждён: git reset --hard f41beab выполнен на
+    чистом дереве (git status --porcelain пуст до сброса, локальных коммитов
+    не было).
+
+    Найдено за границами задачи, не правил: строка invariant №6 в
+    docs/team/INVARIANTS.md содержит пример grep-паттерна с явным
+    перечислением легитимных мест httpx (`llm/`, `search/`, `cli.py`,
+    `pipeline_context.py`, `pipeline_search.py`). После переноса
+    httpx.AsyncClient доктора источников в cli_doctor.py этот пример
+    формально устарел — прогон паттерна руками (не тест, а именно
+    иллюстрация в тексте инварианта) теперь называет cli_doctor.py как файл
+    вне перечисленных исключений. Это не ошибка (httpx там легитимен — клиент
+    доктора для проверки источников, назначение то же самое, что раньше было
+    в cli.py), просто карта в тексте документа отстала от кода. Автоматической
+    проверки на этот паттерн в tests/ нет (grep -rln из test_backend_layout.py
+    ищет только длину файлов, не httpx), поэтому pytest это не ловит. Решать,
+    поправить ли пример в INVARIANTS.md, — не моя территория (файл не входит
+    в список задачи Д-4).
+
+    Живых вызовов не делал: `scout doctor` без сети не гонял (он живьём ходит
+    в сеть и в модель), проверил только `--help` у обеих команд и полный
+    существующий набор тестов (respx/заглушки, без сети — инвариант №7).

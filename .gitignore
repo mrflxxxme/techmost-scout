@@ -7,6 +7,8 @@
 
 # Данные и результаты работы
 data/*.db
+data/*.db.bak-*
+data/scout.db.bak*
 backend/data/
 data/*.db-journal
 data/*.sqlite*

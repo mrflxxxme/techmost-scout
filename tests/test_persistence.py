@@ -47,6 +47,7 @@ from app.llm import CostLimitExceededError, LLMRouter
 from app.llm.base import LLMError, LLMProvider, LLMResult, Message, Usage
 from app.metrics import max_relevance, share_at_least_relevance
 from app.models import Base, PipelineLog
+from app.models import Brief as BriefRow
 from app.models import Candidate as CandidateRow
 from app.models import Request as RequestRow
 from app.models import SearchPlan as SearchPlanRow
@@ -61,6 +62,7 @@ from app.schemas import (
     Evidence,
     IPStatus,
     MaturityStage,
+    Report,
     RequirementCheck,
     SearchPlan,
     SearchQuery,
@@ -241,6 +243,33 @@ async def test_successful_run_persists_request_card_and_search_log(
         search_logs = (await session.execute(select(PipelineLog).where(PipelineLog.stage == "search"))).scalars().all()
         assert len(search_logs) >= 1
         assert search_logs[0].sources_hit  # непустой словарь по источникам
+
+
+# ── Д-1 (РЕШ-146/156): полный прогон пишет report_json и оживляет briefs ────
+async def test_successful_run_persists_report_json_and_brief_row(
+    settings, brief, fake_provider_factory, db_session_factory
+):
+    """Прогон на подменах: `report_json` читается обратно `load_report`
+    типизированным `Report`, совпадающим с тем, что вернул `pipeline.run`, а
+    `briefs` получает строку — критерии приёмки задачи Д-1 целиком."""
+    from app.pipeline.persistence import load_report
+
+    provider = fake_provider_factory("deepseek", [_PLAN_JSON, _SCORE_JSON, _CARD_JSON, _VERIFY_JSON, _SUMMARY_JSON])
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(settings, provider, [_OneHitAdapter(client)], session_factory=db_session_factory)
+        report = await pipeline.run(brief, request_id=0, raw_text="текст задачи для отчёта в БД")
+
+    assert report.request_id > 0
+
+    loaded = await load_report(db_session_factory, report.request_id)
+    assert isinstance(loaded, Report)  # мутация (б): сырой dict не пройдёт isinstance
+    assert loaded.model_dump(mode="json") == report.model_dump(mode="json")
+
+    async with db_session_factory() as session:
+        brief_rows = (await session.execute(select(BriefRow))).scalars().all()
+    assert len(brief_rows) > 0, "критерий Д-1: briefs > 0 строк после прогона на подменах"
+    assert brief_rows[0].request_id == report.request_id
+    assert brief_rows[0].owner_answers == [], "brief-фикстура без ответов владельца — авто-режим"
 
 
 # ── Т-5: три поля фазы Э1-2-Ф доезжают до solution_cards ────────────────────
@@ -515,6 +544,31 @@ async def test_pipeline_failure_persists_failed_status_and_error(settings, brief
         assert requests[0].status == "failed"
         assert requests[0].error
         assert requests[0].raw_text == "текст, который не соберётся"
+
+
+# ── Д-1 (РЕШ-146/156), ревью цикл 1, блокирующее №1: briefs на РЕАЛЬНОМ отказе
+# через ScoutPipeline.run(), а не через прямой вызов persist_run. Существующий
+# тест выше проверяет только RequestRow; тест на persist_run с brief= в
+# test_report_persistence.py минует run_flow.py целиком — ни один из них не
+# ловит потерю `brief=brief` в except-ветке `run.py` (мутация ревьюера это
+# доказала: удалённый аргумент не уронил ни одного из 762 тестов).
+async def test_pipeline_failure_persists_brief_row_via_real_run(settings, brief, db_session_factory):
+    """Отказ стадии ПОСЛЕ интейка через настоящий `ScoutPipeline.run()`
+    обязан оставить строку в `briefs`: бриф существует уже к моменту отказа,
+    и except-ветка `run_flow.py` передаёт его в `persist_run` ровно за этим."""
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(
+            settings, _AlwaysFailProvider(), [_OneHitAdapter(client)], session_factory=db_session_factory
+        )
+        with pytest.raises(LLMError):
+            await pipeline.run(brief, request_id=1, raw_text="текст, упавший после интейка, с брифом")
+
+    async with db_session_factory() as session:
+        brief_rows = (await session.execute(select(BriefRow))).scalars().all()
+
+    assert len(brief_rows) == 1, "briefs пуста после реального отказа стадии — brief=brief потерян в except-ветке"
+    assert brief_rows[0].industry == brief.industry
+    assert brief_rows[0].task_summary == brief.task_summary
 
 
 # ── РЕШ-45: стоп-кран лимита стоимости роняет прогон, а не деградирует ──────

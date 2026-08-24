@@ -17,8 +17,9 @@ import respx
 
 from app.schemas import SearchQuery, SourceType
 from app.search import build_adapters
+from app.search import rospatent as rospatent_module
 from app.search.base import SearchError
-from app.search.rospatent import SEARCH_PLATFORM_URL, RospatentAdapter
+from app.search.rospatent import SEARCH_PLATFORM_URL, RospatentAdapter, _shorten_query
 
 APPLICANT = 'АКЦИОНЕРНОЕ ОБЩЕСТВО "ГАЗПРОМНЕФТЬ-ОМСКИЙ НПЗ"'
 
@@ -181,6 +182,156 @@ async def test_темп_не_чаще_одного_запроса_в_секун�
     # Первому запросу ждать не от чего, значит интервал ровно один.
     # 0,9 — допуск на разрешение системного таймера.
     assert elapsed >= adapter.min_interval_seconds * 0.9, f"запросы ушли подряд, за {elapsed:.3f} с"
+
+
+# ── Повтор с обобщением при бедной выдаче (диагноз З-6, Д-2) ────────────────
+#
+# Живой контроль З-6 (`.planning/evidence/E2J-rospatent-разбор.md`): хвост
+# «на основе нейросети» обрушивает выдачу платформы с 20+ до 1 — редкий
+# технологический термин почти не встречается в формальном языке патентных
+# текстов. Порог повтора здесь не 0, как у КиберЛенинки, а < 3: переуточнение
+# у Роспатента душит выдачу не до нуля.
+
+#: 8-словная формулировка с редким термином — по образцу живого диагноза З-6.
+_LONG_QUERY = "способ ультразвуковой диагностики супоросности свиноматок на основе нейросети"
+#: Первые 4 содержательных слова той же формулировки (без стоп-слова «на»).
+_SHORT_QUERY = "способ ультразвуковой диагностики супоросности"
+
+
+def _by_query(long_response: httpx.Response, short_response: httpx.Response):
+    """Разные ответы на длинную и укороченную форму — по телу запроса."""
+
+    def side_effect(request: httpx.Request) -> httpx.Response:
+        return long_response if json.loads(request.content)["qn"] == _LONG_QUERY else short_response
+
+    return side_effect
+
+
+@respx.mock
+async def test_повтор_при_бедной_выдаче_укороченной_формулировкой(adapter_factory, caplog):
+    """Критерий 1: < 3 кандидатов на исходной формулировке → один повтор
+    укороченной формой; обе формы и число кандидатов видны в логе прогона."""
+    route = respx.post(SEARCH_PLATFORM_URL).mock(
+        side_effect=_by_query(
+            httpx.Response(200, json=_payload(_hit())),
+            httpx.Response(200, json=_payload(*[_hit(id=f"RU{n}A1_20200101") for n in range(20)])),
+        )
+    )
+    caplog.set_level("INFO", logger=rospatent_module.__name__)
+    async with httpx.AsyncClient() as client:
+        found = await adapter_factory(client).search(_query(_LONG_QUERY), limit=20)
+
+    assert len(found) == 20
+    assert route.call_count == 2, "должно быть ровно два обращения: исходная форма + один повтор"
+    bodies = [json.loads(call.request.content)["qn"] for call in route.calls]
+    assert bodies == [_LONG_QUERY, _SHORT_QUERY]
+    assert _LONG_QUERY in caplog.text
+    assert _SHORT_QUERY in caplog.text
+    assert "кандидатов=1" in caplog.text and "кандидатов=20" in caplog.text
+
+
+@respx.mock
+async def test_богатая_выдача_повтора_не_даёт(adapter_factory):
+    """Мутация (б): ≥ 3 кандидатов на исходной формулировке — повтора быть не
+    должно, источник получает ровно один запрос."""
+    route = respx.post(SEARCH_PLATFORM_URL).mock(
+        return_value=httpx.Response(200, json=_payload(_hit(), _hit(id="RU2A1_20200101"), _hit(id="RU3A1_20200101")))
+    )
+    async with httpx.AsyncClient() as client:
+        found = await adapter_factory(client).search(_query(_LONG_QUERY), limit=20)
+
+    assert len(found) == 3
+    assert route.call_count == 1, "богатая выдача не должна вызывать повтор"
+
+
+@respx.mock
+async def test_бедная_выдача_на_обеих_формах_честный_список(adapter_factory):
+    """Критерий 2: если и укороченная форма нашла мало — это результат
+    поиска, а не отказ источника."""
+    respx.post(SEARCH_PLATFORM_URL).mock(return_value=httpx.Response(200, json=_payload(_hit())))
+    async with httpx.AsyncClient() as client:
+        found = await adapter_factory(client).search(_query(_LONG_QUERY), limit=20)
+
+    assert len(found) == 1
+
+
+@respx.mock
+async def test_короткая_формулировка_с_бедной_выдачей_не_даёт_повтора(adapter_factory):
+    """Краевой случай `short_text == text`: формулировка уже короче предела
+    укорачивания — повторять запрос тем же текстом нет смысла, источник
+    получает ровно один запрос (respx-счётчик), не два одинаковых подряд."""
+    short_query = "прочность бетона"
+    assert _shorten_query(short_query) == short_query, "формулировка уже короче предела укорачивания"
+
+    route = respx.post(SEARCH_PLATFORM_URL).mock(return_value=httpx.Response(200, json=_payload(_hit())))
+    async with httpx.AsyncClient() as client:
+        found = await adapter_factory(client).search(_query(short_query), limit=20)
+
+    assert len(found) == 1
+    assert route.call_count == 1, "короткий запрос сам с собой повторяться не должен"
+
+
+@respx.mock
+async def test_отказ_на_повторе_поднимает_search_error(adapter_factory):
+    """Мутация (а)/критерий 3: транспортный отказ на повторе — тот же
+    контракт, что и на первой попытке; отказ не подменяется одним лишним
+    вызовом ради ещё одной попытки (ровно один повтор, не больше)."""
+    route = respx.post(SEARCH_PLATFORM_URL).mock(
+        side_effect=_by_query(httpx.Response(200, json=_payload(_hit())), httpx.Response(500, text="internal error"))
+    )
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(SearchError):
+            await adapter_factory(client).search(_query(_LONG_QUERY), limit=20)
+
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_повтор_тоже_соблюдает_паузу(adapter_factory):
+    """Критерий 4: повтор — такой же сетевой вызов и подчиняется тому же
+    `min_interval_seconds`, что и исходный запрос."""
+    respx.post(SEARCH_PLATFORM_URL).mock(
+        side_effect=_by_query(
+            httpx.Response(200, json=_payload(_hit())),
+            httpx.Response(200, json=_payload(*[_hit(id=f"RU{n}A1_20200101") for n in range(5)])),
+        )
+    )
+    async with httpx.AsyncClient() as client:
+        adapter = adapter_factory(client, min_interval_seconds=RospatentAdapter.min_interval_seconds)
+        started = time.perf_counter()
+        await adapter.search(_query(_LONG_QUERY), limit=20)
+        elapsed = time.perf_counter() - started
+
+    assert elapsed >= adapter.min_interval_seconds * 0.9, f"повтор ушёл без паузы, за {elapsed:.3f} с"
+
+
+def test_укорачивание_детерминировано_и_сохраняет_порядок():
+    """Одна и та же формулировка всегда даёт одну и ту же короткую форму;
+    стоп-слова снимаются, порядок оставшихся слов не меняется."""
+    assert _shorten_query(_LONG_QUERY) == _shorten_query(_LONG_QUERY) == _SHORT_QUERY
+
+
+def test_укорачивание_короткого_запроса_не_меняет_его():
+    assert _shorten_query("прочность бетона") == "прочность бетона"
+
+
+# ── Долг-2 З-6: отсев без title/number на info, а не debug ─────────────────
+@respx.mock
+async def test_отсев_без_названия_или_номера_виден_на_info(adapter_factory, caplog):
+    """Раньше это был `log.debug`, и без тела ответа разбор «Роспатент дал 1»
+    (`.planning/evidence/E2J-rospatent-разбор.md`, шаг 3) требовал живого
+    контрольного вызова. На `INFO` причина отсева видна в самом логе прогона."""
+    without_title = _hit()
+    without_title["biblio"] = {}
+    without_title["snippet"] = {}
+    respx.post(SEARCH_PLATFORM_URL).mock(return_value=httpx.Response(200, json=_payload(without_title, _hit())))
+    caplog.set_level("INFO", logger=rospatent_module.__name__)
+    async with httpx.AsyncClient() as client:
+        found = await adapter_factory(client).search(_query(), limit=10)
+
+    assert len(found) == 1
+    assert "отброшена" in caplog.text
+    assert any(record.levelname == "INFO" and "отброшена" in record.message for record in caplog.records)
 
 
 # ── Отказы ──────────────────────────────────────────────────────────────────

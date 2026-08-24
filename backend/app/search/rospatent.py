@@ -52,6 +52,18 @@
 ТЕМП
     Лимит на ключ платформой не опубликован, поэтому берём осторожно:
     не чаще одного запроса в секунду, как у OAI КиберЛенинки.
+
+БЕДНАЯ ВЫДАЧА НА ПЕРЕУТОЧНЁННОЙ ФОРМУЛИРОВКЕ (диагноз З-6,
+`.planning/evidence/E2J-rospatent-разбор.md`). Живой контрольный вызов
+показал 1 кандидата на «способ ультразвуковой диагностики супоросности
+свиноматок на основе нейросети» и 20 — на той же формулировке без хвоста
+«на основе нейросети»: платформа теряет совпадения, когда в единственной
+(по правилу промпта) патентной формулировке появляется редкий
+технологический термин, которого нет в формальном языке патентных текстов.
+Порог здесь не ноль, как у КиберЛенинки: переуточнение душит выдачу не до
+нуля, а до одного-двух документов, поэтому повтор срабатывает при
+`< 3` кандидатов на исходной формулировке — тот же приём (ступенчатое
+укорачивание, один повтор, без модели), что и в `cyberleninka.py`.
 """
 
 from __future__ import annotations
@@ -66,6 +78,7 @@ from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
 from app.search.base import SearchAdapter, SearchError
+from app.search.query_shortening import shorten_ru_query
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +93,16 @@ CONTACT_EMAIL = "uklonskiy.k@gmail.com"
 MAX_LIMIT = 100
 MAX_SNIPPET = 700
 MAX_AUTHORS = 12
+#: Порог повтора (диагноз З-6): переуточнение душит выдачу не до нуля, как у
+#: КиберЛенинки, а до одного-двух документов — поэтому порог не `== 0`.
+MIN_CANDIDATES_BEFORE_REPEAT = 3
+#: Сколько содержательных слов оставлять при укорачивании — тот же потолок,
+#: что и у КиберЛенинки (З-2): подобран не под один пример, а как разумный
+#: компромисс между специфичностью и полнотой выдачи.
+#: Патентная формулировка всегда русская (правило промпта: «на patent ровно
+#: 1 запрос, и он на русском»), поэтому английский вариант укорачивания
+#: (`query_shortening.english_content_words`) здесь не нужен.
+SHORT_QUERY_WORDS = 4
 
 #: Подсветка совпадений в snippet и прочая разметка
 _TAG = re.compile(r"<[^>]+>")
@@ -118,16 +141,47 @@ class RospatentAdapter(SearchAdapter):
         return f"TechMostScout/1.0 (mailto:{self._contact_email})"
 
     async def search(self, query: SearchQuery, *, limit: int = 20) -> list[Candidate]:
+        """Кандидаты по одной формулировке. Отказ источника — `SearchError`.
+
+        Диагноз З-6 (`.planning/evidence/E2J-rospatent-разбор.md`): редкий
+        технологический термин в единственной патентной формулировке душит
+        выдачу платформы до одного-двух документов. При `< 3` кандидатов на
+        исходной формулировке — один повтор с укороченной формой (первые 3–4
+        содержательных слова, без модели). Больше одного повтора не делаем.
+        """
         if not self._api_key:
             log.warning("rospatent: нет ROSPATENT_API_KEY — источник пропущен")
             return []
 
+        text = query.text.strip()
+        if not text:
+            return []
         wanted = max(1, min(limit, MAX_LIMIT))
-        payload = await self._request(query.text, limit=wanted)
+
+        candidates = await self._search_once(text, limit=wanted)
+
+        short_text = _shorten_query(text)
+        if len(candidates) < MIN_CANDIDATES_BEFORE_REPEAT and short_text and short_text != text:
+            short_candidates = await self._search_once(short_text, limit=wanted)
+            log.info(
+                "rospatent: «%s» → кандидатов=%s; повтор укороченной «%s» → кандидатов=%s",
+                text,
+                len(candidates),
+                short_text,
+                len(short_candidates),
+            )
+            return short_candidates[:wanted]
+
+        log.info("rospatent: «%s» → кандидатов=%s", text, len(candidates))
+        return candidates[:wanted]
+
+    async def _search_once(self, text: str, *, limit: int) -> list[Candidate]:
+        """Один запрос к платформе, разбор `hits` в кандидатов."""
+        payload = await self._request(text, limit=limit)
         hits = payload.get("hits")
         if not isinstance(hits, list):
             # Ответ разобран, записей нет — это пустой результат, а не отказ
-            log.warning("rospatent: ответ без hits по запросу «%s»", query.text)
+            log.warning("rospatent: ответ без hits по запросу «%s»", text)
             return []
 
         candidates: list[Candidate] = []
@@ -137,7 +191,7 @@ class RospatentAdapter(SearchAdapter):
             candidate = self._to_candidate(hit)
             if candidate is not None:
                 candidates.append(candidate)
-        return candidates[:wanted]
+        return candidates
 
     async def health(self) -> tuple[bool, str]:
         if not self._api_key:
@@ -187,7 +241,16 @@ class RospatentAdapter(SearchAdapter):
         title = _clean(ru.get("title")) or _clean(en.get("title")) or _strip_markup(snippet.get("title"))
         number = _document_number(common) or _clean(hit.get("id")).split("_")[0]
         if not title or not number:
-            log.debug("rospatent: запись без названия или номера отброшена")
+            # Долг-2 З-6: раньше это был debug, и слепое пятно «что именно
+            # отсеялось» закрывалось только живым контрольным вызовом
+            # (`.planning/evidence/E2J-rospatent-разбор.md`, шаг 3). На info
+            # причина отсева видна прямо в логе прогона.
+            reason = (
+                "нет ни названия, ни номера"
+                if not title and not number
+                else ("нет названия" if not title else "нет номера")
+            )
+            log.info("rospatent: запись отброшена — %s (id=%s)", reason, _clean(hit.get("id")) or "?")
             return None
 
         # Заявитель — прямое поле правообладателя, ради него источник и нужен
@@ -268,3 +331,13 @@ def _year(value: Any) -> int | None:
     """Дата публикации приходит как «2020.06.25» — нужен только год."""
     match = _YEAR.search(_clean(value))
     return int(match.group(0)) if match else None
+
+
+def _shorten_query(text: str) -> str:
+    """Короткая форма формулировки — приём общий с КиберЛенинкой (Д-5, `query_shortening`).
+
+    Живой контроль З-6 показал, что именно хвостовой технологический термин
+    («на основе нейросети») душит выдачу платформы — укорачивание с начала
+    формулировки его и отбрасывает.
+    """
+    return shorten_ru_query(text, word_limit=SHORT_QUERY_WORDS)

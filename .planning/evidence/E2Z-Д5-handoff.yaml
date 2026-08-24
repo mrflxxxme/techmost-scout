@@ -1,0 +1,76 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: "Д-5 (волна Э2-З)"
+  did:
+    - "search/openalex.py (593 → 412 строк): разворачивание abstract_inverted_index
+       и маппинг полей выдачи/обогащения вынесены в новый чистый модуль
+       search/openalex_parse.py (219 строк, без сети и без состояния). Фасад
+       реэкспортирует OpenAlexAdapter, normalize_doi, MAX_SNIPPET,
+       _abstract_from_inverted_index — тест tests/test_openalex.py не правился."
+    - "search/yandex_search.py (558 → 326 строк): разбор XML-выдачи (кандидаты,
+       сырые записи extractor) и выбор контура/сужение site: вынесены в новый
+       модуль search/yandex_parse.py (289 строк). Фасад реэкспортирует
+       CONTEST_OUTCOME_MARKERS, CONTEST_SITES, GRANT_SITES, MAX_SNIPPET,
+       has_contest_outcome_marker, _with_site_filter — нужны продакшен-импорту
+       app.pipeline.planning и тестам без правок логики."
+    - "scripts/probe.py: точечная правка — YandexSearchAdapter._search_type(query)
+       (метод исчез при дроблении) заменён на публичную search_type_for(query) из
+       yandex_parse. Названо явно, вне границ задачи по файлам, но без этой правки
+       proba.py был бы сломан дроблением."
+    - "tests/test_backend_layout.py: записи search/openalex.py и
+       search/yandex_search.py убраны из _EXCEPTIONS. Строка cli.py (726) НЕ
+       тронута — её обнуляет параллельная задача Д-4; итоговое опустошение
+       списка и правило без исключений — за оркестратором при слиянии."
+    - "Совет ревью Д-2 (взят в задачу): search/query_shortening.py — общий
+       помощник укорачивания формулировки. RU_STOP_WORDS + shorten_ru_query
+       (одна копия для cyberleninka.py и rospatent.py, их _shorten_query теперь
+       тонкие обёртки над shorten_ru_query(text, word_limit=SHORT_QUERY_WORDS));
+       EN_STOP_WORDS + english_content_words (арXiv, был _content_words/
+       _STOPWORDS). Поведение не менялось — respx-тесты всех трёх адаптеров
+       зелёные без правок логики, только импорт нового вызова в arxiv.py."
+  artifacts:
+    - backend/app/search/openalex.py
+    - backend/app/search/openalex_parse.py
+    - backend/app/search/yandex_search.py
+    - backend/app/search/yandex_parse.py
+    - backend/app/search/query_shortening.py
+    - backend/app/search/cyberleninka.py
+    - backend/app/search/rospatent.py
+    - backend/app/search/arxiv.py
+    - scripts/probe.py
+    - tests/test_backend_layout.py
+  self_audit: pass
+  checks:
+    - "pytest -q: 787 passed, 0 failed (базовое число волны из PLAN.md совпало)"
+    - "pytest tests/test_openalex.py -q: 71 passed"
+    - "pytest tests/test_search_yandex.py tests/test_yandex_limit_visibility.py tests/test_contest_queries.py tests/test_plan_types.py tests/test_grant_source_type.py tests/test_run_accounting.py tests/test_paid_demand_two_passes.py tests/test_fallback_without_guesses.py tests/test_secret_leak_guard.py tests/test_probe.py tests/test_stages.py -q: 194 passed"
+    - "pytest tests/test_search_cyberleninka.py tests/test_rospatent.py tests/test_search_arxiv.py -q: 52 passed"
+    - "pytest tests/test_backend_layout.py tests/test_prompts.py tests/test_stage_token_budgets.py -q: 51 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 143 files already formatted"
+    - "grep -rn _STOP_WORDS backend/app/search/*.py: только RU_STOP_WORDS и EN_STOP_WORDS в query_shortening.py — одно определение на язык"
+    - "wc -l: openalex.py 412, openalex_parse.py 219, yandex_search.py 326, yandex_parse.py 289, query_shortening.py 116, cyberleninka.py 359, rospatent.py 343, arxiv.py 207 — все ≤ 500"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача Д-5 волны Э2-З)
+    - docs/SPEC.md
+    - backend/app/search/openalex.py
+    - backend/app/search/openalex_parse.py
+    - backend/app/search/yandex_search.py
+    - backend/app/search/yandex_parse.py
+    - backend/app/search/query_shortening.py
+    - tests/test_backend_layout.py
+  notes: >
+    Рабочая копия при старте отставала от базы волны (f41beab) на слитые
+    задачи Д-1/Д-2/Д-3 (была на HEAD ворот Э2-Ж, 753 passed) — подтянута
+    git reset --hard f41beab по инструкции РЕШ-158 при чистом дереве, других
+    незакоммиченных изменений в копии не было.
+    Три отдельных коммита по ходу: openalex, yandex_search, query_shortening —
+    каждый после зелёных тестов и ruff. showcase.py содержит свой отдельный
+    _STOPWORDS (стемминг витрины, другая задача поиска) — намеренно не тронут,
+    вне границ задачи и вне грепа _STOP_WORDS (другое имя). _EXCEPTIONS
+    test_backend_layout.py после моей правки содержит только "cli.py": 726 —
+    полное опустошение и смена комментария («чистое правило без исключений»)
+    оставлены оркестратору, как оговорено в постановке, чтобы не столкнуться
+    с параллельной задачей Д-4 на слиянии.

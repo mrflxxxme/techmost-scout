@@ -34,6 +34,9 @@ EXPECTED_PLACEHOLDERS = {
     "summary": {"BRIEF_JSON", "CARDS_JSON"},
     "extractor": {"SOURCE_TYPE", "PROVIDER", "RAW_RESULTS"},
     "scorer": set(),
+    # Д-6 волны Э2-З (РЕШ-152): семантический судья дублей — список отобранных
+    # кандидатов номером, заголовком, организацией и фрагментом одной меткой.
+    "dedup_judge": {"CANDIDATES_LISTING"},
 }
 
 
@@ -154,7 +157,9 @@ def test_render_prompt_fails_loudly_on_missing_value():
         render_prompt("verifier", CARD_JSON="{}")
 
 
-@pytest.mark.parametrize("name", ["intake", "planner", "replanner", "card_author", "verifier", "summary", "scorer"])
+@pytest.mark.parametrize(
+    "name", ["intake", "planner", "replanner", "card_author", "verifier", "summary", "scorer", "dedup_judge"]
+)
 def test_prompt_has_error_section(name: str):
     """У каждого промпта есть раздел про ошибки: дешёвые модели без него врут."""
     text = load_prompt(name).lower()
@@ -186,6 +191,40 @@ def test_card_author_response_format_has_requirement_checks():
     """Формат ответа обязан содержать requirement_checks — построчную сверку с брифом (РЕШ-38)."""
     text = load_prompt("card_author")
     assert "requirement_checks" in text
+
+
+# ── Атрибуция чисел аналога/прототипа (РЕШ-181 п. 1, Б-1 пост-аудита Э2-З) ───
+#
+# Живой воротный прогон приписал разработке из карточки 6 чужие числа: 98%
+# восстановления активности и «менее 10 ppm» серы взяты из раздела патента
+# RU2758845C1 «уровень техники», где разбирается ДРУГОЙ патент (№2666355) как
+# аналог с недостатками (`.planning/evidence/audit-Э2-З.md`, находка Б-1).
+# Первая строка отчёта клиенту и единственный `confirmed` во всём отчёте
+# держались на этой подмене. Ниже — не поведенческий тест (живой прогон —
+# работа владельца, РЕШ-181 п. 2), а текстовый страж: без правила атрибуции в
+# промпте модель может повторить ту же ошибку на следующем патенте, и страж
+# обязан упасть первым, до платного прогона.
+
+
+def test_card_author_запрещает_переносить_числа_аналога_на_разработку():
+    """Мутация «правило атрибуции убрано из промпта» обязана ронять этот тест."""
+    text = load_prompt("card_author")
+    assert "АНАЛОГ" in text and "ПРОТОТИП" in text
+    assert "принадлежат этому аналогу" in text
+    # Правило прямо перечисляет requirement_checks среди полей, куда числа
+    # аналога переносить нельзя — карточка 6 нарушила именно на этом поле.
+    assert "requirement_checks" in text.split("АНАЛОГ")[-1][:600]
+
+
+def test_verifier_проверяет_что_подтверждение_requirement_checks_не_из_описания_аналога():
+    """Verifier получает отдельную проверку (РЕШ-181 п. 1): подтверждение
+    requirement_checks обязано быть про саму разработку, а не про аналог или
+    прототип, описанные тем же источником. Мутация «проверка убрана из
+    промпта» обязана ронять этот тест."""
+    text = load_prompt("verifier")
+    assert "requirement_checks" in text and "confirmed" in text
+    assert "АНАЛОГА" in text or "АНАЛОГ" in text
+    assert "требование подтверждено описанием аналога/прототипа, а не разработки" in text
 
 
 _CHANGELOG_ENTRY_VERSION = re.compile(r"^##\s*([\d.]+)\s", re.MULTILINE)

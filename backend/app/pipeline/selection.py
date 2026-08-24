@@ -78,12 +78,21 @@ def _pick_top(eligible: list[ScoredCandidate], *, limit: int) -> list[ScoredCand
     return picked
 
 
-def group_for_cards(selected: list[ScoredCandidate], *, target: int) -> list[list[ScoredCandidate]]:
-    """Сгруппировать кандидатов в заготовки карточек.
+def group_candidates(selected: list[ScoredCandidate]) -> list[list[ScoredCandidate]]:
+    """Сгруппировать кандидатов в заготовки карточек — БЕЗ среза до `target`.
 
     Пока группировка простая: один кандидат — одна карточка, но с запасом на
     склейку по организации (несколько публикаций одной лаборатории — один
-    вариант решения, а не три).
+    вариант решения, а не три). Заготовки отсортированы по максимальной
+    оценке участника, лучшие впереди.
+
+    Вынесено отдельно от среза (РЕШ-181 п. 4, цикл правок аудита Э2-З): судья
+    дублей (`app.pipeline.dedup_judge`) обязан сливать заготовки ДО того, как
+    часть из них обрежется до `target` в `run_stages.py` — иначе
+    освободившееся после склейки место не достаётся следующему по счёту
+    кандидату, а пропадает вместе со срезанной заготовкой (живой пример из
+    совета аудита — пара №1062/№1069: вторая карточка ушла под срез не
+    спрошенной судьёй, потому что срез стоял раньше склейки).
     """
     by_org: dict[str, list[ScoredCandidate]] = defaultdict(list)
     singles: list[list[ScoredCandidate]] = []
@@ -95,7 +104,29 @@ def group_for_cards(selected: list[ScoredCandidate], *, target: int) -> list[lis
             singles.append([item])
     groups = [group for group in by_org.values()] + singles
     groups.sort(key=lambda g: max(i.total for i in g), reverse=True)
-    return groups[:target]
+    return groups
+
+
+def cut_to_target(groups: list[list[ScoredCandidate]], *, target: int) -> list[list[ScoredCandidate]]:
+    """Срезать заготовки до `target`, лучшие по максимальной оценке — впереди.
+
+    Пересортировка здесь не косметика: склейка судьи (`apply_judge_groups`)
+    успевает поменять число и состав заготовок между `group_candidates` и этим
+    срезом, и порядок, выставленный `group_candidates` до склейки, для нового
+    состава уже не действует.
+    """
+    ordered = sorted(groups, key=lambda g: max(i.total for i in g), reverse=True)
+    return ordered[:target]
+
+
+def group_for_cards(selected: list[ScoredCandidate], *, target: int) -> list[list[ScoredCandidate]]:
+    """Сгруппировать кандидатов в заготовки карточек и сразу срезать до `target`.
+
+    Композиция `group_candidates` + `cut_to_target` одним вызовом — для
+    очередей, где семантический судья дублей не участвует (конкурсная очередь
+    в `run_stages.py`) и группировка со срезом законно идут одним шагом.
+    """
+    return cut_to_target(group_candidates(selected), target=target)
 
 
 # ── 5а. Отбор карточек к публикации ─────────────────────────────────────────
