@@ -1,0 +1,86 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: "Д-6"
+  did:
+    - "Проба scripts/dedup_judge_probe.py (256 строк, вне поставки): дословные заголовки Э2-Г из evidence/E2G-З6-similarity.md (фарма 5, нефтегаз 6) с готовой ручной разметкой (фарма 3-4 дубль, 1-5 не дубль; нефтегаз группа 2-3-4-5 дубли, 1 и 6 контрольные недубли), точность считается по всем C(n,2) парам обоих наборов против промпта-судьи. Живой прогон НЕ делал (инвариант №7 для исполнителя) — только --dry-run, доказательство в evidence/E2Z-Д6-probe-dry-run.txt"
+    - "Промпт prompts/dedup_judge.md (версия 1.0): системная часть — правила семантического сравнения (номера, не переписывать тексты; предел размера группы против переклейки по теме — правило 6); метка {{CANDIDATES_LISTING}} в конце (кэш префикса), заполняется render_prompt. Запись в prompts/CHANGELOG.md"
+    - "tests/test_prompts.py: dedup_judge добавлен в EXPECTED_PLACEHOLDERS ({CANDIDATES_LISTING}) и в параметризацию test_prompt_has_error_section"
+    - "backend/app/pipeline/dedup_judge.py (229 строк, новый модуль, БЕЗ обращений к БД): judge_duplicate_groups(router, candidates) — один вызов модели (max_tokens=6000, замок test_stage_token_budgets проходит автоматически — он сканирует весь пакет app.pipeline), меньше 2 кандидатов — вызова нет; CostLimitExceededError пробрасывается нетронутым (стоп-кран РЕШ-45), любой другой отказ — деградация до None с логом. _sanitize — предел размера группы JUDGE_MAX_GROUP_SIZE=6 (половина лимита кандидатов 12) и защита от пересекающихся групп. apply_judge_groups — union-find по личности объекта кандидата: сливает заготовки group_for_cards, не задваивая кандидата в двух заготовках (наивная склейка через merge_duplicate_groups так делает — тест это ловит)"
+    - "backend/app/pipeline/run_stages.py: вызов судьи вставлен перед group_for_cards ОСНОВНОЙ очереди (после second_pass, до конкурсной ветки — она признаком не проверяется, +1 вызов на прогон, не +2); StageRecord 'dedup_judge' пишется только когда вызов реально состоялся (len(selected)>=2), поэтому однокандидатные сценарии существующих тестов не задеты"
+    - "backend/app/config.py: llm_stage_routes default += dedup_judge:deepseek"
+    - "tests/test_dedup_judge.py (18 тестов): judge_duplicate_groups — успех/пустой вердикт/отказ провайдера/кривой JSON/стоп-кран/лимит кандидатов; _sanitize — предел группы (мутация б), одиночка, номера вне диапазона, пересечение; apply_judge_groups — склейка без задваивания, пустой вердикт, кандидат вне заготовок; сквозной ScoutPipeline.run — вердикт доезжает до карточек, отказ не роняет прогон (мутация а), пустой вердикт карточек не меняет"
+    - "tests/test_dedup_judge_probe.py (12 тестов): разметка, all_pairs/judged_pairs/score, сухой прогон, живой прогон на FakeProvider (идеальный и отказавший)"
+    - "Существующие тесты, реально задетые новым вызовом (только там, где selected содержит >=2 кандидатов): tests/test_pipeline_second_pass.py::test_при_выключенном_пороге_прогон_совпадает_с_прежним (5→6 вызовов, стадия dedup_judge в списке журнала — судья отвечает мимо ScriptedProvider и честно деградирует, что и требовалось показать) и docstring-примечания в tests/test_contest_gate_and_order.py (без изменения проверяемого поведения — там selected схлопывается до одного кандидата отсечкой relevance_min, судья не вызывается)"
+  artifacts:
+    - backend/app/pipeline/dedup_judge.py
+    - backend/app/pipeline/run_stages.py
+    - backend/app/config.py
+    - prompts/dedup_judge.md
+    - prompts/CHANGELOG.md
+    - scripts/dedup_judge_probe.py
+    - tests/test_dedup_judge.py
+    - tests/test_dedup_judge_probe.py
+    - tests/test_prompts.py
+    - tests/test_pipeline_second_pass.py
+    - tests/test_contest_gate_and_order.py
+    - .planning/evidence/E2Z-Д6-prompt.md
+    - .planning/evidence/E2Z-Д6-pytest.txt
+    - .planning/evidence/E2Z-Д6-pytest-criteria.txt
+    - .planning/evidence/E2Z-Д6-ruff.txt
+    - .planning/evidence/E2Z-Д6-probe-dry-run.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_dedup_judge.py tests/test_dedup_judge_probe.py -v: 30 passed"
+    - "pytest -q: 822 passed, 0 failed (787 базовых + 35 новых/изменённых параметризаций)"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 145 files already formatted"
+    - "scripts/dedup_judge_probe.py --dry-run: печатает оба набора и разметку без единого вызова модели (см. evidence/E2Z-Д6-probe-dry-run.txt)"
+    - "мутация (а) вручную: except Exception → raise RuntimeError в judge_duplicate_groups — упали tests/test_dedup_judge.py::test_отказ_судьи_не_роняет_прогон, tests/test_pipeline_second_pass.py::test_при_выключенном_пороге_прогон_совпадает_с_прежним, tests/test_dedup_judge_probe.py::test_живой_прогон_отказ_судьи_не_роняет_пробу; правка отменена, diff пуст"
+    - "мутация (б) вручную: проверка JUDGE_MAX_GROUP_SIZE в _sanitize закомментирована — упал tests/test_dedup_judge.py::test_группа_больше_предела_отбрасывается; правка отменена"
+    - "мутация «вердикт судьи игнорируется» вручную: apply_judge_groups не вызывается в run_stages.py — упал tests/test_dedup_judge.py::test_вердикт_судьи_доезжает_до_карточек (3 карточки вместо 2); правка отменена"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача Д-6, волна Э2-З)
+    - .planning/evidence/E2G-З6-similarity.md (числа РЕШ-152, откуда разметка пробы)
+    - backend/app/pipeline/dedup_judge.py
+    - backend/app/pipeline/run_stages.py (вокруг "Семантический судья дублей")
+    - .planning/evidence/E2Z-Д6-prompt.md (текст промпта для визы владельца)
+    - tests/test_dedup_judge.py
+  notes: |
+    +1 вызов модели на прогон (стадия dedup_judge, маршрут dedup_judge:deepseek,
+    max_tokens=6000). Живой прогон пробы (~0,1–0,3 ₽ по оценке PLAN.md) НЕ
+    делал — это работа оркестратора (инвариант №7 для агента, явно оговорено
+    в постановке). Живого вызова судьи в проде тоже не делал: только
+    FakeProvider в тестах.
+
+    Дизайн-развилка, которую стоит явно проговорить на ревью: судья видит
+    `selected` (кандидатов ДО group_for_cards, как в постановке Д-6 «перед
+    группировкой»), но подключение в run_stages.py вызывает
+    group_for_cards() ПЕРВЫМ, а вердикт судьи применяется к его результату
+    через apply_judge_groups (union-find по личности кандидата) — а не
+    заменяет org-группировку целиком. Причина: буквальная замена (судья
+    решает ВСЁ, group_for_cards не вызывается) технически возможна, но я не
+    нашёл в постановке однозначного требования отказаться от
+    org-группировки, а объединение обоих сигналов (организация ИЛИ судья)
+    строго не хуже (уравнение "хотя бы один сигнал — дубль"), не теряет
+    покрытие merge_duplicate_groups и не требует трогать selection.py
+    (граница задачи: "скоринг/отбор не менять"). Если ревью сочтёт нужным
+    буквальную замену — это локальная правка внутри run_stages.py, тесты
+    apply_judge_groups не изменятся.
+
+    StageRecord "dedup_judge" появляется в журнале ТОЛЬКО когда вызов
+    реально произошёл (len(selected)>=2) — по тому же принципу, что и
+    строка contest_cards чуть ниже по файлу ("своя строка только когда
+    была причина её писать"). Это осознанный выбор: альтернатива (всегда
+    писать строку, включая "пропущено, кандидатов меньше двух") разошлась
+    бы с этим прецедентом и добавила бы вторую форму той же информации.
+
+    Сниппетов и организаций в evidence/E2G-З6-similarity.md нет (только
+    заголовки) — проба подаёт судье заголовки без вспомогательных полей,
+    это НАЗВАНО в докстроке скрипта как более трудный случай, чем в бою.
+
+    Файлы, тронутые за пределами исходного списка задачи (все —
+    консеквенциальные, не по инициативе): tests/test_pipeline_second_pass.py
+    и tests/test_contest_gate_and_order.py — оба уже перечислены в did/
+    artifacts выше с точным объяснением, почему и где именно.
