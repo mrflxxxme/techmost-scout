@@ -13,6 +13,7 @@ handoff:
     - "tests/test_secret_leak_guard.py: страж секретов расширен на путь cli._run/format_active_run_params (РЕШ-168) — два новых теста: (1) фиктивный DEEPSEEK_API_KEY не просачивается в caplog/stdout/stderr при реальном прогоне cli._run; (2) мутация — monkeypatch format_active_run_params, дописывающий значение ключа в строку параметров — показана и ловится стражем (pytest.raises(AssertionError) вокруг _assert_no_secrets)"
     - "backend/app/metrics.py: докстроки max_relevance и silent_sources_share честно называют потребителя — воротные измерения, в конвейере не участвуют"
     - "docs/remote-setup.md: строка SECOND_PASS_RELEVANCE_MAX перенесена из блока обязательных значений в абзац «переопределение при необходимости», по образцу RELEVANCE_MIN"
+    - "Цикл 2 (правка по ревью): tests/test_config.py — новый test_second_pass_relevance_max_умолчание_шесть, ровно критерий карточки Settings().second_pass_relevance_max == 6, рядом с test_маршруты_по_умолчанию_все_стадии_на_deepseek_резерв_yandex. Мутация показана: default=6 → default=0 в config.py — тест падает (assert 0 == 6), значение восстановлено, diff config.py после восстановления пуст"
   artifacts:
     - backend/app/config.py
     - backend/app/pipeline/summary.py
@@ -25,9 +26,11 @@ handoff:
     - tests/test_pipeline_second_pass.py
     - tests/test_contest_gate_and_order.py
     - tests/test_backend_layout.py
+    - tests/test_config.py
   self_audit: pass
   checks:
-    - "pytest -q: 760 passed, 0 failed (753 базовых + 7 новых)"
+    - "pytest tests/test_config.py -q: 11 passed (цикл 2)"
+    - "pytest -q: 761 passed, 0 failed (753 базовых + 8 новых)"
     - "pytest tests/test_cli_doctor_schema_guard.py -v: 5 passed"
     - "pytest tests/test_secret_leak_guard.py -v: 7 passed (2 новых по РЕШ-168)"
     - "pytest tests/test_stage_token_budgets.py -v: 4 passed"
@@ -55,8 +58,9 @@ handoff:
     материализовался — считаю это хорошей новостью, а не поводом для
     подозрений, но называю явно, как просили.
 
-    За границами явного списка файлов задачи тронуты два файла — оба
-    консequential, не по своей инициативе:
+    За границами явного списка файлов задачи тронуты три файла — все
+    консеквенциальные, не по своей инициативе (третий — tests/test_config.py,
+    добавлен в цикле 2 ровно под блокирующую находку ревью):
     (1) tests/test_backend_layout.py — рост cli.py на 52 строки от
     _schema_drift иначе ронял бы test_exceptions_do_not_grow_unnoticed;
     правка — только число в _EXCEPTIONS плюс комментарий с обоснованием, по
@@ -71,3 +75,17 @@ handoff:
 
     Живых платных вызовов не делал — scout doctor на реальном окружении не
     гонял (в копии нет .env и ключей), только на временных базах в тестах.
+
+    Цикл 2 (правка по ревью, .planning/evidence/E2Z-Д3-review.md, вердикт
+    ДОРАБОТАТЬ, 1 блокирующая находка): критерий карточки
+    «Settings().second_pass_relevance_max == 6 (тест)» не был закрыт прямой
+    проверкой — прежний тест на умолчание 0 задача переписала под явный
+    threshold, а замену не добавила. Добавлен tests/test_config.py::
+    test_second_pass_relevance_max_умолчание_шесть рядом с существующим
+    тестом умолчаний маршрутов. Мутация: default=6 → default=0 в config.py,
+    прогон tests/test_config.py::test_second_pass_relevance_max_умолчание_шесть
+    даёт `AssertionError: assert 0 == 6`, значение восстановлено обратно
+    (git diff backend/app/config.py после восстановления пуст). Совет ревью
+    (про _schema_drift на живой data/scout.db после слияния Д-1) не блокирует
+    и оставлен как есть — это ожидаемое следствие порядка слияния волны, не
+    дефект этой задачи.
