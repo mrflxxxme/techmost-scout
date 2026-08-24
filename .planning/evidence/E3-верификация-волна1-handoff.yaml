@@ -1,0 +1,41 @@
+handoff:
+  from: verifier
+  to: orchestrator
+  task: "волна1-Э3"
+  did:
+    - "Прогнаны все 30 критериев приёмки из PLAN.md для задач И-4…И-9"
+    - "Подтверждены инварианты №3, №4, №5, №6, №7, №8, №9 способами из INVARIANTS.md"
+    - "Проверено наличие всех файлов handoff и review для 6 задач"
+    - "Evidence файлы И-6 (маршруты) сверены содержательно: до и после идентичны"
+  artifacts:
+    - ".planning/evidence/E3-верификация-волна1.md"
+    - ".planning/evidence/E3-верификация-волна1-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest -q: 915 passed в 55.22s (волна 0 + волна 1 целиком)"
+    - "ruff check: All checks passed"
+    - "ruff format --check: 168 files already formatted"
+    - "pytest tests/test_cli_run.py: 22 passed (без правок файла)"
+    - "pytest tests/test_intake_flow.py: 6 passed (все сценарии)"
+    - "pytest tests/test_persistence.py: 38 passed (request_id логика)"
+    - "pytest tests/test_report_persistence.py tests/test_run_accounting.py: 16 passed (совместимость)"
+    - "pytest tests/test_web_auth.py: 5 passed (без правок)"
+    - "pytest tests/test_report_overrides.py: 11 passed (все случаи наложения)"
+    - "pytest tests/test_web_templates.py: 5 passed (стили и рендер)"
+    - "pytest tests/test_brief_store.py: 11 passed (read-write логика)"
+    - "pytest tests/test_prompts.py: 51 passed (placeholders нейтрализованы)"
+    - "grep -rE sk-|gigachat|Api-Key backend/ tests/: только тестовые значения и комментарии"
+    - "grep статус-литералы: пусто (успешно заменены на RequestStatus enum)"
+    - "wc -l: cli_run 301, intake_flow 327, persistence 295, persistence_write 329, report_overrides 66, brief_store 181, routes/* макс 60 (все < 500)"
+    - "E3-И6-routes-до.txt и E3-И6-routes-после.txt: идентичны (15 маршрутов)"
+    - "grep hex colors в шаблонах: пусто"
+    - "grep style= в шаблонах: только _stage_todo.html (удалится в И-10)"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (разделы И-4…И-9)"
+    - "docs/team/INVARIANTS.md (способы проверки)"
+    - ".planning/evidence/E3-верификация-волна1.md (полный отчёт)"
+  notes: |
+    Вердикт PASS для волны 1. Все 6 задач выполнены полностью. Волна 1 готова
+    к слиянию и старту волны 2. Нет открытых DLG, все инварианты подтверждены.
+    Таблица маршрутов волны 1 совпадает с контрактами PLAN.md.
