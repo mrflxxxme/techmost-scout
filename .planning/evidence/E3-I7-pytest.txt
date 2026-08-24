@@ -1,0 +1,53 @@
+=== pytest tests/test_report_overrides.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a3bb64463ccf711b0
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 10 items
+
+tests/test_report_overrides.py::test_empty_overrides_give_byte_identical_report PASSED [ 10%]
+tests/test_report_overrides.py::test_text_field_is_replaced PASSED       [ 20%]
+tests/test_report_overrides.py::test_original_report_is_not_mutated PASSED [ 30%]
+tests/test_report_overrides.py::test_contest_card_at_same_position_is_untouched PASSED [ 40%]
+tests/test_report_overrides.py::test_confidence_override_is_ignored PASSED [ 50%]
+tests/test_report_overrides.py::test_requirement_checks_and_unsourced_claims_override_is_ignored PASSED [ 60%]
+tests/test_report_overrides.py::test_evidence_removed_drops_exactly_one_row PASSED [ 70%]
+tests/test_report_overrides.py::test_cannot_add_evidence_via_override PASSED [ 80%]
+tests/test_report_overrides.py::test_all_editable_fields_are_applied PASSED [ 90%]
+tests/test_report_overrides.py::test_unknown_key_in_overrides_map_is_ignored PASSED [100%]
+
+============================== 10 passed in 0.03s ==============================
+
+=== pytest -q (полный набор) ===
+........................................................................ [  8%]
+........................................................................ [ 16%]
+........................................................................ [ 24%]
+........................................................................ [ 32%]
+........................................................................ [ 40%]
+........................................................................ [ 48%]
+........................................................................ [ 56%]
+........................................................................ [ 64%]
+........................................................................ [ 72%]
+........................................................................ [ 80%]
+........................................................................ [ 88%]
+........................................................................ [ 96%]
+..................................                                       [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+898 passed, 1 warning in 54.36s
+
+=== ruff check . ===
+All checks passed!
+
+=== ruff format --check . ===
+165 files already formatted
+
+=== grep -nE "sqlalchemy|app\.db|httpx" backend/app/report_overrides.py ===
+(совпадений нет — критерий 2 выполнен)
