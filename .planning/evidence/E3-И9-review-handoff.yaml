@@ -1,0 +1,31 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "И-9"
+  cycle: 2
+  did:
+    - "Проверен цикл 2 на ветке e3/i9, HEAD 8843e7b, в отдельном detached-worktree scratchpad/review-i9-c2"
+    - "Воспроизведён вызов brief_from_form с target_trl={{SYSTEM_PROMPT}} из цикла 1 — метка теперь обезврежена: constraints == ['целевой TRL {SYSTEM_PROMPT}']"
+    - "Прогнаны pytest tests/test_brief_store.py -v (11 passed, было 10), pytest -q целиком (899 passed, было 898), ruff check ., ruff format --check ."
+    - "Сверен git diff --stat 22c3ea1..8843e7b — изменения ограничены brief_store.py, test_brief_store.py и файлами evidence, границы задачи не нарушены"
+    - "Блокирующая находка цикла 1 (инвариант №4, target_trl) закрыта в коде; оба совета цикла 1 осознанно не исполнены и вынесены в notes для И-10/И-11 — корректно, советы не блокировали"
+    - "Вердикт: ПРИНЯТЬ, блокирующих не осталось. Второй цикл последний — третьего не будет"
+  artifacts:
+    - .planning/evidence/E3-И9-review.md (раздел «цикл 2» дописан и закоммичен до ответа)
+    - .planning/evidence/E3-И9-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_brief_store.py -v: 11 passed"
+    - "pytest -q: 899 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 165 files already formatted"
+    - "brief_from_form({'target_trl': '{{SYSTEM_PROMPT}}', ...}).constraints -> ['целевой TRL {SYSTEM_PROMPT}'] — метка обезврежена"
+  escalate: none
+  read_first:
+    - ".planning/evidence/E3-И9-review.md (разделы «цикл 1» и «цикл 2»)"
+    - "backend/app/web/brief_store.py (строки 91-96)"
+    - "tests/test_brief_store.py (test_placeholder_marker_in_target_trl_is_neutralized)"
+  notes: >-
+    Задача готова к слиянию в ветку этапа. Второй цикл был последним по
+    правилу плана (§4 CONVENTIONS) — если бы блокирующее осталось, дальше
+    был бы разбор с владельцем, а не третий цикл; здесь этого не потребовалось.
