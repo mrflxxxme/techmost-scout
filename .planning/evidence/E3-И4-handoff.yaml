@@ -1,0 +1,45 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: "И-4"
+  did:
+    - "Вынес сценарий интейка из cli_run.py в новый app/pipeline/intake_flow.py (РЕШ-184): три стадии — run_intake_stage (разбор текста с запасным брифом brief_from_raw_text + INTAKE_FALLBACK_CAVEAT на отказе), refine_brief_stage (сведение ответов владельца, черновик + owner_answers + REFINE_FALLBACK_CAVEAT на отказе), resolve_constraints_stage (обёртка над retry_constraints_if_missing)"
+    - "Модуль не печатает в консоль и не спрашивает оператора: вопросы задаёт вызывающий (cli_run.py — через typer.prompt), в модуль приходят готовые ответы (answers: dict), из модуля выходят Brief, список оговорок и текст warning для консоли/лога вызывающей стороны"
+    - "_persist_intake_stop и _intake_stage_record переехали в intake_flow.py целиком; статус стоп-крана заменён с литерала status='failed' на RequestStatus.FAILED (закрывает границу И-1)"
+    - "cli_run.py переведён на общий модуль: интерактивный typer.prompt-диалог и печать console.print остались в _run, вся логика отказов и стоп-кранов ушла в intake_flow"
+    - "Константы INTAKE_FALLBACK_CAVEAT, REFINE_FALLBACK_CAVEAT, STAGE_INTAKE, STAGE_INTAKE_REFINE реэкспортированы из cli_run.py (без повторного определения) — cli.py их не трогали, он их читает как атрибуты app.cli_run"
+    - "tests/test_cli_run.py не тронут ни одной правкой — доказательство, что вынос не изменил поведение CLI"
+    - "Новый tests/test_intake_flow.py — 6 тестов на модуль без CLI: отказ run_intake, отказ refine_brief, пустые ответы в refine_brief_stage, успешный путь без оговорок/warning, оба стоп-крана (CostLimitExceededError пробрасывается и оставляет строку failed в requests)"
+  artifacts:
+    - backend/app/pipeline/intake_flow.py
+    - backend/app/cli_run.py
+    - tests/test_intake_flow.py
+    - .planning/evidence/E3-И4-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_cli_run.py -v: 22 passed"
+    - "git diff --stat tests/test_cli_run.py: пусто"
+    - "pytest tests/test_intake_flow.py -v: 6 passed"
+    - "grep статус-литералов по backend/app: совпадений нет"
+    - "wc -l: cli_run.py 301, intake_flow.py 327 (оба ≤500)"
+    - "pytest tests/test_backend_layout.py -v: 3 passed"
+    - "pytest -q: 881 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 158 files already formatted"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел "### И-4")
+    - .planning/DECISIONS.md (РЕШ-184, РЕШ-143 п. 1-2)
+    - backend/app/pipeline/intake_flow.py
+    - backend/app/cli_run.py
+    - tests/test_intake_flow.py
+  notes: >
+    Рабочая копия была создана от устаревшей базы (последний коммит —
+    "Волна Э2-З влита"), пришлось переключиться на e3/i4 от коммита
+    8122125a6ee181e3dd843f9a03fc20ff1d2c8231 ("Волна 0 слита"), как указано в
+    постановке. cli.py не трогал (не в списке файлов задачи) — он по-прежнему
+    делает "from app.cli_run import (... INTAKE_FALLBACK_CAVEAT ...)", поэтому
+    константы в cli_run.py оставлены как импорт-реэкспорт из intake_flow, а не
+    продублированы. За границами задачи замечено: docstring cli.py (строки
+    7-17) всё ещё описывает "интейк до пайплайна" как код cli_run.py дословно —
+    актуализация не входила в файлы этой задачи, не правил.
