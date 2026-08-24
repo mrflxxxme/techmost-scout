@@ -92,6 +92,15 @@ def _clear_registry() -> None:
     run._active_runs.clear()
 
 
+@pytest.fixture(autouse=True)
+def _fresh_start_lock() -> None:
+    """`asyncio.Lock` привязывается к циклу событий первого использования
+    (`_get_loop`), а у pytest-asyncio цикл — свой на каждый тест: без
+    пересоздания второй тест падает `RuntimeError: bound to a different
+    event loop`, поймано прогоном конкурентных тестов ревью цикла 1."""
+    run._start_lock = asyncio.Lock()
+
+
 @pytest.fixture
 async def db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Временная база вместо `data/scout.db` (см. докстроку модуля)."""
@@ -249,3 +258,79 @@ async def test_hub_shows_cost_and_report_link_when_drafted(client, db):
     assert response.status_code == 200
     assert "12.34" in response.text or "12,34" in response.text
     assert f"/requests/{request_id}/report" in response.text
+
+
+async def test_hub_not_found_returns_html_not_json(client, db):
+    """Ревью цикла 1, находка 2: голый JSON `HTTPException` — не выход."""
+    response = await client.get("/requests/999999", auth=_AUTH)
+
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("text/html")
+    assert "не найден" in response.text.lower()
+
+
+def _slow_load_brief(delay: float):
+    """Обёртка над настоящим `brief_store.load_brief` с искусственной
+    задержкой — раздвигает окно гонки так, чтобы два конкурентных запроса
+    гарантированно оказались внутри него одновременно (ревью цикла 1,
+    находка 1), а не полагаться на удачное совпадение по времени."""
+    original = brief_store.load_brief
+
+    async def slow(session, request_id):
+        await asyncio.sleep(delay)
+        return await original(session, request_id)
+
+    return slow
+
+
+# ── Ревью цикла 1, находка 1: гонка двойного клика ───────────────────────────
+
+
+async def test_concurrent_double_click_same_request_runs_pipeline_once(client, db, monkeypatch: pytest.MonkeyPatch):
+    """Два одновременных POST /start на один request_id — пайплайн запущен
+    ровно один раз (замок атомарен, `_start_lock`)."""
+    request_id = await _make_request(db)
+    monkeypatch.setattr(brief_store, "load_brief", _slow_load_brief(0.05))
+
+    first, second = await asyncio.gather(
+        client.post(f"/requests/{request_id}/start", auth=_AUTH),
+        client.post(f"/requests/{request_id}/start", auth=_AUTH),
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert _FakePipeline.calls == 1
+    assert len(run._active_runs) == 1
+
+    _FakePipeline.gate.set()
+    await run._active_runs[request_id]
+
+    row = await _row_status(db, request_id)
+    assert row.status == RequestStatus.DRAFTED
+
+
+async def test_concurrent_start_different_requests_only_one_wins(client, db, monkeypatch: pytest.MonkeyPatch):
+    """Два разных запроса стартуют одновременно — активным остаётся ровно
+    один, второй отказывает по замку (РЕШ-147), а не проскакивает гонкой."""
+    first_id = await _make_request(db)
+    second_id = await _make_request(db)
+    monkeypatch.setattr(brief_store, "load_brief", _slow_load_brief(0.05))
+
+    first_response, second_response = await asyncio.gather(
+        client.post(f"/requests/{first_id}/start", auth=_AUTH),
+        client.post(f"/requests/{second_id}/start", auth=_AUTH),
+    )
+
+    statuses = sorted([first_response.status_code, second_response.status_code])
+    assert statuses == [200, 409]
+    assert _FakePipeline.calls == 1
+    assert len(run._active_runs) == 1
+
+    winner_id = first_id if first_response.status_code == 200 else second_id
+    loser_id = second_id if winner_id == first_id else first_id
+    loser_row = await _row_status(db, loser_id)
+    assert loser_row.status == RequestStatus.BRIEFING
+    assert loser_id not in run._active_runs
+
+    _FakePipeline.gate.set()
+    await run._active_runs[winner_id]

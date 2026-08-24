@@ -36,6 +36,16 @@ SPEC Э3-3, а не дефект).
 масштабе «десятки запросов в месяц» это не течёт ощутимо, но при появлении
 публичного метода очистки в `progress.py` (задача И-13 или отдельный долг)
 этот маршрут обязан его вызвать после `done`.
+
+Замок атомарен намеренно (ревью цикла 1, находка 1): проверка «активный
+прогон уже есть» и его регистрация в `_active_runs` разнесены двумя await'ами
+(`brief_store.load_brief`, `session.flush()`) — без общего примитива
+атомарности два одновременных `POST /start` (двойной клик по кнопке) успевали
+пройти проверку раньше, чем первый регистрировал свою задачу, и запускали
+пайплайн дважды. `_start_lock` держит всю критическую секцию «проверить и
+занять» одним куском: пока один запрос ждёт `load_brief`/`flush`, второй
+блокируется на входе в `async with` и видит уже зарегистрированную задачу
+первого, а не пустой реестр.
 """
 
 from __future__ import annotations
@@ -45,7 +55,7 @@ import json
 import logging
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -66,6 +76,11 @@ router = APIRouter()
 #: (РЕШ-147): непустой реестр значит «в системе уже идёт прогон».
 _active_runs: dict[int, asyncio.Task] = {}
 
+#: Атомарность «проверить замок и занять его» в `start_run` (ревью цикла 1,
+#: находка 1) — без него между проверкой и регистрацией задачи лежат два
+#: await'а, и двойной клик по кнопке запускает пайплайн дважды.
+_start_lock = asyncio.Lock()
+
 #: Не реже раза в 2 секунды (SPEC Э3-4). Вынесено константой модуля, а не
 #: литералом внутри маршрута, — тем же приёмом, что и параметр
 #: `keepalive_interval` у `ProgressBroker.subscribe` (И-2): тест подменяет имя
@@ -73,6 +88,7 @@ _active_runs: dict[int, asyncio.Task] = {}
 _KEEPALIVE_INTERVAL = 2.0
 
 #: Новые клиентские фразы этой задачи (см. handoff для визы владельца).
+REQUEST_NOT_FOUND = "Запрос №{request_id} не найден."
 REFUSAL_BRIEF_NOT_CONFIRMED = (
     "Бриф ещё не подтверждён. Вернитесь к шагу подтверждения и нажмите «Подтвердить и продолжить»."
 )
@@ -150,13 +166,19 @@ async def _run_pipeline(request_id: int, brief: Brief) -> None:
         broker_hook(stage, message, fraction)
 
     pipeline = ScoutPipeline(session_factory=session_scope, progress=hook)
+    failed = False
     try:
         await pipeline.run(brief, request_id=request_id)
     except Exception:
+        failed = True
         log.exception("прогон запроса №%s завершился отказом пайплайна", request_id)
     finally:
         if not state["done"]:
-            hook("done", "Прогон завершён.", 1.0)
+            # Пайплайн не прислал ни одного события (отказ до первого вызова
+            # хука) — живой лог обязан честно показать, что это был отказ, а
+            # не тихое завершение (ревью цикла 1, совет 2).
+            message = "Прогон завершился отказом." if failed else "Прогон завершён."
+            hook("done", message, 1.0)
         _active_runs.pop(request_id, None)
 
 
@@ -171,11 +193,14 @@ async def start_run(
     Контракт: без подтверждённого брифа — отказ человеческим текстом; тот же
     запрос при уже идущей своей задаче — фрагмент текущего прогресса без
     второго прогона; другой запрос при активном где-либо прогоне — отказ
-    (РЕШ-147, системный замок один на процесс).
+    (РЕШ-147, системный замок один на процесс). Проверка замка и его
+    регистрация — атомарны через `_start_lock` (ревью цикла 1, находка 1):
+    без этого два одновременных запроса (двойной клик) успевали пройти
+    проверку раньше, чем первый регистрировал свою задачу.
     """
     row = await session.get(RequestRow, request_id)
     if row is None:
-        return _notice(f"Запрос №{request_id} не найден.", status_code=404)
+        return _notice(REQUEST_NOT_FOUND.format(request_id=request_id), status_code=404)
 
     confirmed_at = (
         await session.execute(select(BriefRow.confirmed_at).where(BriefRow.request_id == request_id))
@@ -183,23 +208,27 @@ async def start_run(
     if confirmed_at is None:
         return _notice(REFUSAL_BRIEF_NOT_CONFIRMED, status_code=400)
 
-    _forget_finished_runs()
+    async with _start_lock:
+        _forget_finished_runs()
 
-    if request_id in _active_runs:
-        # Тот же запрос уже идёт — второй прогон не заводим, отдаём текущий
-        # прогресс тем же фрагментом, что и на старте (РЕШ-147).
-        return _progress_fragment(request, request_id)
+        if request_id in _active_runs:
+            # Тот же запрос уже идёт — второй прогон не заводим, отдаём
+            # текущий прогресс тем же фрагментом, что и на старте (РЕШ-147).
+            return _progress_fragment(request, request_id)
 
-    if _active_runs:
-        other_id = next(iter(_active_runs))
-        return _notice(REFUSAL_ANOTHER_RUN_ACTIVE.format(other_id=other_id), status_code=409)
+        if _active_runs:
+            other_id = next(iter(_active_runs))
+            return _notice(REFUSAL_ANOTHER_RUN_ACTIVE.format(other_id=other_id), status_code=409)
 
-    brief = await brief_store.load_brief(session, request_id)
-    row.status = RequestStatus.SEARCHING
-    await session.flush()
+        # Бриф грузится и статус пишется ВНУТРИ замка: пока эти await'ы не
+        # завершились, второй конкурентный запрос ждёт на входе в
+        # `async with` и не может проскочить с пустым реестром на руках.
+        brief = await brief_store.load_brief(session, request_id)
+        row.status = RequestStatus.SEARCHING
+        await session.flush()
 
-    task = asyncio.create_task(_run_pipeline(request_id, brief))
-    _active_runs[request_id] = task
+        task = asyncio.create_task(_run_pipeline(request_id, brief))
+        _active_runs[request_id] = task
 
     return _progress_fragment(request, request_id)
 
@@ -211,10 +240,17 @@ async def request_hub(
     session: AsyncSession = Depends(get_session),
 ) -> HTMLResponse:
     """Хаб запроса: бриф, живой прогресс или плашка прерванного прогона,
-    ссылка на отчёт при готовности, стоимость (РЕШ-189 п. 12)."""
+    ссылка на отчёт при готовности, стоимость (РЕШ-189 п. 12).
+
+    Несуществующий `request_id` отдаёт человекочитаемый HTML тем же способом,
+    что и `start_run` (`_notice`), а не голый JSON `HTTPException`: у маршрута
+    указан `response_class=HTMLResponse`, но это только метаданные OpenAPI —
+    `HTTPException` всё равно уходит в стандартный обработчик Starlette и
+    превращается в `application/json` (ревью цикла 1, находка 2).
+    """
     row = await session.get(RequestRow, request_id)
     if row is None:
-        raise HTTPException(status_code=404, detail=f"Запрос №{request_id} не найден")
+        return _notice(REQUEST_NOT_FOUND.format(request_id=request_id), status_code=404)
 
     brief = await brief_store.load_brief(session, request_id)
     confirmed_at = (
