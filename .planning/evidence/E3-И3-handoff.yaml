@@ -1,0 +1,36 @@
+handoff:
+  from: implementer-3
+  to: reviewer
+  task: "И-3"
+  did:
+    - "Реализован backend/app/anonymize.py: чистая синхронная функция find_deidentification_risks — регулярные выражения без вызова модели, без httpx"
+    - "Ловится юридическая форма (ООО, АО, ПАО, ЗАО, ОАО, НАО, ИП) рядом со словом с заглавной буквы или названием в кавычках-ёлочках, а также латинский CamelCase (например, AcmeCorp)"
+    - "Словарь известных брендов не заводился (РЕШ-189 п. 3)"
+    - "Починена висячая ссылка в backend/app/schemas.py:91 — докстрока теперь ссылается на существующий модуль app.anonymize"
+    - "Тесты tests/test_anonymize.py, 17 случаев (8 параметризованных позитивных + 9 отдельных, включая все требуемые негативные: пустой технический текст, спелл-аут «акционерное общество» посреди предложения, ГОСТ, TRL)"
+  artifacts:
+    - backend/app/anonymize.py
+    - tests/test_anonymize.py
+    - backend/app/schemas.py
+  self_audit: pass
+  checks:
+    - "pytest tests/test_anonymize.py -v: 17 passed"
+    - "grep -nE 'httpx|LLMRouter|async def' backend/app/anonymize.py: 0 совпадений"
+    - "grep -n anonymize backend/app/schemas.py: строка 91 ссылается на app.anonymize"
+    - "pytest -q: 853 passed, 1 warning"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 153 files already formatted"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «И-3»)
+    - docs/SPEC.md (FR-4, строки 544-546)
+    - .planning/DECISIONS.md (РЕШ-189 п. 1-3)
+    - backend/app/anonymize.py
+    - tests/test_anonymize.py
+  notes: >-
+    Текст предупреждения оператору здесь не сочинялся — это работа И-9/И-10;
+    функция только возвращает список найденных фрагментов. Ветка рабочей копии
+    e3/i3 создана поверх базового SHA ba86bf2f (переключением текущего
+    sandbox-worktree на новую ветку, а не отдельным git worktree add — внешний
+    worktree по пути .claude/worktrees/E3-I3 недоступен для записи из этой
+    сессии, поэтому использован тот же приём, что и у соседних потоков волны).

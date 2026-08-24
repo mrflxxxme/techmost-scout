@@ -1,0 +1,34 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "И-8"
+  did:
+    - "Проверен diff (255acae, 9d6056a) на ветке e3/i8 против PLAN.md, всех десяти инвариантов и граблей SPEC 0.1"
+    - "Прогнаны pytest tests/test_web_templates.py -v, pytest -q целиком, ruff check ., ruff format --check ., layout-стражи, test_team_docs.py"
+    - "Проверена мутация стража вручную (возврат style= в index.html:23) — тест падает с указанием файла и строки, правка откачена"
+    - "Сверены текст страниц (до/после — построчно идентичен), цветовые литералы (повторяют существующие .badge.low и .notice), список new_theme_classes из handoff — с фактическим theme.css"
+    - "Блокирующих находок нет, вердикт ПРИНЯТО; один совет — не блокирует"
+  artifacts:
+    - .planning/evidence/E3-И8-review.md (закоммичен до ответа)
+    - .planning/evidence/E3-И8-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_templates.py -v: 5 passed"
+    - "pytest -q: 893 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 164 files already formatted"
+    - "grep -rn \"style=\" backend/app/web/templates: только _stage_todo.html:2,:5"
+    - "grep -rnE \"#[0-9a-fA-F]{3,6}\" backend/app/web/templates: пусто"
+    - "grep -c \"^\\.\" theme.css: 73 (было 44)"
+    - "Мутация index.html:23 — 2 теста падают, ошибка называет файл и строку"
+  escalate: none
+  read_first:
+    - .planning/evidence/E3-И8-review.md
+    - .planning/PLAN.md (раздел И-8, строки 401-445)
+    - backend/app/web/static/theme.css
+  notes: >-
+    Цикл 1, вердикт ПРИНЯТО — второго цикла не требуется. Отдельно для
+    протокола: в PLAN.md строки 424-427 опечатка (ссылка на И-9 вместо
+    И-10 как задачу, снимающую исключение _stage_todo.html у стража) —
+    правка не блокирует И-8, комментарий в коде исполнителя ссылается на
+    И-10 верно, поправить PLAN.md стоит владельцу отдельно.

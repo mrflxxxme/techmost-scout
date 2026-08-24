@@ -1,0 +1,62 @@
+=== критерий 1: pytest tests/test_anonymize.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a5c643378ea64f82f
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 17 items
+
+tests/test_anonymize.py::test_finds_known_positive_cases[\u0417\u0430\u043a\u0430\u0437\u0447\u0438\u043a \u2014 \u041e\u041e\u041e \u0420\u043e\u043c\u0430\u0448\u043a\u0430, \u0438\u0449\u0435\u043c \u0440\u0435\u0448\u0435\u043d\u0438\u0435 \u043f\u043e \u043e\u0447\u0438\u0441\u0442\u043a\u0435 \u0432\u043e\u0434\u044b.-expected0] PASSED [  5%]
+tests/test_anonymize.py::test_finds_known_positive_cases[\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a \u2014 \u0410\u041e \xab\u0420\u043e\u043c\u0430\u0448\u043a\u0430\xbb, \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f \u043c\u043e\u0434\u0435\u0440\u043d\u0438\u0437\u0430\u0446\u0438\u044f \u043b\u0438\u043d\u0438\u0438.-expected1] PASSED [ 11%]
+tests/test_anonymize.py::test_finds_known_positive_cases[\u041f\u0430\u0440\u0442\u043d\u0451\u0440 \u043f\u0440\u043e\u0435\u043a\u0442\u0430 \u2014 \u041f\u0410\u041e \u0413\u0430\u0437\u043f\u0440\u043e\u043c, \u043d\u0435\u0444\u0442\u0435\u043f\u0435\u0440\u0435\u0440\u0430\u0431\u043e\u0442\u043a\u0430.-expected2] PASSED [ 17%]
+tests/test_anonymize.py::test_finds_known_positive_cases[\u041f\u043e\u0434\u0440\u044f\u0434\u0447\u0438\u043a \u0417\u0410\u041e \u0412\u044b\u043c\u043f\u0435\u043b \u0433\u043e\u0442\u043e\u0432 \u043a \u043f\u0438\u043b\u043e\u0442\u0443.-expected3] PASSED [ 23%]
+tests/test_anonymize.py::test_finds_known_positive_cases[\u0420\u0430\u0431\u043e\u0442\u044b \u0432\u0435\u0434\u0451\u0442 \u041e\u0410\u041e \u0418\u0436\u0441\u0442\u0430\u043b\u044c \u0441\u043e\u0432\u043c\u0435\u0441\u0442\u043d\u043e \u0441 \u0438\u043d\u0441\u0442\u0438\u0442\u0443\u0442\u043e\u043c.-expected4] PASSED [ 29%]
+tests/test_anonymize.py::test_finds_known_positive_cases[\u0423\u0447\u0440\u0435\u0434\u0438\u0442\u0435\u043b\u044c \u2014 \u041d\u0410\u041e \u0421\u0438\u043d\u0442\u0435\u0437, \u0438\u0441\u043f\u044b\u0442\u0430\u043d\u0438\u044f \u043d\u0430 \u043f\u043b\u043e\u0449\u0430\u0434\u043a\u0435.-expected5] PASSED [ 35%]
+tests/test_anonymize.py::test_finds_known_positive_cases[\u0417\u0430\u043a\u0430\u0437\u0447\u0438\u043a \u2014 \u0418\u041f \u041a\u0443\u0437\u043d\u0435\u0446\u043e\u0432, \u043c\u0430\u043b\u043e\u0435 \u043f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0441\u0442\u0432\u043e.-expected6] PASSED [ 41%]
+tests/test_anonymize.py::test_finds_known_positive_cases[\u0422\u0435\u0445\u043d\u043e\u043b\u043e\u0433\u0438\u044e \u043f\u0440\u0435\u0434\u043b\u0430\u0433\u0430\u0435\u0442 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u044f AcmeCorp, \u0421\u0428\u0410.-expected7] PASSED [ 47%]
+tests/test_anonymize.py::test_plain_technical_text_gives_empty_list PASSED [ 52%]
+tests/test_anonymize.py::test_spelled_out_legal_form_in_the_middle_of_sentence_is_not_a_false_positive PASSED [ 58%]
+tests/test_anonymize.py::test_gost_abbreviation_is_not_caught PASSED     [ 64%]
+tests/test_anonymize.py::test_trl_abbreviation_is_not_caught PASSED      [ 70%]
+tests/test_anonymize.py::test_legal_form_without_capitalized_word_after_is_not_caught PASSED [ 76%]
+tests/test_anonymize.py::test_empty_text_gives_empty_list PASSED         [ 82%]
+tests/test_anonymize.py::test_deduplicates_repeated_mentions_preserving_order PASSED [ 88%]
+tests/test_anonymize.py::test_multiple_distinct_entities_are_returned_in_order_of_appearance PASSED [ 94%]
+tests/test_anonymize.py::test_lowercase_latin_word_is_not_camel_case PASSED [100%]
+
+============================== 17 passed in 0.03s ==============================
+
+=== критерий 2: grep httpx/LLMRouter/async def в anonymize.py (ожидается пусто) ===
+(строк найдено: 0)
+
+=== критерий 3: grep anonymize в schemas.py ===
+91:    Обезличена: названия компаний-заказчиков сюда не попадают (см. app.anonymize).
+
+=== критерий 4: pytest целиком ===
+........................................................................ [  8%]
+........................................................................ [ 16%]
+........................................................................ [ 25%]
+........................................................................ [ 33%]
+........................................................................ [ 42%]
+........................................................................ [ 50%]
+........................................................................ [ 59%]
+........................................................................ [ 67%]
+........................................................................ [ 75%]
+........................................................................ [ 84%]
+........................................................................ [ 92%]
+.............................................................            [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+853 passed, 1 warning in 53.52s
+
+=== критерий 4: ruff check ===
+All checks passed!
+
+=== критерий 4: ruff format --check ===
+153 files already formatted

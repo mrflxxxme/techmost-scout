@@ -20,7 +20,7 @@
         Пишите обезличенно: без названия компании и данных под соглашением о конфиденциальности —
         только техническая суть. Текст задачи уходит во внешнюю языковую модель.
       </p>
-      <div style="margin-top:20px">
+      <div class="mt-lg">
         <button class="btn" type="submit">
           Начать подбор <span class="dot">→</span>
         </button>
@@ -34,7 +34,7 @@
 {% if recent %}
 <h2>Последние запросы</h2>
 <div class="bezel">
-  <div class="core" style="padding:0">
+  <div class="core flush">
     <table>
       <thead>
         <tr><th>№</th><th>Задача</th><th>Статус</th><th>Стоимость</th></tr>
@@ -44,7 +44,7 @@
         <tr>
           <td>{{ row.id }}</td>
           <td>{{ row.raw_text[:110] }}{% if row.raw_text|length > 110 %}…{% endif %}</td>
-          <td><span class="badge{% if row.status == 'validated' %} ok{% elif row.status == 'failed' %} low{% endif %}">{{ row.status }}</span></td>
+          <td><span class="badge{% if row.status == 'validated' %} ok{% elif row.status == 'failed' %} low{% endif %}">{{ row.status_label }}</span></td>
           <td class="muted">{{ "%.2f"|format(row.cost_rub) }} ₽</td>
         </tr>
         {% endfor %}

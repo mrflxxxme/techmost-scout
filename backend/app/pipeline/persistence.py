@@ -1,29 +1,19 @@
-"""Запись прогона в БД: запросы, брифы, план поиска, кандидаты с оценками,
-карточки, журнал стадий (Ф-8, РЕШ-40, РЕШ-83, РЕШ-84, РЕШ-146/156).
+"""Чтение прогонов из БД и типы записей журнала: план поиска, отчёт, история
+прошлых прогонов, кандидаты с оценками (Ф-8, РЕШ-40, РЕШ-83, РЕШ-84,
+РЕШ-146/156).
 
-Шесть таблиц из восьми существующих в `app.models`: `requests`, `briefs`,
-`search_plans`, `candidates`, `solution_cards`, `pipeline_logs` — и сам отчёт
-целиком, дампом в `requests.report_json`. Вердикты и витрина партнёров —
-задача этапа 3–4, им запись здесь не нужна.
-
-Кандидаты с оценками добавлены сюда в Т-20 (РЕШ-84): оценки скоринга жили
-только в строке журнала калибровки, то есть умирали вместе с прогоном, и
-числовой критерий приёмки подэтапа (РЕШ-86) подтвердить было нечем. Считают по
-этим строкам чистые функции `app.metrics`.
-
-План поиска добавлен сюда же (РЕШ-83): пока он строится моделью заново каждый
-раз, эффект правок поиска неотличим от разброса между прогонами. Обратная
-операция — `load_search_plan`: прогон по сохранённому плану (`scout run
---plan-id N`) не зовёт планировщик вовсе.
+Сама запись (`persist_run`) — в соседнем `persistence_write.py` (задача И-5):
+файл дробится на чтение и запись, потому что правка записи под обновление
+существующей строки `requests` (РЕШ-145, долг DLG-3) перевалила лимит 500
+строк CLAUDE.md. Здесь остаются типы записей журнала (`StageRecord`,
+`PlanRecord`, `CandidateRecord`) и три операции чтения: `load_search_plan`,
+`load_report`, `load_history_pool` — `persistence_write.py` берёт типы отсюда
+же, а `persist_run` реэкспортирован в конце файла, чтобы существующий импорт
+`from app.pipeline.persistence import persist_run` не заметил дробления.
 
 Работа с базой живёт вне стадий (CLAUDE.md, `docs/team/CONVENTIONS.md`):
 стадии остаются чистыми функциями, а запись вызывает только оркестратор через
 переданную фабрику сессий — той же формы, что и `app.db.session_scope`.
-
-Ценность прогона выше ценности строки в таблице: любой отказ записи (файла
-базы нет, файл занят другим процессом) не должен ронять прогон — markdown-
-отчёт первичен. Поэтому `persist_run` сама гасит исключения записи и кладёт
-факт отказа в лог, а не пробрасывает его наружу.
 
 Миграций в MVP нет (`init_db` — это `create_all`): новые колонки появляются
 только на вновь созданном файле базы, существующий файл нужно пересоздать.
@@ -41,14 +31,12 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Brief as BriefRow
 from app.models import Candidate as CandidateRow
-from app.models import PipelineLog as PipelineLogRow
 from app.models import Request as RequestRow
+from app.models import RequestStatus
 from app.models import SearchPlan as SearchPlanRow
-from app.models import SolutionCard as SolutionCardRow
 from app.pipeline.history import HistoryPool, HistoryRow, build_history_pool, normalize_task_text
-from app.schemas import Brief, Candidate, Report, SearchPlan, SolutionCard
+from app.schemas import Candidate, Report, SearchPlan
 
 log = logging.getLogger(__name__)
 
@@ -237,7 +225,7 @@ async def load_history_pool(
     текста (оператор указал его руками, потому что задачу пересказали другими
     словами и автоматическое опознание не сработает), иначе — совпадение
     нормализованного текста среди прогонов, не закончившихся отказом
-    (`status != "failed"` — из упавшего прогона брать нечего, кроме случайных
+    (`status != RequestStatus.FAILED` — из упавшего прогона брать нечего, кроме случайных
     строк с середины). Без фабрики сессий и без единого совпадения возвращается
     пустой пул, а не исключение — это тот же обычный случай, что и «БД не
     настроена» у `persist_run`, а не отказ.
@@ -254,7 +242,7 @@ async def load_history_pool(
             else:
                 target = normalize_task_text(raw_text)
                 found = await session.execute(
-                    select(RequestRow.id, RequestRow.raw_text).where(RequestRow.status != "failed")
+                    select(RequestRow.id, RequestRow.raw_text).where(RequestRow.status != RequestStatus.FAILED)
                 )
                 request_ids = [rid for rid, text in found.all() if normalize_task_text(text) == target]
             if not request_ids:
@@ -282,215 +270,26 @@ async def load_history_pool(
     return build_history_pool(history_rows)
 
 
-async def persist_run(
-    session_factory: SessionFactory | None,
-    *,
-    raw_text: str,
-    status: str,
-    cost_rub: float,
-    cards: list[SolutionCard],
-    contest_cards: list[SolutionCard],
-    stages: list[StageRecord],
-    plans: list[PlanRecord] | None = None,
-    candidates: list[CandidateRecord] | None = None,
-    error: str | None = None,
-    brief: Brief | None = None,
-    report: Report | None = None,
-) -> int | None:
-    """Записать прогон одной транзакцией: запрос, кандидаты, карточки, журнал стадий.
+# Запись прогона (`persist_run`) живёт в `persistence_write.py` (задача И-5,
+# долг DLG-3 грилла РЕШ-145/189): правка под `request_id` перевалила лимит
+# 500 строк CLAUDE.md, а чтение (выше) и типы записей (`StageRecord`,
+# `PlanRecord`, `CandidateRecord`) остались здесь. Импорт — намеренно ПОСЛЕ
+# всех определений модуля: `persistence_write.py` берёт типы записей и
+# `SessionFactory` отсюда же (`from app.pipeline.persistence import …`), и на
+# момент этого импорта они уже существуют как атрибуты модуля — обычный
+# приём разрыва циклического импорта между файлом чтения и файлом записи.
+from app.pipeline.persistence_write import persist_run  # noqa: E402
 
-    Возвращает `requests.id` записанной строки — оркестратор ставит его в
-    `Report.request_id`, и экспорт печатает «Запрос №N» вместо прочерка (Т-7).
-    До этого номер прогона существовал только в БД, и связать выданный клиенту
-    отчёт со строкой журнала было нечем.
-
-    `contest_cards` — карточки секции «Ранние разработки и команды» (РЕШ-85
-    п. 1). Аргумент **обязательный**, без умолчания, по тому же уроку, что и
-    журналы проходов (РЕШ-89): умолчание сделало бы потерю целой секции
-    незаметной для тестов, а это ровно тот класс дефекта, ради которого
-    заведена Т-33. В базе секции различаются колонкой `solution_cards.is_contest`.
-
-    `brief` — структурированная постановка задачи (РЕШ-146/156): строка
-    `briefs` пишется на КАЖДОМ прогоне, где бриф уже собран, — успешном и
-    упавшем на любой стадии после интейка, — а не только на успешном. Таблица
-    была мертва (РЕШ-156), ничего в неё не писало ни разу; ответы оператора
-    (`Brief.owner_answers`) пусты в авто-режиме, но строка всё равно есть.
-
-    `report` — готовый отчёт (РЕШ-146): дампится в `requests.report_json`
-    целиком через `Report.model_dump_json()`. Передаётся только на успешном
-    прогоне (на отказе стадии отчёта ещё не существует). `report.request_id`
-    на момент вызова ещё не исправлен на настоящий номер — `_write` кладёт в
-    базу копию с уже подставленным `request_id`, а сам переданный объект не
-    трогает: вызывающий код (`run_flow.ScoutPipeline.run`) сам присваивает
-    `report.request_id` после этого вызова.
-
-    Фабрика не передана (тесты, веб до Э3) — запись не выполняется, прогон не
-    меняется ни на шаг, номера нет: возвращается `None`. Любой отказ самой
-    записи (открытия сессии, вставки) гасится и уходит в лог, наружу тоже
-    уходит `None`: он не должен уничтожить уже готовый отчёт (инвариант №5 в
-    редакции РЕШ-43 — отказ не роняет прогон, но и не выдаётся за успех).
-    """
-    if session_factory is None:
-        return None
-    try:
-        async with session_factory() as session:
-            return await _write(
-                session,
-                raw_text=raw_text,
-                status=status,
-                cost_rub=cost_rub,
-                cards=cards,
-                contest_cards=contest_cards,
-                stages=stages,
-                plans=plans or [],
-                candidates=candidates or [],
-                error=error,
-                brief=brief,
-                report=report,
-            )
-    except Exception:
-        log.warning("запись прогона в БД не удалась — отчёт сохранён без неё", exc_info=True)
-        return None
-
-
-async def _write(
-    session: AsyncSession,
-    *,
-    raw_text: str,
-    status: str,
-    cost_rub: float,
-    cards: list[SolutionCard],
-    contest_cards: list[SolutionCard],
-    stages: list[StageRecord],
-    plans: list[PlanRecord],
-    candidates: list[CandidateRecord],
-    error: str | None,
-    brief: Brief | None = None,
-    report: Report | None = None,
-) -> int:
-    request_row = RequestRow(raw_text=raw_text, status=status, cost_rub=cost_rub, error=error)
-    session.add(request_row)
-    await session.flush()  # нужен id запроса для внешних ключей карточек и журнала
-    # Снимаем номер сразу значением: после выхода из `session_scope` сессия
-    # закрыта, и обращение к атрибуту ORM-объекта уже полезло бы в базу.
-    request_id = int(request_row.id)
-
-    if report is not None:
-        # Копия с исправленным request_id, а не мутация переданного объекта:
-        # на момент этого вызова `report.request_id` у вызывающего кода ещё
-        # нулевой (номер появляется только сейчас) — в базу должен попасть
-        # отчёт с настоящим номером, а не с нулём (см. докстроку persist_run).
-        request_row.report_json = report.model_copy(update={"request_id": request_id}).model_dump_json()
-
-    if brief is not None:
-        # Бриф пишется независимо от report: он существует уже к моменту
-        # отказа любой стадии после интейка, а отчёт — только на успехе.
-        session.add(
-            BriefRow(
-                request_id=request_id,
-                industry=brief.industry,
-                task_summary=brief.task_summary,
-                constraints=list(brief.constraints),
-                owner_answers=[item.model_dump(mode="json") for item in brief.owner_answers],
-                target_maturity=brief.target_maturity.value if brief.target_maturity is not None else None,
-                geography=brief.geography,
-                budget_hint=brief.budget_hint,
-                timeline_hint=brief.timeline_hint,
-                keywords_ru=list(brief.keywords_ru),
-                keywords_en=list(brief.keywords_en),
-            )
-        )
-
-    # План поиска — в той же транзакции, что и строка запроса (РЕШ-83): план,
-    # записанный отдельно от прогона, не с чем сопоставить.
-    for record in plans:
-        session.add(
-            SearchPlanRow(
-                request_id=request_id,
-                pass_no=record.pass_no,
-                queries=record.plan.model_dump(mode="json"),
-            )
-        )
-
-    # Кандидаты с оценками — той же транзакцией (РЕШ-84). Пишутся все, кто дошёл
-    # до скоринга, а не только отобранные: сравнивать прогоны между собой можно
-    # лишь по полной выдаче, отобранные же и так видны в карточках.
-    for record in candidates:
-        session.add(
-            CandidateRow(
-                request_id=request_id,
-                pass_no=record.pass_no,
-                source_type=record.candidate.source_type.value,
-                provider=record.candidate.provider,
-                title=record.candidate.title,
-                url=str(record.candidate.url),
-                org=record.candidate.org,
-                authors=list(record.candidate.authors),
-                year=record.candidate.year,
-                snippet=record.candidate.snippet,
-                raw_id=record.candidate.raw_id,
-                dedup_key=record.candidate.dedup_key(),
-                score=dict(record.score),
-                status=record.status,
-            )
-        )
-
-    # Обе секции отчёта ложатся в одну таблицу и различаются колонкой
-    # `is_contest` (РЕШ-92, критерий 3). Нумерация позиций своя у каждой секции:
-    # `position` повторяет порядковый номер карточки в отчёте, а конкурсные там
-    # нумеруются заново, с единицы.
-    for position, card in enumerate(cards):
-        session.add(_card_row(request_id, position, card, is_contest=False))
-    for position, card in enumerate(contest_cards):
-        session.add(_card_row(request_id, position, card, is_contest=True))
-
-    for record in stages:
-        session.add(
-            PipelineLogRow(
-                request_id=request_id,
-                pass_no=record.pass_no,
-                stage=record.stage,
-                started_at=record.started_at,
-                finished_at=record.finished_at,
-                provider=record.provider,
-                cost_rub=record.cost_rub,
-                sources_hit=dict(record.sources_hit),
-                error=record.error,
-            )
-        )
-
-    return request_id
-
-
-def _card_row(request_id: int, position: int, card: SolutionCard, *, is_contest: bool) -> SolutionCardRow:
-    """Строка `solution_cards` из карточки. Тело общее для обеих секций.
-
-    Общее сознательно: отдельная сборка строки для конкурсной секции — тот
-    самый путь, которым однажды разошлись бы состав полей отчёта и состав полей
-    базы, и карточка в базе снова стала бы «увереннее» своей markdown-версии
-    (урок Т-5). Секция задаётся одним флагом, а не своим набором полей.
-    """
-    return SolutionCardRow(
-        request_id=request_id,
-        position=position,
-        is_contest=is_contest,
-        title=card.title,
-        essence=card.essence,
-        maturity_stage=card.maturity_stage.value,
-        trl_estimate=card.trl_estimate,
-        ip_status=card.ip_status.value,
-        developer_org=card.developer_org,
-        developer_team=card.developer_team,
-        contact_leads=list(card.contact_leads),
-        evidence=[item.model_dump(mode="json") for item in card.evidence],
-        applicability=card.applicability,
-        risks=list(card.risks),
-        gov_support=[item.model_dump(mode="json") for item in card.gov_support],
-        next_step=card.next_step,
-        confidence=card.confidence.value,
-        confidence_note=card.confidence_note,
-        candidate_urls=[str(url) for url in card.candidate_urls],
-        requirement_checks=[check.model_dump(mode="json") for check in card.requirement_checks],
-        unsourced_claims=list(card.unsourced_claims),
-        pdf_urls=[str(url) for url in card.pdf_urls],
-    )
+__all__ = [
+    "CandidateRecord",
+    "HistoryReadError",
+    "PlanRecord",
+    "ReportNotFoundError",
+    "SearchPlanNotFoundError",
+    "SessionFactory",
+    "StageRecord",
+    "load_history_pool",
+    "load_report",
+    "load_search_plan",
+    "persist_run",
+]

@@ -1,0 +1,58 @@
+Задача Э3-И14 · Документы этапа
+Ветка: e3/i14, база: 9bac42520a45e9ba61234079ed0cfa0b1c333305
+
+== Критерий 1: grep -n "растут записи" docs/SPEC.md ==
+(пусто — совпадений нет)
+
+== Критерий 2: grep -n "web/routes.py" docs/SPEC.md ==
+(пусто — совпадений нет)
+
+== Критерий 3: git diff --stat ==
+ docs/SPEC.md | 39 +++++++++++++++++++++++++++------------
+ 1 file changed, 27 insertions(+), 12 deletions(-)
+
+== Критерий 4а: pytest tests/test_team_docs.py -v ==
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0
+collecting ... collected 35 items
+...
+============================== 35 passed in 0.10s ==============================
+
+== Критерий 4б: pytest -q (полный прогон) ==
+960 passed, 1 warning in 60.26s (0:01:00)
+
+== ruff check . ==
+All checks passed!
+
+== ruff format --check . ==
+173 files already formatted
+
+== Цикл 2 (доработка по ревью, блокирующая находка: битая ссылка «см.
+намётку ниже») ==
+
+Правки: убрана фраза «(см. намётку ниже)» из четырёх пометок готовности
+(строки 533, 564, 583, 605 до доработки); совет 1 — путь
+`app/pipeline/intake_flow.py` приведён к `backend/app/pipeline/intake_flow.py`
+(строка 536); совет 2 — Э4-1 переведена на нейтральный `backend/app/web/routes/`
+вместо конкретного `routes/report.py` (строка 631), по аналогии с Э4-3.
+
+== grep -n "растут записи" docs/SPEC.md ==
+(пусто — совпадений нет)
+
+== grep -n "web/routes.py" docs/SPEC.md ==
+(пусто — совпадений нет)
+
+== grep -n "намётку ниже" docs/SPEC.md ==
+(пусто — совпадений нет)
+
+== pytest tests/test_team_docs.py -v ==
+35 passed in 0.09s
+
+== pytest -q (полный прогон) ==
+960 passed, 1 warning in 59.64s
+
+== ruff check . ==
+All checks passed!
+
+== ruff format --check . ==
+173 files already formatted

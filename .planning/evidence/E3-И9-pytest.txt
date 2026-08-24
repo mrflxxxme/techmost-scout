@@ -1,0 +1,158 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a676f786930788944
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 10 items
+
+tests/test_brief_store.py::test_save_and_load_round_trip_equal_brief PASSED [ 10%]
+tests/test_brief_store.py::test_repeated_save_updates_same_row_not_duplicate PASSED [ 20%]
+tests/test_brief_store.py::test_confirmed_true_sets_confirmed_at PASSED  [ 30%]
+tests/test_brief_store.py::test_confirmed_false_leaves_confirmed_at_null PASSED [ 40%]
+tests/test_brief_store.py::test_trl_from_form_appears_as_string_in_constraints PASSED [ 50%]
+tests/test_brief_store.py::test_empty_trl_does_not_add_constraint_line PASSED [ 60%]
+tests/test_brief_store.py::test_placeholder_marker_is_neutralized_in_every_field PASSED [ 70%]
+tests/test_brief_store.py::test_load_brief_returns_none_when_absent PASSED [ 80%]
+tests/test_brief_store.py::test_form_list_field_accepts_both_string_and_list PASSED [ 90%]
+tests/test_brief_store.py::test_brief_from_form_with_minimal_fields PASSED [100%]
+
+============================== 10 passed in 0.58s ==============================
+
+=== pytest tests/test_persistence.py -v (критерий 3) ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a676f786930788944
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 38 items
+
+tests/test_persistence.py::test_successful_run_persists_request_card_and_search_log PASSED [  2%]
+tests/test_persistence.py::test_successful_run_persists_report_json_and_brief_row PASSED [  5%]
+tests/test_persistence.py::test_new_card_fields_persist_without_loss PASSED [  7%]
+tests/test_persistence.py::test_card_without_new_fields_persists_empty_lists_not_null PASSED [ 10%]
+tests/test_persistence.py::test_new_columns_default_to_empty_list_on_bare_insert PASSED [ 13%]
+tests/test_persistence.py::test_without_factory_pipeline_runs_and_writes_nothing PASSED [ 15%]
+tests/test_persistence.py::test_broken_factory_does_not_crash_run PASSED [ 18%]
+tests/test_persistence.py::test_persist_run_returns_id_of_written_request PASSED [ 21%]
+tests/test_persistence.py::test_persist_run_returns_none_when_write_fails PASSED [ 23%]
+tests/test_persistence.py::test_persist_run_returns_none_without_factory PASSED [ 26%]
+tests/test_persistence.py::test_run_puts_persisted_id_into_report PASSED [ 28%]
+tests/test_persistence.py::test_run_keeps_zero_request_id_when_write_fails PASSED [ 31%]
+tests/test_persistence.py::test_pipeline_failure_persists_failed_status_and_error PASSED [ 34%]
+tests/test_persistence.py::test_pipeline_failure_persists_brief_row_via_real_run PASSED [ 36%]
+tests/test_persistence.py::test_cost_limit_exceeded_during_scoring_raises_and_persists_failed PASSED [ 39%]
+tests/test_persistence.py::test_cost_limit_exceeded_during_card_authoring_raises_and_persists_failed PASSED [ 42%]
+tests/test_persistence.py::test_cost_limit_exceeded_during_summary_raises_and_persists_failed PASSED [ 44%]
+tests/test_persistence.py::test_search_plan_round_trips_through_db_without_loss PASSED [ 47%]
+tests/test_persistence.py::test_successful_run_persists_exactly_one_plan_row PASSED [ 50%]
+tests/test_persistence.py::test_two_passes_persist_two_rows_with_their_own_pass_no PASSED [ 52%]
+tests/test_persistence.py::test_run_with_preset_plan_does_not_call_planner_and_logs_zero_cost PASSED [ 55%]
+tests/test_persistence.py::test_normalize_contest_queries_план_на_потолке_переживает_search_plans_и_load_search_plan PASSED [ 57%]
+tests/test_persistence.py::test_load_search_plan_returns_saved_plan PASSED [ 60%]
+tests/test_persistence.py::test_load_search_plan_raises_on_unknown_id PASSED [ 63%]
+tests/test_persistence.py::test_load_search_plan_raises_on_unreadable_row PASSED [ 65%]
+tests/test_persistence.py::test_load_search_plan_raises_without_factory PASSED [ 68%]
+tests/test_persistence.py::test_run_persists_one_candidate_row_per_deduplicated_candidate PASSED [ 71%]
+tests/test_persistence.py::test_failed_scoring_batch_is_marked_neutral_in_saved_scores PASSED [ 73%]
+tests/test_persistence.py::test_candidate_rows_survive_run_without_session_factory PASSED [ 76%]
+tests/test_persistence.py::test_failed_run_keeps_scores_collected_before_the_failure PASSED [ 78%]
+tests/test_persistence.py::test_load_search_plan_raises_when_database_is_broken PASSED [ 81%]
+tests/test_persistence.py::test_persist_run_with_request_id_updates_existing_row_without_second_insert PASSED [ 84%]
+tests/test_persistence.py::test_persist_run_with_request_id_updates_report_json PASSED [ 86%]
+tests/test_persistence.py::test_persist_run_with_request_id_does_not_duplicate_cards PASSED [ 89%]
+tests/test_persistence.py::test_persist_run_with_request_id_updates_brief_without_unique_violation PASSED [ 92%]
+tests/test_persistence.py::test_persist_run_without_request_id_still_creates_new_row_each_time PASSED [ 94%]
+tests/test_persistence.py::test_persist_run_with_unknown_request_id_falls_back_to_insert PASSED [ 97%]
+tests/test_persistence.py::test_run_failure_with_request_id_updates_same_row_to_failed PASSED [100%]
+
+============================== 38 passed in 2.94s ==============================
+
+=== grep -in trl backend/app/models.py (критерий 2) ===
+215:    trl_estimate: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+=== pytest -q (полный набор) ===
+........................................................................ [  8%]
+........................................................................ [ 16%]
+........................................................................ [ 24%]
+........................................................................ [ 32%]
+........................................................................ [ 40%]
+........................................................................ [ 48%]
+........................................................................ [ 56%]
+........................................................................ [ 64%]
+........................................................................ [ 72%]
+........................................................................ [ 80%]
+........................................................................ [ 88%]
+........................................................................ [ 96%]
+..................................                                       [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+898 passed, 1 warning in 56.67s
+
+=== ruff check . ===
+All checks passed!
+
+=== ruff format --check . ===
+165 files already formatted
+
+
+========================================
+=== ЦИКЛ 2 (правка блокирующего замечания ревью: target_trl через _clean) ===
+========================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a676f786930788944
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 11 items
+
+tests/test_brief_store.py::test_save_and_load_round_trip_equal_brief PASSED [  9%]
+tests/test_brief_store.py::test_repeated_save_updates_same_row_not_duplicate PASSED [ 18%]
+tests/test_brief_store.py::test_confirmed_true_sets_confirmed_at PASSED  [ 27%]
+tests/test_brief_store.py::test_confirmed_false_leaves_confirmed_at_null PASSED [ 36%]
+tests/test_brief_store.py::test_trl_from_form_appears_as_string_in_constraints PASSED [ 45%]
+tests/test_brief_store.py::test_empty_trl_does_not_add_constraint_line PASSED [ 54%]
+tests/test_brief_store.py::test_placeholder_marker_is_neutralized_in_every_field PASSED [ 63%]
+tests/test_brief_store.py::test_placeholder_marker_in_target_trl_is_neutralized PASSED [ 72%]
+tests/test_brief_store.py::test_load_brief_returns_none_when_absent PASSED [ 81%]
+tests/test_brief_store.py::test_form_list_field_accepts_both_string_and_list PASSED [ 90%]
+tests/test_brief_store.py::test_brief_from_form_with_minimal_fields PASSED [100%]
+
+============================== 11 passed in 0.51s ==============================
+
+=== pytest -q (полный набор, цикл 2) ===
+........................................................................ [  8%]
+........................................................................ [ 16%]
+........................................................................ [ 24%]
+........................................................................ [ 32%]
+........................................................................ [ 40%]
+........................................................................ [ 48%]
+........................................................................ [ 56%]
+........................................................................ [ 64%]
+........................................................................ [ 72%]
+........................................................................ [ 80%]
+........................................................................ [ 88%]
+........................................................................ [ 96%]
+...................................                                      [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+899 passed, 1 warning in 54.87s
+
+=== ruff check . (цикл 2) ===
+All checks passed!
+
+=== ruff format --check . (цикл 2) ===
+165 files already formatted

@@ -1,0 +1,36 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "Э3-И12"
+  cycle: 2
+  did:
+    - "Цикл 1: найдено 2 блокирующих (регрессия render_markdown без разделителя; необъявленные клиентские фразы в ветке «report is none») и 2 совета — вердикт ДОРАБОТАТЬ"
+    - "Цикл 2: проверен коммит 86cc0c6 (ветка e3/i12, поверх e124bee) в отдельном worktree, основной каталог не тронут"
+    - "Регрессия markdown проверена самостоятельно: собственный скрипт сравнил render_markdown(86cc0c6) с render_markdown(732c4063) на 4 сценариях (источники/оговорки/оба/ничего) — все побайтово идентичны"
+    - "Ветка «report is none» проверена: сырой текст исключения ReportNotFoundError со страницы убран (уходит в log.info), человеческая фраза и единый h1 подтверждены прогоном нового теста и grep по шаблону"
+    - "Прогнаны pytest tests/test_web_report.py (15), tests/test_export_markdown.py (33, diff теста пуст), полный pytest -q (930), ruff check, ruff format --check"
+    - "Список новых клиентских фраз в обновлённом handoff исполнителя сверен построчно с фактическим текстом report.html/_card.html — обе фразы блокирующего №2 в списке"
+    - "Оба блокирующих цикла 1 закрыты и подтверждены независимо (не со слов исполнителя) — новых блокирующих находок нет"
+  artifacts:
+    - .planning/evidence/E3-И12-review.md (раздел «цикл 2», закоммичен до ответа)
+    - .planning/evidence/E3-И12-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_report.py -v: 15 passed"
+    - "pytest tests/test_export_markdown.py -q: 33 passed"
+    - "git diff 732c4063..86cc0c6 --stat -- tests/test_export_markdown.py: пусто"
+    - "pytest -q: 930 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 169 files already formatted"
+    - "render_markdown(86cc0c6) == render_markdown(732c4063) на 4 сценариях: ALL IDENTICAL True"
+    - "wc -l backend/app/web/routes/report.py backend/app/export/markdown.py: 206 и 309"
+  escalate: none
+  read_first:
+    - .planning/evidence/E3-И12-review.md (раздел «цикл 2»)
+    - .planning/PLAN.md (раздел «### И-12»)
+  notes: >
+    Вердикт: ПРИНЯТЬ. Цикл 2 — последний по правилу (§4 CONVENTIONS), и
+    результат положительный: оба блокирующих из цикла 1 закрыты с
+    самостоятельно подтверждённым доказательством (не переприняты со слов
+    исполнителя). Задача Э3-И12 готова к слиянию в ветку этапа Э3. Проверенный
+    коммит — e3/i12 @ 86cc0c6.

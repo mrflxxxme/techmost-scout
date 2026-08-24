@@ -1,0 +1,136 @@
+=== Цикл 2 (правки по ревью: замок атомарен, хаб 404 отдаёт HTML) ===
+
+=== pytest tests/test_web_run.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a31c6b3d977fd27ee
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 11 items
+
+tests/test_web_run.py::test_start_changes_status_and_creates_one_task PASSED [  9%]
+tests/test_web_run.py::test_repeated_start_same_request_reuses_task PASSED [ 18%]
+tests/test_web_run.py::test_start_other_request_refuses_while_one_active PASSED [ 27%]
+tests/test_web_run.py::test_completion_writes_report_to_same_request_id PASSED [ 36%]
+tests/test_web_run.py::test_pipeline_failure_sets_failed_status_and_error PASSED [ 45%]
+tests/test_web_run.py::test_hub_shows_banner_when_searching_without_registered_task PASSED [ 54%]
+tests/test_web_run.py::test_start_without_confirmed_brief_refuses PASSED [ 63%]
+tests/test_web_run.py::test_hub_shows_cost_and_report_link_when_drafted PASSED [ 72%]
+tests/test_web_run.py::test_hub_not_found_returns_html_not_json PASSED   [ 81%]
+tests/test_web_run.py::test_concurrent_double_click_same_request_runs_pipeline_once PASSED [ 90%]
+tests/test_web_run.py::test_concurrent_start_different_requests_only_one_wins PASSED [100%]
+
+============================== 11 passed in 1.41s ==============================
+
+=== pytest tests/test_web_progress_stream.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a31c6b3d977fd27ee
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 7 items
+
+tests/test_web_progress_stream.py::test_content_type_is_event_stream PASSED [ 14%]
+tests/test_web_progress_stream.py::test_events_carry_stage_message_fraction PASSED [ 28%]
+tests/test_web_progress_stream.py::test_unavailable_sources_message_reaches_stream_verbatim PASSED [ 42%]
+tests/test_web_progress_stream.py::test_keepalive_marks_repeated_event PASSED [ 57%]
+tests/test_web_progress_stream.py::test_done_event_closes_stream PASSED  [ 71%]
+tests/test_web_progress_stream.py::test_demo_mode_hides_cost_but_keeps_ready_notice PASSED [ 85%]
+tests/test_web_progress_stream.py::test_demo_mode_off_keeps_cost_visible PASSED [100%]
+
+============================== 7 passed in 0.55s ===============================
+
+=== pytest -q (весь набор) ===
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 23%]
+........................................................................ [ 30%]
+........................................................................ [ 38%]
+........................................................................ [ 46%]
+........................................................................ [ 54%]
+........................................................................ [ 61%]
+........................................................................ [ 69%]
+........................................................................ [ 77%]
+........................................................................ [ 84%]
+........................................................................ [ 92%]
+.....................................................................    [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+933 passed, 1 warning in 58.40s
+
+=== ruff check . ===
+All checks passed!
+
+=== ruff format --check . ===
+170 files already formatted
+
+=== wc -l backend/app/web/routes/run.py backend/app/web/static/progress.js ===
+  300 backend/app/web/routes/run.py
+   41 backend/app/web/static/progress.js
+  341 total
+
+=== grep celery|redis backend/ (*.py) ===
+нет совпадений
+
+=== grep hx-ext|sse-connect в файлах задачи И-11 ===
+нет совпадений
+
+=== pytest tests/test_backend_layout.py tests/test_tests_layout.py tests/test_web_templates.py tests/test_web_auth.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a31c6b3d977fd27ee
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 16 items
+
+tests/test_backend_layout.py::test_backend_app_stays_within_line_limit PASSED [  6%]
+tests/test_backend_layout.py::test_exceptions_do_not_grow_unnoticed PASSED [ 12%]
+tests/test_backend_layout.py::test_backend_app_directory_is_not_empty PASSED [ 18%]
+tests/test_tests_layout.py::test_new_test_files_stay_within_line_limit PASSED [ 25%]
+tests/test_tests_layout.py::test_exceptions_do_not_grow_unnoticed PASSED [ 31%]
+tests/test_tests_layout.py::test_tests_directory_is_not_empty PASSED     [ 37%]
+tests/test_web_templates.py::test_no_inline_style_outside_exempt_file PASSED [ 43%]
+tests/test_web_templates.py::test_no_hex_colors_in_templates PASSED      [ 50%]
+tests/test_web_templates.py::test_page_renders_without_errors[/] PASSED  [ 56%]
+tests/test_web_templates.py::test_page_renders_without_errors[/requests] PASSED [ 62%]
+tests/test_web_templates.py::test_page_renders_without_errors[/showcase] PASSED [ 68%]
+tests/test_web_auth.py::test_routes_require_auth[/] PASSED               [ 75%]
+tests/test_web_auth.py::test_routes_require_auth[/requests] PASSED       [ 81%]
+tests/test_web_auth.py::test_routes_require_auth[/showcase] PASSED       [ 87%]
+tests/test_web_auth.py::test_health_is_open PASSED                       [ 93%]
+tests/test_web_auth.py::test_require_auth_verdicts PASSED                [100%]
+
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 16 passed, 1 warning in 0.63s =========================
+
+=== Прогон конкурентных тестов 5 раз подряд (устойчивость к флаки) ===
+--- прогон 1 ---
+...........                                                              [100%]
+11 passed in 1.46s
+--- прогон 2 ---
+...........                                                              [100%]
+11 passed in 1.42s
+--- прогон 3 ---
+...........                                                              [100%]
+11 passed in 1.54s
+--- прогон 4 ---
+...........                                                              [100%]
+11 passed in 1.41s
+--- прогон 5 ---
+...........                                                              [100%]
+11 passed in 1.35s

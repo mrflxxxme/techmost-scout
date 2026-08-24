@@ -1,0 +1,29 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "И-1"
+  did:
+    - "Прочитаны PLAN.md (раздел И-1 и блок «Статусы» «Контрактов»), INVARIANTS.md, handoff исполнителя"
+    - "Diff сверен построчно со списком файлов задачи — совпадает без лишних файлов"
+    - "Самостоятельно прогнаны pytest tests/test_request_status.py, pytest -q целиком, ruff check, ruff format --check, оба grep-критерия"
+    - "Проведена собственная мутация STATUS_LABELS (удалена метка exported) — тест падает, правка возвращена, дерево чистое"
+    - "Проверены все десять инвариантов способами из INVARIANTS.md; нарушений нет"
+    - "Прочитаны шаблоны index.html/history.html — подсветка badge осталась на row.status (сыром значении), печать переведена на row.status_label, логика подсветки не сломана"
+  artifacts:
+    - .planning/evidence/E3-И1-review.md (закоммичен до ответа)
+    - .planning/evidence/E3-И1-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_request_status.py -v: 12 passed"
+    - "pytest -q: 848 passed, 0 failed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 152 files already formatted"
+    - "grep статус-литералов backend/app: только cli_run.py:143 (граница И-4)"
+    - "grep '{{ row.status }}' backend/app/web/templates: пусто"
+    - "мутация STATUS_LABELS (снята метка exported): 2 failed, тест ловит"
+  escalate: none
+  read_first:
+    - .planning/evidence/E3-И1-review.md
+    - backend/app/models.py
+    - tests/test_request_status.py
+  notes: "Вердикт ПРИНЯТЬ. Блокирующих нет, один совет (не блокирует). Цикл 1, второго не потребовалось."

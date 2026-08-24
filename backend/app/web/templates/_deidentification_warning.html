@@ -1,0 +1,19 @@
+{# Фрагмент предупреждения об обезличивании — ответ на POST /requests, когда
+   риск найден и форма не несёт accept_risks (задача П-2, РЕШ-193 п. 2).
+   Строка requests ещё не создана: текст задачи ни разу не уходил во внешнюю
+   модель, кнопка ниже повторяет тот же POST с accept_risks=1. #}
+<div class="bezel appear mt-lg">
+  <div class="core">
+    <p class="kicker">Проверьте текст перед отправкой</p>
+    <h2>Похоже на обезличивание</h2>
+    <div class="notice mb-md">{{ warning }}</div>
+    <p class="hint">
+      Текст ещё не уходил во внешнюю модель. Поправьте формулировку или отправьте как есть.
+    </p>
+    <form hx-post="/requests" hx-target="#stage" hx-swap="innerHTML">
+      <input type="hidden" name="raw_text" value="{{ raw_text }}">
+      <input type="hidden" name="accept_risks" value="1">
+      <button class="btn" type="submit">Отправить как есть <span class="dot">→</span></button>
+    </form>
+  </div>
+</div>

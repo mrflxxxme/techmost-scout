@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Запрос №{{ row.id }} — ТехМост Скаут{% endblock %}
+
+{% block content %}
+<p class="kicker">Запрос №{{ row.id }}</p>
+<h1>{{ row.status_label }}</h1>
+<p class="lead">{{ row.raw_text[:220] }}{% if row.raw_text|length > 220 %}…{% endif %}</p>
+
+{% if brief %}
+<div class="bezel mb-lg">
+  <div class="core">
+    <p class="kicker">Бриф</p>
+    <p><strong>Отрасль:</strong> {{ brief.industry }}</p>
+    <p>{{ brief.task_summary }}</p>
+    {% if brief.constraints %}
+    <p class="hint">Ограничения: {{ brief.constraints|join("; ") }}</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if row.status == "searching" %}
+  {% if task_active %}
+    {% with request_id = row.id %}
+      {% include "_progress.html" %}
+    {% endwith %}
+  {% else %}
+  <div class="notice danger mb-lg">
+    <strong>Прогон прерван перезапуском.</strong>
+    Фоновая задача не пережила перезапуск сервиса — сам запрос и бриф сохранены.
+    <form method="post" action="/requests/{{ row.id }}/start" class="mt-md">
+      <button class="btn" type="submit">Запустить заново <span class="dot">↻</span></button>
+    </form>
+  </div>
+  {% endif %}
+{% elif row.status == "briefing" and brief_confirmed %}
+<div class="bezel mb-lg">
+  <div class="core">
+    <p>Бриф подтверждён и готов к поиску.</p>
+    <form method="post" action="/requests/{{ row.id }}/start" class="mt-md">
+      <button class="btn" type="submit">Начать поиск <span class="dot">→</span></button>
+    </form>
+  </div>
+</div>
+{% elif row.status == "failed" %}
+<div class="notice danger mb-lg">
+  <strong>Прогон завершился отказом.</strong>
+  {% if row.error %}<span>{{ row.error }}</span>{% endif %}
+  <form method="post" action="/requests/{{ row.id }}/start" class="mt-md">
+    <button class="btn ghost" type="submit">Запустить заново</button>
+  </form>
+</div>
+{% endif %}
+
+{% if row.status in ("drafted", "validated", "exported") %}
+<div class="bezel mb-lg">
+  <div class="core">
+    <p>Черновик отчёта готов. Стоимость запроса: <strong>{{ "%.2f"|format(row.cost_rub) }} ₽</strong></p>
+    <a class="btn" href="/requests/{{ row.id }}/report">Открыть отчёт <span class="dot">→</span></a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

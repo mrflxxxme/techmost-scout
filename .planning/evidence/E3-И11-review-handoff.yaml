@@ -1,0 +1,45 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "И-11"
+  cycle: 2
+  verdict: "ПРИНЯТЬ"
+  did:
+    - "Проверена ветка e3/i11 на коммите cfc0288 (поверх a189849) — правки цикла 2 по обеим блокирующим находкам цикла 1"
+    - "Находка 1 (гонка замка РЕШ-147): подтверждено, что вся критическая секция (проверка реестра, load_brief, простановка searching, flush, регистрация задачи) обёрнута в module-level asyncio.Lock (_start_lock); прогнаны новые конкурентные тесты и pytest tests/test_web_run.py -v ×5 подряд без флаки; мутация (временный откат _start_lock) — оба конкурентных теста красные, восстановление — git diff --stat пуст"
+    - "Отдельно проверено требование координатора: лок не держится на время всего прогона — контрольный тест со 120-секундным пайплайном показал, что конкурентный запрос на другой request_id получает 409 меньше чем за секунду (asyncio.create_task не await-ится внутри async with, лок отпускается сразу после регистрации задачи). Новой блокирующей находки нет"
+    - "Находка 2 (404 хаба голым JSON): подтверждено, что request_hub теперь отвечает через _notice (HTML, content-type text/html), тест test_hub_not_found_returns_html_not_json зелёный"
+    - "Проверены советы 1-2 цикла 1: константа REQUEST_NOT_FOUND сведена, фраза «Прогон завершился отказом.» учтена в списке клиентских фраз handoff (пункт 5) как расширение области применения уже одобренного текста"
+    - "Прогнаны tests/test_web_run.py -v (11 passed), tests/test_web_progress_stream.py -v (7 passed), pytest -q весь набор (933 passed), ruff check ., ruff format --check ., wc -l, grep-критерии, tests/test_backend_layout.py, tests/test_tests_layout.py, tests/test_team_docs.py — все числа исполнителя воспроизведены"
+    - "Дописан раздел «Цикл 2» в E3-И11-review.md с вердиктом ПРИНЯТЬ"
+  artifacts:
+    - .planning/evidence/E3-И11-review.md (раздел «Цикл 2», закоммичен до ответа)
+    - .planning/evidence/E3-И11-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_run.py -v: 11 passed"
+    - "pytest tests/test_web_run.py -q ×5 подряд: 11 passed каждый раз, флаки не обнаружено"
+    - "pytest tests/test_web_progress_stream.py -v: 7 passed"
+    - "pytest -q: 933 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 170 files already formatted"
+    - "wc -l backend/app/web/routes/run.py: 300 (лимит 500)"
+    - "мутация (временный откат async with _start_lock): оба конкурентных теста падают (assert [200, 200] == [200, 409] и аналогично); откат — git diff --stat пуст"
+    - "контрольный тест на удержание лока (пайплайн 120с): конкурентный запрос на другой request_id отвечает 409 за <1с"
+    - "pytest tests/test_team_docs.py -q: 35 passed (инвариант №10)"
+  escalate: none
+  read_first:
+    - .planning/evidence/E3-И11-review.md (разделы «цикл 1» и «цикл 2»)
+    - .planning/PLAN.md (раздел «И-11», РЕШ-147)
+    - backend/app/web/routes/run.py (start_run 185–233, request_hub 236–)
+  notes: |
+    Цикл 2 — последний по правилам этапа (§4 CONVENTIONS): оба блокирующих
+    из цикла 1 закрыты и перепроверены независимо (не на слово исполнителя):
+    собственный мутационный тест на снятие лока, собственный контрольный тест
+    на длительность удержания лока (отдельный вопрос координатора), пятикратный
+    прогон конкурентных тестов на флаки. Новых блокирующих находок нет.
+    Совет 3 из цикла 1 (стык И-9/И-10/И-11, залипание confirmed_at при
+    повторном черновике брифа) сознательно не тронут исполнителем — он вне
+    файлов этой задачи; остаётся риском для аудита/И-13 при слиянии волны 2,
+    рекомендую держать в поле зрения на сведении.
+    Задача готова к слиянию в ветку этапа.

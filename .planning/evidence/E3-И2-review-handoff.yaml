@@ -1,0 +1,35 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "И-2"
+  did:
+    - "Прочитаны PLAN.md (раздел И-2), РЕШ-183, INVARIANTS.md, §5 CONVENTIONS.md, handoff исполнителя"
+    - "Прогнан diff ba86bf2f..e3/i2 в чистой рабочей копии, файлы задачи сверены со списком PLAN.md — расхождений нет"
+    - "Прогнаны pytest tests/test_web_progress.py -v (10 passed), pytest -q целиком (846 passed), ruff check ., ruff format --check ."
+    - "Проверены инварианты №5-10 (применимые к модулю), №1-4 к задаче не относятся"
+    - "Мутационная проверка трёх точек (буфер позднему подписчику, защита от QueueFull, закрытие по done) — все три ловятся тестами, файл возвращён в исходное состояние"
+  artifacts:
+    - .planning/evidence/E3-И2-review.md
+    - .planning/evidence/E3-И2-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_progress.py -v: 10 passed in 0.05s"
+    - "pytest -q: 846 passed, 1 warning in 54.57s"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 153 files already formatted"
+    - "wc -l backend/app/web/progress.py: 134"
+    - "grep -nE 'app\\.db|app\\.models|sqlalchemy' backend/app/web/progress.py: пусто"
+    - "grep -rE 'sk-|gigachat|Api-Key' backend/app/web/progress.py tests/test_web_progress.py: пусто"
+    - "git diff ba86bf2f..e3/i2 --stat -- backend tests: только progress.py и test_web_progress.py"
+  escalate: none
+  read_first:
+    - .planning/evidence/E3-И2-review.md
+    - .planning/PLAN.md (раздел «И-2 · Брокер прогресса в памяти процесса»)
+    - backend/app/web/progress.py
+  notes: >-
+    Вердикт ПРИНЯТЬ, блокирующих находок нет. Три совета не блокируют: рост
+    dict _channels без очистки (назвать в комментарии или закрыть в И-11),
+    опечатка «пайпларну» в докстроке hook_for, часть тестов-генераторов без
+    обёртки asyncio.wait_for (риск тихого зависания CI при регрессии
+    закрытия по done, не относится к текущей задаче). Цикл 1, второй будет
+    последним, если возврат вообще понадобится.

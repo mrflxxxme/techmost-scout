@@ -10,7 +10,7 @@
   из открытых источников.
 </p>
 
-<div class="notice" style="margin-bottom:28px">
+<div class="notice mb-xl">
   Загрузка из файла: <code>scout showcase путь/к/витрине.csv</code> —
   колонки <code>title, org, contact, maturity_stage, description, tags, url, source_note</code>
   (теги через точку с запятой).
@@ -25,12 +25,12 @@
         {% set current = stages.index(item.maturity_stage) if item.maturity_stage in stages else 0 %}
         {% for i in range(4) %}<i class="{% if i <= current %}on{% endif %}"></i>{% endfor %}
       </div>
-      <h3 style="margin:14px 0 8px; font-size:17px; color:var(--navy)">{{ item.title }}</h3>
-      <p class="muted" style="margin:0 0 10px">{{ item.org }}</p>
-      <p style="font-size:14px">{{ item.description[:220] }}{% if item.description|length > 220 %}…{% endif %}</p>
+      <h3 class="showcase-title">{{ item.title }}</h3>
+      <p class="muted showcase-org">{{ item.org }}</p>
+      <p class="showcase-desc">{{ item.description[:220] }}{% if item.description|length > 220 %}…{% endif %}</p>
       {% if item.tags %}
-      <p style="margin-top:12px">
-        {% for tag in item.tags %}<span class="badge" style="margin-right:6px">{{ tag }}</span>{% endfor %}
+      <p class="showcase-tags">
+        {% for tag in item.tags %}<span class="badge mr-sm">{{ tag }}</span>{% endfor %}
       </p>
       {% endif %}
     </div>

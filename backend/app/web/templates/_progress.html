@@ -1,0 +1,10 @@
+{# Фрагмент живого прогресса (Э3-4): и ответ POST /start, и содержимое хаба
+   при активном прогоне используют один и тот же фрагмент. Контейнер должен
+   называться request_id — на хабе он берётся из row.id через {% with %}. #}
+<div class="bezel mb-lg">
+  <div class="core">
+    <p class="kicker">Идёт поиск</p>
+    <div id="progress-log" class="progress-log" data-progress-log data-request-id="{{ request_id }}"></div>
+  </div>
+</div>
+<script src="/static/progress.js" defer></script>

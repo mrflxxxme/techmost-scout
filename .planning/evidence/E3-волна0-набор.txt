@@ -1,0 +1,5 @@
+Волна 0 этапа 3 — слитое дерево (И-1, И-2, И-3 + отчёты ревью)
+дата: 24 августа 2026
+875 passed, 1 warning in 54.26s
+All checks passed!
+156 files already formatted

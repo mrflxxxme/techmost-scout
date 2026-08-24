@@ -1,0 +1,44 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a03b50a679536765b
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 12 items
+
+tests/test_request_status.py::test_request_status_values_match_spec PASSED [  8%]
+tests/test_request_status.py::test_request_status_is_str_subclass PASSED [ 16%]
+tests/test_request_status.py::test_every_status_has_non_empty_russian_label[intake] PASSED [ 25%]
+tests/test_request_status.py::test_every_status_has_non_empty_russian_label[briefing] PASSED [ 33%]
+tests/test_request_status.py::test_every_status_has_non_empty_russian_label[searching] PASSED [ 41%]
+tests/test_request_status.py::test_every_status_has_non_empty_russian_label[drafted] PASSED [ 50%]
+tests/test_request_status.py::test_every_status_has_non_empty_russian_label[validated] PASSED [ 58%]
+tests/test_request_status.py::test_every_status_has_non_empty_russian_label[exported] PASSED [ 66%]
+tests/test_request_status.py::test_every_status_has_non_empty_russian_label[failed] PASSED [ 75%]
+tests/test_request_status.py::test_status_labels_has_no_extra_keys PASSED [ 83%]
+tests/test_request_status.py::test_request_status_label_property_reads_dictionary PASSED [ 91%]
+tests/test_request_status.py::test_request_status_label_falls_back_to_raw_value_for_unknown_status PASSED [100%]
+
+============================== 12 passed in 0.28s ==============================
+
+=== pytest -q (весь набор) ===
+........................................................................ [  8%]
+........................................................................ [ 16%]
+........................................................................ [ 25%]
+........................................................................ [ 33%]
+........................................................................ [ 42%]
+........................................................................ [ 50%]
+........................................................................ [ 59%]
+........................................................................ [ 67%]
+........................................................................ [ 76%]
+........................................................................ [ 84%]
+........................................................................ [ 93%]
+........................................................                 [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+848 passed, 1 warning in 53.97s

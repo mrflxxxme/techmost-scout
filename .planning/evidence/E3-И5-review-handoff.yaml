@@ -1,0 +1,37 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "И-5"
+  did:
+    - "Прочитаны PLAN.md (раздел «### И-5»), INVARIANTS.md, handoff исполнителя; diff e3/i5 против базы 8122125 сверен со списком файлов задачи."
+    - "Прогнаны лично: pytest tests/test_persistence.py -v (38 passed), pytest tests/test_report_persistence.py tests/test_run_accounting.py -v (16 passed, diff этих файлов пуст), pytest -q целиком (882 passed), ruff check . и ruff format --check . (чисто), pytest tests/test_backend_layout.py tests/test_pipeline_layout.py -v (9 passed), wc -l обоих persistence-файлов (295 и 329)."
+    - "Мутационная проверка: закомментирован delete(SolutionCardRow) в _write — упал test_persist_run_with_request_id_does_not_duplicate_cards; безусловный INSERT в briefs вместо upsert — упал test_persist_run_with_request_id_updates_brief_without_unique_violation (IntegrityError поймана persist_run, второй id вернулся None). Обе мутации отменены, git diff после отката пуст."
+    - "Проверена атомарность обновления (delete+insert одной сессией/транзакцией session_factory), сохранность confirmed_at в _apply_brief, безопасность лога отката на вставку, отсутствие сетевых вызовов в тесте ветки failed, целостность фасада persistence.py (циклический импорт, существующие точки импорта persist_run не изменились)."
+    - "Сверено число в компаньон-правке tests/test_tests_layout.py (1416 = wc -l tests/test_persistence.py), комментарий честный — не блокирует, оставлено на решение оркестратора при слиянии (правку либо принять, либо переиздать самому)."
+  artifacts:
+    - .planning/evidence/E3-И5-review.md (закоммичен до ответа)
+    - .planning/evidence/E3-И5-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_persistence.py -v: 38 passed"
+    - "pytest tests/test_report_persistence.py tests/test_run_accounting.py -v: 16 passed"
+    - "git diff 8122125..e3/i5 --stat -- tests/test_report_persistence.py tests/test_run_accounting.py: пусто"
+    - "pytest -q: 882 passed"
+    - "ruff check .: All checks passed; ruff format --check .: 157 files already formatted"
+    - "wc -l backend/app/pipeline/persistence.py backend/app/pipeline/persistence_write.py: 295 и 329"
+    - "pytest tests/test_backend_layout.py tests/test_pipeline_layout.py -v: 9 passed"
+    - "мутация delete(SolutionCardRow) убрана — падает test_persist_run_with_request_id_does_not_duplicate_cards; мутация upsert briefs на безусловный insert — падает test_persist_run_with_request_id_updates_brief_without_unique_violation"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «### И-5»)
+    - .planning/evidence/E3-И5-review.md
+    - backend/app/pipeline/persistence_write.py
+  notes: >-
+    Вердикт ПРИНЯТЬ, цикл 1, блокирующих находок нет. Два совета не требуют
+    доработки: явный assert evidence в тесте обновления report_json (мелкая
+    правка теста при желании) и архитектурная заметка про будущий повтор уже
+    успешного (drafted) запроса — актуальна для И-11/дальше, не для этой
+    задачи. Компаньон-правка tests/test_tests_layout.py (1164→1416) выходит
+    за список файлов задачи формально, но число верное и правка тривиальна к
+    откату — решение по процедуре (принять как есть или переиздать при
+    слиянии) оставлено оркестратору, на вердикт не влияет.

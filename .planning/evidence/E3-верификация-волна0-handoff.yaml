@@ -1,0 +1,42 @@
+handoff:
+  from: verifier
+  to: orchestrator
+  task: "волна0-Э3"
+  did:
+    - "Прогнаны все 13 критериев приёмки из PLAN.md: 5 для И-1, 4 для И-2, 4 для И-3"
+    - "Закрыто 13 критериев — волна 0 полностью верифицирована"
+    - "Подтверждены инварианты №3-9 способами из INVARIANTS.md"
+    - "Проверены артефакты: все файлы из handoff исполнителей существуют"
+  artifacts:
+    - ".planning/evidence/E3-верификация-волна0.md (отчёт верификации)"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_request_status.py -v: 12 passed"
+    - "pytest tests/test_web_progress.py -v: 10 passed"
+    - "pytest tests/test_anonymize.py -v: 17 passed"
+    - "pytest -q (полный набор): 875 passed, 1 warning"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 156 files already formatted"
+    - "grep статус-литералов: только cli_run.py:143 (граница И-4)"
+    - "grep row.status в шаблонах: совпадений нет"
+    - "grep app.db/models/sqlalchemy в progress.py: совпадений нет"
+    - "grep httpx/LLMRouter/async в anonymize.py: совпадений нет"
+    - "grep anonymize в schemas.py: ссылка на app.anonymize на строке 91"
+    - "wc -l progress.py: 134 строк (лимит 150)"
+    - "grep секреты (sk-|gigachat|Api-Key): только предсуществующие некритичные совпадения"
+    - "pytest test_prompts.py: 51 passed"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (волна 0: И-1, И-2, И-3)"
+    - "docs/team/INVARIANTS.md (проверка инвариантов)"
+    - ".planning/evidence/E3-И1-handoff.yaml"
+    - ".planning/evidence/E3-И2-handoff.yaml"
+    - ".planning/evidence/E3-И3-handoff.yaml"
+    - ".planning/evidence/E3-И1-review.md"
+    - ".planning/evidence/E3-И2-review.md"
+    - ".planning/evidence/E3-И3-review.md"
+  notes: >-
+    Волна 0 полностью слита на коммите 8122125a. Верификация проведена на этом
+    дереве. Все критерии приёмки прогнаны командами, фактические выводы
+    совпадают с ожиданиями из PLAN.md. Вердикт: PASS. Отчёт готов к
+    сохранению оркестратором в .planning/evidence/E3-верификация-волна0.md.
