@@ -27,6 +27,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app import main
+from app.llm.base import Usage
 from app.models import Base, RequestStatus
 from app.models import Request as RequestRow
 from app.schemas import Brief
@@ -44,18 +45,25 @@ def _next_raw_text() -> str:
 class _FakePipeline:
     """Заглушка `ScoutPipeline`: считает вызовы, ждёт управляемый gate,
     сама пишет статус в БД — тем же контрактом, что настоящий пайплайн
-    (успех → `drafted`, отказ → `failed` до повторного `raise`). Стоимость
-    складывается с уже стоящей в строке (РЕШ-193 п. 1, П-1 аудита Э3), а не
-    перезаписывает её, — тем же выражением, что `persistence_write._write`
-    на ветке обновления существующей строки."""
+    (успех → `drafted`, отказ → `failed` до повторного `raise`).
+
+    Стоимость — через настоящий `router.cost.add` того `LLMRouter`, что ей
+    передал `_run_pipeline` (РЕШ-194, вариант А ревью цикла 1 правки аудита
+    Э3): `_run_pipeline` создаёт роутер с `initial_spent_rub=row.cost_rub` и
+    передаёт его конструктору `ScoutPipeline` — заглушка ловит этот роутер,
+    а не сама читает `row.cost_rub` из базы. Так тест ловит регрессию
+    проводки: если `_run_pipeline` перестанет сеять или передавать роутер,
+    `self._router` окажется `None`, и итоговая стоимость перестанет включать
+    уже потраченное — тест увидит 4.56, а не 4.74."""
 
     calls = 0
     gate: asyncio.Event | None = None
     fail_message: str | None = None
 
-    def __init__(self, *, session_factory=None, progress=None, **_ignored: Any) -> None:
+    def __init__(self, *, session_factory=None, progress=None, router=None, **_ignored: Any) -> None:
         self._session_factory = session_factory
         self._progress = progress
+        self._router = router
 
     async def run(self, brief: Brief, *, request_id: int = 0, **_ignored: Any):
         type(self).calls += 1
@@ -70,12 +78,17 @@ class _FakePipeline:
             raise RuntimeError(message)
         if type(self).gate is not None:
             await type(self).gate.wait()
+        if self._router is not None:
+            self._router.cost.add(Usage(tokens_in=10, tokens_out=10, cost_rub=4.56, provider="deepseek", model="fake"))
+            cost_rub = self._router.cost.spent_rub
+        else:
+            cost_rub = 4.56
         async with self._session_factory() as session:
             row = await session.get(RequestRow, request_id)
             row.status = RequestStatus.DRAFTED
-            row.cost_rub = (row.cost_rub or 0.0) + 4.56
+            row.cost_rub = cost_rub
         if self._progress:
-            self._progress("done", "Отчёт готов. Стоимость запроса: 4.56 ₽", 1.0)
+            self._progress("done", f"Отчёт готов. Стоимость запроса: {cost_rub:.2f} ₽", 1.0)
         return None
 
 

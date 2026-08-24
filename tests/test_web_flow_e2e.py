@@ -43,6 +43,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app import main
+from app.llm.base import Usage
 from app.models import Base, RequestStatus
 from app.models import Request as RequestRow
 from app.models import SolutionCard as SolutionCardRow
@@ -119,11 +120,22 @@ def _fake_report(request_id: int, brief: Brief) -> Report:
 class _FakeScoutPipeline:
     """Заглушка пайплайна: пишет отчёт и строки карточек напрямую в базу,
     зовёт прогресс-хук по стадиям `_PIPELINE_STAGES`, живой поиск и модель
-    не вызывает ни разу (инвариант №7)."""
+    не вызывает ни разу (инвариант №7).
 
-    def __init__(self, *, session_factory=None, progress=None, **_ignored: Any) -> None:
+    Стоимость — через настоящий `router.cost.add` того `LLMRouter`, что ей
+    передал `_run_pipeline` (РЕШ-194, вариант А ревью цикла 1 правки аудита
+    Э3): роутер посеян `initial_spent_rub=row.cost_rub` (интейк и сбор брифа
+    из прошлых шагов сценария), `report.cost_rub` из фикстуры — это
+    собственная трата фазы прогона, а `router.cost.add` делает её
+    кумулятивной тем же способом, что и настоящий пайплайн
+    (`run_stages.py`: `report.cost_rub = self._router.cost.spent_rub`).
+    `row.cost_rub` получает уже кумулятивное значение присваиванием — второй
+    раз тот же перенос не делаем (единственный механизм, П-1 аудита Э3)."""
+
+    def __init__(self, *, session_factory=None, progress=None, router=None, **_ignored: Any) -> None:
         self._session_factory = session_factory
         self._progress = progress
+        self._router = router
 
     async def run(self, brief: Brief, *, request_id: int = 0, **_ignored: Any) -> None:
         for stage, message, fraction in _PIPELINE_STAGES:
@@ -131,14 +143,15 @@ class _FakeScoutPipeline:
                 self._progress(stage, message, fraction)
 
         report = _fake_report(request_id, brief)
+        if self._router is not None:
+            self._router.cost.add(
+                Usage(tokens_in=10, tokens_out=10, cost_rub=report.cost_rub, provider="deepseek", model="fake")
+            )
+            report.cost_rub = self._router.cost.spent_rub
         async with self._session_factory() as session:
             row = await session.get(RequestRow, request_id)
             row.status = RequestStatus.DRAFTED
-            # Сложение, не перезапись (РЕШ-193 п. 1, П-1 аудита Э3): строка
-            # уже несёт трату интейка и сбора брифа с прошлых шагов сценария —
-            # тем же выражением, что `persistence_write._write` на ветке
-            # обновления существующей строки.
-            row.cost_rub = (row.cost_rub or 0.0) + report.cost_rub
+            row.cost_rub = report.cost_rub
             row.report_json = report.model_dump_json()
             for position, card in enumerate(report.cards):
                 session.add(

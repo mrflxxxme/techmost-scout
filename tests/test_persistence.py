@@ -1178,9 +1178,13 @@ async def test_load_search_plan_raises_when_database_is_broken():
 
 async def test_persist_run_with_request_id_updates_existing_row_without_second_insert(db_session_factory):
     """Критерий 1: повторная запись по тому же `request_id` не создаёт вторую
-    строку `requests`, обновляет статус и текст ошибки, а стоимость
-    складывает с уже стоящей (РЕШ-193 п. 1, П-1 аудита Э3) — единый счёт
-    трат на запрос, а не перезапись последней фазы."""
+    строку `requests`, обновляет статус, стоимость и текст ошибки —
+    присваиванием (РЕШ-194, вариант А ревью цикла 1 правки аудита Э3):
+    `cost_rub`, приходящий сюда параметром, уже кумулятивен на входе (его
+    считает `LLMRouter` с `initial_spent_rub`, см. интеграционный тест
+    `test_web_path_llm_router_and_persist_run_together_do_not_double_count`
+    ниже) — `persist_run` его не складывает повторно, а просто кладёт в
+    строку."""
     first_id = await persist_run(
         db_session_factory,
         raw_text="текст задачи, которую перезапишут",
@@ -1214,27 +1218,81 @@ async def test_persist_run_with_request_id_updates_existing_row_without_second_i
     assert len(after) == 1, "повторная запись по request_id завела вторую строку requests"
     assert after[0].id == first_id
     assert after[0].status == "failed"
-    assert after[0].cost_rub == pytest.approx(1.24)  # 0.01 (интейк) + 1.23 (эта запись) — сложение, не перезапись
+    assert after[0].cost_rub == pytest.approx(1.23)  # присваивание: 1.23 заменяет 0.01, не складывается с ним
     assert after[0].error == "повторный прогон отказал на скоринге"
 
 
-async def test_persist_run_sums_web_intake_cost_with_pipeline_cost(db_session_factory):
-    """Веб-сценарий из аудита Э3 (П-1): интейк записал строку `requests` с
-    0,18 ₽ (без `persist_run` — веб пишет расход интейка напрямую в
-    `row.cost_rub`), затем прогон приносит `persist_run(request_id=…,
-    cost_rub=11.28)` — в строке обязано остаться 11,46 ₽, а не 11,28
-    (перезапись, найденная аудитом)."""
+class _FixedCostProvider(LLMProvider):
+    """Провайдер-заглушка с точной ценой ответа, без сети (инвариант №7).
+
+    Нужен ровно для интеграционного теста ниже: `FakeProvider` из
+    `conftest.py` отдаёт фиксированные 0.01 ₽ за вызов, а здесь важно
+    провести через настоящий `LLMRouter` ровно ту сумму, что фигурирует
+    в примере аудита (11.28 ₽, 2.0 ₽), не набирая её сотнями вызовов."""
+
+    price_in_rub_per_mtok = 0.0
+    price_out_rub_per_mtok = 0.0
+
+    def __init__(self, name: str, cost_rub: float) -> None:
+        self.name = name
+        self._cost_rub = cost_rub
+
+    async def complete(
+        self,
+        messages: list[Message],
+        *,
+        model: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 4096,
+        json_mode: bool = False,
+    ) -> LLMResult:
+        return LLMResult(
+            text="{}",
+            usage=Usage(
+                tokens_in=10, tokens_out=10, cost_rub=self._cost_rub, provider=self.name, model=model or "fake"
+            ),
+        )
+
+    async def health(self) -> tuple[bool, str]:
+        return True, "заглушка"
+
+
+async def test_web_path_llm_router_and_persist_run_together_do_not_double_count(settings, db_session_factory):
+    """Интеграционный тест П-1 (РЕШ-194): настоящий `LLMRouter` с
+    `initial_spent_rub` и настоящий `persist_run`/`_write` в ОДНОМ сценарии —
+    без моков этой связки, как показало ревью цикла 1 (моки в
+    `test_web_run.py`/`test_web_flow_e2e.py` и прежний тест здесь закрепили
+    контракт, которого продакшн-код не соблюдает: одна сумма переносится
+    дважды).
+
+    Строка `requests` стартует с 0,18 ₽ (как будто интейк уже потратил).
+    Роутер фазы посеян этим значением, тратит 11,28 ₽ настоящим вызовом
+    `LLMRouter.complete` — на выходе `router.cost.spent_rub` кумулятивен
+    (0,18 + 11,28 = 11,46), и `persist_run(cost_rub=router.cost.spent_rub,
+    request_id=…)` обязан положить в строку ровно 11,46 ₽, не 11,64.
+
+    Повторный прогон той же строки (retry, задача И-9): новый роутер посеян
+    уже накопленными 11,46 ₽, тратит ещё 2,0 ₽ — в строке обязано остаться
+    13,46 ₽, а не 24,92 (двойной перенос компаундится на каждом повторе)."""
+    high_limit = settings.model_copy(update={"cost_limit_rub_per_request": 50.0})
+
     async with db_session_factory() as session:
         row = RequestRow(raw_text="задача веб-сценария из аудита", status="briefing", cost_rub=0.18)
         session.add(row)
         await session.flush()
         request_id = int(row.id)
 
+    # ── Фаза 1: прогон тратит 11.28 ₽ поверх уже стоявших 0.18 ₽ ────────────
+    provider_1 = _FixedCostProvider("deepseek", 11.28)
+    router_1 = LLMRouter(high_limit, providers={"deepseek": provider_1, "yandex": provider_1}, initial_spent_rub=0.18)
+    await router_1.complete("planner", [Message(role="user", content="старт прогона")])
+    assert router_1.cost.spent_rub == pytest.approx(11.46)  # кумулятив, не дельта фазы
+
     persisted_id = await persist_run(
         db_session_factory,
         raw_text="задача веб-сценария из аудита",
         status="drafted",
-        cost_rub=11.28,
+        cost_rub=round(router_1.cost.spent_rub, 4),
         cards=[_card()],
         contest_cards=[],
         stages=[],
@@ -1243,8 +1301,34 @@ async def test_persist_run_sums_web_intake_cost_with_pipeline_cost(db_session_fa
     assert persisted_id == request_id
 
     async with db_session_factory() as session:
-        row_after = await session.get(RequestRow, request_id)
-    assert row_after.cost_rub == pytest.approx(11.46)
+        row_after_first_run = await session.get(RequestRow, request_id)
+    assert row_after_first_run.cost_rub == pytest.approx(11.46)
+
+    # ── Фаза 2: повторный прогон той же строки тратит ещё 2.0 ₽ ─────────────
+    provider_2 = _FixedCostProvider("deepseek", 2.0)
+    router_2 = LLMRouter(
+        high_limit,
+        providers={"deepseek": provider_2, "yandex": provider_2},
+        initial_spent_rub=row_after_first_run.cost_rub,
+    )
+    await router_2.complete("planner", [Message(role="user", content="повторный прогон")])
+    assert router_2.cost.spent_rub == pytest.approx(13.46)
+
+    await persist_run(
+        db_session_factory,
+        raw_text="задача веб-сценария из аудита",
+        status="drafted",
+        cost_rub=round(router_2.cost.spent_rub, 4),
+        cards=[_card()],
+        contest_cards=[],
+        stages=[],
+        request_id=request_id,
+    )
+
+    async with db_session_factory() as session:
+        row_after_second_run = await session.get(RequestRow, request_id)
+    assert row_after_second_run.cost_rub == pytest.approx(13.46)
+    assert row_after_second_run.cost_rub != pytest.approx(24.92)  # двойной перенос удвоил бы сумму на компаунде
 
 
 async def test_persist_run_with_request_id_updates_report_json(db_session_factory):
