@@ -1,0 +1,39 @@
+handoff:
+  from: verifier
+  to: orchestrator
+  task: "волна2-Э3"
+  did:
+    - "Прогнаны все критерии приёмки И-10, И-11, И-12 из PLAN.md"
+    - "Подтверждены инварианты №1–9 способами из INVARIANTS.md"
+    - "Проверены handoff/review файлы всех трёх задач (по 2 цикла ревью)"
+    - "Конкурентные тесты замка (И-11) прогнаны 3 раза подряд без флаки"
+    - "Общий набор: 959 passed, ruff чистый"
+  artifacts:
+    - ".planning/evidence/E3-верификация-волна2.md"
+    - ".planning/evidence/E3-верификация-волна2-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest -q: 959 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 172 files already formatted"
+    - "pytest tests/test_web_intake.py -v: 11 passed"
+    - "pytest tests/test_web_run.py -v: 11 passed"
+    - "pytest tests/test_web_progress_stream.py -v: 7 passed"
+    - "pytest tests/test_web_report.py -v: 15 passed"
+    - "pytest tests/test_export_markdown.py -v: 33 passed"
+    - "pytest tests/test_backend_layout.py -v: 3 passed"
+    - "pytest tests/test_web_templates.py -v: 5 passed"
+    - "wc -l intake.py: 386; run.py: 300; report.py: 206; markdown.py: 309; progress.js: 41"
+    - "grep celery|redis backend/: нет совпадений"
+    - "grep hx-ext|sse-connect backend/app/web: нет совпадений"
+    - "grep style= templates: нет совпадений"
+    - "grep вердикт|verdict|ревью report.html/_card.html: нет совпадений"
+    - "grep _stage_todo backend/app: нет совпадений"
+    - "concurrent test runs (3×): 2 passed, 2 passed, 2 passed (no flakes)"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (И-10, И-11, И-12)"
+    - ".planning/evidence/E3-И10-review.md"
+    - ".planning/evidence/E3-И11-review.md"
+    - ".planning/evidence/E3-И12-review.md"
+  notes: "Верификация волны 2 успешна. Все критерии приёмки закрыты, инварианты подтверждены. 959 passed совпадает с требованием. К слиянию готово."
