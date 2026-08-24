@@ -1,0 +1,73 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: "Д-3"
+  did:
+    - "Settings.second_pass_relevance_max: умолчание 0 → 6 (РЕШ-103, долг ворот Э2-Ж)"
+    - "Тесты, закреплявшие умолчание 0, правлены сознательно: tests/test_pipeline_second_pass.py (test_при_выключенном_пороге_прогон_совпадает_с_прежним — явный threshold=0 вместо чтения умолчания settings) и tests/test_contest_gate_and_order.py (две проверки порядка журнала стадий, которые несут явный second_pass_relevance_max=0 — им проверяется журнал, а не гейт второго прохода)"
+    - "backend/app/pipeline/summary.py: max_tokens стадии summary 6000 → 14000 (долг аудита Э2-Ж — DeepSeek обрезался на 6000, сводку писал резерв; card_author ретраем уже доходит до тех же 14000 удвоением 7000)"
+    - "tests/test_stage_token_budgets.py: докстрока REASONING_STAGE_MIN_TOKENS обновлена под новый бюджет сводки (14000), сам порог замка не менялся"
+    - "backend/app/cli.py: новая функция _schema_drift(engine) — сверка pragma table_info живой базы с моделями SQLAlchemy (имена колонок и NOT NULL); scout doctor печатает внятную красную строку на расхождение и зелёную на совпадение. Замок на инцидент прогона 1 ворот Э2-Ж (лишняя NOT NULL колонка tokens_in ронула INSERT)"
+    - "tests/test_cli_doctor_schema_guard.py (новый файл, 5 тестов): чистая схема без расхождений, лишняя NOT NULL колонка ловится, отсутствующая колонка модели ловится, doctor на битой схеме печатает красную строку, doctor на целой схеме подтверждает совпадение — всё на временном файле SQLite"
+    - "tests/test_backend_layout.py: исключение cli.py в _EXCEPTIONS поднято 674 → 726 (рост от _schema_drift), с объяснением в комментарии — дробление файла отдельная задача Д-4 той же волны"
+    - "tests/test_secret_leak_guard.py: страж секретов расширен на путь cli._run/format_active_run_params (РЕШ-168) — два новых теста: (1) фиктивный DEEPSEEK_API_KEY не просачивается в caplog/stdout/stderr при реальном прогоне cli._run; (2) мутация — monkeypatch format_active_run_params, дописывающий значение ключа в строку параметров — показана и ловится стражем (pytest.raises(AssertionError) вокруг _assert_no_secrets)"
+    - "backend/app/metrics.py: докстроки max_relevance и silent_sources_share честно называют потребителя — воротные измерения, в конвейере не участвуют"
+    - "docs/remote-setup.md: строка SECOND_PASS_RELEVANCE_MAX перенесена из блока обязательных значений в абзац «переопределение при необходимости», по образцу RELEVANCE_MIN"
+  artifacts:
+    - backend/app/config.py
+    - backend/app/pipeline/summary.py
+    - backend/app/cli.py
+    - backend/app/metrics.py
+    - docs/remote-setup.md
+    - tests/test_cli_doctor_schema_guard.py
+    - tests/test_secret_leak_guard.py
+    - tests/test_stage_token_budgets.py
+    - tests/test_pipeline_second_pass.py
+    - tests/test_contest_gate_and_order.py
+    - tests/test_backend_layout.py
+  self_audit: pass
+  checks:
+    - "pytest -q: 760 passed, 0 failed (753 базовых + 7 новых)"
+    - "pytest tests/test_cli_doctor_schema_guard.py -v: 5 passed"
+    - "pytest tests/test_secret_leak_guard.py -v: 7 passed (2 новых по РЕШ-168)"
+    - "pytest tests/test_stage_token_budgets.py -v: 4 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 137 files already formatted"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача Д-3, волна Э2-З)
+    - docs/SPEC.md §0.1 (грабли; п.7 бюджет сводки — не тронут, это Д-7)
+    - backend/app/cli.py (_schema_drift, вызов из _doctor)
+    - tests/test_cli_doctor_schema_guard.py
+    - tests/test_secret_leak_guard.py (критерий 4, конец файла)
+  notes: |
+    База копии на старте была на стороннем коммите 5d6e3f0 (merge Э2-Ж в main
+    по другой ветке, не содержавшей план волны Э2-З) — не ancestor 9228adb.
+    Выполнен git reset --hard 9228adb по инструкции задачи (РЕШ-158),
+    рабочее дерево было чистым перед сбросом, локальных коммитов не было.
+
+    .env.example недоступен для чтения и записи в этой копии (запрещающее
+    правило permission), как и было оговорено в постановке — строку
+    SECOND_PASS в нём правит оркестратор при слиянии. Полный pytest прогнан
+    без единого known failed: тест сверки .env.example↔Settings
+    (tests/test_config.py) сравнивает только МНОЖЕСТВА ИМЁН переменных, а не
+    значения умолчаний, поэтому обещанный «1 известный failed» не
+    материализовался — считаю это хорошей новостью, а не поводом для
+    подозрений, но называю явно, как просили.
+
+    За границами явного списка файлов задачи тронуты два файла — оба
+    консequential, не по своей инициативе:
+    (1) tests/test_backend_layout.py — рост cli.py на 52 строки от
+    _schema_drift иначе ронял бы test_exceptions_do_not_grow_unnoticed;
+    правка — только число в _EXCEPTIONS плюс комментарий с обоснованием, по
+    точному образцу уже принятого прецедента (yandex_search.py 544→558,
+    задача З-4 той же волны Э2-Ж).
+    (2) tests/test_contest_gate_and_order.py — два теста журнала стадий
+    неявно полагались на second_pass_relevance_max=0 по умолчанию настроек;
+    без явного tuned.model_copy(second_pass_relevance_max=0) они падали бы
+    (второй проход теперь включается на relevance 1-2 в основной выдаче).
+    Правка — только добавление explicit override, поведение теста и его цель
+    (порядок журнала) не изменились.
+
+    Живых платных вызовов не делал — scout doctor на реальном окружении не
+    гонял (в копии нет .env и ключей), только на временных базах в тестах.
