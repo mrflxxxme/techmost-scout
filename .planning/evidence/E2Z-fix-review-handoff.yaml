@@ -1,0 +1,58 @@
+handoff:
+  from: reviewer
+  to: verifier-owner
+  task: "E2Z-fix-review (цикл 1, аудит волны Э2-З, РЕШ-181)"
+  did:
+    - "Промпты card_author.md/verifier.md сверены дословно с рамкой РЕШ-181 п. 1: правило 19 и правило 8 реализуют ровно её, ничего сверх"
+    - "Сплошной грep 'правил' по обоим промптам целиком: перекрёстные ссылки на номера после сдвига (19->20 в card_author, 8..14 -> 9..15 в verifier) корректны, расхождений нет"
+    - "CHANGELOG.md: одна запись 2.2 на оба файла, версии в метках файлов совпадают с записью (машинный страж test_prompt_version_matches_latest_changelog_entry прошёл)"
+    - "selection.py: group_for_cards == cut_to_target(group_candidates(...)) - композиция, поведение для всех прочих вызовов (конкурсная очередь, history_probe, тесты) не изменилось - проверено грепом и отдельным прогоном 180 passed"
+    - "run_stages.py: порядок группировка -> судья -> срез подтверждён построчным чтением"
+    - "Лог вклада судьи (describe_groups) печатает только номер+укороченный до 40 знаков заголовок, не полный текст кандидата"
+    - "cards.py не тронут - проверено кодом, что unsourced_claims действительно даёт confidence=LOW без правки; найден и задокументирован предел - requirement_checks.status код не переписывает (в отличие от maturity_stage), это не блокирует цикл (вне визы РЕШ-181 п.1), но требует внимания на контрольном платном прогоне"
+    - "Мутации (а) card_author и (а) verifier воспроизведены лично по каждому промпту отдельно - оба текстовых стража падают"
+    - "Мутация (б) (cut_to_target перед apply_judge_groups) воспроизведена лично в run_stages.py - test_судья_до_среза_..._сквозным_прогоном падает, rank7_url теряется"
+    - "Совет 2 аудита ('добор после склейки') проверен лично на пуле из 10 кандидатов чистыми функциями - работает шире, чем описано в notes исполнителя; оценён как норм, не долг"
+    - "Полный pytest, ruff check, ruff format --check прогнаны лично"
+  artifacts:
+    - .planning/evidence/E2Z-fix-review.md (закоммичен до ответа)
+    - .planning/evidence/E2Z-fix-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q: 836 passed, 1 warning (55.91 с)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 151 files already formatted"
+    - "pytest tests/test_dedup_judge.py -v: 23 passed"
+    - "pytest tests/test_stages.py tests/test_pipeline_layout.py tests/test_persistence.py tests/test_contest_section_flow.py tests/test_contest_gate_and_order.py tests/test_pipeline_second_pass.py: 180 passed"
+    - "мутация (а) card_author: test_card_author_запрещает_переносить_числа_аналога_на_разработку упал, восстановлено"
+    - "мутация (а) verifier: test_verifier_проверяет_что_подтверждение_requirement_checks_не_из_описания_аналога упал, восстановлено"
+    - "мутация (б): test_судья_до_среза_сохраняет_кандидата_за_границей_сквозным_прогоном упал (rank7_url потерян), восстановлено"
+    - "grep -rE sk-|gigachat|Api-Key backend/ tests/ prompts/: только имена переменных/заголовков и фиктивные тестовые ключи"
+    - "grep -rln httpx backend/app: только llm/, search/, cli_doctor.py, pipeline_context.py, pipeline_search.py"
+    - "yaml.safe_load(E2Z-fix-handoff.yaml): парсится без ошибок"
+  escalate: none
+  verdict: ПРИНЯТЬ
+  read_first:
+    - .planning/evidence/E2Z-fix-review.md (вердикт и разбор по пунктам, включая §4/§6)
+    - .planning/evidence/audit-Э2-З.md (исходное блокирующее Б-1)
+    - .planning/DECISIONS.md (РЕШ-181)
+    - prompts/card_author.md (правило 19), prompts/verifier.md (правило 8)
+    - backend/app/pipeline/run_stages.py (блок судья ДО среза)
+  notes: |
+    Блокирующих находок нет, цикл 1 закрыт вердиктом ПРИНЯТЬ. Один существенный
+    момент для внимания владельца на контрольном платном прогоне (РЕШ-181 п. 2,
+    ещё не выполнен - явно оставлен исполнителем владельцу): у
+    requirement_checks.status нет код-бэкстопа по образцу
+    _MATURITY_UNCONFIRMED_MARKER, поэтому если правило 19 card_author где-то не
+    сработает, verifier честно понизит confidence и добавит запись в
+    unsourced_claims, но сама строка "<требование>: подтверждено источником" в
+    блоке "Сверка с требованиями задачи" отчёта не изменится - рядом появится
+    предупреждение, но не исправление. Рекомендация: на контрольном прогоне
+    отдельно сверить именно этот блок по карточкам-патентам, не только
+    essence/applicability. Это не блокирует данный цикл (правка cards.py вне
+    визы РЕШ-181 п. 1), но стоит зафиксировать как критерий разбора
+    контрольного прогона.
+
+    Совет 2 аудита ("добор после склейки закрыт частично") при личной проверке
+    оказался закрыт куда шире заявленного в notes исполнителя - это не
+    претензия, это уточнение для следующего чтения handoff.
