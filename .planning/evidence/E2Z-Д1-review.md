@@ -201,3 +201,111 @@ handoff:
     Отдельный коммит handoff (884549b) не блокирует — прецедент Э2-Ж, см.
     совет 3 в отчёте.
 ```
+
+---
+
+# Ревью Д-1 волны Э2-З · цикл 2 (последний)
+Вердикт: ПРИНЯТЬ
+
+Коммиты цикла 2 (поверх 884549b, копия agent-a3ca04dde202b8c7e):
+`5dd538d` (код+тест — закрытие блокирующего и совета 1), `a0600a5` (handoff
+и доказательства).
+
+## Блокирующее цикла 1 — закрыто
+
+Добавлен `tests/test_persistence.py::test_pipeline_failure_persists_brief_row_via_real_run`
+по образцу `test_pipeline_failure_persists_failed_status_and_error`: гонит
+реальный отказ стадии planner через `ScoutPipeline.run()` (`_AlwaysFailProvider`,
+уже существующая фикстура), проверяет строку в `BriefRow`.
+
+Воспроизвёл мутацию сам: убрал строку `brief=brief,  # РЕШ-146/156: ...` из
+except-ветки `run_flow.py` (сохранена копия, восстановлено после), прогнал
+полный набор — **новый тест падает** (`AssertionError: briefs пуста после
+реального отказа стадии... assert 0 == 1`), **остальные 762 теста зелёные**:
+мутация поймана ровно тем тестом, который для этого написан, а не побочным
+эффектом. Восстановил файл, `git status` чист. Блокирующее закрыто корректно.
+
+## Совет 1 цикла 1 — взят с запасом
+
+`run_flow.py` (500 строк ровно) раздроблен: `_run_stages`/`_empty_report`
+вынесены в новый `backend/app/pipeline/run_stages.py` (`RunStagesMixin`,
+359 строк), `run_flow.py` сжался до 175. Сверил перенос
+`git diff 884549b 5dd538d --color-moved=zebra` и построчным diff тела
+`_run_stages`/`_empty_report` между старой и новой позицией: **единственное
+текстовое отличие — удалена локальная отложенная строка
+`from app.schemas import ReportSummary`** внутри `_empty_report`, потому что
+в новом модуле `ReportSummary` уже импортирован на уровне модуля (строка 26).
+Логики это не меняет — чистое перемещение с консолидацией импорта, не правка.
+
+Проверил список стража `test_pipeline_layout.py::_ORCH_MODULES_UNDER_LIMIT`:
+`run_stages.py` в него **не добавлен**. Не дыра: список специфичен для
+модулей дробления `orchestrator.py` в задаче З-10 (по докстроке класса — «Модули,
+созданные или изменённые задачей З-10»), `run_stages.py` создан не ею. Файл
+покрыт рекурсивным `test_backend_layout.py` (`_APP_DIR.rglob("*.py")`, без
+именованных исключений) — прогнал сам: `pytest tests/test_backend_layout.py
+tests/test_pipeline_layout.py -v` — 9 passed, файл 359 строк учитывается этим
+стражем и укладывается в лимит 500 без необходимости в исключении. Как
+чистая стилистика можно было бы добавить `run_stages.py` и в
+`_ORCH_MODULES_UNDER_LIMIT` для единообразия документации дробления
+оркестратора — не блокирует, функционального пробела нет.
+
+## Проверено (цикл 2, самостоятельно)
+
+- **Diff 884549b..5dd538d только заявленные файлы:** `run_flow.py` (правка),
+  `run_stages.py` (новый), `tests/test_persistence.py` (новый тест) —
+  `git diff --stat` подтверждает, посторонних файлов нет.
+- **Мутация блокирующего воспроизведена лично** (не по слову исполнителя) —
+  см. раздел выше; `git status` после восстановления чист.
+- **Фасадная поверхность `ScoutPipeline` не изменилась.** Полный
+  `pytest -q`: **763 passed, 0 failed** (свой прогон, не из evidence-файла).
+  `ruff check .`: All checks passed. `ruff format --check .`: 138 files
+  already formatted.
+- **ALTER-команды цикла 1 не тронуты.** `git diff 884549b 5dd538d -- .planning/evidence/`
+  пуст для SQL-файла (правился только handoff.yaml вторым коммитом `a0600a5`,
+  сам `E2Z-Д1-alter.sql` не менялся). `md5`/размер/mtime живой базы
+  `data/scout.db` (2 621 440 байт, `Aug 24 00:13`) совпадает с тем, что
+  наблюдал в цикле 1 — не тронута.
+
+## Итоговый вердикт
+
+**ПРИНЯТЬ.** Блокирующее цикла 1 закрыто тестом, идущим через реальный код
+(не заглушкой) и подтверждено моей собственной мутацией. Совет 1 выполнен с
+запасом (дробление, а не подгонка под лимит). Советы 2 и 3 из цикла 1
+осознанно оставлены без изменений (объяснено в notes handoff исполнителя,
+не блокировали и раньше) — фиксирую как разрешённый долг, не как недоделку:
+плюс замечание по совету 2 остаётся в силе для следующей правки схемы
+`SolutionCard`/`Brief`, если кто-то возьмётся её трогать.
+Это был цикл 2, последний — третьего не будет.
+
+## Handoff (цикл 2)
+
+```yaml
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "Д-1"
+  did:
+    - "Цикл 2: подтверждено закрытие блокирующего (инвариант №8) — мутация воспроизведена лично, ловится ровно новым тестом; проверено дробление run_flow.py→run_stages.py как чистый перенос (color-moved + построчный diff тела); проверены списки стражей (test_pipeline_layout не требует правки — покрыт test_backend_layout); ALTER и живая база не тронуты"
+    - "Итоговый вердикт: ПРИНЯТЬ"
+  artifacts:
+    - .planning/evidence/E2Z-Д1-review.md (раздел «Цикл 2», закоммичен до ответа)
+    - .planning/evidence/E2Z-Д1-review-handoff.yaml (обновлён)
+  self_audit: pass
+  checks:
+    - "pytest -q: 763 passed, 0 failed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 138 files already formatted"
+    - "мутация (снять brief=brief из except-ветки run_flow.py): ровно новый тест test_pipeline_failure_persists_brief_row_via_real_run падает, 762 остальных зелёные; восстановлено, git status чист"
+    - "git diff 884549b 5dd538d --color-moved=zebra: перенос _run_stages/_empty_report в run_stages.py чист, единственное отличие — консолидация импорта ReportSummary"
+    - "pytest tests/test_backend_layout.py tests/test_pipeline_layout.py -v: 9 passed — run_stages.py (359 строк) под лимитом, покрыт рекурсивным стражем"
+    - "md5/размер/mtime data/scout.db не изменились между циклами (2621440 байт, Aug 24 00:13)"
+  escalate: none
+  read_first:
+    - .planning/evidence/E2Z-Д1-review.md (полный отчёт, оба цикла)
+    - backend/app/pipeline/run_stages.py (новый модуль)
+    - tests/test_persistence.py::test_pipeline_failure_persists_brief_row_via_real_run
+  notes: >
+    Цикл 2 — последний, дальше третьего не будет. Задача Д-1 готова к слиянию
+    (ALTER-команды из E2Z-Д1-alter.sql выполняет оркестратор при слиянии,
+    урок Э2-Ж — резервную копию data/scout.db снять перед ALTER).
+```
