@@ -1,0 +1,38 @@
+handoff:
+  from: implementer-2
+  to: reviewer
+  task: И-2
+  did:
+    - "Брокер прогресса в памяти процесса backend/app/web/progress.py: кольцевой буфер на 200 событий по request_id плюс очередь на подписчика (maxsize 200)"
+    - "hook_for(request_id) отдаёт синхронный ProgressHook (stage, message, fraction) — совместим с сигнатурой из app.pipeline.pipeline_context"
+    - "subscribe(request_id, keepalive_interval=...) — асинхронный генератор: сначала буфер уже случившихся событий, затем новые; при молчании дольше keepalive_interval отдаёт повтор последнего события; событие done (или fraction >= 1.0) завершает генератор сам"
+    - "Переполнение очереди подписчика (QueueFull) и потеря подписчика (закрытие генератора) гасятся молча — публикация не падает (инвариант №5)"
+    - "Модуль не импортирует app.db/app.models/sqlalchemy и ничего не пишет в БД (РЕШ-183) — HTTP-маршрут SSE и реестр задач здесь не заводились, это задача И-11"
+    - "Тесты tests/test_web_progress.py — 10 штук: порядок событий, буфер для позднего подписчика, keepalive без реального ожидания, закрытие потока по done, изоляция между request_id, выживание при отключении подписчика, выживание при переполнении очереди подписчика, выживание при переполнении кольцевого буфера, сигнатура hook_for"
+  artifacts:
+    - backend/app/web/progress.py
+    - tests/test_web_progress.py
+    - .planning/evidence/E3-И2-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_progress.py -v: 10 passed"
+    - "grep -nE \"app\\.db|app\\.models|sqlalchemy\" backend/app/web/progress.py: совпадений нет"
+    - "pytest -q: 846 passed, 1 warning"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 153 files already formatted"
+    - "wc -l backend/app/web/progress.py: 134 строки (лимит 150, ориентир РЕШ-183 — 70)"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «И-2 · Брокер прогресса в памяти процесса»)
+    - .planning/DECISIONS.md (РЕШ-183)
+    - backend/app/pipeline/pipeline_context.py (тип ProgressHook)
+    - backend/app/web/progress.py
+    - tests/test_web_progress.py
+  notes: >-
+    Базовый SHA рабочей копии сверен с веткой волны (ba86bf2f, «базовый SHA
+    волны 0») до первой строки кода — исходная копия агента стояла на f0cccd8
+    из другой линии (волна Э2-З), поэтому ветка e3/i2 создана поверх
+    правильной базы прямо в assigned worktree. HTTP-маршрут /requests/{id}/progress
+    и клиентский JS (SPEC Э3-4) сюда не входят — это задача И-11, она читает
+    hook_for и subscribe из этого модуля. Файлы .env.example и .planning/*
+    (кроме evidence) не тронуты.
