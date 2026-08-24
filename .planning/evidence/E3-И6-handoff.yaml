@@ -1,0 +1,53 @@
+handoff:
+  from: "implementer-3"
+  to: "reviewer"
+  task: "И-6"
+  did:
+    - "Пакет backend/app/web/routes/ собран из старого routes.py: __init__.py — только сборка роутера (include_router четырёх подроутеров)"
+    - "pages.py — index, list_requests, showcase; intake.py — create_request; run.py — стаб progress_stream; report.py — стаб show_report и стаб submit_verdict"
+    - "Пути, имена обработчиков и тексты страниц не менялись — механический переезд (РЕШ-143 п. 5)"
+    - "backend/app/web/routes.py удалён; per-file-ignore B008 в pyproject.toml перенесён с routes.py на routes/*.py"
+    - "Новых стабов build_brief/start_run/request_hub/edit_card не заводил: РЕШ-143 п. 5 и критерий 2 задачи требуют, чтобы список путей/имён маршрутов не менялся; эти четыре обработчика в базовом routes.py отсутствовали, их создание было бы новым поведением (инвариант №9). Разложат их будущие задачи И-10/И-11/И-12 — файлы уже на месте и под лимитом строк"
+  artifacts:
+    - "backend/app/web/routes/__init__.py"
+    - "backend/app/web/routes/pages.py"
+    - "backend/app/web/routes/intake.py"
+    - "backend/app/web/routes/run.py"
+    - "backend/app/web/routes/report.py"
+    - "pyproject.toml"
+    - ".planning/evidence/E3-И6-routes-до.txt"
+    - ".planning/evidence/E3-И6-routes-после.txt"
+    - ".planning/evidence/E3-И6-pytest.txt"
+  self_audit: "pass"
+  checks:
+    - "pytest tests/test_web_auth.py -v: 5 passed"
+    - "git diff --stat tests/test_web_auth.py: пусто"
+    - "grep -rn 'backend/app/web/routes.py' pyproject.toml: совпадений нет"
+    - "ruff check .: All checks passed"
+    - "wc -l backend/app/web/routes/*.py: 28/58/60/32/23 строк, все под лимитом 500"
+    - "pytest tests/test_backend_layout.py -v: 3 passed"
+    - "pytest -q: 875 passed (совпадает с числом на базе волны 0)"
+    - "ruff format --check .: 160 files already formatted"
+  escalate: "none"
+  read_first:
+    - ".planning/PLAN.md (задача И-6)"
+    - "docs/team/INVARIANTS.md (№9, №8, №7)"
+    - "backend/app/web/routes/__init__.py"
+    - "backend/app/main.py (не менялся, импорт router работает как раньше)"
+  notes: >-
+    Новое поведение не добавлялось, поэтому по постановке задачи новых тестов
+    не требуется (инвариант №8 применён буквально: раз diff в backend/ — это
+    чистый перенос без изменения логики, тестового диффа тоже нет; все 875
+    тестов — прежние). Найдена грабля окружения, не относящаяся к границам
+    задачи: в установленной версии FastAPI 0.141.1 `app.routes` после
+    `include_router` заворачивает подроутер в объект `_IncludedRouter` без
+    атрибута `path`/`name`, поэтому буквальная команда критерия 2
+    `sorted((r.path, r.name) for r in app.routes)` падает с AttributeError
+    одинаково и до, и после дробления (зафиксировано в обоих файлах evidence
+    дословно с этой ошибкой). Для содержательной сверки списка маршрутов
+    добавлен рекурсивный обход через `r.original_router.routes` — до и после
+    дробления даёт один и тот же список из 13 маршрутов (пути и имена
+    совпадают побайтово, кроме порядка сортировки). Файл "до" получен из
+    ветки этапа `claude/remote-work-readiness-check-ze0wg3` дословно, как
+    попросил оркестратор. Правку самой команды проверки или кода FastAPI не
+    делал — не в границах задачи, сообщаю как факт для видимости команды.

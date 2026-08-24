@@ -90,6 +90,6 @@ ignore = [
 "tests/*" = ["S105", "S106"]  # тестовые пароли-заглушки
 # Depends(...) и typer.Option(...) в значениях по умолчанию — идиома этих
 # библиотек, а не ошибка: так объявляются зависимости и параметры команд.
-"backend/app/web/routes.py" = ["B008"]
+"backend/app/web/routes/*.py" = ["B008"]
 "backend/app/main.py" = ["B008"]
 "backend/app/cli.py" = ["B008"]
