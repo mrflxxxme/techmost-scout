@@ -26,3 +26,33 @@ All checks passed!
 
 == ruff format --check . ==
 173 files already formatted
+
+== Цикл 2 (доработка по ревью, блокирующая находка: битая ссылка «см.
+намётку ниже») ==
+
+Правки: убрана фраза «(см. намётку ниже)» из четырёх пометок готовности
+(строки 533, 564, 583, 605 до доработки); совет 1 — путь
+`app/pipeline/intake_flow.py` приведён к `backend/app/pipeline/intake_flow.py`
+(строка 536); совет 2 — Э4-1 переведена на нейтральный `backend/app/web/routes/`
+вместо конкретного `routes/report.py` (строка 631), по аналогии с Э4-3.
+
+== grep -n "растут записи" docs/SPEC.md ==
+(пусто — совпадений нет)
+
+== grep -n "web/routes.py" docs/SPEC.md ==
+(пусто — совпадений нет)
+
+== grep -n "намётку ниже" docs/SPEC.md ==
+(пусто — совпадений нет)
+
+== pytest tests/test_team_docs.py -v ==
+35 passed in 0.09s
+
+== pytest -q (полный прогон) ==
+960 passed, 1 warning in 59.64s
+
+== ruff check . ==
+All checks passed!
+
+== ruff format --check . ==
+173 files already formatted

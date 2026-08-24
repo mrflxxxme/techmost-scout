@@ -530,10 +530,10 @@ showcase, _stage_todo — остались инлайновые `style=`; выч
 ### Э3-2 ✅ Уточняющие вопросы и подтверждение брифа
 
 Принято на подменах (respx/фикстуры, без сети); живой прогон через браузер —
-на воротах этапа Э3 (см. намётку ниже).
+на воротах этапа Э3.
 
 **Файлы.** `backend/app/web/routes/intake.py`, `backend/app/web/brief_store.py`,
-`app/pipeline/intake_flow.py`, `templates/_intake_questions.html`,
+`backend/app/pipeline/intake_flow.py`, `templates/_intake_questions.html`,
 `templates/_brief_confirm.html`
 
 **Что делать.** Заменить заглушку `_stage_todo.html` на живой поток:
@@ -561,7 +561,7 @@ showcase, _stage_todo — остались инлайновые `style=`; выч
 ### Э3-3 ✅ Запуск поиска в фоне
 
 Принято на подменах (respx/фикстуры, без сети); живой прогон через браузер —
-на воротах этапа Э3 (см. намётку ниже).
+на воротах этапа Э3.
 
 **Файлы.** `backend/app/web/routes/run.py`, `templates/request.html`
 
@@ -580,7 +580,7 @@ showcase, _stage_todo — остались инлайновые `style=`; выч
 ### Э3-4 ✅ Живой прогресс поиска
 
 Принято на подменах (respx/фикстуры, без сети); живой прогон через браузер —
-на воротах этапа Э3 (см. намётку ниже).
+на воротах этапа Э3.
 
 **Файлы.** `backend/app/web/routes/run.py`, `backend/app/web/progress.py`,
 `templates/_progress.html`, `backend/app/web/static/progress.js`
@@ -602,7 +602,7 @@ showcase, _stage_todo — остались инлайновые `style=`; выч
 ### Э3-5 ✅ Отчёт с карточками
 
 Принято на подменах (respx/фикстуры, без сети); живой прогон через браузер —
-на воротах этапа Э3 (см. намётку ниже).
+на воротах этапа Э3.
 
 **Файлы.** `backend/app/web/routes/report.py`, `backend/app/report_overrides.py`,
 `templates/report.html`, `templates/_card.html`
@@ -628,7 +628,7 @@ showcase, _stage_todo — остались инлайновые `style=`; выч
 
 ### Э4-1 ⬜ Ревью эксперта
 
-**Файлы.** `backend/app/web/routes/report.py`, `templates/review.html`
+**Файлы.** `backend/app/web/routes/`, `templates/review.html`
 
 **Что делать.** `GET /requests/{id}/review` — экран для научного
 со-основателя; `POST /cards/{id}/verdict` — вердикт.
