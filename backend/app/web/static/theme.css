@@ -154,7 +154,10 @@ h2 {
 .grid.three { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 
 /* ── Форма ───────────────────────────────────────────────────────────────── */
-textarea, input[type="text"], input[type="password"] {
+/* select — тем же набором правил, что текстовые поля (долг И-10 закрыт
+   задачей И-13): без этой строки браузерный виджет выпадал из дизайн-системы
+   неоформленным на форме подтверждения брифа (target_maturity). */
+textarea, input[type="text"], input[type="password"], select {
   width: 100%;
   font-family: var(--font);
   font-size: 16px;
@@ -167,7 +170,7 @@ textarea, input[type="text"], input[type="password"] {
   resize: vertical;
 }
 
-textarea:focus, input:focus {
+textarea:focus, input:focus, select:focus {
   outline: none;
   border-color: var(--navy);
   box-shadow: 0 0 0 3px rgba(30, 39, 97, 0.08);
@@ -338,7 +341,10 @@ tr:hover td { background: var(--shell); }
 .showcase-desc { font-size: 14px; }
 .showcase-tags { margin-top: 12px; }
 
-/* ── Форма и поля брифа — экран И-10 «уточняющие вопросы и подтверждение» ── */
+/* ── Форма и поля брифа — экран И-10 «уточняющие вопросы и подтверждение» ──
+   Тот же набор классов переиспользован формой правки карточки (_card.html,
+   экран И-12, задача И-13): без общего ритма поля правки шли вплотную друг к
+   другу браузерным умолчанием, а не отступом дизайн-системы. */
 .brief-form { display: grid; gap: var(--gap); }
 .brief-field { display: flex; flex-direction: column; gap: 8px; }
 .brief-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--gap); }

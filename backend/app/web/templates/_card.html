@@ -84,36 +84,55 @@
     {% if card_id %}
     <details class="card-edit mt-lg">
       <summary>Править карточку</summary>
-      <form method="post" action="/cards/{{ card_id }}/edit" class="mt-md">
-        <label for="title-{{ card_id }}">Название</label>
-        <input id="title-{{ card_id }}" type="text" name="title" value="{{ card.title }}">
+      <form method="post" action="/cards/{{ card_id }}/edit" class="brief-form mt-md">
+        <div class="brief-field">
+          <label for="title-{{ card_id }}">Название</label>
+          <input id="title-{{ card_id }}" type="text" name="title" value="{{ card.title }}">
+        </div>
 
-        <label for="essence-{{ card_id }}">Суть</label>
-        <textarea id="essence-{{ card_id }}" name="essence">{{ card.essence }}</textarea>
+        <div class="brief-field">
+          <label for="essence-{{ card_id }}">Суть</label>
+          <textarea id="essence-{{ card_id }}" name="essence">{{ card.essence }}</textarea>
+        </div>
 
-        <label for="applicability-{{ card_id }}">Применимость к задаче</label>
-        <textarea id="applicability-{{ card_id }}" name="applicability">{{ card.applicability }}</textarea>
+        <div class="brief-field">
+          <label for="applicability-{{ card_id }}">Применимость к задаче</label>
+          <textarea id="applicability-{{ card_id }}" name="applicability">{{ card.applicability }}</textarea>
+        </div>
 
-        <label for="next_step-{{ card_id }}">Следующий шаг</label>
-        <textarea id="next_step-{{ card_id }}" name="next_step">{{ card.next_step }}</textarea>
+        <div class="brief-field">
+          <label for="next_step-{{ card_id }}">Следующий шаг</label>
+          <textarea id="next_step-{{ card_id }}" name="next_step">{{ card.next_step }}</textarea>
+        </div>
 
-        <label for="risks-{{ card_id }}">Риски (по одному на строку)</label>
-        <textarea id="risks-{{ card_id }}" name="risks">{{ card.risks|join("\n") }}</textarea>
+        <div class="brief-field">
+          <label for="risks-{{ card_id }}">Риски (по одному на строку)</label>
+          <textarea id="risks-{{ card_id }}" name="risks">{{ card.risks|join("\n") }}</textarea>
+        </div>
 
-        <label for="contact_leads-{{ card_id }}">Как выйти на связь (по одному на строку)</label>
-        <textarea id="contact_leads-{{ card_id }}" name="contact_leads">{{ card.contact_leads|join("\n") }}</textarea>
+        <div class="brief-field">
+          <label for="contact_leads-{{ card_id }}">Как выйти на связь (по одному на строку)</label>
+          <textarea id="contact_leads-{{ card_id }}" name="contact_leads">{{ card.contact_leads|join("\n") }}</textarea>
+        </div>
 
-        <label for="developer_org-{{ card_id }}">Организация-разработчик</label>
-        <input id="developer_org-{{ card_id }}" type="text" name="developer_org" value="{{ card.developer_org or '' }}">
-
-        <label for="developer_team-{{ card_id }}">Команда разработчика</label>
-        <input id="developer_team-{{ card_id }}" type="text" name="developer_team" value="{{ card.developer_team or '' }}">
+        <div class="brief-row">
+          <div class="brief-field">
+            <label for="developer_org-{{ card_id }}">Организация-разработчик</label>
+            <input id="developer_org-{{ card_id }}" type="text" name="developer_org" value="{{ card.developer_org or '' }}">
+          </div>
+          <div class="brief-field">
+            <label for="developer_team-{{ card_id }}">Команда разработчика</label>
+            <input id="developer_team-{{ card_id }}" type="text" name="developer_team" value="{{ card.developer_team or '' }}">
+          </div>
+        </div>
 
         {% if card.evidence %}
-        <p class="mt-md mb-sm">Убрать подтверждение из карточки:</p>
-        {% for item in card.evidence %}
-        <label class="mb-sm"><input type="checkbox" name="evidence_removed" value="{{ item.url }}"> {{ item.claim }}</label><br>
-        {% endfor %}
+        <div class="brief-field">
+          <p class="mb-sm">Убрать подтверждение из карточки:</p>
+          {% for item in card.evidence %}
+          <label class="mb-sm"><input type="checkbox" name="evidence_removed" value="{{ item.url }}"> {{ item.claim }}</label><br>
+          {% endfor %}
+        </div>
         {% endif %}
 
         <div class="edit-actions">
