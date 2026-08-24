@@ -546,6 +546,31 @@ async def test_pipeline_failure_persists_failed_status_and_error(settings, brief
         assert requests[0].raw_text == "текст, который не соберётся"
 
 
+# ── Д-1 (РЕШ-146/156), ревью цикл 1, блокирующее №1: briefs на РЕАЛЬНОМ отказе
+# через ScoutPipeline.run(), а не через прямой вызов persist_run. Существующий
+# тест выше проверяет только RequestRow; тест на persist_run с brief= в
+# test_report_persistence.py минует run_flow.py целиком — ни один из них не
+# ловит потерю `brief=brief` в except-ветке `run.py` (мутация ревьюера это
+# доказала: удалённый аргумент не уронил ни одного из 762 тестов).
+async def test_pipeline_failure_persists_brief_row_via_real_run(settings, brief, db_session_factory):
+    """Отказ стадии ПОСЛЕ интейка через настоящий `ScoutPipeline.run()`
+    обязан оставить строку в `briefs`: бриф существует уже к моменту отказа,
+    и except-ветка `run_flow.py` передаёт его в `persist_run` ровно за этим."""
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(
+            settings, _AlwaysFailProvider(), [_OneHitAdapter(client)], session_factory=db_session_factory
+        )
+        with pytest.raises(LLMError):
+            await pipeline.run(brief, request_id=1, raw_text="текст, упавший после интейка, с брифом")
+
+    async with db_session_factory() as session:
+        brief_rows = (await session.execute(select(BriefRow))).scalars().all()
+
+    assert len(brief_rows) == 1, "briefs пуста после реального отказа стадии — brief=brief потерян в except-ветке"
+    assert brief_rows[0].industry == brief.industry
+    assert brief_rows[0].task_summary == brief.task_summary
+
+
 # ── РЕШ-45: стоп-кран лимита стоимости роняет прогон, а не деградирует ──────
 #
 # FakeProvider (conftest.py) отдаёт фиксированную Usage(cost_rub=0.01) на
