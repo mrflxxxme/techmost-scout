@@ -1,0 +1,52 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "З-8 (волна Э2-Ж): SPEC и правила приводятся к работающему коду"
+  did:
+    - "Цикл 2 (последний): проверен diff cedac72..3417f84 — только
+       docs/SPEC.md, docs/remote-setup.md, handoff-файл, по стату и по numstat."
+    - "Прочитаны обе правки docs/remote-setup.md целиком: GIGACHAT_AUTH_KEY
+       убран из таблицы переменных, пример LLM_STAGE_ROUTES переведён на
+       восемь имён deepseek. Сверено с реестром PROVIDER_CLASSES
+       (backend/app/llm/router.py) — все имена известны, LLMError не
+       поднимается при копировании примера в .env; блокирующая находка
+       цикла 1 устранена и лично перепроверена по коду роутера."
+    - "«Восемь стадий» сверено лично с Settings.llm_stage_routes (config.py,
+       8 имён) и с ls prompts/*.md (8 файлов) — оба места SPEC.md (строки
+       113, 134) исправлены верно."
+    - "Найдена третья строка с тем же фактом (docs/SPEC.md:115 «Промпты семи
+       стадий»), которую правка не задела — не блокирует (числовой ляп без
+       функционального следствия), отмечена как совет на будущее."
+    - "Прогнаны pytest tests/test_team_docs.py -q (35), pytest -q (753),
+       ruff check ., ruff format --check . — воспроизведены лично, совпадают
+       с заявленным."
+    - "grep -rni gigachat docs/remote-setup.md docs/SPEC.md CLAUDE.md — пусто
+       в remote-setup.md, единственное (историческое, датированное) вхождение
+       в SPEC.md §0.1 — принято ещё в цикле 1."
+  artifacts:
+    - ".planning/evidence/E2J-З8-review.md (раздел «Цикл 2», закоммичен до ответа)"
+    - ".planning/evidence/E2J-З8-review-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_team_docs.py -q: 35 passed"
+    - "pytest -q: 753 passed, 1 warning"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 136 files already formatted"
+    - "git diff cedac72..3417f84 --numstat: SPEC.md +2/-2, remote-setup.md +7/-6, только эти файлы плюс handoff"
+    - "grep -rni gigachat docs/remote-setup.md: пусто"
+    - "LLM_STAGE_ROUTES из docs/remote-setup.md: все 8 имён есть в PROVIDER_CLASSES router.py — не роняет приложение"
+  escalate: none
+  read_first:
+    - ".planning/evidence/E2J-З8-review.md (полный отчёт, циклы 1 и 2)"
+    - "docs/remote-setup.md"
+    - "docs/SPEC.md"
+  notes: |
+    Вердикт: ПРИНЯТЬ. Единственное блокирующее замечание цикла 1
+    (docs/remote-setup.md не приведён к РЕШ-171, пример LLM_STAGE_ROUTES ронял
+    бы приложение) устранено и лично перепроверено по коду
+    (backend/app/llm/router.py:PROVIDER_CLASSES), а не только по слову
+    исполнителя. Оба совета цикла 1 тоже учтены. Есть один новый мелкий совет
+    (SPEC.md:115 «промпты семи стадий» не подтянуто под «восемь») —
+    не блокирует, функционального следствия нет. Второй цикл был последним по
+    пределу карточки; эскалация к владельцу не требуется, задача готова к
+    слиянию в рамках волны Э2-Ж.

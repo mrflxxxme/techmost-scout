@@ -1,0 +1,33 @@
+handoff:
+  from: reviewer
+  to: verifier
+  task: "З-7"
+  did:
+    - "Сверил diff (c2c31b3..acb00ff) с картой файлов задачи: только docs/sources.md и docs/deps-manual.md, кода нет"
+    - "Живой перепроверкой (независимо от исполнителя) повторил GET к developers.epo.org, fair-use, ops.epo.org, /user/register, /apis, DNS forums.epo.org — коды совпадают с записанными"
+    - "Скачал и разобрал PDF условий (терпимо к отсутствию pypdf/pdfminer в окружении — ручная распаковка zlib-потоков) и swagger-гайд; сверил все дословные цитаты и версию 2.0-09.2017 — совпадают посимвольно"
+    - "Проверил согласованность шагов владельца между sources.md и deps-manual.md — совпадают"
+    - "Оценил замечание исполнителя про устаревший пункт 9 deps-manual (PatentsView) — реальная нестыковка, не в файлах ни одной задачи волны, вынес в советы как долг ворот"
+    - "Проверил handoff исполнителя: yaml.safe_load ок, self_audit/escalate непротиворечивы, checks — фактический вывод"
+    - "pytest tests/test_team_docs.py -q и полный pytest -q в worktree исполнителя — совпадают с заявленным"
+  artifacts:
+    - .planning/evidence/E2J-З7-check.md (закоммичен до ответа)
+    - .planning/evidence/E2J-З7-check-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_team_docs.py -q: 35 passed"
+    - "pytest -q: 753 passed, 1 warning, 45.56s"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 136 files already formatted"
+    - "git diff c2c31b3..acb00ff --stat: docs/deps-manual.md (+31), docs/sources.md (+211) — только эти два файла"
+    - "живые GET: developers.epo.org 200, fair-use 200, ops.epo.org 200 (2 редиректа), /user/register 200, /apis 403, terms PDF 200/63273 байт — все совпадают с текстом раздела"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (задача З-7, раздел «Волна 2»)"
+    - "docs/sources.md (новый раздел «EPO OPS (Espacenet)»)"
+    - "docs/deps-manual.md (пункт 10, и устаревший пункт 9 — см. советы отчёта)"
+  notes: >-
+    Вердикт ПРИНЯТЬ, цикл 1 (карточка предполагает предел в 1 цикл, второго
+    не требуется). Блокирующих находок нет. Один совет — обновить статус
+    PatentsView в deps-manual.md п. 9 (не входит в файлы этой задачи, кандидат
+    для З-8 или отдельной строки долгов ворот Э2-Ж).

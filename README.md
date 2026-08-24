@@ -36,18 +36,15 @@ py -3.12 -m venv .venv
 # 2. Ключи: перенос из проекта TEAMLY_RU (значения не выводятся на экран)
 .\.venv\Scripts\python.exe scripts\import_keys.py
 
-# 3. Сертификаты для GigaChat (домены Сбера подписаны НУЦ Минцифры)
-.\.venv\Scripts\python.exe scripts\build_ca_bundle.py
-
-# 4. Проверка: ключи, модели, источники
+# 3. Проверка: ключи, модели, источники
 .\.venv\Scripts\scout.exe doctor
 
-# 5. Первый запрос
+# 4. Первый запрос
 .\.venv\Scripts\scout.exe run "описание технологической задачи" --no-interactive
 ```
 
-Ожидаемый результат `doctor` на настроенной машине: `gigachat` и `deepseek` —
-«ок», источники `crossref`, `cyberleninka`, `arxiv`, `semanticscholar`,
+Ожидаемый результат `doctor` на настроенной машине: `deepseek` — «ок»,
+источники `crossref`, `cyberleninka`, `arxiv`, `semanticscholar`,
 `showcase` — «ок».
 
 Отчёт появится в `out/`. Веб-интерфейс: `scout serve` → http://127.0.0.1:8000
@@ -68,9 +65,10 @@ py -3.12 -m venv .venv
 
 Звёздочка — этапы 2–4 спецификации.
 
-Модели: массовые стадии — GigaChat (бесплатный тариф, 250 млн токенов),
-качественные — DeepSeek V4-Flash, резерв — YandexGPT. Маршрутизация — строкой
-`LLM_STAGE_ROUTES` в `.env`. Ожидаемая себестоимость запроса — единицы рублей.
+Модели: все стадии — DeepSeek V4-Flash (дёшево, кэш префикса удешевляет вход
+в разы), аварийный резерв на случай его отказа — YandexGPT (РЕШ-171: ГигаЧат
+выпилен из кода). Маршрутизация — строкой `LLM_STAGE_ROUTES` в `.env`.
+Ожидаемая себестоимость запроса — единицы рублей.
 
 ## Команды
 

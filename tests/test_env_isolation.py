@@ -90,7 +90,7 @@ def test_purge_settings_env_removes_only_settings_names() -> None:
     заведомо системных имени, которых чистка обязана не тронуть.
     """
     fake_environ: dict[str, str] = {
-        "GIGACHAT_AUTH_KEY": "боевой-ключ",  # поле с validation_alias
+        "DEEPSEEK_API_KEY": "боевой-ключ",  # поле с validation_alias
         "ROSPATENT_API_KEY": "боевой-ключ",  # поле без validation_alias
         "RELEVANCE_MIN": "4",  # поле без validation_alias, боевой порог
         "PATH": "/usr/bin",
@@ -99,7 +99,7 @@ def test_purge_settings_env_removes_only_settings_names() -> None:
     }
     removed = purge_settings_env(fake_environ)
 
-    assert set(removed) == {"GIGACHAT_AUTH_KEY", "ROSPATENT_API_KEY", "RELEVANCE_MIN"}
+    assert set(removed) == {"DEEPSEEK_API_KEY", "ROSPATENT_API_KEY", "RELEVANCE_MIN"}
     assert "PATH" in fake_environ
     assert "HOME" in fake_environ
     assert "HTTPS_PROXY" in fake_environ

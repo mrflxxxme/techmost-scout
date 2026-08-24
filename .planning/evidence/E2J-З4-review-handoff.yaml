@@ -1,0 +1,29 @@
+handoff:
+  from: reviewer
+  to: verifier-or-orchestrator
+  task: "З-4"
+  did:
+    - "Цикл 1: прочитаны PLAN.md/INVARIANTS.md/CONVENTIONS.md/CLAUDE.md, diff 1dfb2b8..a07e1d1 целиком, проверен сквозной путь, наследование типа, метрика, основная очередь, воспроизведена мутация, границы; найдена 1 блокирующая находка (CHANGELOG противоречит planner.md)"
+    - "Цикл 2: проверен коммит b56abeb поверх a07e1d1 — git diff a07e1d1..b56abeb --stat (только CHANGELOG.md и handoff), grep «9 до 11» пуст, новая формулировка записи 2.6 прочитана и сверена арифметически лично, прогнан прицельно pytest tests/test_prompts.py -k matches_latest_changelog (8 passed, включая [replanner]) и tests/test_prompts.py tests/test_plan_types.py (55 passed), полный pytest -q (767 passed) и ruff"
+    - "Блокирующая находка цикла 1 устранена точечно, без расширения правки на planner.md/replanner.md"
+  artifacts:
+    - ".planning/evidence/E2J-З4-review.md (раздел «Цикл 2» добавлен, закоммичен до ответа)"
+    - ".planning/evidence/E2J-З4-review-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "git diff a07e1d1..b56abeb --stat: prompts/CHANGELOG.md, .planning/evidence/E2J-З4-handoff.yaml"
+    - "grep -rn '9 до 11' . --include=*.md --include=*.py: пусто"
+    - "pytest tests/test_prompts.py -k matches_latest_changelog -v: 8 passed (включая [replanner])"
+    - "pytest tests/test_prompts.py tests/test_plan_types.py -q: 55 passed"
+    - "pytest -q: 767 passed, 0 failed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 137 files already formatted"
+  escalate: "нет; виза владельца на текст prompts/planner.md — отдельный вопрос оркестратора, не входит в это ревью (planner.md этим коммитом не менялся)"
+  read_first:
+    - ".planning/evidence/E2J-З4-review.md (раздел «Цикл 2»)"
+    - "prompts/CHANGELOG.md (запись 2.6, новая редакция)"
+  notes: |
+    Итоговый вердикт задачи З-4: ПРИНЯТЬ (цикл 2, последний по счёту, но блокирующих
+    не осталось — эскалации после цикла 2 не требуется). Долг вне задачи (не блокирует,
+    зафиксирован в отчёте обоих циклов): replanner.md правило 9 не знает про тип grant —
+    не входит в файлы ни одной задачи волны Э2-Ж, требует внимания владельца отдельно.

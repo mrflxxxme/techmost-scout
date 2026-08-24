@@ -216,7 +216,7 @@ class ShowcaseItem(Base):
 
 
 class PipelineLog(Base):
-    """Журнал стадий: время, источники, токены, стоимость. Основа демо-режима."""
+    """Журнал стадий: время, источники, стоимость. Основа демо-режима."""
 
     __tablename__ = "pipeline_logs"
 
@@ -235,8 +235,20 @@ class PipelineLog(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    tokens_in: Mapped[int] = mapped_column(Integer, default=0)
-    tokens_out: Mapped[int] = mapped_column(Integer, default=0)
+    # `tokens_in`/`tokens_out` удалены из модели (РЕШ-174): счётчик стоимости
+    # копит только рубли, токены нигде не читались. На боевой базе, созданной
+    # ДО этого удаления, старые колонки физически остаются в файле — но не как
+    # безобидный мёртвый груз, а как `NOT NULL` без серверного умолчания:
+    # каждый `INSERT` без значения для них валит `IntegrityError` и откатывает
+    # ВСЮ транзакцию (инцидент воротного прогона Э2-Ж, прогон 1 потерян
+    # целиком). Починка на живой базе — `ALTER TABLE pipeline_logs
+    # DROP COLUMN tokens_in, DROP COLUMN tokens_out`, выполнена 23.08.2026 с
+    # предварительной резервной копией файла базы. На будущее: `init_db` — это
+    # `create_all`, он не видит расхождений в уже существующей таблице, а
+    # `doctor` схему не смотрит — проверки дрейфа схемы в проекте нет. Любое
+    # изменение состава колонок модели нужно сверять с `pragma table_info`
+    # живой базы до платного прогона, а не полагаться на предположение о
+    # безвредности.
     cost_rub: Mapped[float] = mapped_column(Float, default=0.0)
     sources_hit: Mapped[dict] = mapped_column(JSON, default=dict)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

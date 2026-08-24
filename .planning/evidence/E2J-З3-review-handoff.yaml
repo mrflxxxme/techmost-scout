@@ -1,0 +1,36 @@
+handoff:
+  from: reviewer
+  to: verifier
+  task: "З-3 (волна Э2-Ж) — Выпил ГигаЧата: DeepSeek первичный"
+  did:
+    - "Проверены diff (89335cf), все 10 инвариантов, грабли §0.1 SPEC, границы задачи по git diff --stat"
+    - "Прогнаны pytest -q (751 passed, 1 xfailed, 0 failed), ruff check, ruff format --check в копии исполнителя"
+    - "Прицельная мутация: убран вызов _check_known_providers() из LLMRouter.__init__ — оба новых теста упали (DID NOT RAISE), дерево восстановлено, git status чист"
+    - "Выборочно проверены 16 из 20 механически изменённых тестовых файлов на сохранение смысла проверки, включая test_probe.py и test_run_visibility.py по прямому указанию"
+    - "Разобраны оба отступления, названные исполнителем: handoff отдельным коммитом (не блокирует — работа не потеряна) и неполная чистка .env.example (не блокирует — территория владельца, доступ к файлу заблокирован и у ревьюера тоже)"
+    - "Вердикт: ПРИНЯТЬ, блокирующих находок нет, 2 совета"
+  artifacts:
+    - .planning/evidence/E2J-З3-review.md (закоммичен)
+    - .planning/evidence/E2J-З3-review-handoff.yaml (закоммичен)
+  self_audit: pass
+  checks:
+    - "pytest -q (копия agent-a2e2bd66ef648e338): 751 passed, 1 xfailed, 0 failed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 136 files already formatted"
+    - "grep -rni gigachat backend/app --include='*.py': пусто"
+    - "grep -rni gigachat tests --include='*.py': пусто"
+    - "grep -rn httpx backend/app: только llm/, search/, pipeline_context.py, pipeline_search.py, cli.py"
+    - "мутация _check_known_providers: 2 failed (DID NOT RAISE LLMError), после восстановления — снова зелёные"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача З-3, волна Э2-Ж)
+    - .planning/evidence/E2J-З3-review.md
+    - backend/app/llm/router.py
+    - backend/app/config.py
+  notes: |
+    Вердикт ПРИНЯТЬ, цикл 1 — второго цикла не потребовалось. Оба отступления,
+    названные исполнителем (handoff отдельным коммитом; .env.example не
+    почищен), разобраны в отчёте и признаны неблокирующими: работа нигде не
+    потеряна, границы задачи по .env-файлам соблюдены буквально (карточка
+    прямо называет их территорией владельца). Ветку можно передавать
+    верификатору/на слияние волны 0.

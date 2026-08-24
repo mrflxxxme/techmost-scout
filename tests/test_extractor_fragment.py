@@ -28,9 +28,9 @@ from app.schemas import SourceType
 
 
 def _extractor_router(settings, fake_provider_factory, responses: list[str]):
-    """Роутер с заглушкой на месте GigaChat — маршрут стадии `extractor:gigachat`."""
-    provider = fake_provider_factory("gigachat", responses)
-    return LLMRouter(settings, providers={"gigachat": provider}), provider
+    """Роутер с заглушкой на месте провайдера — маршрут стадии `extractor:deepseek`."""
+    provider = fake_provider_factory("deepseek", responses)
+    return LLMRouter(settings, providers={"deepseek": provider}), provider
 
 
 # ── Критерий 1: выход стадии сократился не менее чем вдвое ──────────────────

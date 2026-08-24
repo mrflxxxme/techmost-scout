@@ -23,7 +23,8 @@ from app.search.base import SearchAdapter, SearchError
 
 log = logging.getLogger(__name__)
 
-API_URL = "http://export.arxiv.org/api/query"
+#: Только https: прокси среды режет незашифрованный http (403 на всех прогонах)
+API_URL = "https://export.arxiv.org/api/query"
 NS = {"atom": "http://www.w3.org/2005/Atom"}
 MAX_RESULTS = 100
 MAX_SNIPPET = 700

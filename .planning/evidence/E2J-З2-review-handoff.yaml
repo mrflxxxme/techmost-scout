@@ -1,0 +1,43 @@
+handoff:
+  from: reviewer
+  to: verifier-none-merged
+  task: "З-2 (волна Э2-Ж) — КиберЛенинка: короткий запрос вместо нулевой выдачи"
+  did:
+    - >
+      Цикл 1: проверены diff (fc049f7..2a3f579), все 10 инвариантов, границы
+      задачи, условия РЕШ-70, укорачивание запроса, кэш по q, лог; лично
+      прогнаны pytest -q (755 passed), pytest -k cyberleninka (19 passed),
+      ruff; лично воспроизведены все три заявленные мутации. Найдено 1
+      блокирующее (инвариант №10 — незакавыченное двоеточие в собственном
+      handoff исполнителя, yaml.safe_load падал) и 3 совета.
+    - >
+      Цикл 2: проверен коммит 68c9b91 поверх 2a3f579. Кавычки в handoff
+      подтверждены лично — yaml.safe_load разбирает файл без исключения.
+      Новый тест test_короткий_запрос_с_нулевой_выдачей_не_даёт_повтора
+      честно проверяет случай short_text == text через respx-счётчик
+      (route.call_count == 1), закрывает совет 2 цикла 1. Диф 2a3f579..68c9b91
+      затрагивает только handoff и тестовый файл — cyberleninka.py и
+      docs/sources.md не менялись.
+  artifacts:
+    - .planning/evidence/E2J-З2-review.md (закоммичен до ответа, раздел «Цикл 2» добавлен)
+    - .planning/evidence/E2J-З2-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "yaml.safe_load(E2J-З2-handoff.yaml) после правки: без исключения (было ScannerError line 4)"
+    - "pytest tests/test_search_cyberleninka.py -v: 20 passed"
+    - "pytest -q (копия исполнителя): 756 passed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 137 files already formatted"
+    - "git diff 2a3f579..68c9b91 --stat: только .planning/evidence/E2J-З2-handoff.yaml и tests/test_search_cyberleninka.py"
+  escalate: none
+  read_first:
+    - .planning/evidence/E2J-З2-review.md (оба раздела — цикл 1 и цикл 2)
+    - .planning/PLAN.md (задача З-2, волна Э2-Ж)
+    - .claude/worktrees/agent-aaad2d9ac2400d349/backend/app/search/cyberleninka.py
+  notes: >
+    Вердикт ПРИНЯТЬ, цикл 2 (последний по лимиту карточки — предел циклов
+    проверки для З-2 равен 2, третьего не будет и не потребовалось). Все
+    критерии приёмки карточки подтверждены лично, все 10 инвариантов
+    пройдены. Советы 1 и 3 цикла 1 (безусловный вызов _shorten_query при
+    found>0; теоретический краевой случай с двойными пробелами) остаются
+    необязательными пожеланиями — не блокируют, в задачу не входят.

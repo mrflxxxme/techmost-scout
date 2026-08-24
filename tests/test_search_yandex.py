@@ -18,9 +18,9 @@ import respx
 
 from app.llm import LLMRouter
 from app.pipeline.orchestrator import ScoutPipeline
-from app.schemas import SearchPlan, SearchQuery, SourceType
+from app.schemas import Candidate, SearchPlan, SearchQuery, SourceType
 from app.search import build_adapters
-from app.search.base import SearchAdapter, SearchError
+from app.search.base import SearchAdapter, SearchError, normalize_url
 from app.search.yandex_search import (
     CONTEST_OUTCOME_MARKERS,
     CONTEST_SITES,
@@ -173,8 +173,10 @@ async def test_предел_платных_запросов_на_прогон(ma
 
 @respx.mock
 async def test_грантовый_маркер_в_web_формулировке_сужает_до_реестров_только_в_ru(make_adapter):
-    """Сужение `site:` больше не зависит от типа `grant` (планировщик его не выдаёт, РЕШ-39) —
-    оно включается по маркеру грантового намерения в тексте русской web-формулировки (РЕШ-41)."""
+    """РЕШ-173 вернула тип `grant` планировщику (основной путь — ниже, тесты про
+    `SourceType.GRANT`); маркерное сужение по тексту русской web-формулировки
+    (РЕШ-41) остаётся страховкой на случай, если модель вопреки правилу 9
+    `planner.md` всё же разметит грантовую формулировку типом `web`."""
     route = respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
     respx.get(url__startswith=OPERATION_URL).mock(
         return_value=httpx.Response(200, json=_operation_done(_xml(_doc("https://rscf.ru/project/1"))))
@@ -213,6 +215,59 @@ async def test_грантовый_маркер_в_web_формулировке_�
     # Обычная русская web-формулировка без грантового маркера — без сужения
     assert "site:" not in ru_plain_text
     assert "site:rscf.ru" in ru_konkurs_text and "site:fasie.ru" in ru_konkurs_text
+
+
+def test_grant_в_составе_source_types_адаптера():
+    """Критерий задачи З-4 (РЕШ-173): `SourceType.GRANT` обязан быть перечислен
+    в `source_types` — иначе `gather_candidates` оркестратора отфильтрует
+    грантовую формулировку плана ДО того, как она дойдёт до адаптера
+    (`pipeline_search.py:149`), и тип `grant` останется мёртвым в промпте."""
+    assert SourceType.GRANT in YandexSearchAdapter.source_types
+
+
+@respx.mock
+async def test_запрос_типа_grant_принимается_адаптером_и_кандидат_получает_тип_grant(make_adapter):
+    """Критерий 1 задачи З-4: веб-контур принимает формулировку типа `grant`
+    тем же путём, что `web` и `contest` (`search_types`), а кандидат из неё
+    получает `source_type=grant`, а не `web` — тип не схлопывается при разборе
+    XML (`_to_candidates(source_type=query.source_type)`)."""
+    route = respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
+    respx.get(url__startswith=OPERATION_URL).mock(
+        return_value=httpx.Response(
+            200, json=_operation_done(_xml(_doc("https://rscf.ru/project/1", "Грант РНФ на разработку катализатора")))
+        )
+    )
+    async with httpx.AsyncClient() as client:
+        found = await make_adapter(client).search(
+            _query(text="поддержанные проекты РНФ катализатор гидроочистки", lang="ru", source_type=SourceType.GRANT),
+            limit=5,
+        )
+
+    sent = json.loads(route.calls[0].request.content)["query"]["queryText"]
+    assert len(found) == 1
+    assert found[0].source_type is SourceType.GRANT
+    # Тип запроса уже несёт намерение — сужение включается без маркеров в тексте,
+    # в отличие от страховки на `web` (тест выше требует маркер).
+    assert "site:rscf.ru" in sent and "site:fasie.ru" in sent
+
+
+@respx.mock
+async def test_grant_в_мировом_контуре_не_сужается(make_adapter):
+    """Реестры РНФ и Фонда содействия — российские; правило 9 `planner.md`
+    требует `lang: "ru"` для `grant`, но защита от ошибки модели (`lang: "en"`)
+    не должна сузить мировую выдачу до бессмысленных для неё сайтов."""
+    route = respx.post(SEARCH_ASYNC_URL).mock(return_value=httpx.Response(200, json={"id": "op-1"}))
+    respx.get(url__startswith=OPERATION_URL).mock(
+        return_value=httpx.Response(200, json=_operation_done(_xml(_doc("https://a.example.org/p"))))
+    )
+    async with httpx.AsyncClient() as client:
+        await make_adapter(client).search(
+            _query(text="supported grant projects catalyst research", lang="en", source_type=SourceType.GRANT),
+            limit=5,
+        )
+
+    sent = json.loads(route.calls[0].request.content)["query"]["queryText"]
+    assert "site:" not in sent
 
 
 @respx.mock
@@ -312,33 +367,29 @@ async def test_источник_включается_только_с_обоим�
 
 
 @respx.mock
-async def test_страница_из_двух_поисковиков_склеивается_в_одного_кандидата(make_adapter):
-    """Главная причина общего ключа склейки: один адрес — один кандидат."""
-    from app.search.google_search import API_URL, GoogleSearchAdapter
+async def test_страница_из_другого_веб_источника_склеивается_в_одного_кандидата(make_adapter):
+    """Главная причина общего ключа склейки: один адрес — один кандидат.
 
+    Раньше вторым источником в паре был Google (адаптер удалён, РЕШ-174).
+    Ключ склейки — общая функция `normalize_url`, а не что-то специфичное
+    для Яндекса, поэтому её достаточно проверить напрямую вторым кандидатом,
+    без второго живого адаптера.
+    """
     _mock_ok(_xml(_doc("https://pure.manchester.ac.uk/lab/", "Лаборатория")))
-    respx.get(API_URL).mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "items": [
-                    {
-                        "title": "Lab page",
-                        "link": "https://www.pure.manchester.ac.uk/lab",
-                        "snippet": "…",
-                        "displayLink": "pure.manchester.ac.uk",
-                    }
-                ]
-            },
-        )
-    )
     async with httpx.AsyncClient() as client:
         from_yandex = await make_adapter(client).search(_query(), limit=5)
-        google = GoogleSearchAdapter(client, api_key="k", cse_id="cx")
-        from_google = await google.search(_query(lang="en"), limit=5)
 
-    assert from_yandex[0].raw_id == from_google[0].raw_id
-    assert from_yandex[0].dedup_key() == from_google[0].dedup_key()
+    other_source = Candidate(
+        source_type=SourceType.WEB,
+        title="Lab page",
+        url="https://www.pure.manchester.ac.uk/lab",
+        snippet="…",
+        raw_id=normalize_url("https://www.pure.manchester.ac.uk/lab"),
+        provider="другой_веб_источник",
+    )
+
+    assert from_yandex[0].raw_id == other_source.raw_id
+    assert from_yandex[0].dedup_key() == other_source.dedup_key()
 
 
 # ── Т-23: конкурсные формулировки через контур Яндекса ─────────────────────

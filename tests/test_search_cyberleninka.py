@@ -31,7 +31,7 @@ from app.schemas import SearchQuery, SourceType
 from app.search import build_adapters
 from app.search import cyberleninka as cyberleninka_module
 from app.search.base import SearchError
-from app.search.cyberleninka import API_URL, USER_AGENT, CyberLeninkaAdapter
+from app.search.cyberleninka import API_URL, USER_AGENT, CyberLeninkaAdapter, _shorten_query
 
 #: Ответ API в том виде, в каком его вернул живой запрос (§1.6 доказательства):
 #: подсветка в названии и фрагментах, относительная ссылка, признак ВАК.
@@ -210,6 +210,121 @@ async def test_повторный_запрос_берётся_из_кэша(tmp_
 
     assert route.call_count == 1
     assert [c.url for c in first] == [c.url for c in second]
+
+
+# ── Укорачивание при found=0 (диагноз Э2-Ж, docs/sources.md) ───────────────
+
+#: 8-словная формулировка модели из диагноза — на живом вызове дала found=0.
+_LONG_QUERY = "ультразвуковая диагностика супоросности свиноматок с помощью нейросети"
+#: Первые 4 содержательных слова той же формулировки (без стоп-слова «с»).
+_SHORT_QUERY = "ультразвуковая диагностика супоросности свиноматок"
+
+
+def _by_query(long_response: httpx.Response, short_response: httpx.Response):
+    """Разные ответы на длинную и укороченную форму — по телу запроса."""
+
+    def side_effect(request: httpx.Request) -> httpx.Response:
+        return long_response if _body(request)["q"] == _LONG_QUERY else short_response
+
+    return side_effect
+
+
+@respx.mock
+async def test_укорачивание_повторяет_запрос_при_нулевой_выдаче(tmp_path, caplog):
+    """Критерий 1: длинная форма → 0, укороченная → N>0 — адаптер возвращает
+    кандидатов укороченной формы, в логе прогона видны обе формы и оба found —
+    диагноз следующего нуля читается из журнала без контрольных вызовов."""
+    route = respx.post(API_URL).mock(side_effect=_by_query(_response(found=0), _response(_ARTICLE, found=21)))
+    caplog.set_level("INFO", logger=cyberleninka_module.__name__)
+    async with httpx.AsyncClient() as client:
+        adapter = CyberLeninkaAdapter(client, cache_dir=tmp_path)
+        found = await adapter.search(_query(_LONG_QUERY), limit=5)
+
+        # Повторный вызов той же формулировки: обе формы уже в кэше — источник
+        # больше не тревожим (кэш ключуется финальной формой запроса).
+        found_again = await adapter.search(_query(_LONG_QUERY), limit=5)
+
+    assert len(found) == 1
+    assert route.call_count == 2, "должно быть ровно два обращения: исходная форма + один повтор"
+    bodies = [_body(call.request)["q"] for call in route.calls]
+    assert bodies == [_LONG_QUERY, _SHORT_QUERY]
+    assert _LONG_QUERY in caplog.text
+    assert _SHORT_QUERY in caplog.text
+    assert "found=0" in caplog.text and "found=21" in caplog.text
+    assert [c.url for c in found_again] == [c.url for c in found]
+
+
+@respx.mock
+async def test_found_ноль_на_обеих_формах_честный_пустой_список(tmp_path):
+    """Критерий 2: если и укороченная форма ничего не нашла — это результат
+    поиска, а не отказ источника."""
+    respx.post(API_URL).mock(return_value=_response(found=0))
+    async with httpx.AsyncClient() as client:
+        found = await CyberLeninkaAdapter(client, cache_dir=tmp_path).search(_query(_LONG_QUERY), limit=5)
+
+    assert found == []
+
+
+@respx.mock
+async def test_отказ_на_повторе_поднимает_searcherror(tmp_path):
+    """Критерий 3: транспортный отказ на повторе — тот же контракт, что и на
+    первой попытке; существующая машинерия `_fetch` не обходится стороной."""
+    route = respx.post(API_URL).mock(
+        side_effect=_by_query(_response(found=0), httpx.Response(500, text="internal error"))
+    )
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(SearchError):
+            await CyberLeninkaAdapter(client, cache_dir=tmp_path).search(_query(_LONG_QUERY), limit=5)
+
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_повтор_тоже_соблюдает_паузу(tmp_path):
+    """Критерий 4: повтор — такой же сетевой вызов и подчиняется тому же
+    `min_interval_seconds`, что и исходный запрос (РЕШ-70)."""
+    respx.post(API_URL).mock(side_effect=_by_query(_response(found=0), _response(_ARTICLE, found=21)))
+    async with httpx.AsyncClient() as client:
+        adapter = CyberLeninkaAdapter(client, cache_dir=tmp_path)
+        started = time.perf_counter()
+        await adapter.search(_query(_LONG_QUERY), limit=5)
+        elapsed = time.perf_counter() - started
+
+    assert elapsed >= adapter.min_interval_seconds * 0.9, f"повтор ушёл без паузы, за {elapsed:.3f} с"
+
+
+def test_укорачивание_детерминировано_и_сохраняет_порядок():
+    """Критерий 5: одна и та же формулировка всегда даёт одну и ту же короткую
+    форму; стоп-слова снимаются, порядок оставшихся слов не меняется."""
+    text = "ультразвуковая диагностика для супоросности у свиноматок с помощью нейросети"
+
+    short = _shorten_query(text)
+
+    assert short == _shorten_query(text)
+    assert short == "ультразвуковая диагностика супоросности свиноматок"
+
+
+def test_укорачивание_короткого_запроса_не_меняет_его():
+    """Формулировка из живого диагноза, давшая found=21: три содержательных
+    слова, короче делать уже нечего — короткая форма совпадает с исходной."""
+    assert _shorten_query("супоросность свиноматок узи") == "супоросность свиноматок узи"
+
+
+@respx.mock
+async def test_короткий_запрос_с_нулевой_выдачей_не_даёт_повтора(tmp_path):
+    """Краевой случай `short_text == text`: формулировка уже короче предела
+    укорачивания, `found=0` — повторять запрос тем же текстом нет смысла,
+    источник должен получить ровно один сетевой вызов (respx-счётчик), а не
+    два одинаковых подряд."""
+    short_query = "супоросность свиноматок узи"
+    assert _shorten_query(short_query) == short_query, "формулировка уже короче предела укорачивания"
+
+    route = respx.post(API_URL).mock(return_value=_response(found=0))
+    async with httpx.AsyncClient() as client:
+        found = await CyberLeninkaAdapter(client, cache_dir=tmp_path).search(_query(short_query), limit=5)
+
+    assert found == []
+    assert route.call_count == 1, "короткий запрос сам с собой повторяться не должен"
 
 
 # ── Отказы (инвариант №5, РЕШ-43) ───────────────────────────────────────────

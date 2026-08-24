@@ -1,0 +1,33 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: "Цикл правок аудита Э2-Ж (правки 2 и 3, правка 1 внесена оркестратором)"
+  did:
+    - "Правка 2: backend/app/models.py, комментарий у удалённых tokens_in/tokens_out переписан честно — называет действительное следствие (IntegrityError, откат транзакции прогона 1), фиксирует выполненный ALTER TABLE DROP COLUMN 23.08 с резервной копией и правило на будущее (сверять pragma table_info перед изменением схемы модели)"
+    - "Правка 3: README.md — убран шаг установки сертификатов ГигаЧата, строка ожидаемого doctor исправлена на 'deepseek — ок', строка про модели переписана на 'DeepSeek — все стадии, YandexGPT — резерв (РЕШ-171)'"
+    - "Правка 3: docs/deps-manual.md — пункт 1 (ГигаЧат) переписан в историческую заметку: что было настроено 11.08 и почему выпилено 23.08 (РЕШ-171, порт 9443 недоступен из среды, требование качества); пункт 2 (DeepSeek) переименован в основную модель для всех стадий, упоминание резервного маршрута исправлено с ГигаЧата на YandexGPT"
+    - "Бонус аудита: пункт 9 deps-manual.md (PatentsView) помечен отклонённым по РЕШ-172 со ссылкой на пункт 10 (EPO OPS)"
+  artifacts:
+    - backend/app/models.py
+    - README.md
+    - docs/deps-manual.md
+  self_audit: pass
+  checks:
+    - "grep -rni gigachat README.md docs/deps-manual.md: только 3 явных исторических упоминания внутри раздела 'ГигаЧат — выпилен из кода, раздел исторический (РЕШ-171)' (docs/deps-manual.md строки 23, 24, 31 — снимок 11.08 и имя удалённого файла адаптера llm/gigachat.py)"
+    - "pytest tests/test_team_docs.py -q: 35 passed"
+    - "pytest -q: 753 passed, 1 warning (starlette httpx2 deprecation, не связано с правкой)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 136 files already formatted"
+  escalate: none
+  read_first:
+    - ".planning/evidence/audit-Э2-Ж.md (правки 2 и 3)"
+    - "backend/app/models.py (класс PipelineLog, комментарий у tokens_in/tokens_out)"
+    - "README.md (Быстрый старт, раздел «Как это устроено»)"
+    - "docs/deps-manual.md (пункты 1, 2, 9)"
+    - "docs/remote-setup.md (образец формулировок РЕШ-171, уже правленный)"
+  notes: >-
+    База рабочей копии отставала от верхушки волны (была на 892de13, волна
+    Э2-Е), верхушка — 857c7db с уже внесённой правкой 1. Подтянул `git reset
+    --hard 857c7db` при чистом дереве (РЕШ-158), своих коммитов на момент
+    входа не было. Правку 1 (.env.example) не трогал — она вне моих границ.
+    Живых вызовов не делал, значения секретов нигде не выводил.

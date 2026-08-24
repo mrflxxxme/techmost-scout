@@ -42,7 +42,6 @@ _PLAN_JSON = json.dumps(
 #: Уникальные фиктивные значения секретов (РЕШ-124, инвариант №3) — не
 #: настоящие ключи, а маркеры для стража: если хоть один встретится в выводе,
 #: тест провалится и укажет ровно на утечку, а не на что-то ещё.
-_FAKE_GIGACHAT_KEY = "FAKE-GIGACHAT-KEY-9f3d1c7b"
 _FAKE_DEEPSEEK_KEY = "FAKE-DEEPSEEK-KEY-2b7a44dd"
 _FAKE_YANDEX_KEY = "FAKE-YANDEX-KEY-6e0a91aa"
 
@@ -138,8 +137,8 @@ async def test_params_line_carries_all_named_values(settings, brief, fake_provid
     assert "→".join(settings.fallback_order()) in line
 
     # Имена обеих моделей.
-    assert settings.gigachat_model in line
     assert settings.deepseek_model in line
+    assert settings.yandex_model in line
 
 
 # ── Критерий 3: секретов в выводе нет (страж по фактическому выводу, РЕШ-124) ─
@@ -148,7 +147,6 @@ async def test_params_line_has_no_secret_values(monkeypatch, brief, fake_provide
     встречается ни в caplog, ни в перехваченных stdout/stderr."""
     from app.config import Settings, get_settings
 
-    monkeypatch.setenv("GIGACHAT_AUTH_KEY", _FAKE_GIGACHAT_KEY)
     monkeypatch.setenv("DEEPSEEK_API_KEY", _FAKE_DEEPSEEK_KEY)
     monkeypatch.setenv("YANDEX_API_KEY", _FAKE_YANDEX_KEY)
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
@@ -167,7 +165,7 @@ async def test_params_line_has_no_secret_values(monkeypatch, brief, fake_provide
         get_settings.cache_clear()
 
     captured = capsys.readouterr()
-    for secret in (_FAKE_GIGACHAT_KEY, _FAKE_DEEPSEEK_KEY, _FAKE_YANDEX_KEY):
+    for secret in (_FAKE_DEEPSEEK_KEY, _FAKE_YANDEX_KEY):
         assert secret not in caplog.text, "значение ключа не имеет права попасть в лог прогона"
         assert secret not in captured.out, "значение ключа не имеет права попасть в stdout"
         assert secret not in captured.err, "значение ключа не имеет права попасть в stderr"

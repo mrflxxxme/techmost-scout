@@ -179,8 +179,8 @@ async def test_обе_конкурсные_формулировки_первог
             },
             ensure_ascii=False,
         )
-        replan_provider = fake_provider_factory("gigachat", [plan2_json])
-        replan_router = LLMRouter(settings, providers={"gigachat": replan_provider})
+        replan_provider = fake_provider_factory("deepseek", [plan2_json])
+        replan_router = LLMRouter(settings, providers={"deepseek": replan_provider})
         brief = Brief(
             industry="агропром",
             task_summary="Диагностика супоросности свиноматок по УЗИ.",

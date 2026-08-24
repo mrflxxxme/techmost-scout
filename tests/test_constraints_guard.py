@@ -114,8 +114,8 @@ async def test_retry_constraints_fills_only_constraints_field(settings, fake_pro
         task_summary="подменённая суть - не должна попасть в бриф",
         constraints=["точность 95-98%", "TRL 6-9"],
     )
-    provider = fake_provider_factory("gigachat", [first, second])
-    router = LLMRouter(settings, providers={"gigachat": provider})
+    provider = fake_provider_factory("deepseek", [first, second])
+    router = LLMRouter(settings, providers={"deepseek": provider})
 
     intake = await stages.run_intake(router, _FARMA_TEXT)
     assert router.cost.calls == 1, "база отсчёта: один вызов на сам run_intake"
@@ -141,8 +141,8 @@ async def test_retry_constraints_fills_only_constraints_field(settings, fake_pro
 async def test_retry_constraints_skipped_without_requirement_signs(settings, fake_provider_factory):
     """Критерий 3: пустой `constraints`, но признаков требований нет -
     повторного вызова быть не должно."""
-    provider = fake_provider_factory("gigachat", ["{}"])
-    router = LLMRouter(settings, providers={"gigachat": provider})
+    provider = fake_provider_factory("deepseek", ["{}"])
+    router = LLMRouter(settings, providers={"deepseek": provider})
     brief = _brief(constraints=[])
     stage_log: list = []
 
@@ -160,8 +160,8 @@ async def test_retry_constraints_skipped_when_constraints_already_present(settin
     """Обратная сторона критерия 2: `constraints` уже заполнен и покрывает все
     маркеры `_LEVEL_MARKERS` из текста - вызова нет, хотя признаки в тексте
     есть (мутация (б): вызов делается всегда независимо от покрытия)."""
-    provider = fake_provider_factory("gigachat", ["{}"])
-    router = LLMRouter(settings, providers={"gigachat": provider})
+    provider = fake_provider_factory("deepseek", ["{}"])
+    router = LLMRouter(settings, providers={"deepseek": provider})
     brief = _brief(constraints=["уже есть ограничение вместе с уровнем готовности TRL 6-9"])
 
     updated_brief, unresolved = await retry_constraints_if_missing(
@@ -178,8 +178,8 @@ async def test_retry_constraints_empty_second_answer_marks_unresolved(settings, 
     а не пустой список без объяснения (критерий 4, готовит клиентскую строку)."""
     first = _intake_response(industry="фарма", task_summary="Суть.", constraints=[])
     second = _intake_response(industry="фарма", task_summary="Суть.", constraints=[])
-    provider = fake_provider_factory("gigachat", [first, second])
-    router = LLMRouter(settings, providers={"gigachat": provider})
+    provider = fake_provider_factory("deepseek", [first, second])
+    router = LLMRouter(settings, providers={"deepseek": provider})
     brief = _brief(constraints=[])
 
     updated_brief, unresolved = await retry_constraints_if_missing(
@@ -197,7 +197,7 @@ class _AlwaysFailsProvider(LLMProvider):
     """Провайдер, отказывающий без права на повтор - без сна в тесте
     (`retryable=False` не даёт `LLMRouter.complete` ждать между попытками)."""
 
-    name = "gigachat"
+    name = "deepseek"
     price_in_rub_per_mtok = 10.0
     price_out_rub_per_mtok = 20.0
 
@@ -212,7 +212,7 @@ class _CostlyProvider(LLMProvider):
     """Провайдер, у которого один вызов дороже всего лимита запроса - тот же
     образец, что `test_pipeline_resilience._CostlyProvider`."""
 
-    name = "gigachat"
+    name = "deepseek"
     price_in_rub_per_mtok = 10.0
     price_out_rub_per_mtok = 20.0
 
@@ -229,7 +229,7 @@ class _CostlyProvider(LLMProvider):
 async def test_retry_constraints_llm_error_does_not_raise_run_continues(settings):
     """Отказ повторного вызова не роняет прогон (инвариант №5): предупреждение
     в лог, своя строка журнала стадий, `constraints_unresolved=True`."""
-    router = LLMRouter(settings, providers={"gigachat": _AlwaysFailsProvider()})
+    router = LLMRouter(settings, providers={"deepseek": _AlwaysFailsProvider()})
     brief = _brief(constraints=[])
     stage_log: list = []
 
@@ -247,7 +247,7 @@ async def test_retry_constraints_llm_error_does_not_raise_run_continues(settings
 async def test_retry_constraints_cost_limit_propagates(settings):
     """Исчерпание лимита стоимости (РЕШ-45) - команда «стоп тратить», не отказ
     модели: исключение обязано выйти наружу, а не смягчиться."""
-    router = LLMRouter(settings, providers={"gigachat": _CostlyProvider()})
+    router = LLMRouter(settings, providers={"deepseek": _CostlyProvider()})
     brief = _brief(constraints=[])
     stage_log: list = []
 
@@ -279,8 +279,8 @@ async def test_retry_constraints_fires_when_constraints_non_empty_but_marker_unc
         task_summary="не должно попасть в бриф",
         constraints=["уровень технологической готовности от TRL 6 до TRL 9"],
     )
-    provider = fake_provider_factory("gigachat", [second])
-    router = LLMRouter(settings, providers={"gigachat": provider})
+    provider = fake_provider_factory("deepseek", [second])
+    router = LLMRouter(settings, providers={"deepseek": provider})
     brief = _brief(constraints=["точность 95-98%"])
     stage_log: list = []
 
@@ -302,8 +302,8 @@ async def test_retry_constraints_fires_when_constraints_non_empty_but_marker_unc
 async def test_retry_constraints_skipped_when_marker_already_covered(settings, fake_provider_factory):
     """Критерий 4, первая половина: маркер TRL уже покрыт собранным
     требованием - здоровый прогон не дорожает, повторного вызова нет."""
-    provider = fake_provider_factory("gigachat", ["{}"])
-    router = LLMRouter(settings, providers={"gigachat": provider})
+    provider = fake_provider_factory("deepseek", ["{}"])
+    router = LLMRouter(settings, providers={"deepseek": provider})
     brief = _brief(constraints=["точность 95-98%, уровень готовности TRL 6-9"])
 
     updated_brief, unresolved = await retry_constraints_if_missing(
@@ -318,8 +318,8 @@ async def test_retry_constraints_skipped_when_marker_already_covered(settings, f
 async def test_retry_constraints_marker_coverage_ignores_case(settings, fake_provider_factory):
     """Мутация (в): сравнение маркера с требованием обязано игнорировать
     регистр - «trl» в требовании покрывает «TRL» в тексте задачи."""
-    provider = fake_provider_factory("gigachat", ["{}"])
-    router = LLMRouter(settings, providers={"gigachat": provider})
+    provider = fake_provider_factory("deepseek", ["{}"])
+    router = LLMRouter(settings, providers={"deepseek": provider})
     brief = _brief(constraints=["готовность trl 6-9"])
 
     updated_brief, unresolved = await retry_constraints_if_missing(
@@ -339,8 +339,8 @@ async def test_retry_constraints_two_uncovered_markers_trigger_single_call(setti
         task_summary="s",
         constraints=["прочность не менее нормативной", "уровень готовности TRL 6-9"],
     )
-    provider = fake_provider_factory("gigachat", [second])
-    router = LLMRouter(settings, providers={"gigachat": provider})
+    provider = fake_provider_factory("deepseek", [second])
+    router = LLMRouter(settings, providers={"deepseek": provider})
     brief = _brief(constraints=["исходное требование без обоих маркеров"], industry="пром")
 
     updated_brief, unresolved = await retry_constraints_if_missing(

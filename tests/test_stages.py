@@ -18,7 +18,7 @@ import respx
 from app.config import Settings
 from app.llm import CostLimitExceededError, LLMRouter
 from app.pipeline import stages
-from app.pipeline.orchestrator import ScoutPipeline
+from app.pipeline.orchestrator import ScoutPipeline, split_contest_candidates
 from app.pipeline.stages import (
     NEUTRAL_SCORE_NOTE,
     candidates_listing,
@@ -156,12 +156,14 @@ def test_select_top_limits_single_provider_dominance(candidates):
     assert sum(1 for i in picked if i.candidate.provider == "crossref") <= 3
 
 
-def test_relevance_min_default_is_zero_cutoff_disabled():
-    """Порог по умолчанию — 0: отсечка выключена, пока значение не подобрано на
-    прогоне (Т-10). Догадка в коде хуже отсутствия отсечки."""
+def test_relevance_min_default_is_three():
+    """Умолчание порога — 3 (РЕШ-174): значение подобрано по журналу калибровки
+    живых прогонов Э2 и переехало в код рабочим, а не нулевым, — нулевая
+    отсечка пропускала явно нерелевантных кандидатов дальше по пайплайну без
+    причины платить за них модели на следующих стадиях."""
     field = Settings.model_fields["relevance_min"]
 
-    assert field.default == 0
+    assert field.default == 3
 
 
 def test_select_top_drops_candidate_below_relevance_min():
@@ -703,8 +705,8 @@ def test_mixed_group_with_contest_is_capped():
 
 def test_contest_does_not_count_towards_source_type_coverage():
     """Критерий 3: выдача из `publication`, `patent` и `contest` даёт покрытие 2,
-    а не 3 (РЕШ-85 п. 2). Иначе четвёртый тип метрики добирался бы конкурсами
-    вместо грантов и организаций."""
+    а не 3 (РЕШ-85 п. 2). Иначе четвёртый тип метрики («публикации, патенты,
+    гранты, веб», РЕШ-173) добирался бы конкурсами вместо гранта или веба."""
     candidates = [
         Candidate(source_type=SourceType.PUBLICATION, title="Статья", url="https://example.org/a", provider="crossref"),
         Candidate(source_type=SourceType.PATENT, title="Патент", url="https://example.org/b", provider="rospatent"),
@@ -762,6 +764,53 @@ def test_source_type_coverage_of_contests_only_is_zero():
     ]
 
     assert stages.count_source_type_coverage(candidates) == 0
+
+
+def test_grant_засчитывается_в_покрытие_как_четвёртый_тип():
+    """Критерий 2 задачи З-4 (РЕШ-173): пул из `publication` + `patent` +
+    `grant` + `web` даёт покрытие 4 — метрика ворот («≥ 4 из: публикации,
+    патенты, гранты, веб») достижима по построению. Без гранта тот же пул
+    даёт 3 — мутация (а) задачи (тип `grant` схлопнулся бы в `web`) обязана
+    ронять именно этот тест."""
+    with_grant = [
+        Candidate(source_type=SourceType.PUBLICATION, title="A", url="https://example.org/a", provider="crossref"),
+        Candidate(source_type=SourceType.PATENT, title="B", url="https://example.org/b", provider="rospatent"),
+        Candidate(source_type=SourceType.GRANT, title="C", url="https://rscf.ru/project/1", provider="yandex_search"),
+        Candidate(source_type=SourceType.WEB, title="D", url="https://example.org/d", provider="yandex_search"),
+    ]
+    without_grant = with_grant[:2] + with_grant[3:]
+
+    assert stages.count_source_type_coverage(with_grant) == 4
+    assert stages.count_source_type_coverage(without_grant) == 3
+
+
+def _grant_scored(
+    *, title: str = "Грант РНФ на разработку катализатора", url: str = "https://rscf.ru/project/1"
+) -> ScoredCandidate:
+    """Оценённый кандидат-грант: важен только `source_type` — критерий 3
+    задачи З-4 (РЕШ-173) проверяет, что он не уходит в конкурсную очередь и
+    не получает её потолок зрелости."""
+    return ScoredCandidate(
+        candidate=Candidate(source_type=SourceType.GRANT, title=title, url=url, provider="yandex_search"),
+        relevance=7,
+        maturity=7,
+        accessibility=8,
+        freshness=8,
+        completeness=6,
+    )
+
+
+def test_грант_идёт_в_основную_очередь_без_потолка_зрелости():
+    """Критерий 3 задачи З-4: грант — основная очередь (`split_contest_candidates`
+    делит только по `SourceType.CONTEST`), потолок зрелости конкурсного класса
+    (`cap_contest_maturity`) на него не распространяется."""
+    main, contest = split_contest_candidates([_grant_scored()])
+    assert len(main) == 1
+    assert contest == []
+
+    card = _card_with_maturity(MaturityStage.SERIES)
+    capped = stages.cap_contest_maturity(card, [_grant_scored()])
+    assert capped.maturity_stage is MaturityStage.SERIES
 
 
 # ── Стадия extractor: нормализация сырой выдачи моделью (Э2-5) ──────────────
@@ -823,9 +872,9 @@ _EXTRACT_JSON = json.dumps(
 
 
 def _extractor_router(settings, fake_provider_factory, responses: list[str] | None = None, **kwargs):
-    """Роутер с заглушкой на месте GigaChat: маршрут стадии — `extractor:gigachat`."""
-    provider = fake_provider_factory("gigachat", responses, **kwargs)
-    return LLMRouter(settings, providers={"gigachat": provider}), provider
+    """Роутер с заглушкой на месте DeepSeek: маршрут стадии — `extractor:deepseek`."""
+    provider = fake_provider_factory("deepseek", responses, **kwargs)
+    return LLMRouter(settings, providers={"deepseek": provider}), provider
 
 
 class _FakeWebAdapter(SearchAdapter):
@@ -938,8 +987,8 @@ async def test_extractor_просит_свой_лимит_токенов(setting
                 messages, model=model, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode
             )
 
-    provider = _Recording("gigachat", [_EXTRACT_JSON])
-    router = LLMRouter(settings, providers={"gigachat": provider})
+    provider = _Recording("deepseek", [_EXTRACT_JSON])
+    router = LLMRouter(settings, providers={"deepseek": provider})
 
     await stages.extract_candidates(SourceType.WEB, "yandex_search", _RAW_WEB, router)
 
@@ -1394,7 +1443,7 @@ async def test_журнал_стадии_поиска_несёт_трату_и_�
         await pipeline._run_stages(brief, 1, stage_log, [], [])
 
     record = next(item for item in stage_log if item.stage == "search")
-    assert record.provider == "gigachat", "платный вызов стадии extractor не отражён в журнале"
+    assert record.provider == "deepseek", "платный вызов стадии extractor не отражён в журнале"
     assert record.cost_rub > 0
     assert record.error and "ноль кандидатов" in record.error
 
@@ -1430,7 +1479,7 @@ async def test_журнал_стадии_поиска_несёт_фактиче�
 
     record = next(item for item in stage_log if item.stage == "search")
     цена_вызова = 0.01
-    assert record.provider == "gigachat"
+    assert record.provider == "deepseek"
     assert record.cost_rub == pytest.approx(цена_вызова), "в журнале не цена стадии, а другое число"
     assert router.cost.spent_rub == pytest.approx(цена_вызова * len(provider.calls))
     assert record.cost_rub < router.cost.spent_rub, "цена стадии подменена накопленным итогом прогона"
@@ -1590,10 +1639,10 @@ async def test_скоринг_просит_16000_а_планировщик_ос�
     держит обе стороны: 16000 у скоринга и нетронутые 8000 у планировщика.
     """
     scorer = _recording_provider(fake_provider_factory, "deepseek", [_SCORE_JSON])
-    planner = _recording_provider(fake_provider_factory, "gigachat", [_PLAN_WEB_JSON])
+    planner = _recording_provider(fake_provider_factory, "deepseek", [_PLAN_WEB_JSON])
 
     await stages.score_candidates(LLMRouter(settings, providers={"deepseek": scorer}), brief, [_candidate(1)])
-    await stages.plan_search(LLMRouter(settings, providers={"gigachat": planner}), brief)
+    await stages.plan_search(LLMRouter(settings, providers={"deepseek": planner}), brief)
 
     assert scorer.limits == [16000], "скоринг снова уходит на прежнем лимите — повтор остаётся штатным путём"
     assert planner.limits == [8000], "правка лимита расползлась на соседний вызов"
