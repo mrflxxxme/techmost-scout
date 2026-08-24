@@ -1,0 +1,35 @@
+{# Фрагмент уточняющих вопросов — ответ на POST /requests (задача И-10, SPEC Э3-2). #}
+<div class="bezel appear mt-lg">
+  <div class="core">
+    <p class="kicker">Запрос №{{ request_id }} создан</p>
+    <h2>Уточняющие вопросы</h2>
+
+    {% if deidentification_warning %}
+    <div class="notice mb-md">{{ deidentification_warning }}</div>
+    {% endif %}
+
+    {% if questions %}
+    <p class="hint">
+      Ответ «не знаю» допустим на любой вопрос — просто оставьте поле пустым.
+    </p>
+    <form class="brief-form mt-md" hx-post="/requests/{{ request_id }}/brief" hx-target="#stage" hx-swap="innerHTML">
+      {% for q in questions %}
+      <div class="brief-field">
+        <label for="answer-{{ loop.index0 }}">{{ q.question }}</label>
+        <p class="hint">{{ q.why }}</p>
+        <input type="hidden" name="question" value="{{ q.question }}">
+        <input type="text" id="answer-{{ loop.index0 }}" name="answer" placeholder="не знаю">
+      </div>
+      {% endfor %}
+      <div class="mt-lg">
+        <button class="btn" type="submit">Собрать бриф <span class="dot">→</span></button>
+      </div>
+    </form>
+    {% else %}
+    <p class="muted">Дополнительных вопросов нет — постановка задачи уже достаточно подробная.</p>
+    <form class="mt-md" hx-post="/requests/{{ request_id }}/brief" hx-target="#stage" hx-swap="innerHTML">
+      <button class="btn" type="submit">Собрать бриф <span class="dot">→</span></button>
+    </form>
+    {% endif %}
+  </div>
+</div>
