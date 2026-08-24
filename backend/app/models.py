@@ -35,6 +35,13 @@ class Request(Base):
     cost_rub: Mapped[float] = mapped_column(Float, default=0.0)
     demo_flag: Mapped[bool] = mapped_column(default=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Дамп `schemas.Report.model_dump_json()` целиком (РЕШ-146/156) — отчёт
+    #: читается обратно той же схемой одним вызовом (`persistence.load_report`),
+    #: без собственного разбора полей, тем же приёмом, что `search_plans.queries`
+    #: (Т-19). Nullable: до сборки отчёта или при отказе прогона (`status
+    #: failed`) колонка пуста, а не пустая строка — иначе пустой JSON читался бы
+    #: как валидный, но бессмысленный отчёт.
+    report_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     brief: Mapped[Brief | None] = relationship(back_populates="request", uselist=False, cascade="all, delete-orphan")
     candidates: Mapped[list[Candidate]] = relationship(back_populates="request", cascade="all, delete-orphan")
@@ -53,6 +60,13 @@ class Brief(Base):
     industry: Mapped[str] = mapped_column(String(255))
     task_summary: Mapped[str] = mapped_column(Text)
     constraints: Mapped[list] = mapped_column(JSON, default=list)
+    #: Ответы владельца на уточняющие вопросы интейка (РЕШ-146, `schemas.OwnerAnswer`
+    #: дампом каждого элемента). Таблица `briefs` не писалась ни разу (РЕШ-156);
+    #: эта колонка — часть того же оживления, что и `Request.report_json`. В
+    #: авто-режиме (`scout run --no-interactive`) вопросов не задаётся — список
+    #: пуст, но строка `briefs` всё равно пишется: бриф прогона существует
+    #: независимо от того, отвечал ли на вопросы человек.
+    owner_answers: Mapped[list] = mapped_column(JSON, default=list)
     target_maturity: Mapped[str | None] = mapped_column(String(32), nullable=True)
     geography: Mapped[str] = mapped_column(String(128), default="РФ")
     budget_hint: Mapped[str | None] = mapped_column(String(255), nullable=True)

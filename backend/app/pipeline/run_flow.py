@@ -123,6 +123,7 @@ class ScoutPipeline(PipelineContextMixin, SearchMixin, EnrichmentMixin, Selectio
                 plans=plan_log,
                 candidates=candidate_log,
                 error=str(exc),
+                brief=brief,  # РЕШ-146/156: briefs пишется и на отказавшем прогоне
             )
             raise
         if initial_caveats:
@@ -153,13 +154,14 @@ class ScoutPipeline(PipelineContextMixin, SearchMixin, EnrichmentMixin, Selectio
             status="drafted",
             cost_rub=report.cost_rub,
             cards=report.cards,
-            # Обе секции пишутся из отчёта, а не из локальных списков стадии:
-            # источник карточек один и тот же для клиента и для базы (РЕШ-92).
+            # Обе секции пишутся из отчёта: источник карточек один и тот же для клиента и для базы (РЕШ-92).
             contest_cards=report.contest_cards,
             stages=stage_log,
             plans=plan_log,
             candidates=candidate_log,
             error=None,
+            brief=brief,
+            report=report,  # РЕШ-146/156: briefs и report_json — для экрана Э3-5
         )
         if persisted_id is not None:
             # Номер прогона появляется только в момент записи: до неё строки
