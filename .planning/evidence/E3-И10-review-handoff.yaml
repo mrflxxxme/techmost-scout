@@ -1,0 +1,48 @@
+handoff:
+  from: reviewer
+  to: implementer-1
+  task: "И-10"
+  did:
+    - "Проверены diff, все десять инвариантов, критерии приёмки, грабли §0.1; прогнаны pytest -q (925 passed), ruff check, ruff format --check"
+    - "Прицельные мутации на tests/test_web_intake.py: убран вызов find_deidentification_risks — падает нужный тест; сломана ветка confirm (confirmed=False вместо True) — падают два нужных теста; обе мутации возвращены, рабочая копия чистая"
+    - "Пробным тестом на подмене run_intake воспроизведена потеря стоимости при стоп-кране: requests.cost_rub остаётся 0.0 при реально потраченных 15 ₽"
+    - "Найдено 1 блокирующее (дефект логики: cost_rub не пишется при срабатывании стоп-крана во всех трёх точках intake.py), 2 совета, 1 пункт для стыковки с будущим ревью И-11 (не блокирует)"
+  artifacts:
+    - .planning/evidence/E3-И10-review.md (закоммичен до ответа)
+    - .planning/evidence/E3-И10-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_intake.py -v: 10 passed"
+    - "pytest tests/test_web_templates.py -v: 5 passed"
+    - "pytest -q: 925 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 169 files already formatted"
+    - "grep -rn _stage_todo backend/app: нет совпадений"
+    - "grep -rn run_intake|refine_brief backend/app/web: только через app.pipeline.intake_flow"
+    - "grep -rE sk-|gigachat|Api-Key backend/ tests/: только вне diff задачи, значений ключей нет"
+    - "grep httpx backend/app вне llm/search/pipeline_context/pipeline_search/cli_doctor: пусто"
+    - "wc -l backend/app/web/routes/intake.py: 351"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (раздел И-10)"
+    - "backend/app/web/routes/intake.py (строки 137-144, 179-220, 265-266)"
+    - "backend/app/llm/router.py (строки 97-106, CostTracker.add)"
+    - "backend/app/pipeline/persistence_write.py (строки 101-108, поведение persist_run при session_factory=None)"
+    - ".planning/evidence/E3-И10-review.md"
+  notes: |
+    Цикл 1 из двух. Второй цикл — последний: если находка 1 не закрыта, дальше
+    разбор с владельцем (§4 CONVENTIONS), а не третий цикл.
+
+    Исправление точечное: добавить в _fail_with_cost_limit (или в каждый из
+    трёх вызовов перед ним) обновление row.cost_rub суммой
+    llm_router.cost.spent_rub — тем же выражением, что уже используется на
+    успешных ветках (row.cost_rub = (row.cost_rub or 0.0) + llm_router.cost.spent_rub).
+    Стоит добавить тест, который проверяет requests.cost_rub после стоп-крана
+    (существующий test_cost_limit_exceeded_marks_request_failed это не
+    проверяет).
+
+    Советы 1-2 в отчёте можно закрыть тем же циклом или отложить — на
+    усмотрение исполнителя, они не блокируют.
+
+    Пункт «для стыковки с И-11» в отчёте — предупреждение на будущее ревью,
+    здесь ничего чинить не нужно.
