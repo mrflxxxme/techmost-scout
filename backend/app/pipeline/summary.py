@@ -50,7 +50,12 @@ async def summarize(router: LLMRouter, brief: Brief, cards: list[SolutionCard]) 
             Message(role="user", content=_GO),
         ],
         ReportSummary,
-        max_tokens=6000,
+        # 14000, а не 6000 (долг аудита Э2-Ж): на боевом прогоне DeepSeek
+        # обрезался на 6000 токенах, ремонтный ретрай удваивал бюджет до тех
+        # же 14000, что уже даёт `card_author` (7000×2) — сводке отдаём этот
+        # запас сразу, вместо того чтобы платить за гарантированно обрезанный
+        # первый вызов.
+        max_tokens=14000,
     )
 
 

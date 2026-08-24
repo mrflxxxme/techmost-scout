@@ -24,6 +24,8 @@ from app.llm import CostLimitExceededError, LLMRouter
 from app.schemas import Brief, MaturityStage, OwnerAnswer, SearchPlan
 
 if TYPE_CHECKING:  # только для аннотаций: тяжёлые модули грузятся лениво, внутри команд
+    from sqlalchemy.ext.asyncio import AsyncEngine
+
     from app.pipeline.persistence import SessionFactory, StageRecord
 
 app = typer.Typer(add_completion=False, help="ТехМост Скаут — подбор научных решений под задачу бизнеса")
@@ -192,14 +194,64 @@ def doctor(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
     asyncio.run(_doctor())
 
 
+async def _schema_drift(engine: AsyncEngine) -> list[str]:
+    """Сверить `pragma table_info` живой базы с моделями SQLAlchemy — имена
+    колонок и признак `NOT NULL`. Список пуст — схема совпадает.
+
+    Страж закрывает инцидент прогона 1 ворот Э2-Ж: `init_db` — это
+    `create_all`, а он не видит расхождений в уже существующей таблице.
+    Удаление колонок `tokens_in`/`tokens_out` из модели `pipeline_logs`
+    оставило их в файле боевой базы как `NOT NULL` без серверного умолчания —
+    каждый `INSERT` без значения для них валил `IntegrityError` и откатывал
+    всю транзакцию, а прогон терялся целиком. До этой проверки расхождение
+    между файлом базы и моделями не видел никто, включая `doctor`.
+    """
+    from sqlalchemy import text
+
+    from app.models import Base
+
+    problems: list[str] = []
+    async with engine.connect() as conn:
+        for table in Base.metadata.sorted_tables:
+            result = await conn.execute(text(f'PRAGMA table_info("{table.name}")'))
+            rows = result.mappings().all()
+            if not rows:
+                problems.append(f"таблица {table.name}: объявлена в моделях, отсутствует в базе")
+                continue
+            db_columns = {row["name"]: bool(row["notnull"]) for row in rows}
+            model_columns = {column.name: (not column.nullable) for column in table.columns}
+            for name in sorted(set(model_columns) - set(db_columns)):
+                problems.append(f"{table.name}.{name}: есть в модели, нет в базе")
+            for name in sorted(set(db_columns) - set(model_columns)):
+                mark = " NOT NULL" if db_columns[name] else ""
+                problems.append(f"{table.name}.{name}: есть в базе{mark}, нет в модели")
+            for name in sorted(set(model_columns) & set(db_columns)):
+                if model_columns[name] != db_columns[name]:
+                    problems.append(
+                        f"{table.name}.{name}: NOT NULL расходится "
+                        f"(модель={'да' if model_columns[name] else 'нет'}, "
+                        f"база={'да' if db_columns[name] else 'нет'})"
+                    )
+    return problems
+
+
 async def _doctor() -> None:
     settings = get_settings()
 
     # Таблицы создаём до проверок: иначе витрина честно, но бесполезно
     # сообщает «нет таблицы» на чистой машине.
+    from app.db import engine as db_engine
     from app.db import init_db
 
     await init_db()
+
+    console.print("[bold]Проверяю схему базы…[/bold]")
+    schema_drift = await _schema_drift(db_engine)
+    if schema_drift:
+        for problem in schema_drift:
+            console.print(f"[red]Схема базы разошлась с моделями:[/red] {problem}")
+    else:
+        console.print("[green]Схема базы совпадает с моделями.[/green]")
 
     secrets_table = Table(title="Ключи", show_lines=False)
     secrets_table.add_column("Переменная")

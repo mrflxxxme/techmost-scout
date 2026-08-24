@@ -54,7 +54,6 @@
 
 ```
 COST_LIMIT_RUB_PER_REQUEST=20     # боевой стоп-кран на запрос (РЕШ-46)
-SECOND_PASS_RELEVANCE_MAX=6       # порог второго прохода (РЕШ-103)
 LLM_STAGE_ROUTES=intake:deepseek,extractor:deepseek,planner:deepseek,replan:deepseek,scorer:deepseek,card_author:deepseek,verifier:deepseek,summary:deepseek
 ```
 
@@ -65,6 +64,12 @@ LLM_STAGE_ROUTES=intake:deepseek,extractor:deepseek,planner:deepseek,replan:deep
 порог снижен РЕШ-162) переехало в умолчание кода (РЕШ-174). Переменная нужна
 только для переопределения при необходимости — например, при разборе нового
 прогона калибровкой.
+
+**`SECOND_PASS_RELEVANCE_MAX` вносить не обязательно** — рабочее значение 6
+(РЕШ-103) переехало в умолчание кода (долг ворот Э2-Ж, закрыт задачей Д-3
+волны Э2-З: та же болезнь, что и с `RELEVANCE_MIN`). Переменная нужна только
+для переопределения при необходимости — например, чтобы временно выключить
+второй проход значением 0 при разборе прогона.
 
 ## Проверка, что среда собрана верно
 
