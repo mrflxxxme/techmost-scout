@@ -1,8 +1,18 @@
 """Реализация команды `scout run` (Д-4 волны Э2-З, дробление `cli.py`).
 
 Точка входа typer (`app.command()`) осталась в `cli.py` — здесь только тяжёлая
-часть: интейк до пайплайна (со своим журналом стадий и стоп-краном РЕШ-45),
-сборка брифа и сам асинхронный `_run`.
+часть: интерактивный диалог поверх общего сценария интейка и сам асинхронный
+`_run`.
+
+Сам сценарий интейка (разбор текста, уточнение, дозаполнение ограничений, след
+трат стоп-крана) уехал в `app.pipeline.intake_flow` (РЕШ-184, задача И-4) —
+общий модуль для CLI и веба. Здесь остаётся только то, что специфично именно
+для командной строки: вопросы оператору через `typer.prompt` и печать в
+`console`. Константы и имена стадий (`INTAKE_FALLBACK_CAVEAT`,
+`REFINE_FALLBACK_CAVEAT`, `STAGE_INTAKE`, `STAGE_INTAKE_REFINE`) реэкспортированы
+из `intake_flow` — `cli.py` читает их как атрибуты `app.cli_run` (см. докстроку
+`app.cli`), и переносить эти обращения при дроблении не входило в границы
+задачи.
 
 `console`, `get_settings`, `LLMRouter` намеренно НЕ импортируются на уровне
 модуля, а читаются ОТЛОЖЕННЫМ импортом внутри `_run` (`from app.cli import
@@ -20,20 +30,39 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import typer
 
-from app.llm import CostLimitExceededError
-from app.schemas import Brief, MaturityStage, OwnerAnswer, SearchPlan
+from app.pipeline.intake_flow import (
+    INTAKE_FALLBACK_CAVEAT,
+    REFINE_FALLBACK_CAVEAT,
+    STAGE_INTAKE,
+    STAGE_INTAKE_REFINE,
+    refine_brief_stage,
+    resolve_constraints_stage,
+    run_intake_stage,
+)
+from app.schemas import Brief, MaturityStage, SearchPlan
 
 if TYPE_CHECKING:  # только для аннотаций: тяжёлые модули грузятся лениво, внутри функций
-    from app.llm import LLMRouter
-    from app.pipeline.persistence import SessionFactory, StageRecord
+    from app.pipeline.persistence import StageRecord
 
 log = logging.getLogger(__name__)
+
+# Реэкспорт: `app.cli` импортирует эти имена из `app.cli_run` как часть своей
+# публичной поверхности (см. докстроку модуля выше и `app.cli.__all__`) — сами
+# значения теперь определены в `intake_flow`, здесь только алиасы.
+__all__ = [
+    "INTAKE_FALLBACK_CAVEAT",
+    "REFINE_FALLBACK_CAVEAT",
+    "STAGE_INTAKE",
+    "STAGE_INTAKE_REFINE",
+    "UNKNOWN_ANSWER",
+    "UNSPECIFIED_REQUIREMENT",
+    "_run",
+]
 
 #: Умолчание уточняющего диалога: оператор, нажавший Enter, отвечает именно так.
 UNKNOWN_ANSWER = "не знаю"
@@ -42,112 +71,6 @@ UNKNOWN_ANSWER = "не знаю"
 #: «не знаю» читается как потерянные данные, хотя по смыслу это отсутствие
 #: требования к решению; ответ уходит в модель именно в этой формулировке.
 UNSPECIFIED_REQUIREMENT = "требование не специализировано"
-
-
-#: Оговорка клиенту, когда уточняющий диалог не состоялся и бриф собран кодом
-#: из текста задачи (РЕШ-58, П-1 аудита). Отказ интейка виден оператору в
-#: консоли, в логе и в `pipeline_logs`, но до эксперта и клиента доживает
-#: только отчёт — и он об этом молчал, хотя обеднённый бриф объясняет и
-#: широкую выдачу, и пустую сверку с требованиями в карточках.
-INTAKE_FALLBACK_CAVEAT = (
-    "Уточнения по задаче не собраны: бриф составлен из текста задачи. "
-    "Выдача может быть шире и менее точной, чем при уточнённой постановке."
-)
-
-#: Оговорка клиенту, когда уточняющий диалог состоялся, а свести ответы в
-#: постановку не удалось (доводка П-1). Своя формулировка, а не
-#: `INTAKE_FALLBACK_CAVEAT`: тот говорит «бриф составлен из текста задачи», а
-#: здесь бриф взят из черновика интейка — было бы неправдой. О качестве выдачи
-#: не заявляется ничего: ответы владельца доезжают до модели через
-#: `owner_answers`, и утверждать, что выдача от этого хуже, нечем.
-REFINE_FALLBACK_CAVEAT = (
-    "Постановка задачи осталась черновой: ответы на уточняющие вопросы получены "
-    "и учтены при подборе, но в постановку не сведены."
-)
-
-#: Имена стадий интейка в журнале `pipeline_logs`. Разведены (совет С-2
-#: аудита): отказ разбора текста и отказ уточнения брифа — разные инциденты с
-#: разной починкой, а одинаковая строка `intake` их не различала. Маршрут
-#: модели у обеих стадий один и тот же — `intake` (РЕШ-46), меняются только
-#: имена в журнале.
-STAGE_INTAKE = "intake"
-STAGE_INTAKE_REFINE = "intake_refine"
-
-
-def _intake_stage_record(
-    stage: str,
-    *,
-    started_at: datetime,
-    cost_before: dict[str, float],
-    router: LLMRouter,
-    error: BaseException | None = None,
-) -> StageRecord:
-    """Строка журнала стадии интейка — со снимком счётчика.
-
-    Интейк выполняется в `cli._run`, до пайплайна, поэтому снимок счётчика
-    вокруг вызова снимается здесь — тем же способом и той же функцией, что и в
-    `orchestrator._run_stages` (П-4 аудита). Стадия платная (`intake:deepseek`
-    в других конфигурациях маршрутов, РЕШ-46), и её расход — что на отказе,
-    что на успехе — обязан попасть в журнал: `complete_json` делает оплаченный
-    вызов, затем оплаченный ремонтный при несходимости со схемой, и раньше эта
-    трата на удачном пути нигде не оседала (долг 8 аудита Э2-Г: 0,51 ₽,
-    5,6% прогона, не были отнесены ни к какой стадии).
-
-    `error=None` — стадия завершилась успешно, запись всё равно нужна: иначе
-    построчный расход по журналу не сходится с фактической стоимостью прогона.
-    """
-    from app.pipeline.orchestrator import cost_delta
-    from app.pipeline.persistence import StageRecord
-
-    spent, provider = cost_delta(cost_before, dict(router.cost.by_provider))
-    return StageRecord(
-        stage=stage,
-        started_at=started_at,
-        finished_at=datetime.now(UTC),
-        provider=provider,
-        cost_rub=spent,
-        error=str(error) if error is not None else None,
-    )
-
-
-async def _persist_intake_stop(
-    session_factory: SessionFactory | None,
-    *,
-    raw_text: str,
-    router: LLMRouter,
-    stage_log: list[StageRecord],
-    record: StageRecord | None,
-    error: BaseException,
-) -> None:
-    """Записать прогон, оборванный стоп-краном (РЕШ-45) на стадии интейка.
-
-    Стоп-кран не смягчается: исключение уходит наружу, прогон обязан упасть.
-    Но след обязан остаться (П-5 аудита) — деньги на неудавшийся вызов уже
-    потрачены, а до пайплайна прогон не дошёл, значит `persist_run` иначе не
-    вызовет никто: `requests` не получал даже строки `failed`, и трата
-    исчезала. Тот же `CostLimitExceededError` внутри `pipeline.run` пишется со
-    статусом `failed` и фактической стоимостью — здесь ровно та же запись.
-
-    `record=None` — вызывающий уже дописал свою строку в `stage_log` сам (так
-    делает `retry_constraints_if_missing`, у которого свой снимок счётчика
-    стоимости вокруг вызова): повторный `append` завёл бы дубль записи об
-    одном и том же отказе (ревью, цикл 1, совет 2).
-    """
-    from app.pipeline.persistence import persist_run
-
-    if record is not None:
-        stage_log.append(record)
-    await persist_run(
-        session_factory,
-        raw_text=raw_text,
-        status="failed",
-        cost_rub=round(router.cost.spent_rub, 4),
-        cards=[],
-        # Прогон оборвался на интейке — карточек нет ни в одной секции.
-        contest_cards=[],
-        stages=stage_log,
-        error=str(error),
-    )
 
 
 def _normalize_owner_answer(answer: str) -> str:
@@ -181,8 +104,7 @@ async def _run(
     from app.db import init_db, session_scope
     from app.export.markdown import CONSTRAINTS_UNRESOLVED_NOTICE
     from app.pipeline import ScoutPipeline
-    from app.pipeline.constraints_guard import retry_constraints_if_missing
-    from app.pipeline.stages import brief_from_raw_text, neutralize_placeholders, refine_brief, run_intake
+    from app.pipeline.stages import neutralize_placeholders
 
     settings = get_settings()
     router = LLMRouter(settings)
@@ -236,70 +158,32 @@ async def _run(
     # остаются пустыми, а именно они дают карточкам сверку с техтребованиями
     # (РЕШ-38). Маршрут `intake` идёт на DeepSeek (РЕШ-171).
     #
-    # Устойчивость интейка (Т-2): раньше отказ `run_intake`/`refine_brief`
-    # убивал прогон целиком ДО пайплайна и не оставлял в БД даже строки
-    # `failed` (аудит Ф-10, дважды воспроизведено на прежнем провайдере
-    # интейка). Теперь отказ — предупреждение оператору и честный след в
-    # `pipeline_logs`, а прогон продолжается до отчёта. Исчерпание лимита
-    # стоимости (РЕШ-45) — исключение: это команда «стоп тратить», не отказ
-    # модели, и она пробрасывается наружу как есть.
+    # Сценарий интейка (разбор текста, уточнение, дозаполнение ограничений,
+    # след трат стоп-крана) — общий с вебом модуль `app.pipeline.intake_flow`
+    # (РЕШ-184). Здесь остаётся только то, что специфично для CLI: вопросы
+    # оператору через `typer.prompt` и печать предупреждений в консоль —
+    # сам модуль ни того, ни другого не делает.
     industry_hint = industry or "не указана"
     if interactive:
         console.print("[bold]Уточняю задачу…[/bold]")
 
     intake_stage_log: list[StageRecord] = []
-    intake_started = datetime.now(UTC)
-    intake_cost_before = dict(router.cost.by_provider)
-    try:
-        intake = await run_intake(router, task, industry_hint=industry_hint)
-    except CostLimitExceededError as exc:
-        await _persist_intake_stop(
-            db_session_factory,
-            raw_text=task,
-            router=router,
-            stage_log=intake_stage_log,
-            record=_intake_stage_record(
-                STAGE_INTAKE, started_at=intake_started, cost_before=intake_cost_before, router=router, error=exc
-            ),
-            error=exc,
-        )
-        raise
-    except Exception as exc:
-        log.warning("интейк не удался, бриф собран из текста задачи без уточнений", exc_info=True)
-        console.print("[yellow]Предупреждение:[/yellow] интейк не удался, бриф собран из текста задачи без уточнений")
-        intake_stage_log.append(
-            _intake_stage_record(
-                STAGE_INTAKE,
-                started_at=intake_started,
-                cost_before=intake_cost_before,
-                router=router,
-                error=exc,
-            )
-        )
-        intake = None
-    else:
-        # Успешный интейк — тоже платный вызов, и его расход обязан попасть
-        # в журнал (долг 8 аудита Э2-Г), а не остаться только в счётчике
-        # роутера. `else` выполняется исключительно при отсутствии исключения
-        # — двойной записи вместе с веткой отказа не будет.
-        intake_stage_log.append(
-            _intake_stage_record(
-                STAGE_INTAKE,
-                started_at=intake_started,
-                cost_before=intake_cost_before,
-                router=router,
-            )
-        )
+    intake_outcome = await run_intake_stage(
+        router, task, industry_hint=industry_hint, session_factory=db_session_factory, stage_log=intake_stage_log
+    )
+    intake_caveats: list[str] = list(intake_outcome.caveats)
+    if intake_outcome.warning:
+        console.print(f"[yellow]Предупреждение:[/yellow] {intake_outcome.warning}")
 
     brief: Brief
-    intake_caveats: list[str] = []
-    if intake is None:
+    if intake_outcome.intake is None:
         # Черновика нет вовсе — уточняющий диалог провести не из чего,
-        # бриф собирается кодом из сырого текста задачи (инвариант №1).
-        # Клиент узнаёт об этом из отчёта, а не только оператор из консоли.
-        brief = brief_from_raw_text(task, industry_hint=industry_hint)
-        intake_caveats.append(INTAKE_FALLBACK_CAVEAT)
+        # бриф уже собран `run_intake_stage` кодом из сырого текста задачи
+        # (инвариант №1). Клиент узнаёт об этом из отчёта, а не только
+        # оператор из консоли.
+        brief = intake_outcome.brief
     elif interactive:
+        intake = intake_outcome.intake
         answers: dict[str, str] = {}
         for question in intake.questions:
             console.print(f"\n[dim]{question.why}[/dim]")
@@ -307,103 +191,33 @@ async def _run(
                 typer.prompt(question.question, default=UNKNOWN_ANSWER)
             )
         if answers:
-            refine_started = datetime.now(UTC)
-            refine_cost_before = dict(router.cost.by_provider)
-            try:
-                brief = await refine_brief(router, task, answers, industry_hint=industry_hint)
-            except CostLimitExceededError as exc:
-                await _persist_intake_stop(
-                    db_session_factory,
-                    raw_text=task,
-                    router=router,
-                    stage_log=intake_stage_log,
-                    record=_intake_stage_record(
-                        STAGE_INTAKE_REFINE,
-                        started_at=refine_started,
-                        cost_before=refine_cost_before,
-                        router=router,
-                        error=exc,
-                    ),
-                    error=exc,
-                )
-                raise
-            except Exception as exc:
-                log.warning(
-                    "уточнение брифа не удалось, использую черновик интейка с ответами владельца", exc_info=True
-                )
-                console.print(
-                    "[yellow]Предупреждение:[/yellow] уточнение брифа не удалось, "
-                    "использую черновик интейка с вашими ответами"
-                )
-                # Ответы владельца не теряются, но и не выдаются клиенту за
-                # ограничения задачи: у них своё поле брифа (РЕШ-58, П-2
-                # аудита). `constraints` печатается строкой «Ограничения:» и
-                # разворачивается в `requirement_checks` каждой карточки —
-                # паре «вопрос — ответ» там не место. До модели ответы доходят
-                # через `owner_answers` в BRIEF_JSON и через блок уточнений в
-                # сообщении скоринга (`stages.owner_answers_block`).
-                brief = intake.draft_brief.model_copy(
-                    update={
-                        "owner_answers": [
-                            *intake.draft_brief.owner_answers,
-                            *(OwnerAnswer(question=question, answer=answer) for question, answer in answers.items()),
-                        ]
-                    }
-                )
-                intake_stage_log.append(
-                    _intake_stage_record(
-                        STAGE_INTAKE_REFINE,
-                        started_at=refine_started,
-                        cost_before=refine_cost_before,
-                        router=router,
-                        error=exc,
-                    )
-                )
-                # Отказ уточнения тоже доживает до отчёта, а не остаётся в
-                # консоли и журнале: черновая постановка объясняет эксперту и
-                # клиенту, почему бриф выглядит менее собранным, чем ожидалось.
-                intake_caveats.append(REFINE_FALLBACK_CAVEAT)
-            else:
-                # Успешное уточнение — тоже платный вызов (долг 8 аудита
-                # Э2-Г): без этой записи расход по журналу расходился с
-                # фактической стоимостью прогона на сумму уточнения.
-                intake_stage_log.append(
-                    _intake_stage_record(
-                        STAGE_INTAKE_REFINE,
-                        started_at=refine_started,
-                        cost_before=refine_cost_before,
-                        router=router,
-                    )
-                )
+            refine_outcome = await refine_brief_stage(
+                router,
+                task,
+                intake,
+                answers,
+                industry_hint=industry_hint,
+                session_factory=db_session_factory,
+                stage_log=intake_stage_log,
+            )
+            brief = refine_outcome.brief
+            intake_caveats.extend(refine_outcome.caveats)
+            if refine_outcome.warning:
+                console.print(f"[yellow]Предупреждение:[/yellow] {refine_outcome.warning}")
         else:
             brief = intake.draft_brief
     else:
         # Немой режим: вопросы не задаются и не печатаются, бриф берётся как
         # есть из разбора текста.
-        brief = intake.draft_brief
+        brief = intake_outcome.intake.draft_brief
 
     # РЕШ-115: непустой текст задачи с признаками требований влечёт непустой
     # constraints либо явную строку клиенту - молчаливого третьего исхода нет.
     # Единственный лишний вызов за прогон, и только если все пути выше
     # оставили constraints пустым (проверка - внутри retry_constraints_if_missing).
-    constraints_unresolved = False
-    try:
-        brief, constraints_unresolved = await retry_constraints_if_missing(
-            router, brief, task, industry_hint=industry_hint, stage_log=intake_stage_log
-        )
-    except CostLimitExceededError as exc:
-        # record=None: строка журнала уже дописана внутри
-        # retry_constraints_if_missing своим снимком счётчика стоимости -
-        # повторный append завёл бы дубль (ревью, цикл 1, совет 2).
-        await _persist_intake_stop(
-            db_session_factory,
-            raw_text=task,
-            router=router,
-            stage_log=intake_stage_log,
-            record=None,
-            error=exc,
-        )
-        raise
+    brief, constraints_unresolved = await resolve_constraints_stage(
+        router, brief, task, industry_hint=industry_hint, session_factory=db_session_factory, stage_log=intake_stage_log
+    )
     if constraints_unresolved:
         intake_caveats.append(CONSTRAINTS_UNRESOLVED_NOTICE)
 

@@ -1,0 +1,91 @@
+Задача: Э3, волна 1, И-4 — сценарий интейка переезжает в pipeline/intake_flow.py
+Ветка: e3/i4, база: 8122125a6ee181e3dd843f9a03fc20ff1d2c8231 (Волна 0 слита)
+
+=== 1. pytest tests/test_cli_run.py -v (без правок самого файла) ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-af3e34f42d7a8a112
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 22 items
+
+tests/test_cli_run.py::test_no_interactive_calls_run_intake_once_with_constraints PASSED [  4%]
+tests/test_cli_run.py::test_industry_flag_overrides_parsed_industry[True] PASSED [  9%]
+tests/test_cli_run.py::test_industry_flag_overrides_parsed_industry[False] PASSED [ 13%]
+tests/test_cli_run.py::test_interactive_calls_refine_brief_when_questions_present PASSED [ 18%]
+tests/test_cli_run.py::test_interactive_skips_refine_brief_when_no_questions PASSED [ 22%]
+tests/test_cli_run.py::test_init_db_failure_does_not_crash_run_and_report_is_built PASSED [ 27%]
+tests/test_cli_run.py::test_run_intake_failure_falls_back_to_brief_from_raw_text_and_warns PASSED [ 31%]
+tests/test_cli_run.py::test_successful_intake_adds_no_caveat_to_report PASSED [ 36%]
+tests/test_cli_run.py::test_cost_line_says_cache_is_counted_only_for_deepseek PASSED [ 40%]
+tests/test_cli_run.py::test_long_raw_text_is_truncated_at_limit_without_dangling_space PASSED [ 45%]
+tests/test_cli_run.py::test_placeholder_in_raw_text_does_not_break_prompt_rendering PASSED [ 50%]
+tests/test_cli_run.py::test_empty_raw_text_falls_back_to_placeholder_summary[] PASSED [ 54%]
+tests/test_cli_run.py::test_empty_raw_text_falls_back_to_placeholder_summary[   \n\t  ] PASSED [ 59%]
+tests/test_cli_run.py::test_plan_id_hands_saved_plan_to_pipeline PASSED  [ 63%]
+tests/test_cli_run.py::test_run_without_plan_id_builds_plan_as_before PASSED [ 68%]
+tests/test_cli_run.py::test_unknown_plan_id_stops_run_before_any_paid_call PASSED [ 72%]
+tests/test_cli_run.py::test_constraints_unresolved_caveat_reaches_report PASSED [ 77%]
+tests/test_cli_run.py::test_constraints_unresolved_false_adds_no_caveat PASSED [ 81%]
+tests/test_cli_run.py::test_constraints_retry_cost_limit_propagates_and_persists_failed PASSED [ 86%]
+tests/test_cli_run.py::test_params_line_printed_when_intake_stops_on_cost_limit PASSED [ 90%]
+tests/test_cli_run.py::test_params_line_printed_before_run_intake_is_called PASSED [ 95%]
+tests/test_cli_run.py::test_params_line_not_duplicated_by_pipeline_on_successful_run PASSED [100%]
+
+============================== 22 passed in 0.62s ==============================
+
+=== git diff --stat tests/test_cli_run.py (пусто = файл не тронут, РЕШ-184) ===
+(пусто)
+
+=== 2. pytest tests/test_intake_flow.py -v (модуль без CLI, 6 тестов) ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-af3e34f42d7a8a112
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items
+
+tests/test_intake_flow.py::test_run_intake_failure_returns_fallback_brief_with_caveat PASSED [ 16%]
+tests/test_intake_flow.py::test_refine_brief_failure_keeps_owner_answers_in_own_field PASSED [ 33%]
+tests/test_intake_flow.py::test_refine_brief_stage_with_empty_answers_still_succeeds PASSED [ 50%]
+tests/test_intake_flow.py::test_successful_run_intake_stage_has_no_caveats_and_no_warning PASSED [ 66%]
+tests/test_intake_flow.py::test_run_intake_cost_limit_propagates_and_persists_failed PASSED [ 83%]
+tests/test_intake_flow.py::test_resolve_constraints_cost_limit_propagates_and_persists_failed PASSED [100%]
+
+============================== 6 passed in 0.57s ===============================
+
+=== 3. grep статус-литералов по backend/app (пусто = граница И-1 закрыта) ===
+$ grep -rnE '(status=|status = )"(intake|briefing|searching|drafted|validated|exported|failed)"' backend/app --include='*.py'
+(совпадений нет, exit code 1)
+
+=== 4. wc -l — оба файла ≤ 500 строк ===
+  301 backend/app/cli_run.py
+  327 backend/app/pipeline/intake_flow.py
+  628 total
+
+pytest tests/test_backend_layout.py -v:
+============================= test session starts ==============================
+collected 3 items
+
+tests/test_backend_layout.py::test_backend_app_stays_within_line_limit PASSED [ 33%]
+tests/test_backend_layout.py::test_exceptions_do_not_grow_unnoticed PASSED [ 66%]
+tests/test_backend_layout.py::test_backend_app_directory_is_not_empty PASSED [100%]
+
+============================== 3 passed in 0.03s ===============================
+
+=== 5. pytest -q целиком ===
+........................................................................ [ 89%]
+........................................................................ [ 98%]
+.................                                                        [100%]
+881 passed, 1 warning in 54.54s
+(warning — известный StarletteDeprecationWarning про httpx/starlette.testclient, к задаче не относится)
+
+=== ruff check . ===
+All checks passed!
+
+=== ruff format --check . ===
+158 files already formatted
