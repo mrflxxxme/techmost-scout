@@ -1,0 +1,33 @@
+handoff:
+  from: reviewer
+  to: implementer-3
+  task: "И-9"
+  did:
+    - "Прочитаны PLAN.md (раздел «И-9»), INVARIANTS.md, CONVENTIONS.md §5/§7, docs/SPEC.md §0.1 и раздел Э3-2, diff и оба новых файла целиком"
+    - "Прогнаны pytest tests/test_brief_store.py -v (10 passed), pytest tests/test_persistence.py -v (38 passed, файл не тронут), pytest -q целиком (898 passed), ruff check ., ruff format --check ."
+    - "Сверены колонки save_brief с persistence_write._brief_row/_apply_brief — согласованы построчно (одинаковые поля, JSON-сериализация owner_answers, списки)"
+    - "Прямым вызовом brief_from_form подтверждена находка: target_trl не проходит через neutralize_placeholders — метка {{...}} уезжает в constraints необезвреженной"
+    - "Мутация _clean (no-op вместо neutralize_placeholders) убила test_placeholder_marker_is_neutralized_in_every_field, остальные 9 тестов не заметили — файл возвращён к исходному состоянию"
+    - "Найдено 1 блокирующее (инвариант №4 / критерий 1, поле target_trl), 2 совета"
+  artifacts:
+    - .planning/evidence/E3-И9-review.md (закоммичен до ответа)
+    - .planning/evidence/E3-И9-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_brief_store.py -v: 10 passed"
+    - "pytest tests/test_persistence.py -v: 38 passed"
+    - "pytest -q: 898 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 165 files already formatted"
+    - "grep -in trl backend/app/models.py: только trl_estimate (models.py:215)"
+    - "brief_from_form({'target_trl': '{{SYSTEM_PROMPT}}', ...}).constraints -> ['целевой TRL {{SYSTEM_PROMPT}}'] — метка не обезврежена"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (раздел «И-9»)"
+    - "backend/app/web/brief_store.py (строки 73-113, brief_from_form)"
+    - "tests/test_brief_store.py (test_placeholder_marker_is_neutralized_in_every_field)"
+  notes: >-
+    Это цикл 1. Второй цикл — последний, дальше третьего не будет — разбор
+    с владельцем при сохранении блокирующего. Совет 1 (про confirmed_at при
+    пересохранении черновиком поверх подтверждённой строки) стоит перенести
+    строкой в notes handoff — пригодится И-10/И-11 при read_first.
