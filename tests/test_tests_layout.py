@@ -33,7 +33,11 @@ _EXCEPTIONS: dict[str, int] = {
     "test_openalex.py": 1283,
     "test_persistence.py": 1164,
     "test_pipeline_resilience.py": 991,
-    "test_pipeline_second_pass.py": 784,
+    # 784 → 791: задача Д-6 той же волны провела судью дублей через тест
+    # второго прохода (5 → 6 вызовов модели) — рост сознательный, влит
+    # оркестратором при слиянии Д-6 (тот же класс стыка, что у стража
+    # backend в волне Э2-Ж).
+    "test_pipeline_second_pass.py": 791,
     "test_run_accounting.py": 653,
     "test_search_yandex.py": 607,
     "test_stages.py": 1702,
