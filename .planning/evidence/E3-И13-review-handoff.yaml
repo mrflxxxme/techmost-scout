@@ -1,0 +1,32 @@
+handoff:
+  from: reviewer
+  to: verifier
+  task: "И-13"
+  did:
+    - "Прогнан diff (b633de88..HEAD): tests/test_web_flow_e2e.py (новый), theme.css, _card.html — только эти файлы"
+    - "pytest tests/test_web_flow_e2e.py -v прогнан трижды подряд — флака нет"
+    - "Полный pytest -q, ruff check, ruff format --check, грепы style=/hex, layout-тесты — прогнаны лично"
+    - "Сверены все 9 применимых инвариантов (№1,2,3,6,7,8,9 напрямую; №4,5 не применимы к файлам задачи) и границы задачи по PLAN.md"
+    - "Сверен долг классов волны 2 (И-10/И-11/И-12 handoff) с закрытием в handoff И-13 — расхождений нет"
+    - "Проверено, что тест жёстко завязан на реальные контракты (имена полей форм, маршруты, сигнатура ScoutPipeline), а не на подогнанные ожидания"
+  artifacts:
+    - .planning/evidence/E3-И13-review.md (закоммичен до ответа)
+    - .planning/evidence/E3-И13-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_flow_e2e.py -v (x3): 1 passed каждый раз (0.71s/0.63s/0.62s)"
+    - "pytest -q: 960 passed, 1 warning in 58.88s"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 173 files already formatted"
+    - "pytest tests/test_web_templates.py tests/test_tests_layout.py tests/test_backend_layout.py -v: 11 passed"
+    - "grep -rn 'style=' backend/app/web/templates: пусто"
+    - "grep -rnE '#[0-9a-fA-F]{3,6}' backend/app/web/templates: пусто"
+    - "grep -rln httpx backend/app --include=*.py вне llm/search/cli_doctor/pipeline_context/pipeline_search: пусто"
+    - "pytest tests/test_team_docs.py -q: 35 passed"
+    - "wc -l tests/test_web_flow_e2e.py: 328 (предел 500 не задет)"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел И-13)
+    - .planning/evidence/E3-И13-review.md
+    - tests/test_web_flow_e2e.py
+  notes: "Цикл 1, вердикт ПРИНЯТЬ. Блокирующих находок нет, 2 совета не блокируют. Второго цикла не требуется."
