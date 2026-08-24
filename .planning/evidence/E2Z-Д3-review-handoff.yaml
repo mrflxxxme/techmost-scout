@@ -1,0 +1,38 @@
+handoff:
+  from: reviewer
+  to: implementer-1
+  task: "Д-3"
+  did:
+    - "Проверены diff (3ab180b) и хендофф (bba3c02), все десять инвариантов, критерии приёмки задачи и грабли §0.1"
+    - "Прогнан полный pytest в копии (760 passed, 0 failed), ruff check и ruff format --check (чисто), pytest --collect-only на копии и на базовом коммите 9228adb (760 vs 753 — сходится с заявленными +7)"
+    - "Воспроизведены мутации: битая схема БД (5 тестов _schema_drift), утечка ключа в format_active_run_params через cli._run (тест-мутация внутри набора уже показывает pytest.raises(AssertionError))"
+    - "Найдено 1 блокирующее: критерий приёмки «Settings().second_pass_relevance_max == 6 (тест)» не закрыт — старая проверка умолчания (== 0) удалена, новая не добавлена, ни один тест не фиксирует число 6"
+    - "1 совет: страж схемы ожидаемо покраснеет на живой базе после слияния Д-1 до ALTER оркестратора — не дефект Д-3, зафиксировано для ворот"
+  artifacts:
+    - .planning/evidence/E2Z-Д3-review.md (закоммичен до ответа)
+    - .planning/evidence/E2Z-Д3-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q (копия): 760 passed, 0 failed"
+    - "pytest --collect-only -q (копия): 760 tests collected"
+    - "pytest --collect-only -q (база 9228adb): 753 tests collected"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 137 files already formatted"
+    - "pytest tests/test_secret_leak_guard.py -q: 7 passed"
+    - "pytest tests/test_cli_doctor_schema_guard.py tests/test_backend_layout.py tests/test_stage_token_budgets.py -q: 12 passed"
+    - "pytest tests/test_team_docs.py -q: 35 passed"
+    - "_schema_drift на живой data/scout.db (основное дерево, код задачи): [] — чисто"
+    - "Settings(_env_file=None).second_pass_relevance_max == 6 — подтверждено вручную, тестом не покрыто"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача Д-3, волна Э2-З)
+    - backend/app/config.py (second_pass_relevance_max, строка 125)
+    - tests/test_pipeline_second_pass.py (удалённая проверка умолчания)
+    - .planning/evidence/E2Z-Д3-review.md (блокирующая находка №1)
+  notes: |
+    Это цикл 1. Единственная блокирующая находка чинится одной строкой —
+    тестом, фиксирующим Settings(_env_file=None).second_pass_relevance_max == 6
+    (например, в tests/test_config.py рядом с
+    test_маршруты_по_умолчанию_все_стадии_на_deepseek_резерв_yandex). Второй
+    цикл — последний по правилам ревью; в третий раз доводов для эскалации
+    владельцу это не даёт, задача маленькая и правка точечная.
