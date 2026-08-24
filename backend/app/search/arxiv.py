@@ -32,6 +32,7 @@ from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
 from app.search.base import SearchAdapter, SearchError
+from app.search.query_shortening import english_content_words
 
 log = logging.getLogger(__name__)
 
@@ -50,12 +51,8 @@ PHRASE_WORD_LIMIT = 6
 #: `PHRASE_WORD_LIMIT`, поэтому короткая форма всегда идёт фразовым поиском.
 SHORT_QUERY_WORDS = 4
 
-_WORD = re.compile(r"[A-Za-z0-9\-]+")
 _WS = re.compile(r"\s+")
 _ARXIV_ID = re.compile(r"arxiv\.org/abs/(.+)$", re.IGNORECASE)
-_STOPWORDS = frozenset(
-    {"the", "and", "for", "with", "from", "that", "this", "are", "was", "of", "in", "on", "to", "a", "an"}
-)
 
 
 class ArxivAdapter(SearchAdapter):
@@ -80,7 +77,7 @@ class ArxivAdapter(SearchAdapter):
             log.debug("arxiv: пропускаем русскую формулировку «%s» — индекс англоязычный", query.text)
             return []
 
-        words = _content_words(query.text)
+        words = english_content_words(query.text)
         if not words:
             return []
         search_query = _query_from_words(words)
@@ -172,13 +169,6 @@ class ArxivAdapter(SearchAdapter):
         except ValidationError as exc:
             log.debug("arxiv: запись отброшена (%s): %s", url, exc)
             return None
-
-
-def _content_words(text: str) -> list[str]:
-    """Содержательные слова формулировки: нижний регистр, короткие и
-    стоп-слова отсеяны, порядок исходного текста сохранён."""
-    words = [word.lower() for word in _WORD.findall(text)]
-    return [word for word in words if len(word) >= 3 and word not in _STOPWORDS]
 
 
 def _query_from_words(words: list[str]) -> str:

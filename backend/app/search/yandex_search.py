@@ -324,4 +324,3 @@ class YandexSearchAdapter(SearchAdapter):
         # Операция зависла и не завершилась за отведённое время — источник не
         # отдал результат, это отказ, а не пустая выдача (инвариант №5, РЕШ-45).
         raise SearchError(f"yandex_search: операция {operation_id} не завершилась за {self._max_wait} с")
-

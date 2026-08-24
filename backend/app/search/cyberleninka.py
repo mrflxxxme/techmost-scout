@@ -77,6 +77,7 @@ from pydantic import ValidationError
 from app.schemas import Candidate, SearchQuery, SourceType
 from app.search.base import SearchAdapter, SearchError
 from app.search.crossref import CONTACT_EMAIL
+from app.search.query_shortening import shorten_ru_query
 
 log = logging.getLogger(__name__)
 
@@ -105,73 +106,11 @@ VAK_ALIASES = frozenset({"vak", "вак"})
 #: «супоросность свиноматок узи» — 3 слова — уже даёт found=21, поэтому 4 —
 #: разумный потолок, не подгонка под один пример.
 SHORT_QUERY_WORDS = 4
-#: Маленький стоп-словарь для укорачивания длинной формулировки модели.
-#: Деталь конкретного адаптера, не данные проекта — поэтому здесь, в коде, а
-#: не в отдельном файле или справочнике (граница задачи З-2).
-_STOP_WORDS = frozenset(
-    {
-        "и",
-        "в",
-        "во",
-        "на",
-        "с",
-        "со",
-        "к",
-        "ко",
-        "от",
-        "до",
-        "из",
-        "у",
-        "о",
-        "об",
-        "обо",
-        "по",
-        "при",
-        "про",
-        "для",
-        "без",
-        "над",
-        "под",
-        "перед",
-        "через",
-        "между",
-        "за",
-        "а",
-        "но",
-        "или",
-        "либо",
-        "то",
-        "как",
-        "что",
-        "чтобы",
-        "это",
-        "этот",
-        "эта",
-        "эти",
-        "этих",
-        "не",
-        "ни",
-        "же",
-        "ли",
-        "бы",
-        "также",
-        "уже",
-        "ещё",
-        "очень",
-        "более",
-        "менее",
-        "самый",
-    }
-)
-#: Символы, которые не считаются частью слова при сравнении со стоп-словарём —
-#: снимаются только с краёв токена, само слово не трогаем.
-_PUNCT = ".,!?;:()«»\"'…—-"
 
 #: Совпадения в ответе подсвечены разметкой <b>…</b> — снимаем её
 _TAG = re.compile(r"<[^>]+>")
 _WS = re.compile(r"\s+")
 _YEAR = re.compile(r"(19|20)\d{2}")
-_TOKEN = re.compile(r"\S+")
 
 
 class CyberLeninkaAdapter(SearchAdapter):
@@ -416,16 +355,5 @@ def _found_count(payload: dict[str, Any]) -> int:
 
 
 def _shorten_query(text: str) -> str:
-    """Первые 3–4 содержательных слова формулировки — детерминированно.
-
-    Не модель и не эвристика по частотности: маленький фиксированный
-    стоп-словарь и «первые N слов после фильтра» — один и тот же вход всегда
-    даёт один и тот же короткий запрос, порядок слов исходной формулировки
-    сохраняется. Если вся формулировка состоит из стоп-слов (редкость, но
-    честность важнее) — короче добросовестно не сделать, отдаём как есть.
-    """
-    tokens = _TOKEN.findall(text)
-    content = [token for token in tokens if token.strip(_PUNCT).lower() not in _STOP_WORDS]
-    if not content:
-        content = tokens
-    return " ".join(content[:SHORT_QUERY_WORDS])
+    """Короткая форма формулировки — приём общий с Роспатентом (Д-5, `query_shortening`)."""
+    return shorten_ru_query(text, word_limit=SHORT_QUERY_WORDS)
