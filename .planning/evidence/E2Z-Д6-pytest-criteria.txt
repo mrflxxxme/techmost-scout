@@ -1,0 +1,12 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a77e09d12ca80db99
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 34 items
+
+tests/test_dedup_judge.py ..................                             [ 52%]
+tests/test_dedup_judge_probe.py ................                         [100%]
+
+============================== 34 passed in 8.53s ==============================

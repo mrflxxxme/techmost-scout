@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     llm_stage_routes: str = Field(
         default=(
             "intake:deepseek,extractor:deepseek,planner:deepseek,replan:deepseek,scorer:deepseek,"
-            "card_author:deepseek,verifier:deepseek,summary:deepseek"
+            "card_author:deepseek,verifier:deepseek,summary:deepseek,dedup_judge:deepseek"
         )
     )
     llm_fallback_order: str = Field(default="deepseek,yandex")
