@@ -243,10 +243,36 @@ async def test_cost_limit_exceeded_marks_request_failed(monkeypatch, client):
     response = client.post("/requests", data={"raw_text": _TASK_TEXT})
     assert response.status_code == 200
     assert "лимит" in response.text.lower()
+    assert "Запрос Запрос" not in response.text  # префикс "Запрос №N: " не дублирует слово
 
     row = await _fetch_row(_request_id(response))
     assert row.status == "failed"
     assert row.error
+
+
+async def test_cost_limit_exceeded_keeps_spent_amount_in_cost_rub(monkeypatch, client):
+    """Деньги неудавшегося интейка не пропадают без следа (П-5, ревью цикла 1):
+    `CostTracker.add` прибавляет расход к счётчику раньше, чем поднимает
+    исключение (`app/llm/router.py`), — потраченная сумма обязана попасть
+    в `requests.cost_rub`, а не остаться нулём."""
+    spent = 15.0
+
+    async def broken_run_intake(router, task, *, industry_hint="не указана"):
+        # Тот же порядок, что у настоящего CostTracker.add: расход учтён
+        # раньше, чем поднято исключение.
+        router.cost.spent_rub += spent
+        router.cost.by_provider["deepseek"] = router.cost.by_provider.get("deepseek", 0.0) + spent
+        router.cost.calls += 1
+        raise CostLimitExceededError(f"запрос израсходовал {spent:.2f} ₽ при лимите 10.00 ₽")
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", broken_run_intake)
+
+    response = client.post("/requests", data={"raw_text": _TASK_TEXT})
+    assert response.status_code == 200
+
+    row = await _fetch_row(_request_id(response))
+    assert row.status == "failed"
+    assert row.cost_rub == pytest.approx(spent)
 
 
 # ── TRL ───────────────────────────────────────────────────────────────────
@@ -272,7 +298,9 @@ async def test_target_trl_is_added_to_constraints_string(monkeypatch, client):
 
 
 async def test_invalid_trl_is_rejected_without_polluting_constraints(monkeypatch, client):
-    """Мусорный TRL («abc», вне 1–9) не уезжает в `constraints`, есть предупреждение."""
+    """Мусорный TRL («abc», вне 1–9) не уезжает в `constraints`, бриф не
+    подтверждается (оператор остаётся на редактируемой форме — ревью
+    цикла 1), а введённое значение возвращается в поле для исправления."""
 
     async def fake_run_intake(router, task, *, industry_hint="не указана"):
         return _one_question_intake()
@@ -285,14 +313,27 @@ async def test_invalid_trl_is_rejected_without_polluting_constraints(monkeypatch
     response = client.post(f"/requests/{request_id}/brief", data=_confirm_payload(request_id, target_trl="abc"))
     assert response.status_code == 200
     assert "некорректно" in response.text
+    assert "Начать поиск" not in response.text  # не подтверждено — TRL нужно поправить
+    assert 'value="abc"' in response.text  # введённое значение вернулось в поле
 
     brief_row = await _fetch_brief_row(request_id)
     assert brief_row.constraints == []
+    assert brief_row.confirmed_at is None
 
     out_of_range = client.post(f"/requests/{request_id}/brief", data=_confirm_payload(request_id, target_trl="999"))
     assert "некорректно" in out_of_range.text
+    assert "Начать поиск" not in out_of_range.text
+    assert 'value="999"' in out_of_range.text
     brief_row_again = await _fetch_brief_row(request_id)
     assert brief_row_again.constraints == []
+    assert brief_row_again.confirmed_at is None
+
+    # Оператор поправил значение и подтвердил снова — на этот раз штатно.
+    fixed = client.post(f"/requests/{request_id}/brief", data=_confirm_payload(request_id, target_trl="6"))
+    assert "Начать поиск" in fixed.text
+    brief_row_fixed = await _fetch_brief_row(request_id)
+    assert brief_row_fixed.confirmed_at is not None
+    assert "целевой TRL 6" in brief_row_fixed.constraints
 
 
 # ── Залипший confirmed_at (ревью волны 1) ────────────────────────────────

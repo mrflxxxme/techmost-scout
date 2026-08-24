@@ -76,10 +76,12 @@ router = APIRouter()
 _INDUSTRY_HINT_DEFAULT = "не указана"
 
 #: Человеческий текст отказа при исчерпании стоп-крана (РЕШ-45, РЕШ-143 п. 2).
-#: Новая клиентская фраза — см. список в handoff задачи И-10.
+#: Новая клиентская фраза — см. список в handoff задачи И-10. Не начинается
+#: со слова «Запрос»: `_failure_fragment` уже ставит перед сообщением
+#: «Запрос №N: », и повтор слова читался бы неряшливо (ревью цикла 1).
 COST_LIMIT_NOTICE = (
-    "Запрос остановлен: расход на разбор задачи превысил лимит на один запрос. "
-    "Попробуйте сократить текст задачи и отправить его заново."
+    "Достигнут лимит расходов на этот запрос — подбор остановлен. "
+    "Попробуйте сократить текст задачи и отправить его снова."
 )
 
 #: Предупреждение обезличивания (РЕШ-189 п. 1, FR-4) — не блокирует отправку,
@@ -123,6 +125,7 @@ def _confirm_context(
     confirmed: bool,
     caveats: list[str],
     trl_warning: str | None = None,
+    target_trl_display: str = "",
 ) -> dict[str, Any]:
     return {
         "request_id": row.id,
@@ -130,17 +133,31 @@ def _confirm_context(
         "confirmed": confirmed,
         "caveats": caveats,
         "trl_warning": trl_warning,
+        # Введённое значение TRL для повторного показа формы после
+        # отклонённого ввода — как у остальных полей, которые берутся из
+        # `brief` (ревью цикла 1): у TRL своего поля в `Brief` нет (РЕШ-185),
+        # поэтому значение приходится нести отдельно.
+        "target_trl_display": target_trl_display,
         "maturity_options": _MATURITY_OPTIONS,
     }
 
 
-async def _fail_with_cost_limit(session: AsyncSession, row: RequestRow, exc: CostLimitExceededError) -> HTMLResponse:
+async def _fail_with_cost_limit(
+    session: AsyncSession, row: RequestRow, llm_router: LLMRouter, exc: CostLimitExceededError
+) -> HTMLResponse:
     """Стоп-кран (РЕШ-45): деньги на неудавшийся вызов уже потрачены, запрос
     останавливается статусом `failed` и понятным текстом — исключение здесь
     не пробрасывается наружу дальше (в отличие от CLI, веб обязан ответить
-    HTML-фрагментом, а не уронить процесс)."""
+    HTML-фрагментом, а не уронить процесс).
+
+    `CostTracker.add` прибавляет расход к счётчику ДО того, как поднимает
+    исключение (`llm/router.py`), — деньги на упавший вызов уже потрачены, и
+    `row.cost_rub` обязан это отразить тем же выражением, что и успешные
+    ветки (ревью цикла 1, П-5 «деньги неудавшегося интейка не оставляют
+    след» — докстрока `app.pipeline.intake_flow` требует этого прямо)."""
     row.status = RequestStatus.FAILED
     row.error = str(exc)
+    row.cost_rub = (row.cost_rub or 0.0) + llm_router.cost.spent_rub
     return _failure_fragment(COST_LIMIT_NOTICE, request_id=row.id)
 
 
@@ -174,7 +191,7 @@ async def create_request(
             llm_router, text, industry_hint=_INDUSTRY_HINT_DEFAULT, session_factory=None, stage_log=stage_log
         )
     except CostLimitExceededError as exc:
-        return await _fail_with_cost_limit(session, row, exc)
+        return await _fail_with_cost_limit(session, row, llm_router, exc)
 
     if outcome.intake is None:
         # Отказ разбора: черновика для диалога нет, бриф уже собран запасным
@@ -189,7 +206,7 @@ async def create_request(
                 stage_log=stage_log,
             )
         except CostLimitExceededError as exc:
-            return await _fail_with_cost_limit(session, row, exc)
+            return await _fail_with_cost_limit(session, row, llm_router, exc)
 
         caveats = list(outcome.caveats)
         if unresolved:
@@ -223,7 +240,7 @@ async def _draft_brief_from_answers(request: Request, session: AsyncSession, row
     """Ветка `POST /brief` без `confirm`: собрать бриф из ответов на вопросы."""
     draft = await load_brief(session, row.id)
     if draft is None:
-        return _failure_fragment("Черновик брифа не найден — опишите задачу заново.")
+        return _failure_fragment("черновик брифа не найден — опишите задачу заново.", request_id=row.id)
 
     questions = form.getlist("question")
     answers_raw = form.getlist("answer")
@@ -263,7 +280,7 @@ async def _draft_brief_from_answers(request: Request, session: AsyncSession, row
             stage_log=stage_log,
         )
     except CostLimitExceededError as exc:
-        return await _fail_with_cost_limit(session, row, exc)
+        return await _fail_with_cost_limit(session, row, llm_router, exc)
 
     if unresolved:
         caveats.append(CONSTRAINTS_UNRESOLVED_NOTICE)
@@ -297,8 +314,16 @@ def _validate_target_trl(raw: str | None) -> tuple[str | None, str | None]:
 
 
 async def _confirm_brief(request: Request, session: AsyncSession, row: RequestRow, form) -> HTMLResponse:
-    """Ветка `POST /brief` с `confirm`: сохранить правки и подтвердить бриф."""
-    target_trl, trl_warning = _validate_target_trl(form.get("target_trl"))
+    """Ветка `POST /brief` с `confirm`: сохранить правки и подтвердить бриф.
+
+    Мусорный TRL не топит подтверждение целиком, но и не проходит молча:
+    оператор остаётся на редактируемой форме (`confirmed=False`) с
+    сохранёнными остальными полями и предупреждением, чтобы поправить
+    именно TRL, не перепечатывая всё заново (ревью цикла 1) — введённое
+    значение возвращается в поле тем же способом, что и у остальных полей.
+    """
+    trl_raw = (form.get("target_trl") or "").strip()
+    target_trl, trl_warning = _validate_target_trl(trl_raw)
 
     fields: dict[str, Any] = {
         "industry": form.get("industry", ""),
@@ -320,12 +345,22 @@ async def _confirm_brief(request: Request, session: AsyncSession, row: RequestRo
 
     brief = brief_from_form(fields)
     row.status = RequestStatus.BRIEFING
-    await save_brief(session, row.id, brief, confirmed=True)
 
+    if trl_warning:
+        await save_brief(session, row.id, brief, confirmed=False)
+        return _templates(request).TemplateResponse(
+            request=request,
+            name="_brief_confirm.html",
+            context=_confirm_context(
+                row, brief, confirmed=False, caveats=[], trl_warning=trl_warning, target_trl_display=trl_raw
+            ),
+        )
+
+    await save_brief(session, row.id, brief, confirmed=True)
     return _templates(request).TemplateResponse(
         request=request,
         name="_brief_confirm.html",
-        context=_confirm_context(row, brief, confirmed=True, caveats=[], trl_warning=trl_warning),
+        context=_confirm_context(row, brief, confirmed=True, caveats=[]),
     )
 
 
@@ -343,7 +378,7 @@ async def build_brief(
     """
     row = await session.get(RequestRow, request_id)
     if row is None:
-        return _failure_fragment("Запрос не найден.", request_id=request_id)
+        return _failure_fragment("не найден.", request_id=request_id)
 
     form = await request.form()
     if form.get("confirm"):
