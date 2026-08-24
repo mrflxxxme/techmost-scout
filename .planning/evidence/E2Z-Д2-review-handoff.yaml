@@ -1,0 +1,37 @@
+handoff:
+  from: reviewer
+  to: verifier-orchestrator
+  task: "Д-2"
+  did:
+    - "Сверены границы задачи (diff 48144af..0e26371 = ровно файлы карточки Д-2)"
+    - "Прочитаны rospatent.py и arxiv.py целиком: повтор ровно один, порог < 3 (rospatent) и found==0 (arxiv), отказ источника поднимает SearchError до повтора, темп/условия не смягчены, AND-путь arxiv для длинных формулировок сохранён (проверено живым вызовом _content_words/_query_from_words)"
+    - "Лично воспроизведены мутации (а) и (б) на обоих адаптерах — все четыре ловятся заявленными тестами; дерево восстановлено (git status пуст)"
+    - "Разбор «21 без карточек» сверен построчно с out/E2J-gate-run-1.log и out/report-20260823-232350.md (грепом) — числа и граница честны, SQL синтаксически корректен по models.py"
+    - "Прогнаны pytest -q (769 passed), ruff check, ruff format --check, wc -l, grep httpx/секреты — лично, не со слов исполнителя"
+    - "Найдено расхождение в числах: handoff заявляет «15 новых тестов» в test_rospatent.py, фактически (--collect-only до/после) — 9; сумма 769 всё равно верна. Не блокирует, отражено как совет"
+  artifacts:
+    - .planning/evidence/E2Z-Д2-review.md (закоммичен до ответа)
+    - .planning/evidence/E2Z-Д2-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q: 769 passed, 0 failed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 137 files already formatted"
+    - "wc -l rospatent.py/arxiv.py: 410/217 (оба ≤ 500)"
+    - "мутации (а)/(б) rospatent и arxiv — все 4 воспроизведены лично, ловятся заявленными тестами"
+    - "grep -rE 'sk-|gigachat|Api-Key' по 4 изменённым файлам: пусто"
+    - "grep -rln httpx backend/app вне llm/|search/|cli.py|pipeline_context.py|pipeline_search.py: пусто"
+  verdict: ПРИНЯТЬ
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача Д-2, волна Э2-З)
+    - .planning/evidence/E2Z-Д2-review.md
+    - backend/app/search/rospatent.py
+    - backend/app/search/arxiv.py
+  notes: >-
+    Цикл 1, блокирующих находок нет. Один совет исполнителю на будущее (число
+    новых тестов rospatent в handoff завышено, 15 вместо 9) и один совет по
+    архитектуре (дублирование _shorten_query в трёх адаптерах — кандидат на
+    общий помощник в задаче дробления следующей волны, не сейчас). Разбор
+    «21 без карточек» доказателен и честен в границе; наблюдение в ворота
+    оставлено как есть.
