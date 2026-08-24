@@ -1,0 +1,126 @@
+{# Одна карточка варианта решения (И-12). Включается циклом из report.html —
+   контекст (num, card, card_id, maturity_ru, confidence_ru) наследуется от
+   вызова; номер карточки передаётся явно (Jinja не прокидывает `loop` во
+   `{% include %}`). Тело карточки общее для обеих секций отчёта (основной и
+   конкурсной), как и в markdown-экспорте: инвариант №1 проверяется одним и
+   тем же путём везде. #}
+<div class="bezel hoverable appear">
+  <div class="core">
+    <h3>{{ num }}. {{ card.title }}</h3>
+
+    {% if card.evidence %}
+    <div class="maturity mb-sm" title="Стадия зрелости">
+      {% set stages = ["lab", "prototype", "pilot", "series"] %}
+      {% set current = stages.index(card.maturity_stage) if card.maturity_stage in stages else -1 %}
+      {% for i in range(4) %}<i class="{% if i <= current %}on{% endif %}"></i>{% endfor %}
+      <span class="muted">{{ maturity_ru.get(card.maturity_stage, card.maturity_stage) }}{% if card.trl_estimate %} (TRL ≈ {{ card.trl_estimate }}){% endif %}</span>
+    </div>
+    {% endif %}
+
+    <span class="badge{% if card.confidence == 'low' %} low{% endif %} mb-sm">Уверенность: {{ confidence_ru.get(card.confidence, card.confidence) }}{% if card.confidence_note %} — {{ card.confidence_note }}{% endif %}</span>
+
+    <p>{{ card.essence }}</p>
+
+    <p><strong>Разработчик:</strong> {{ card.developer_org or "не найдено" }}{% if card.developer_team %} — {{ card.developer_team }}{% endif %}</p>
+    {% if card.contact_leads %}
+    <p><strong>Как выйти на связь:</strong> {{ card.contact_leads|join('; ') }}</p>
+    {% endif %}
+
+    <p><strong>Применимость к задаче:</strong> {{ card.applicability }}</p>
+
+    {% if card.requirement_checks %}
+    <p class="mb-sm"><strong>Сверка с требованиями задачи:</strong></p>
+    <ul>
+      {% for check in card.requirement_checks %}
+      <li>
+        {{ check.requirement }}:
+        {% if check.status == "confirmed" %}
+          подтверждено источником{% if check.evidence_url %} (<a href="{{ check.evidence_url }}">ссылка</a>){% endif %}
+        {% else %}
+          не подтверждено источником
+        {% endif %}
+        {% if check.note %} — {{ check.note }}{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if card.risks %}
+    <p class="mb-sm"><strong>Риски:</strong></p>
+    <ul>{% for risk in card.risks %}<li>{{ risk }}</li>{% endfor %}</ul>
+    {% endif %}
+
+    {% if card.gov_support %}
+    <p class="mb-sm"><strong>Господдержка:</strong></p>
+    <ul>
+      {% for item in card.gov_support %}
+      <li><strong>{{ item.instrument }}</strong>{% if item.limit %} — {{ item.limit }}{% endif %}: {{ item.why }}{% if item.url %} (<a href="{{ item.url }}">условия</a>){% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    <p><strong>Следующий шаг:</strong> {{ card.next_step }}</p>
+
+    <p class="mb-sm"><strong>Чем подтверждено:</strong></p>
+    {% if card.evidence %}
+    <ul>
+      {% for item in card.evidence %}
+      <li>{{ item.claim }} — <a href="{{ item.url }}">источник</a></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="notice danger">Нельзя показывать клиенту: нет подтверждений</div>
+    {% endif %}
+
+    {% if card.unsourced_claims %}
+    <p class="mt-sm mb-sm"><strong>Не подтверждено проверкой:</strong></p>
+    <ul>{% for claim in card.unsourced_claims %}<li>{{ claim }}</li>{% endfor %}</ul>
+    {% endif %}
+
+    {% for pdf_url in card.pdf_urls %}
+    <p><a href="{{ pdf_url }}">Полный текст (PDF)</a></p>
+    {% endfor %}
+
+    {% if card_id %}
+    <details class="card-edit mt-lg">
+      <summary>Править карточку</summary>
+      <form method="post" action="/cards/{{ card_id }}/edit" class="mt-md">
+        <label for="title-{{ card_id }}">Название</label>
+        <input id="title-{{ card_id }}" type="text" name="title" value="{{ card.title }}">
+
+        <label for="essence-{{ card_id }}">Суть</label>
+        <textarea id="essence-{{ card_id }}" name="essence">{{ card.essence }}</textarea>
+
+        <label for="applicability-{{ card_id }}">Применимость к задаче</label>
+        <textarea id="applicability-{{ card_id }}" name="applicability">{{ card.applicability }}</textarea>
+
+        <label for="next_step-{{ card_id }}">Следующий шаг</label>
+        <textarea id="next_step-{{ card_id }}" name="next_step">{{ card.next_step }}</textarea>
+
+        <label for="risks-{{ card_id }}">Риски (по одному на строку)</label>
+        <textarea id="risks-{{ card_id }}" name="risks">{{ card.risks|join("\n") }}</textarea>
+
+        <label for="contact_leads-{{ card_id }}">Как выйти на связь (по одному на строку)</label>
+        <textarea id="contact_leads-{{ card_id }}" name="contact_leads">{{ card.contact_leads|join("\n") }}</textarea>
+
+        <label for="developer_org-{{ card_id }}">Организация-разработчик</label>
+        <input id="developer_org-{{ card_id }}" type="text" name="developer_org" value="{{ card.developer_org or '' }}">
+
+        <label for="developer_team-{{ card_id }}">Команда разработчика</label>
+        <input id="developer_team-{{ card_id }}" type="text" name="developer_team" value="{{ card.developer_team or '' }}">
+
+        {% if card.evidence %}
+        <p class="mt-md mb-sm">Убрать подтверждение из карточки:</p>
+        {% for item in card.evidence %}
+        <label class="mb-sm"><input type="checkbox" name="evidence_removed" value="{{ item.url }}"> {{ item.claim }}</label><br>
+        {% endfor %}
+        {% endif %}
+
+        <div class="edit-actions">
+          <button class="btn" type="submit">Сохранить правки</button>
+        </div>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+</div>
