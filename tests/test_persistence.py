@@ -35,6 +35,7 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -63,6 +64,7 @@ from app.schemas import (
     IPStatus,
     MaturityStage,
     Report,
+    ReportSummary,
     RequirementCheck,
     SearchPlan,
     SearchQuery,
@@ -1162,3 +1164,253 @@ async def test_load_search_plan_raises_when_database_is_broken():
         await load_search_plan(broken_factory, 1)
 
     assert "залокирована" in str(info.value)
+
+
+# ── И-5 (РЕШ-145, долг DLG-3): persist_run(request_id=N) обновляет строку ───
+#
+# До этой задачи `persist_run` всегда вставляла новую строку `requests`: веб
+# (задача И-9/И-10) заранее пишет строку запроса и брифа, и без обновления
+# каждый повтор того же запроса плодил бы вторую строку — история и экран
+# ревью работают по одному номеру, поэтому одна строка обязана оставаться
+# одной. Ниже проверяется путь `persist_run(..., request_id=N)` напрямую и
+# путь через настоящий `ScoutPipeline.run()` на ветке отказа.
+
+
+async def test_persist_run_with_request_id_updates_existing_row_without_second_insert(db_session_factory):
+    """Критерий 1: повторная запись по тому же `request_id` не создаёт вторую
+    строку `requests` и обновляет статус, стоимость и текст ошибки."""
+    first_id = await persist_run(
+        db_session_factory,
+        raw_text="текст задачи, которую перезапишут",
+        status="drafted",
+        cost_rub=0.01,
+        cards=[_card()],
+        contest_cards=[],
+        stages=[],
+    )
+    assert first_id is not None
+
+    async with db_session_factory() as session:
+        before = (await session.execute(select(RequestRow))).scalars().all()
+    assert len(before) == 1
+
+    second_id = await persist_run(
+        db_session_factory,
+        raw_text="текст задачи, которую перезапишут",
+        status="failed",
+        cost_rub=1.23,
+        cards=[],
+        contest_cards=[],
+        stages=[],
+        error="повторный прогон отказал на скоринге",
+        request_id=first_id,
+    )
+    assert second_id == first_id, "номер строки не меняется при обновлении"
+
+    async with db_session_factory() as session:
+        after = (await session.execute(select(RequestRow))).scalars().all()
+    assert len(after) == 1, "повторная запись по request_id завела вторую строку requests"
+    assert after[0].id == first_id
+    assert after[0].status == "failed"
+    assert after[0].cost_rub == 1.23
+    assert after[0].error == "повторный прогон отказал на скоринге"
+
+
+async def test_persist_run_with_request_id_updates_report_json(db_session_factory):
+    """Критерий 1: повторная запись с `report=` обновляет `report_json`
+    существующей строки, а `load_report` читает уже новый отчёт."""
+    from app.pipeline.persistence import load_report
+
+    first_id = await persist_run(
+        db_session_factory,
+        raw_text="текст задачи с последующим обновлением отчёта",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[],
+        contest_cards=[],
+        stages=[],
+    )
+    assert first_id is not None
+
+    updated_report = Report(
+        request_id=0,  # 0 — как до записи, `_write` подставит настоящий номер
+        brief=Brief(industry="нефтепереработка", task_summary="Обновлённая формулировка задачи."),
+        cards=[_card(title="Обновлённая карточка после перезаписи")],
+        contest_cards=[],
+        summary=ReportSummary(recommendation="Рассмотреть обновлённый вариант."),
+        sources_unavailable=[],
+        generated_at=datetime.now(UTC),
+        cost_rub=2.5,
+    )
+    persisted_id = await persist_run(
+        db_session_factory,
+        raw_text="текст задачи с последующим обновлением отчёта",
+        status="drafted",
+        cost_rub=2.5,
+        cards=updated_report.cards,
+        contest_cards=[],
+        stages=[],
+        report=updated_report,
+        request_id=first_id,
+    )
+    assert persisted_id == first_id
+
+    loaded = await load_report(db_session_factory, first_id)
+    assert loaded.request_id == first_id
+    assert loaded.cards[0].title == "Обновлённая карточка после перезаписи"
+
+
+async def test_persist_run_with_request_id_does_not_duplicate_cards(db_session_factory):
+    """Критерий 1: повторная запись по тому же `request_id` не задваивает
+    карточки — старые карточки прошлой попытки заменяются новыми, а не
+    остаются в базе рядом с ними (инвариант №1: карточка в БД не расходится с
+    отчётом клиента)."""
+    request_id = await persist_run(
+        db_session_factory,
+        raw_text="текст задачи с двумя записями карточек",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[_card()],
+        contest_cards=[],
+        stages=[],
+    )
+    assert request_id is not None
+
+    await persist_run(
+        db_session_factory,
+        raw_text="текст задачи с двумя записями карточек",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[_card()],
+        contest_cards=[],
+        stages=[],
+        request_id=request_id,
+    )
+
+    async with db_session_factory() as session:
+        cards = (await session.execute(select(SolutionCardRow))).scalars().all()
+    assert len(cards) == 1, "повторная запись задвоила карточки прошлой попытки"
+    assert all(row.request_id == request_id for row in cards)
+
+
+async def test_persist_run_with_request_id_updates_brief_without_unique_violation(db_session_factory):
+    """Критерий 1: строка `briefs` обновляется, а не дублируется — у неё
+    `unique(request_id)`, и второй `INSERT` на тот же номер уронил бы запись
+    целиком (без гашения исключения это стало бы отказом всей транзакции)."""
+    first_brief = Brief(industry="нефтепереработка", task_summary="Первая формулировка задачи.")
+    request_id = await persist_run(
+        db_session_factory,
+        raw_text="текст задачи с брифом, который потом уточнят",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[],
+        contest_cards=[],
+        stages=[],
+        brief=first_brief,
+    )
+    assert request_id is not None
+
+    second_brief = Brief(industry="фарма", task_summary="Уточнённая формулировка задачи после повтора.")
+    second_id = await persist_run(
+        db_session_factory,
+        raw_text="текст задачи с брифом, который потом уточнят",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[],
+        contest_cards=[],
+        stages=[],
+        brief=second_brief,
+        request_id=request_id,
+    )
+    assert second_id == request_id, "запись брифа по существующему request_id отказала — unique(request_id) не пережил"
+
+    async with db_session_factory() as session:
+        rows = (await session.execute(select(BriefRow))).scalars().all()
+    assert len(rows) == 1, "unique(request_id) нарушен — вторая строка брифа на тот же запрос"
+    assert rows[0].industry == "фарма"
+    assert rows[0].task_summary == "Уточнённая формулировка задачи после повтора."
+
+
+async def test_persist_run_without_request_id_still_creates_new_row_each_time(db_session_factory):
+    """Критерий 1, обратная совместимость: без `request_id` (умолчание `None`)
+    поведение прежнее — каждый вызов заводит новую строку `requests`."""
+    first_id = await persist_run(
+        db_session_factory,
+        raw_text="первый независимый прогон той же формулировки",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[],
+        contest_cards=[],
+        stages=[],
+    )
+    second_id = await persist_run(
+        db_session_factory,
+        raw_text="первый независимый прогон той же формулировки",
+        status="drafted",
+        cost_rub=0.0,
+        cards=[],
+        contest_cards=[],
+        stages=[],
+    )
+
+    assert first_id != second_id
+
+    async with db_session_factory() as session:
+        rows = (await session.execute(select(RequestRow))).scalars().all()
+    assert len(rows) == 2
+
+
+async def test_persist_run_with_unknown_request_id_falls_back_to_insert(db_session_factory, caplog):
+    """Номер, которому в базе нет строки, не роняет запись: `_write`
+    откатывается на обычную вставку и предупреждает в лог, а не теряет прогон
+    (инвариант №5 в редакции РЕШ-43 — отказ не должен стоить записи целиком)."""
+    with caplog.at_level(logging.WARNING):
+        persisted_id = await persist_run(
+            db_session_factory,
+            raw_text="текст задачи с несуществующим номером строки",
+            status="drafted",
+            cost_rub=0.0,
+            cards=[],
+            contest_cards=[],
+            stages=[],
+            request_id=9999,
+        )
+
+    assert persisted_id is not None
+    assert any("9999" in record.message for record in caplog.records)
+
+    async with db_session_factory() as session:
+        rows = (await session.execute(select(RequestRow))).scalars().all()
+    assert len(rows) == 1
+
+
+# ── И-5, критерий 2: ветка отказа с request_id оставляет ту же строку failed ─
+
+
+async def test_run_failure_with_request_id_updates_same_row_to_failed(settings, brief, db_session_factory):
+    """Прогон с уже существующим `request_id`, упавший исключением, оставляет
+    ЭТУ строку со статусом `failed` и текстом ошибки — не создаёт вторую."""
+    async with db_session_factory() as session:
+        pending = RequestRow(raw_text="текст, который упадёт по существующему номеру", status="briefing", cost_rub=0.0)
+        session.add(pending)
+        await session.flush()
+        pending_id = pending.id
+
+    async with httpx.AsyncClient() as client:
+        pipeline = _pipeline(
+            settings, _AlwaysFailProvider(), [_OneHitAdapter(client)], session_factory=db_session_factory
+        )
+        with pytest.raises(LLMError):
+            await pipeline.run(
+                brief,
+                request_id=pending_id,
+                raw_text="текст, который упадёт по существующему номеру",
+            )
+
+    async with db_session_factory() as session:
+        rows = (await session.execute(select(RequestRow))).scalars().all()
+
+    assert len(rows) == 1, "прогон завёл вторую строку requests вместо обновления существующей"
+    assert rows[0].id == pending_id
+    assert rows[0].status == "failed"
+    assert rows[0].error

@@ -1,0 +1,49 @@
+handoff:
+  from: implementer-2
+  to: reviewer
+  task: "И-5"
+  did:
+    - "persist_run получил параметр request_id: int | None = None (РЕШ-145, долг DLG-3): с номером — обновляет статус/стоимость/error/report_json существующей строки requests и перезаписывает её карточки, журнал стадий, кандидатов и планы; briefs обновляется на месте (unique(request_id)), а не дублируется; без номера — прежнее поведение (новая строка)."
+    - "Неизвестный request_id (в базе нет такой строки) не роняет запись: _write откатывается на обычную вставку и предупреждает в лог — тот же принцип устойчивости, что у отказа самой записи (инвариант №5, РЕШ-43)."
+    - "ScoutPipeline.run() пробрасывает свой существующий параметр request_id в оба вызова persist_run — успешный и except-ветку; 0 (умолчание, не бывает настоящим id в SQLite) передаётся как None, поведение scout run без веба не изменилось."
+    - "persistence.py перевалил 500 строк правкой — раздроблен: запись (persist_run, _write, _card_row, работа с briefs) вынесена в новый backend/app/pipeline/persistence_write.py; persistence.py реэкспортирует persist_run в конце файла (комментарий поясняет разрыв циклического импорта), существующий импорт `from app.pipeline.persistence import persist_run` не изменился ни в одном вызывающем месте."
+    - "tests/test_persistence.py: 7 новых тестов на request_id (обновление вместо второй строки, обновление report_json, отсутствие дублей карточек, обновление brief без нарушения unique, обратная совместимость без request_id, откат на вставку при неизвестном номере, ветка отказа через настоящий ScoutPipeline.run())."
+    - "tests/test_report_persistence.py и tests/test_run_accounting.py не тронуты (git diff --stat пуст) и остаются зелёными без единой правки — обратная совместимость подтверждена, а не задекларирована."
+    - "Компаньон-правка вне списка файлов задачи: tests/test_tests_layout.py — запись test_persistence.py в _EXCEPTIONS обновлена с 1164 на 1416 строк с комментарием о причине (страж роста тестовых файлов, CLAUDE.md прямо предписывает этот путь: «список пополняется вместе с задачей, которая раздула файл» — не тихой правкой числа). Без этой правки pytest падает на test_tests_layout.py::test_exceptions_do_not_grow_unnoticed."
+  artifacts:
+    - backend/app/pipeline/persistence.py
+    - backend/app/pipeline/persistence_write.py
+    - backend/app/pipeline/run_flow.py
+    - tests/test_persistence.py
+    - tests/test_tests_layout.py
+    - .planning/evidence/E3-И5-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_persistence.py -v: 38 passed"
+    - "pytest tests/test_report_persistence.py tests/test_run_accounting.py -v: 16 passed"
+    - "git diff --stat -- tests/test_report_persistence.py tests/test_run_accounting.py: пусто"
+    - "wc -l backend/app/pipeline/persistence.py backend/app/pipeline/persistence_write.py: 295 и 329 строк — оба под лимитом 500"
+    - "pytest tests/test_backend_layout.py tests/test_pipeline_layout.py -v: 9 passed"
+    - "pytest -q: 882 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 157 files already formatted"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «### И-5»)
+    - .planning/DECISIONS.md (РЕШ-145, РЕШ-146, РЕШ-189 абзац про DLG-3)
+    - backend/app/pipeline/persistence_write.py
+    - backend/app/pipeline/persistence.py
+    - backend/app/pipeline/run_flow.py (метод run, комментарий про persist_request_id)
+    - tests/test_persistence.py (раздел «И-5» в конце файла)
+  notes: >-
+    Схема БД не менялась, ALTER не делался — задача решена без миграций, как
+    и требовали границы. Удаление старых дочерних строк (карточки, журнал
+    стадий, кандидаты, планы) при обновлении сделано через sqlalchemy.delete
+    по request_id внутри той же транзакции, что и сама запись — атомарно с
+    остальной перезаписью. Раздел «Пункт 4» постановки прямо разрешал
+    дробление persistence.py при превышении лимита — этим и воспользовался;
+    правка tests/test_tests_layout.py формально вне списка «Файлы» задачи, но
+    механическая, самодокументированная и прямо предписана комментарием в
+    самом страже — без неё pytest целиком не проходит. Если ревьюер сочтёт
+    это выходом за границы — легко отменить, откатив только эту правку ценой
+    красной строки в общем pytest -q до отдельного решения владельца.
