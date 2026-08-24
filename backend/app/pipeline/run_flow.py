@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 
+from app.models import RequestStatus
 from app.pipeline import history
 from app.pipeline.persistence import CandidateRecord, PlanRecord, StageRecord
 from app.pipeline.pipeline_context import PipelineContextMixin
@@ -115,7 +116,7 @@ class ScoutPipeline(
             await persist_run(
                 self._session_factory,
                 raw_text=raw_text,
-                status="failed",
+                status=RequestStatus.FAILED,
                 cost_rub=round(self._router.cost.spent_rub, 4),
                 cards=[],
                 contest_cards=[],
@@ -151,7 +152,7 @@ class ScoutPipeline(
         persisted_id = await persist_run(
             self._session_factory,
             raw_text=raw_text,
-            status="drafted",
+            status=RequestStatus.DRAFTED,
             cost_rub=report.cost_rub,
             cards=report.cards,
             # Обе секции пишутся из отчёта: источник карточек один и тот же для клиента и для базы (РЕШ-92).

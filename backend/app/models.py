@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from enum import StrEnum
 
 from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -22,6 +23,42 @@ class Base(DeclarativeBase):
     pass
 
 
+class RequestStatus(StrEnum):
+    """Статусы запроса (РЕШ-143 п. 3, РЕШ-189 п. 11).
+
+    В БД лежат английские значения (колонка `requests.status` — `String(32)`,
+    миграций в MVP нет, менять тип поздно и незачем): `StrEnum` даёт член
+    перечисления для кода и одновременно строку для хранения — сравнение
+    `row.status == RequestStatus.FAILED` работает без явного приведения типов.
+    Порядок значений — это же и порядок прохождения статусов прогоном:
+    `intake` → `briefing` → `searching` → `drafted` → `validated` → `exported`,
+    `failed` — отказ на любой из стадий.
+    """
+
+    INTAKE = "intake"
+    BRIEFING = "briefing"
+    SEARCHING = "searching"
+    DRAFTED = "drafted"
+    VALIDATED = "validated"
+    EXPORTED = "exported"
+    FAILED = "failed"
+
+
+#: Русские метки статусов для интерфейса (шаблоны `index.html`, `history.html`).
+#: В БД и в коде статус остаётся английским литералом `RequestStatus`, метка —
+#: только для отображения, отдельно от значения, чтобы не путать хранимые
+#: данные с текстом интерфейса.
+STATUS_LABELS: dict[RequestStatus, str] = {
+    RequestStatus.INTAKE: "Интейк",
+    RequestStatus.BRIEFING: "Уточнение вопросов",
+    RequestStatus.SEARCHING: "Поиск и оценка",
+    RequestStatus.DRAFTED: "Черновик готов",
+    RequestStatus.VALIDATED: "Проверено экспертом",
+    RequestStatus.EXPORTED: "Экспортировано",
+    RequestStatus.FAILED: "Отказ",
+}
+
+
 class Request(Base):
     """Один запрос бизнеса на подбор решений."""
 
@@ -30,8 +67,8 @@ class Request(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     raw_text: Mapped[str] = mapped_column(Text)
-    # intake → briefing → searching → drafted → validated → exported | failed
-    status: Mapped[str] = mapped_column(String(32), default="intake", index=True)
+    #: Порядок значений — в докстроке `RequestStatus` рядом с перечислением.
+    status: Mapped[str] = mapped_column(String(32), default=RequestStatus.INTAKE, index=True)
     cost_rub: Mapped[float] = mapped_column(Float, default=0.0)
     demo_flag: Mapped[bool] = mapped_column(default=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -48,6 +85,16 @@ class Request(Base):
     search_plans: Mapped[list[SearchPlan]] = relationship(back_populates="request", cascade="all, delete-orphan")
     cards: Mapped[list[SolutionCard]] = relationship(back_populates="request", cascade="all, delete-orphan")
     logs: Mapped[list[PipelineLog]] = relationship(back_populates="request", cascade="all, delete-orphan")
+
+    @property
+    def status_label(self) -> str:
+        """Русская метка текущего статуса — для шаблонов (`STATUS_LABELS`).
+
+        Значение колонки хранится плоской строкой (`String(32)`), но
+        `StrEnum` сравнивается со строкой по значению — поиск в словаре
+        работает без явного приведения `self.status` к `RequestStatus`.
+        """
+        return STATUS_LABELS.get(self.status, self.status)
 
 
 class Brief(Base):

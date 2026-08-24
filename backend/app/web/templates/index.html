@@ -44,7 +44,7 @@
         <tr>
           <td>{{ row.id }}</td>
           <td>{{ row.raw_text[:110] }}{% if row.raw_text|length > 110 %}…{% endif %}</td>
-          <td><span class="badge{% if row.status == 'validated' %} ok{% elif row.status == 'failed' %} low{% endif %}">{{ row.status }}</span></td>
+          <td><span class="badge{% if row.status == 'validated' %} ok{% elif row.status == 'failed' %} low{% endif %}">{{ row.status_label }}</span></td>
           <td class="muted">{{ "%.2f"|format(row.cost_rub) }} ₽</td>
         </tr>
         {% endfor %}
