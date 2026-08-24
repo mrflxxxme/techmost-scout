@@ -119,7 +119,7 @@ PRD (раздел 2а); PRD v1.0 выведен в архив
 | Командная строка (doctor, run, serve, showcase) | `backend/app/cli.py` | ✅ |
 | Веб: главная, история, витрина; дизайн-токены в `theme.css` | `backend/app/web/**` | ✅ |
 | Вход по паролю: basic auth на всех маршрутах, кроме `/health` (РЕШ-16) | `backend/app/main.py` | ✅ |
-| Веб: уточнения, прогресс, отчёт, ревью | `backend/app/web/routes.py` | ⬜ этапы 3–4 |
+| Веб: уточнения, прогресс, отчёт, ревью | `backend/app/web/routes/` | ✅ этап 3 (уточнения, прогресс, отчёт); ⬜ ревью — этап 4 |
 | Выгрузка в PDF и DOCX | `backend/app/export/` | ⬜ этап 4 |
 | Тесты контрактов, роутера, стадий | `tests/` | ✅ |
 | Справочник господдержки | `data/gov_support.yaml` | ✅ |
@@ -527,9 +527,13 @@ showcase, _stage_todo — остались инлайновые `style=`; выч
 `http://127.0.0.1:8000`, в консоли браузера нет ошибки загрузки
 `/static/htmx.min.js`.
 
-### Э3-2 ⬜ Уточняющие вопросы и подтверждение брифа
+### Э3-2 ✅ Уточняющие вопросы и подтверждение брифа
 
-**Файлы.** `backend/app/web/routes.py`, `templates/_intake_questions.html`,
+Принято на подменах (respx/фикстуры, без сети); живой прогон через браузер —
+на воротах этапа Э3 (см. намётку ниже).
+
+**Файлы.** `backend/app/web/routes/intake.py`, `backend/app/web/brief_store.py`,
+`app/pipeline/intake_flow.py`, `templates/_intake_questions.html`,
 `templates/_brief_confirm.html`
 
 **Что делать.** Заменить заглушку `_stage_todo.html` на живой поток:
@@ -554,9 +558,12 @@ showcase, _stage_todo — остались инлайновые `style=`; выч
 **Проверка.** Пройти путь в браузере от текста задачи до нажатия «Начать
 поиск»; в БД у запроса статус `searching` и заполненная строка в `briefs`.
 
-### Э3-3 ⬜ Запуск поиска в фоне
+### Э3-3 ✅ Запуск поиска в фоне
 
-**Файл.** `backend/app/web/routes.py`
+Принято на подменах (respx/фикстуры, без сети); живой прогон через браузер —
+на воротах этапа Э3 (см. намётку ниже).
+
+**Файлы.** `backend/app/web/routes/run.py`, `templates/request.html`
 
 **Что делать.** Поиск идёт минуты, HTTP-запрос столько ждать не должен.
 Запускать `ScoutPipeline.run` через `asyncio.create_task`, держать реестр
@@ -568,11 +575,15 @@ showcase, _stage_todo — остались инлайновые `style=`; выч
 пишутся в БД, поэтому отчёт не теряется.
 
 **Проверка.** Запустить поиск, закрыть вкладку, через минуту открыть
-`/requests` — статус изменился, в `pipeline_logs` растут записи.
+`/requests` — статус изменился, отчёт появился.
 
-### Э3-4 ⬜ Живой прогресс поиска
+### Э3-4 ✅ Живой прогресс поиска
 
-**Файл.** `backend/app/web/routes.py`, `templates/_progress.html`
+Принято на подменах (respx/фикстуры, без сети); живой прогон через браузер —
+на воротах этапа Э3 (см. намётку ниже).
+
+**Файлы.** `backend/app/web/routes/run.py`, `backend/app/web/progress.py`,
+`templates/_progress.html`, `backend/app/web/static/progress.js`
 
 **Что делать.** `GET /requests/{id}/progress` как `text/event-stream`. Источник
 событий — `ProgressHook` пайплайна.
@@ -588,9 +599,13 @@ showcase, _stage_todo — остались инлайновые `style=`; выч
 **Проверка.** Показать прогресс на проекторе от начала до конца: строки
 появляются плавно, видны стадии и стоимость, нет мигания и рывков.
 
-### Э3-5 ⬜ Отчёт с карточками
+### Э3-5 ✅ Отчёт с карточками
 
-**Файлы.** `templates/report.html`, `templates/_card.html`
+Принято на подменах (respx/фикстуры, без сети); живой прогон через браузер —
+на воротах этапа Э3 (см. намётку ниже).
+
+**Файлы.** `backend/app/web/routes/report.py`, `backend/app/report_overrides.py`,
+`templates/report.html`, `templates/_card.html`
 
 **Что делать.** Страница отчёта: сводка, сравнительная таблица, карточки.
 
@@ -613,7 +628,7 @@ showcase, _stage_todo — остались инлайновые `style=`; выч
 
 ### Э4-1 ⬜ Ревью эксперта
 
-**Файлы.** `backend/app/web/routes.py`, `templates/review.html`
+**Файлы.** `backend/app/web/routes/report.py`, `templates/review.html`
 
 **Что делать.** `GET /requests/{id}/review` — экран для научного
 со-основателя; `POST /cards/{id}/verdict` — вердикт.
@@ -652,7 +667,7 @@ doctor, run, serve, showcase).
 
 ### Э4-3 ⬜ Демо-режим
 
-**Файлы.** `backend/app/web/routes.py`, `backend/app/pipeline/demo.py`
+**Файлы.** `backend/app/web/routes/`, `backend/app/pipeline/demo.py`
 
 **Что делать.** Воспроизведение сохранённого прогона без обращения к API:
 события прогресса берутся из `PipelineLog` с сохранением исходных задержек.

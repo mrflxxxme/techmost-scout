@@ -1,0 +1,28 @@
+Задача Э3-И14 · Документы этапа
+Ветка: e3/i14, база: 9bac42520a45e9ba61234079ed0cfa0b1c333305
+
+== Критерий 1: grep -n "растут записи" docs/SPEC.md ==
+(пусто — совпадений нет)
+
+== Критерий 2: grep -n "web/routes.py" docs/SPEC.md ==
+(пусто — совпадений нет)
+
+== Критерий 3: git diff --stat ==
+ docs/SPEC.md | 39 +++++++++++++++++++++++++++------------
+ 1 file changed, 27 insertions(+), 12 deletions(-)
+
+== Критерий 4а: pytest tests/test_team_docs.py -v ==
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0
+collecting ... collected 35 items
+...
+============================== 35 passed in 0.10s ==============================
+
+== Критерий 4б: pytest -q (полный прогон) ==
+960 passed, 1 warning in 60.26s (0:01:00)
+
+== ruff check . ==
+All checks passed!
+
+== ruff format --check . ==
+173 files already formatted
