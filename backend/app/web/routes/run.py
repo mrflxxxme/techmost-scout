@@ -62,6 +62,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import get_session
+from app.llm import LLMRouter
 from app.models import Brief as BriefRow
 from app.models import Request as RequestRow
 from app.models import RequestStatus
@@ -95,6 +96,17 @@ REFUSAL_BRIEF_NOT_CONFIRMED = (
 REFUSAL_ANOTHER_RUN_ACTIVE = (
     "Сейчас выполняется другой запрос (№{other_id}). Дождитесь его завершения и запустите этот запрос заново."
 )
+#: П-3 аудита Э3: повторный старт по запросу, у которого отчёт уже собран
+#: (`drafted`/`validated`/`exported`), раньше заводил второй платный прогон и
+#: перезаписывал отчёт тем же `request_id`. Новая клиентская фраза — на визу
+#: владельца (см. handoff).
+REFUSAL_ALREADY_DONE = 'Отчёт по этому запросу уже готов. <a href="/requests/{request_id}/report">Открыть отчёт</a>.'
+#: Статусы, для которых `start_run` отказывает `REFUSAL_ALREADY_DONE`: отчёт
+#: уже существует и повторный старт перезаписал бы его. `failed` и
+#: `searching` без зарегистрированной задачи (прогон прерван перезапуском
+#: процесса) сюда сознательно не входят — их можно перезапускать («Запустить
+#: заново»).
+_ALREADY_DONE_STATUSES = frozenset({RequestStatus.DRAFTED, RequestStatus.VALIDATED, RequestStatus.EXPORTED})
 
 #: Хвост финального сообщения пайплайна («Отчёт готов. Стоимость запроса: N
 #: ₽») — в демо-режиме вырезается, текст «Отчёт готов» остаётся (РЕШ-188).
@@ -145,7 +157,7 @@ def _progress_fragment(request: Request, request_id: int) -> HTMLResponse:
     )
 
 
-async def _run_pipeline(request_id: int, brief: Brief) -> None:
+async def _run_pipeline(request_id: int, brief: Brief, *, initial_cost_rub: float = 0.0) -> None:
     """Тело фоновой задачи: пайплайн, публикация прогресса, снятие замка.
 
     Замок снимается в `finally` при любом исходе — успехе, отказе пайплайна
@@ -154,6 +166,12 @@ async def _run_pipeline(request_id: int, brief: Brief) -> None:
     `done` — это долг пайплайна, не этой задачи, поэтому здесь и стоит
     страховка: без неё открытая вкладка прогресса зависла бы до перезапуска
     процесса).
+
+    `initial_cost_rub` — сколько уже потрачено по этой строке `requests` до
+    старта прогона (интейк, сбор брифа — РЕШ-193 п. 1, П-1 аудита Э3):
+    роутер этой фазы стартует с этой суммой, а не с нуля, иначе стоп-кран
+    `COST_LIMIT_RUB_PER_REQUEST` действовал бы отдельно на каждую фазу
+    веб-пути вместо запроса целиком.
     """
     from app.db import session_scope
 
@@ -165,7 +183,8 @@ async def _run_pipeline(request_id: int, brief: Brief) -> None:
             state["done"] = True
         broker_hook(stage, message, fraction)
 
-    pipeline = ScoutPipeline(session_factory=session_scope, progress=hook)
+    router = LLMRouter(get_settings(), initial_spent_rub=initial_cost_rub)
+    pipeline = ScoutPipeline(session_factory=session_scope, progress=hook, router=router)
     failed = False
     try:
         await pipeline.run(brief, request_id=request_id)
@@ -190,17 +209,24 @@ async def start_run(
 ) -> HTMLResponse:
     """Запустить фоновый прогон подтверждённого брифа (SPEC Э3-3).
 
-    Контракт: без подтверждённого брифа — отказ человеческим текстом; тот же
-    запрос при уже идущей своей задаче — фрагмент текущего прогресса без
-    второго прогона; другой запрос при активном где-либо прогоне — отказ
-    (РЕШ-147, системный замок один на процесс). Проверка замка и его
-    регистрация — атомарны через `_start_lock` (ревью цикла 1, находка 1):
-    без этого два одновременных запроса (двойной клик) успевали пройти
-    проверку раньше, чем первый регистрировал свою задачу.
+    Контракт: без подтверждённого брифа — отказ человеческим текстом; запрос,
+    у которого отчёт уже собран (`drafted`/`validated`/`exported`), — отказ
+    со ссылкой на готовый отчёт, второй платный прогон не заводится (П-3
+    аудита Э3); тот же запрос при уже идущей своей задаче — фрагмент
+    текущего прогресса без второго прогона; другой запрос при активном
+    где-либо прогоне — отказ (РЕШ-147, системный замок один на процесс).
+    `failed` и `searching` без зарегистрированной задачи (прогон прерван
+    перезапуском процесса) перезапускать можно — кнопка «Запустить заново».
+    Проверка замка и его регистрация — атомарны через `_start_lock` (ревью
+    цикла 1, находка 1): без этого два одновременных запроса (двойной клик)
+    успевали пройти проверку раньше, чем первый регистрировал свою задачу.
     """
     row = await session.get(RequestRow, request_id)
     if row is None:
         return _notice(REQUEST_NOT_FOUND.format(request_id=request_id), status_code=404)
+
+    if row.status in _ALREADY_DONE_STATUSES:
+        return _notice(REFUSAL_ALREADY_DONE.format(request_id=request_id), status_code=409)
 
     confirmed_at = (
         await session.execute(select(BriefRow.confirmed_at).where(BriefRow.request_id == request_id))
@@ -227,7 +253,7 @@ async def start_run(
         row.status = RequestStatus.SEARCHING
         await session.flush()
 
-        task = asyncio.create_task(_run_pipeline(request_id, brief))
+        task = asyncio.create_task(_run_pipeline(request_id, brief, initial_cost_rub=row.cost_rub or 0.0))
         _active_runs[request_id] = task
 
     return _progress_fragment(request, request_id)

@@ -429,3 +429,37 @@ def test_unknown_request_returns_404(client, db_session_factory):
         response = client.get("/requests/999999/report", auth=_AUTH)
 
     assert response.status_code == 404
+
+
+# ── П-5 аудита Э3: страж автоэкранирования Jinja ─────────────────────────
+#
+# Мутация autoescape=False прошла все 960 тестов волны Э3 (аудит, находка
+# П-5) — контракт держался умолчанием, а не проверкой. Тесты ниже ловят обе
+# стороны: сам флаг окружения шаблонов и фактический escape поля карточки,
+# которое печатается без фильтра |safe.
+
+
+def test_templates_env_autoescape_is_enabled_for_html():
+    """Флаг окружения Jinja — `select_autoescape`, включён для html-файлов.
+    Первая линия защиты: если кто-то заменит `Jinja2Templates(...)` на
+    окружение с `autoescape=False`, этот тест ловит это до второго теста."""
+    from app.main import templates
+
+    assert templates.env.autoescape("report.html") is True
+    assert templates.env.autoescape(None) is True
+
+
+def test_card_title_with_script_tag_is_escaped_in_report_html(client, db_session_factory, brief):
+    """Заголовок карточки с `<script>` печатается экранированным текстом —
+    сырой тег в ответе не встречается ни разу. Ловит и подмену `autoescape`,
+    и появление `|safe`/`Markup` на поле карточки."""
+    payload = "<script>alert(1)</script>"
+    report = _make_report([_make_card(title=payload)], brief=brief)
+    request_id = asyncio.run(_seed_request(db_session_factory, report=report))
+
+    with client:
+        response = client.get(f"/requests/{request_id}/report", auth=_AUTH)
+
+    assert response.status_code == 200
+    assert "<script>alert(1)</script>" not in response.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text

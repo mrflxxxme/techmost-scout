@@ -27,6 +27,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app import main
+from app.llm.base import Usage
 from app.models import Base, RequestStatus
 from app.models import Request as RequestRow
 from app.schemas import Brief
@@ -44,15 +45,25 @@ def _next_raw_text() -> str:
 class _FakePipeline:
     """Заглушка `ScoutPipeline`: считает вызовы, ждёт управляемый gate,
     сама пишет статус в БД — тем же контрактом, что настоящий пайплайн
-    (успех → `drafted`, отказ → `failed` до повторного `raise`)."""
+    (успех → `drafted`, отказ → `failed` до повторного `raise`).
+
+    Стоимость — через настоящий `router.cost.add` того `LLMRouter`, что ей
+    передал `_run_pipeline` (РЕШ-194, вариант А ревью цикла 1 правки аудита
+    Э3): `_run_pipeline` создаёт роутер с `initial_spent_rub=row.cost_rub` и
+    передаёт его конструктору `ScoutPipeline` — заглушка ловит этот роутер,
+    а не сама читает `row.cost_rub` из базы. Так тест ловит регрессию
+    проводки: если `_run_pipeline` перестанет сеять или передавать роутер,
+    `self._router` окажется `None`, и итоговая стоимость перестанет включать
+    уже потраченное — тест увидит 4.56, а не 4.74."""
 
     calls = 0
     gate: asyncio.Event | None = None
     fail_message: str | None = None
 
-    def __init__(self, *, session_factory=None, progress=None, **_ignored: Any) -> None:
+    def __init__(self, *, session_factory=None, progress=None, router=None, **_ignored: Any) -> None:
         self._session_factory = session_factory
         self._progress = progress
+        self._router = router
 
     async def run(self, brief: Brief, *, request_id: int = 0, **_ignored: Any):
         type(self).calls += 1
@@ -67,12 +78,17 @@ class _FakePipeline:
             raise RuntimeError(message)
         if type(self).gate is not None:
             await type(self).gate.wait()
+        if self._router is not None:
+            self._router.cost.add(Usage(tokens_in=10, tokens_out=10, cost_rub=4.56, provider="deepseek", model="fake"))
+            cost_rub = self._router.cost.spent_rub
+        else:
+            cost_rub = 4.56
         async with self._session_factory() as session:
             row = await session.get(RequestRow, request_id)
             row.status = RequestStatus.DRAFTED
-            row.cost_rub = 4.56
+            row.cost_rub = cost_rub
         if self._progress:
-            self._progress("done", "Отчёт готов. Стоимость запроса: 4.56 ₽", 1.0)
+            self._progress("done", f"Отчёт готов. Стоимость запроса: {cost_rub:.2f} ₽", 1.0)
         return None
 
 
@@ -194,7 +210,14 @@ async def test_start_other_request_refuses_while_one_active(client, db):
 
 
 async def test_completion_writes_report_to_same_request_id(client, db):
+    """Стоимость прогона складывается с уже потраченным по запросу до старта
+    (интейк, сбор брифа — РЕШ-193 п. 1, П-1 аудита Э3), а не перезаписывает
+    его: строка стартует с 0.18 ₽, прогон приносит 4.56 ₽ — итог 4.74 ₽."""
     request_id = await _make_request(db)
+    async with db() as session:
+        row = await session.get(RequestRow, request_id)
+        row.cost_rub = 0.18
+
     await client.post(f"/requests/{request_id}/start", auth=_AUTH)
 
     _FakePipeline.gate.set()
@@ -202,7 +225,7 @@ async def test_completion_writes_report_to_same_request_id(client, db):
 
     row = await _row_status(db, request_id)
     assert row.status == RequestStatus.DRAFTED
-    assert row.cost_rub == pytest.approx(4.56)
+    assert row.cost_rub == pytest.approx(4.74)
     assert request_id not in run._active_runs
     async with db() as session:
         from sqlalchemy import func, select
@@ -244,6 +267,20 @@ async def test_start_without_confirmed_brief_refuses(client, db):
     assert "не подтверждён" in response.text.lower()
     row = await _row_status(db, request_id)
     assert row.status == RequestStatus.BRIEFING
+    assert request_id not in run._active_runs
+
+
+async def test_start_on_drafted_request_refuses_without_running_pipeline(client, db):
+    """П-3 аудита Э3: запрос со статусом `drafted` — отчёт уже готов, второй
+    платный прогон не заводится, заглушка пайплайна не запускается."""
+    request_id = await _make_request(db, status=RequestStatus.DRAFTED)
+
+    response = await client.post(f"/requests/{request_id}/start", auth=_AUTH)
+
+    assert response.status_code == 409
+    assert "уже готов" in response.text.lower()
+    assert f"/requests/{request_id}/report" in response.text
+    assert _FakePipeline.calls == 0
     assert request_id not in run._active_runs
 
 

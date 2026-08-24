@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+from app.export.markdown import CONFIDENCE_RU, MATURITY_RU
 from app.llm import LLMRouter, Message
 from app.pipeline.prompting import _GO, render_prompt
 from app.schemas import Brief, ReportSummary, SolutionCard
@@ -68,12 +69,18 @@ def fallback_summary(cards: list[SolutionCard]) -> ReportSummary:
     именно это и происходило (прогон агропрома потерял пять готовых карточек
     из-за LLMError на summary). Факт отказа — честная оговорка в caveats, а
     не только запись в логе.
+
+    Стадия зрелости и уверенность печатаются по-русски через словари
+    `MATURITY_RU`/`CONFIDENCE_RU` из `app.export.markdown` (П-4 аудита Э3),
+    а не значением перечисления (`prototype`, `unknown`, `low`) — правило
+    языка CLAUDE.md распространяется и на запасную таблицу, которую видит
+    клиент, а не только на путь через модель.
     """
     rows = [
         {
             "Вариант": card.title,
-            "Стадия зрелости": card.maturity_stage.value,
-            "Уверенность": card.confidence.value,
+            "Стадия зрелости": MATURITY_RU.get(card.maturity_stage, card.maturity_stage.value),
+            "Уверенность": CONFIDENCE_RU.get(card.confidence, card.confidence.value),
         }
         for card in cards
     ]

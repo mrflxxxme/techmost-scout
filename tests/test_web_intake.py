@@ -118,19 +118,76 @@ async def test_create_request_returns_questions_fragment_and_intake_status(monke
     assert row.raw_text == _TASK_TEXT
 
 
-async def test_create_request_flags_deidentification_risk_but_form_stays_submittable(monkeypatch, client):
-    """Текст с «ООО Ромашка» даёт предупреждение, но форма остаётся отправляемой."""
+async def test_create_request_flags_deidentification_risk_without_calling_model(monkeypatch, client):
+    """РЕШ-193 п. 2 (П-2 аудита Э3): текст с «ООО Ромашка» без `accept_risks`
+    не вызывает модель вовсе — оператор видит предупреждение и кнопку
+    «Отправить как есть», строка `requests` не заводится."""
+    calls = {"run_intake": 0}
 
     async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        calls["run_intake"] += 1
         return _one_question_intake()
 
     monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
 
     response = client.post("/requests", data={"raw_text": "ООО Ромашка просит подобрать катализатор."})
     assert response.status_code == 200
+    assert calls["run_intake"] == 0  # модель не вызвана
     assert "ООО Ромашка" in response.text  # фрагмент найденного риска показан оператору
-    assert "Собрать бриф" in response.text  # форма всё ещё отправляемая
+    assert "Отправить как есть" in response.text  # кнопка повторного POST с accept_risks
     assert "<form" in response.text
+
+    async with session_scope() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(RequestRow).where(RequestRow.raw_text == "ООО Ромашка просит подобрать катализатор.")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert rows == []  # строка requests для отклонённой попытки не заведена
+
+
+async def test_create_request_with_accept_risks_calls_model_and_proceeds(monkeypatch, client):
+    """Кнопка «Отправить как есть» повторяет POST с `accept_risks` — на этот
+    раз модель вызывается, интейк идёт как обычно."""
+    calls = {"run_intake": 0}
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        calls["run_intake"] += 1
+        return _one_question_intake()
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+
+    response = client.post(
+        "/requests",
+        data={"raw_text": "ООО Ромашка просит подобрать катализатор.", "accept_risks": "1"},
+    )
+    assert response.status_code == 200
+    assert calls["run_intake"] == 1
+    assert "Какая температура процесса?" in response.text
+    assert "Собрать бриф" in response.text
+
+    row = await _fetch_row(_request_id(response))
+    assert row is not None
+    assert row.status == "intake"
+
+
+async def test_create_request_without_risk_goes_straight_to_intake(monkeypatch, client):
+    """Текст без маркеров риска не показывает предупреждение и сразу идёт
+    в интейк, как раньше."""
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return _one_question_intake()
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+
+    response = client.post("/requests", data={"raw_text": _TASK_TEXT})
+    assert response.status_code == 200
+    assert "Уточняющие вопросы" in response.text
+    assert "Отправить как есть" not in response.text
 
 
 async def test_answer_i_dont_know_is_accepted(monkeypatch, client):
@@ -273,6 +330,48 @@ async def test_cost_limit_exceeded_keeps_spent_amount_in_cost_rub(monkeypatch, c
     row = await _fetch_row(_request_id(response))
     assert row.status == "failed"
     assert row.cost_rub == pytest.approx(spent)
+
+
+# ── Единый счёт трат на запрос (РЕШ-193 п. 1, П-1 аудита Э3) ─────────────
+
+
+async def test_brief_phase_router_seeds_spent_from_existing_request_cost(monkeypatch, client):
+    """Роутер фазы `POST /brief` стартует не с нуля, а с уже потраченного по
+    строке `requests` (интейк): при `requests.cost_rub=19.9` (лимит в тестовом
+    окружении — 10 ₽) первый же вызов модели на этой фазе останавливает её
+    стоп-краном, а не даёт фазе свой отдельный лимит."""
+    from app.llm.base import Usage
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана"):
+        return _one_question_intake()
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+
+    created = client.post("/requests", data={"raw_text": _TASK_TEXT})
+    request_id = _request_id(created)
+
+    async with session_scope() as session:
+        row = await session.get(RequestRow, request_id)
+        row.cost_rub = 19.9
+
+    async def fake_refine_brief(router, task, answers, *, industry_hint="не указана"):
+        # Роутер этой фазы обязан стартовать уже с 19,9 ₽ (РЕШ-193 п. 1), а
+        # не с нуля — иначе стоп-кран на веб-пути действовал бы на фазу.
+        assert router.cost.spent_rub == pytest.approx(19.9)
+        router.cost.add(Usage(tokens_in=10, tokens_out=10, cost_rub=0.01, provider="deepseek", model="fake"))
+
+    monkeypatch.setattr("app.pipeline.stages.refine_brief", fake_refine_brief)
+
+    response = client.post(
+        f"/requests/{request_id}/brief",
+        data={"question": "Какая температура процесса?", "answer": "380 градусов"},
+    )
+    assert response.status_code == 200
+    assert "лимит" in response.text.lower()
+
+    row_after = await _fetch_row(request_id)
+    assert row_after.status == "failed"
+    assert row_after.cost_rub == pytest.approx(19.91)
 
 
 # ── TRL ───────────────────────────────────────────────────────────────────

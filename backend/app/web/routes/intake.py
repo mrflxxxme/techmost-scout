@@ -37,6 +37,18 @@ TRL из формы (РЕШ-185: своей колонки у `Brief` нет и 
 мусор («abc», «999») — не подставляется в `constraints`, оператор видит
 предупреждение. `brief_store.brief_from_form` содержательно ничего не
 проверяет — так и задумано в И-9, поэтому проверка встаёт сюда.
+
+Обезличивание проверяется ДО первого платного вызова, а не после (РЕШ-193
+п. 2, П-2 аудита Э3): регулярка `find_deidentification_risks` бесплатна и
+идёт первой строкой `create_request`. Если она находит риск и форма не несёт
+`accept_risks`, модель не вызывается вовсе — строка `requests` не заводится,
+оператор видит предупреждение и кнопку «Отправить как есть»
+(`_deidentification_warning.html`), которая повторяет тот же POST с
+`accept_risks=1` и тем же текстом. Так держится обещание §2а «внешним API —
+только обезличенный бриф»: сырой текст с похожим на название компании
+фрагментом уходит в DeepSeek только после явного подтверждения оператора, а
+не молча вместе с первым платным вызовом, как было раньше (предупреждение
+показывалось только ПОСЛЕ разбора).
 """
 
 from __future__ import annotations
@@ -84,11 +96,13 @@ COST_LIMIT_NOTICE = (
     "Попробуйте сократить текст задачи и отправить его снова."
 )
 
-#: Предупреждение обезличивания (РЕШ-189 п. 1, FR-4) — не блокирует отправку,
-#: только предлагает проверить текст. Новая клиентская фраза — см. handoff.
+#: Предупреждение обезличивания (РЕШ-189 п. 1, FR-4; порядок — РЕШ-193 п. 2,
+#: П-2 аудита Э3): показывается ДО первого платного вызова и блокирует
+#: отправку в модель, пока оператор не подтвердит кнопкой «Отправить как
+#: есть» (`accept_risks`). Новая клиентская фраза — см. handoff.
 DEIDENTIFICATION_WARNING_TEMPLATE = (
     "В тексте похоже на название компании или бренда: {fragments}. "
-    "Рекомендуем заменить обезличенной формулировкой — отправка всё равно доступна."
+    "Рекомендуем заменить обезличенной формулировкой перед отправкой во внешнюю модель."
 )
 
 #: Предупреждение о некорректном TRL (число вне 1–9 или не число) — требование
@@ -151,13 +165,16 @@ async def _fail_with_cost_limit(
     HTML-фрагментом, а не уронить процесс).
 
     `CostTracker.add` прибавляет расход к счётчику ДО того, как поднимает
-    исключение (`llm/router.py`), — деньги на упавший вызов уже потрачены, и
-    `row.cost_rub` обязан это отразить тем же выражением, что и успешные
-    ветки (ревью цикла 1, П-5 «деньги неудавшегося интейка не оставляют
-    след» — докстрока `app.pipeline.intake_flow` требует этого прямо)."""
+    исключение (`llm/router.py`), — деньги на упавший вызов уже потрачены.
+    `llm_router.cost.spent_rub` на выходе уже включает всё, что стояло в
+    строке до этой фазы (роутер создан с `initial_spent_rub=row.cost_rub`,
+    РЕШ-193 п. 1), поэтому в `row.cost_rub` идёт присваивание, а не
+    повторное сложение (ревью цикла 1, П-5 «деньги неудавшегося интейка не
+    оставляют след» — докстрока `app.pipeline.intake_flow` требует этого
+    прямо)."""
     row.status = RequestStatus.FAILED
     row.error = str(exc)
-    row.cost_rub = (row.cost_rub or 0.0) + llm_router.cost.spent_rub
+    row.cost_rub = llm_router.cost.spent_rub
     return _failure_fragment(COST_LIMIT_NOTICE, request_id=row.id)
 
 
@@ -165,25 +182,40 @@ async def _fail_with_cost_limit(
 async def create_request(
     request: Request,
     raw_text: str = Form(...),
+    accept_risks: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
 ):
     """Создать запрос и провести разбор текста интейком.
 
-    Успешный разбор — фрагмент с уточняющими вопросами (`_intake_questions.html`).
-    Отказ `run_intake` — сразу фрагмент подтверждения брифа
-    (`_brief_confirm.html`) с запасным брифом и оговоркой `INTAKE_FALLBACK_CAVEAT`
-    (диалог провести не из чего, как в CLI). Исчерпание стоп-крана — красная
-    плашка, запрос помечен `failed`.
+    Обезличивание — первая проверка, до создания строки `requests` и до
+    любого платного вызова (см. докстроку модуля, РЕШ-193 п. 2): найденный
+    риск без `accept_risks` в форме сразу отдаёт `_deidentification_warning.html`
+    с кнопкой «Отправить как есть», строка `requests` не заводится.
+
+    Дальше — успешный разбор — фрагмент с уточняющими вопросами
+    (`_intake_questions.html`). Отказ `run_intake` — сразу фрагмент
+    подтверждения брифа (`_brief_confirm.html`) с запасным брифом и оговоркой
+    `INTAKE_FALLBACK_CAVEAT` (диалог провести не из чего, как в CLI).
+    Исчерпание стоп-крана — красная плашка, запрос помечен `failed`.
     """
     text = raw_text.strip()
+    risks = find_deidentification_risks(text)
+    if risks and not accept_risks:
+        # Регулярка бесплатна — риск проверяется раньше первого платного
+        # вызова, и строки `requests` для отклонённой попытки не заводим
+        # (проще, чем создавать и переиспользовать: истории не мусорим).
+        warning = DEIDENTIFICATION_WARNING_TEMPLATE.format(fragments="; ".join(risks))
+        return _templates(request).TemplateResponse(
+            request=request,
+            name="_deidentification_warning.html",
+            context={"raw_text": text, "warning": warning},
+        )
+
     row = RequestRow(raw_text=text, status=RequestStatus.INTAKE)
     session.add(row)
     await session.flush()
 
-    risks = find_deidentification_risks(text)
-    warning = DEIDENTIFICATION_WARNING_TEMPLATE.format(fragments="; ".join(risks)) if risks else None
-
-    llm_router = LLMRouter(get_settings())
+    llm_router = LLMRouter(get_settings(), initial_spent_rub=row.cost_rub or 0.0)
     stage_log: list[StageRecord] = []
 
     try:
@@ -213,7 +245,7 @@ async def create_request(
             caveats.append(CONSTRAINTS_UNRESOLVED_NOTICE)
 
         row.status = RequestStatus.BRIEFING
-        row.cost_rub = (row.cost_rub or 0.0) + llm_router.cost.spent_rub
+        row.cost_rub = llm_router.cost.spent_rub
         await save_brief(session, row.id, brief, confirmed=False)
         return _templates(request).TemplateResponse(
             request=request,
@@ -221,7 +253,7 @@ async def create_request(
             context=_confirm_context(row, brief, confirmed=False, caveats=caveats),
         )
 
-    row.cost_rub = (row.cost_rub or 0.0) + llm_router.cost.spent_rub
+    row.cost_rub = llm_router.cost.spent_rub
     # Черновик сохраняется сразу — POST /brief читает его обратно и не должен
     # заново звать платный run_intake, чтобы восстановить контекст диалога.
     await save_brief(session, row.id, outcome.intake.draft_brief, confirmed=False)
@@ -231,7 +263,6 @@ async def create_request(
         context={
             "request_id": row.id,
             "questions": outcome.intake.questions,
-            "deidentification_warning": warning,
         },
     )
 
@@ -248,7 +279,7 @@ async def _draft_brief_from_answers(request: Request, session: AsyncSession, row
     # `typer.prompt` в CLI (FR-2: ответ «не знаю» допустим на любой вопрос).
     answers = {q: (a.strip() or "не знаю") for q, a in zip(questions, answers_raw, strict=False) if q.strip()}
 
-    llm_router = LLMRouter(get_settings())
+    llm_router = LLMRouter(get_settings(), initial_spent_rub=row.cost_rub or 0.0)
     stage_log: list[StageRecord] = []
     caveats: list[str] = []
 
@@ -286,7 +317,7 @@ async def _draft_brief_from_answers(request: Request, session: AsyncSession, row
         caveats.append(CONSTRAINTS_UNRESOLVED_NOTICE)
 
     row.status = RequestStatus.BRIEFING
-    row.cost_rub = (row.cost_rub or 0.0) + llm_router.cost.spent_rub
+    row.cost_rub = llm_router.cost.spent_rub
     await save_brief(session, row.id, brief, confirmed=False)
 
     return _templates(request).TemplateResponse(
