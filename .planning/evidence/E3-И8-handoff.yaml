@@ -1,0 +1,68 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: "И-8"
+  did:
+    - "Вычищены девять инлайновых style= из index.html, history.html, showcase.html в классы theme.css (тексты страниц не менялись)"
+    - "_stage_todo.html не тронут: два оставшихся style= — граница задачи И-10, снимается вместе с файлом"
+    - "В theme.css добавлены классы для экранов волны 2 (список ниже), число объявлений класса выросло с 44 до 73"
+    - "Новый страж tests/test_web_templates.py: 5 тестов — нет style= вне исключения (с номером строки при нарушении), нет hex-цветов в шаблонах, три страницы (/, /requests, /showcase) рендерятся через httpx ASGI-клиент (TestClient) с basic auth без сети"
+    - "Мутационная проверка стража выполнена руками: возврат одного style= в index.html ловится тестом с указанием файла и строки (index.html:23), после проверки правка откачена и восстановлена"
+  artifacts:
+    - backend/app/web/static/theme.css
+    - backend/app/web/templates/index.html
+    - backend/app/web/templates/history.html
+    - backend/app/web/templates/showcase.html
+    - tests/test_web_templates.py
+  new_theme_classes:
+    - class: ".mt-sm / .mt-md / .mt-lg / .mt-xl / .mb-sm / .mb-md / .mb-lg / .mb-xl / .mr-sm"
+      screen: "И-8 (сама задача) — утилиты отступов вместо вычищенных style=, используются также будущими экранами"
+    - class: ".core.flush"
+      screen: "И-8 — карточка-таблица без внутреннего паддинга (index.html, history.html)"
+    - class: ".showcase-title / .showcase-org / .showcase-desc / .showcase-tags"
+      screen: "И-8 — карточка витрины партнёров (showcase.html)"
+    - class: ".brief-form / .brief-field / .brief-row"
+      screen: "И-10 — форма и поля брифа на экране уточняющих вопросов и подтверждения"
+    - class: ".progress-log / .progress-line.done / .progress-line .stage-label / .progress-line .stage-fraction"
+      screen: "И-11 — журнал прогресса поверх готового .progress-line на странице-хабе запроса"
+    - class: ".notice.danger"
+      screen: "И-12 — плашка «Нельзя показывать клиенту: нет подтверждений» для карточки с пустым evidence (текст задаёт И-12, класс только про оформление, палитра повторяет уже существующий .badge.low, новый цвет не вводится)"
+    - class: ".draft-banner / .draft-banner .dot"
+      screen: "И-12 — шапка «ЧЕРНОВИК — не проверено экспертом» на странице отчёта"
+    - class: ".table-wrap / .compare-table tr.recommended td / .compare-table td.lead-col"
+      screen: "И-12 — сравнительная таблица сводки (FR-11)"
+    - class: ".card-edit / .card-edit .edit-actions"
+      screen: "И-12 — режим правки карточки (POST /cards/{card_id}/edit)"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_templates.py -v: 5 passed"
+    - "pytest -q: 893 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 164 files already formatted"
+    - "grep -rn \"style=\" backend/app/web/templates: только _stage_todo.html:2 и :5"
+    - "grep -rnE \"#[0-9a-fA-F]{3,6}\" backend/app/web/templates: совпадений нет"
+    - "grep -c \"^\\.\" backend/app/web/static/theme.css: 44 -> 73"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (задача И-8, строки 401-445)"
+    - "docs/SPEC.md (строки 243-251 и 519-521)"
+    - "backend/app/web/static/theme.css"
+    - "tests/test_web_templates.py"
+  notes: >-
+    В PLAN.md на строках 424-427 сказано, что исключение _stage_todo.html
+    снимает И-9, но детальный раздел задачи И-9 (строка 447) — это хранилище
+    брифа brief_store.py, не касается шаблонов; раздел И-10 (строка 504-546)
+    прямо перечисляет tests/test_web_templates.py в своих файлах и критерий 2
+    «снять исключение _stage_todo.html у стража, pytest tests/test_web_templates.py
+    зелено». Это явное расхождение внутри самого PLAN.md (вероятно опечатка на
+    строках 425-426), не моя правка задачи: комментарий в тесте и коммит ссылаются
+    на И-10 по детальному разделу, а не на общую сводную строку. Владельцу стоит
+    поправить строки 424-427 PLAN.md при следующей правке документа.
+    Палитра .notice.danger буквально повторяет уже существующие в файле цвета
+    .badge.low (#a3413f/#fdf1f1) — не новый цвет, а переиспользование того же
+    смысла «низкое/недопустимо»; .compare-table tr.recommended td использует ту
+    же rgba(201, 162, 75, 0.06), что и .notice (альфа-вариант токена --gold).
+    Классы для волны 2 — предположение по неймингу и минимальной разметке;
+    экраны И-10/И-11/И-12 могут обнаружить нехватку модификатора — по правилу
+    границ этих задач ("theme.css не правится") недостающее фиксируется у них в
+    handoff для доводки в И-13, а не тихой правкой theme.css в чужой задаче.
