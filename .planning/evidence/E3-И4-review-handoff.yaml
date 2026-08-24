@@ -1,0 +1,29 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "И-4"
+  did:
+    - "Проверены diff, все 10 инвариантов и грабли §0.1; прогнаны pytest, ruff check, ruff format самостоятельно"
+    - "Построчно сверено поведение intake_flow.py + cli_run.py со старым cli_run.py (база 8122125): порядок стадий, оговорки, след стоп-крана, neutralize_placeholders — совпадают"
+    - "Мутация: убрана REFINE_FALLBACK_CAVEAT из ветки отказа refine_brief_stage — поймана test_intake_flow.py::test_refine_brief_failure_keeps_owner_answers_in_own_field; правка отменена"
+    - "Найдено 0 блокирующих, 2 совета"
+  artifacts:
+    - .planning/evidence/E3-И4-review.md (закоммичен до ответа)
+    - .planning/evidence/E3-И4-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_cli_run.py -v: 22 passed"
+    - "git diff 8122125..e3/i4 --stat -- tests/test_cli_run.py: пусто"
+    - "pytest tests/test_intake_flow.py -v: 6 passed"
+    - "pytest -q: 881 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 158 files already formatted"
+    - "grep статус-литералов по backend/app: пусто"
+    - "wc -l: cli_run.py 301, intake_flow.py 327"
+    - "мутация REFINE_FALLBACK_CAVEAT: поймана прицельным тестом test_intake_flow.py"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел "### И-4")
+    - .planning/evidence/E3-И4-review.md
+    - backend/app/pipeline/intake_flow.py
+  notes: "Это цикл 1, задача принята без замечаний. Второй цикл не потребовался."
