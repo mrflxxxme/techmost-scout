@@ -30,9 +30,11 @@
 | [sitall-spravka-urz.docx](sitall-spravka-urz.docx) / [PDF](sitall-spravka-urz.pdf) | Справка на лист для завода |
 | [sitall-spravka-depnedra.docx](sitall-spravka-depnedra.docx) / [PDF](sitall-spravka-depnedra.pdf) | Справка на лист для ведомства |
 | [note-broker.md](note-broker.md) | Внутренняя записка посреднику: не передавать адресатам |
+| [sitall-note-broker.docx](sitall-note-broker.docx) | Она же в DOCX; пересборка — [gen_hmao_note_docx.py](gen_hmao_note_docx.py) |
 | [log.md](log.md) | Журнал контактов и договорённостей |
 
-Пересборка: `python3 gen_hmao_decks.py && python3 gen_hmao_onepagers.py`
+Пересборка: `node gen-hmao-decks.js && python3 gen_hmao_onepagers.py &&
+python3 gen_hmao_note_docx.py`
 (нужны `python-pptx`, `python-docx`; PDF — через LibreOffice:
 `soffice --headless --convert-to pdf <файл>`). На машине без Segoe UI PDF
 получит подменённый шрифт — итоговые PDF для рассылки экспортируйте из
