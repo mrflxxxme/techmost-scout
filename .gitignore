@@ -41,3 +41,7 @@ desktop.ini
 
 # Служебное состояние инструментов сессии
 .omc/
+
+# Node (генераторы деков на pptxgenjs ставятся локально)
+node_modules/
+package-lock.json
