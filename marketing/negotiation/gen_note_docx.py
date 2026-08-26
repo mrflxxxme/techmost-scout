@@ -1,6 +1,6 @@
-# Конвертер записки посреднику из note-broker.md в DOCX (внутренний документ,
-# адресатам не передаётся). Правки вносить в note-broker.md и пересобирать:
-# python3 gen_hmao_note_docx.py  → sitall-note-broker.docx рядом со скриптом.
+# Конвертер записки посреднику из note-broker-2026-08.md в DOCX (внутренний
+# документ, адресатам не передаётся). Правки вносить в Markdown и
+# пересобирать: python3 gen_note_docx.py → sitall-note-broker-2026-08.docx.
 
 import re
 from pathlib import Path
@@ -10,9 +10,10 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Cm, Pt, RGBColor
 
 HERE = Path(__file__).parent
+SRC = HERE / "note-broker-2026-08.md"
+OUT = HERE / "sitall-note-broker-2026-08.docx"
 FONT = "PT Serif"
 NAVY = RGBColor(0x1E, 0x27, 0x61)
-GOLD = RGBColor(0x8A, 0x6D, 0x2B)  # затемнённое золото — читаемо на бумаге
 
 MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 BOLD = re.compile(r"\*\*(.+?)\*\*")
@@ -35,7 +36,7 @@ def add_runs(p, text: str, size: float) -> None:
 
 
 def build() -> None:
-    src = (HERE / "note-broker.md").read_text(encoding="utf-8")
+    src = SRC.read_text(encoding="utf-8")
     doc = Document()
     s = doc.sections[0]
     s.page_width, s.page_height = Cm(21.0), Cm(29.7)
@@ -69,10 +70,8 @@ def build() -> None:
             r = p.add_run(line[3:])
             r.font.name, r.font.size, r.bold = FONT, Pt(12), True
             r.font.color.rgb = NAVY
-        elif re.match(r"^[-\d]", block) and re.match(
-            r"^(- |\d+\. )", block.splitlines()[0]
-        ):
-            # блок-список: пункты разделены переводами строки с висячим отступом
+        elif re.match(r"^(- |\d+\. )", block.splitlines()[0]):
+            # блок-список: пункты с висячим отступом
             item: list[str] = []
             for ln in block.splitlines() + [""]:
                 if re.match(r"^(- |\d+\. )", ln) or ln == "":
@@ -86,9 +85,8 @@ def build() -> None:
         else:
             add_runs(para(), line, 10)
 
-    out = HERE / "sitall-note-broker.docx"
-    doc.save(out)
-    print(f"Собрано: {out.name}")
+    doc.save(OUT)
+    print(f"Собрано: {OUT.name}")
 
 
 if __name__ == "__main__":

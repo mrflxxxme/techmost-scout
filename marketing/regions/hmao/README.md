@@ -1,41 +1,31 @@
-# ХМАО-Югра: заход через регионального партнёра
+# ХМАО-Югра: АО «Югорский рыбоводный завод»
 
-Два адресата, два трека:
+Активный трек региона — **Югорский рыбоводный завод** (ugrafish.ru,
+Ханты-Мансийск). Предложение: оплачиваемый пилот «диагностика + подбор» под
+технологическую задачу завода. Заход — через регионального партнёра;
+материалы показываемые (боли — как вызовы отрасли, цен нет — Р-25).
 
-1. **АО «Югорский рыбоводный завод»** (ugrafish.ru, Ханты-Мансийск) — бизнес.
-   Предложение: оплачиваемый пилот «диагностика + подбор» под технологическую
-   задачу завода.
-2. **Депнедра и природных ресурсов Югры** (в быту «минприроды ХМАО») —
-   власть. Предложение: соглашение о сотрудничестве + представление
-   предприятиям-природопользователям. Денег у бюджета не просим.
-
-Заход — через регионального партнёра-посредника (модель свердловского кейса).
-Материалы двухконтурные: показываемые (боли сформулированы как вызовы
-отрасли/региона) и внутренняя записка посреднику (прямые формулировки, вилки
-цен, возражения). В показываемых материалах цен нет; партнёр в слайдах не
-упоминается.
+Министерский трек Югры (Депнедра и природных ресурсов) 26.08.2026 выведен в
+задел — [archive-depnedra/](archive-depnedra/): министерская встреча
+перенесена на Минприроды Свердловской области
+([../sverdlovsk/](../sverdlovsk/)).
 
 ## Материалы
 
 | Файл | Что это |
 |---|---|
 | [research-ugrafish-2026-08-26.md](research-ugrafish-2026-08-26.md) | Разведка по заводу: юрлицо, деятельность, финансы, болевые точки, гипотезы решений |
-| [research-depnedra-2026-08-26.md](research-depnedra-2026-08-26.md) | Разведка по ведомству: точное название, руководство, программы, KPI, болевые точки |
 | [research-market-2026-08-26.md](research-market-2026-08-26.md) | Статистическая подложка: инновационная среда Югры + аквакультура и природопользование |
-| [deck-texts.md](deck-texts.md) | Тексты слайдов обоих деков — для правок; правьте здесь, затем переносите в генератор |
-| [gen_hmao_decks.py](gen_hmao_decks.py) | Генератор обоих деков (python-pptx, дизайн v3 — Р-29) |
-| [gen_hmao_onepagers.py](gen_hmao_onepagers.py) | Генератор справок на лист (python-docx) |
-| [sitall-deck-urz.pptx](sitall-deck-urz.pptx) / [PDF](sitall-deck-urz.pdf) | Дек для Югорского рыбоводного завода, 10 слайдов |
-| [sitall-deck-depnedra.pptx](sitall-deck-depnedra.pptx) / [PDF](sitall-deck-depnedra.pdf) | Дек для Депнедра Югры, 10 слайдов |
-| [sitall-spravka-urz.docx](sitall-spravka-urz.docx) / [PDF](sitall-spravka-urz.pdf) | Справка на лист для завода |
-| [sitall-spravka-depnedra.docx](sitall-spravka-depnedra.docx) / [PDF](sitall-spravka-depnedra.pdf) | Справка на лист для ведомства |
-| [note-broker.md](note-broker.md) | Внутренняя записка посреднику: не передавать адресатам |
-| [sitall-note-broker.docx](sitall-note-broker.docx) | Она же в DOCX; пересборка — [gen_hmao_note_docx.py](gen_hmao_note_docx.py) |
-| [log.md](log.md) | Журнал контактов и договорённостей |
+| [deck-texts.md](deck-texts.md) | Тексты слайдов дека — для правок |
+| [sitall-deck-urz.pptx](sitall-deck-urz.pptx) / [PDF](sitall-deck-urz.pdf) | Дек, 10 слайдов, дизайн по референсу 26.08 (крупный кегль) |
+| [sitall-spravka-urz.docx](sitall-spravka-urz.docx) / [PDF](sitall-spravka-urz.pdf) | Справка на лист (госстиль, PT Serif) |
+| [log.md](log.md) | Журнал контактов |
+| [archive-depnedra/](archive-depnedra/) | Задел по Депнедра Югры: опыт, разведка, дек, справка |
 
-Пересборка: `node gen-hmao-decks.js && python3 gen_hmao_onepagers.py &&
-python3 gen_hmao_note_docx.py`
-(нужны `python-pptx`, `python-docx`; PDF — через LibreOffice:
-`soffice --headless --convert-to pdf <файл>`). На машине без Segoe UI PDF
-получит подменённый шрифт — итоговые PDF для рассылки экспортируйте из
-PowerPoint/Word.
+Записка посреднику (оба трека дня: завод + Минприроды СО) — в
+[../../negotiation/note-broker-2026-08.md](../../negotiation/note-broker-2026-08.md).
+
+Пересборка: дек — `node ../../gov-deck/gen-decks.js`; справка —
+`python3 ../../gov-deck/gen_onepagers.py`. PDF — LibreOffice
+(`soffice --headless --convert-to pdf <файл>`); на машине без фирменных
+шрифтов итоговые PDF для рассылки экспортируйте из PowerPoint/Word.

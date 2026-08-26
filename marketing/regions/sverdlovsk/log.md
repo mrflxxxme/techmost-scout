@@ -8,10 +8,15 @@
 (первый заместитель губернатора — министр промышленности и науки).
 Разведка: [research-2026-08-22.md](research-2026-08-22.md).
 
+Второй трек с 26.08.2026 — Минприроды Свердловской области (пара к встрече
+с Югорским рыбоводным заводом, один переговорщик): разведка и материалы —
+см. [README.md](README.md), записка —
+[../../negotiation/note-broker-2026-08.md](../../negotiation/note-broker-2026-08.md).
+
 ## Материалы
 
-- Дек: [sitall-gov-deck-sverdlovsk.pptx](sitall-gov-deck-sverdlovsk.pptx) / [PDF](sitall-gov-deck-sverdlovsk.pdf)
-- Справка на лист: [sitall-spravka-sverdlovsk.docx](sitall-spravka-sverdlovsk.docx) / [PDF](sitall-spravka-sverdlovsk.pdf)
+- Правительство области: дек [sitall-gov-deck-sverdlovsk.pptx](sitall-gov-deck-sverdlovsk.pptx) / [PDF](sitall-gov-deck-sverdlovsk.pdf), справка [sitall-spravka-sverdlovsk.docx](sitall-spravka-sverdlovsk.docx) / [PDF](sitall-spravka-sverdlovsk.pdf)
+- Минприроды СО: дек [sitall-deck-minprirody.pptx](sitall-deck-minprirody.pptx) / [PDF](sitall-deck-minprirody.pdf), справка [sitall-spravka-minprirody.docx](sitall-spravka-minprirody.docx) / [PDF](sitall-spravka-minprirody.pdf)
 
 ## Записи
 
