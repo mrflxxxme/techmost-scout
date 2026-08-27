@@ -2,7 +2,7 @@ handoff:
   from: "implementer"
   to: "reviewer"
   task: "Э4-П6"
-  cycle: 1
+  cycle: 2
   did:
     - "РЕШ-210: limitations_lines (markdown.py) при include_caveats=False больше не выбрасывает все caveats — только свободную прозу модели. Машинные пометки распознаются по точному значению против набора констант кода (_machine_caveats), а не по подстроке текста или эвристике, и печатаются всегда, наравне со строкой «Не ответили источники»"
     - "_machine_caveats() собирает: PAID_LIMIT_NOTICE (уже жил в markdown.py), INTAKE_FALLBACK_CAVEAT и REFINE_FALLBACK_CAVEAT (импортированы из pipeline/intake_flow.py отложенным импортом внутри функции — на уровне модуля это дало бы циклический импорт через app.pipeline.__init__ → orchestrator.py → app.export.markdown), SUMMARY_FALLBACK_NOTICE (константа markdown.py)"
@@ -14,6 +14,7 @@ handoff:
     - "РАСШИРЕНИЕ ГРАНИЦЫ (по указанию оркестратора, один файл — backend/app/pipeline/summary.py): fallback_summary больше не хранит свой литерал оговорки — импортирует SUMMARY_FALLBACK_NOTICE из app.export.markdown тем же путём, каким уже импортирует MATURITY_RU/CONFIDENCE_RU (обратного импорта markdown.py → pipeline не заводил, цикла нет). Убрана исходная эскалация из первого прохода задачи: единственная точка правды теперь в markdown.py, а не два независимых литерала"
     - "grep 'построен без участия модели' по pipeline/summary.py после правки — пусто (см. checks); остаются только неродственные строки recommendation ('Автоматическая сводка не собралась. Сравните варианты…' / '…а карточек для сравнения тоже нет…') — это другой текст, не оговорка, не трогал"
     - "Новый тест tests/test_export_pdf.py::test_fallback_summary_caveat_recognized_via_shared_constant — вызывает настоящий fallback_summary(), сверяет caveats с импортированной SUMMARY_FALLBACK_NOTICE (не с хардкодом в тесте) и проверяет печать в PDF. Тест положен в test_export_pdf.py (мой файл, не tests/test_pipeline_summary.py — чужой, не трогал; см. notes, почему не там)"
+    - "ЦИКЛ 2 (блокирующее ревью): _machine_caveats() ловил регресс только по PAID_LIMIT_NOTICE и SUMMARY_FALLBACK_NOTICE — убрать INTAKE_FALLBACK_CAVEAT или REFINE_FALLBACK_CAVEAT из множества набор не замечал (совпадение с другим тестом маскировало дыру). Новый параметризованный тест test_render_print_html_intake_refine_notices_survive_hidden_card (tests/test_export_pdf.py) проверяет каждую константу по отдельности: карточка скрыта, caveats=[notice, \"проза модели\"] — notice в HTML, прозы нет"
   artifacts:
     - "backend/app/export/markdown.py"
     - "backend/app/export/pdf.py"
@@ -24,8 +25,10 @@ handoff:
     - "tests/test_export_docx.py"
   self_audit: "pass"
   checks:
-    - "pytest tests/test_export_markdown.py tests/test_export_pdf.py tests/test_export_docx.py tests/test_pipeline_summary.py -q: 87 passed"
-    - "pytest -q: 1138 passed (было 1132 на базовом SHA 5298ccc)"
+    - "pytest tests/test_export_markdown.py tests/test_export_pdf.py tests/test_export_docx.py tests/test_pipeline_summary.py -q: 89 passed"
+    - "pytest -q: 1140 passed (было 1132 на базовом SHA 5298ccc)"
+    - "Мутация цикла 2 (убрать INTAKE_FALLBACK_CAVEAT из _machine_caveats()): pytest tests/test_export_pdf.py -k intake_refine -q → 1 failed, 1 passed — упал ровно параметр INTAKE_FALLBACK_CAVEAT, REFINE_FALLBACK_CAVEAT остался виден. Мутация отменена: git diff backend/app/export/markdown.py после отмены — пусто"
+    - "Мутация цикла 2 (убрать REFINE_FALLBACK_CAVEAT из _machine_caveats()): pytest tests/test_export_pdf.py -k intake_refine -q → 1 failed, 1 passed — упал ровно параметр REFINE_FALLBACK_CAVEAT, INTAKE_FALLBACK_CAVEAT остался виден. Мутация отменена: git diff backend/app/export/markdown.py после отмены — пусто"
     - "ruff check .: All checks passed!"
     - "ruff format --check .: 198 files already formatted"
     - "pytest tests/test_backend_layout.py tests/test_tests_layout.py tests/test_pipeline_layout.py -q: 12 passed (test_export_docx.py ровно 500 строк — граница, не превышение)"
@@ -75,3 +78,10 @@ handoff:
     Живой вызов модели не делался. Боевая база открывалась только на чтение
     через копию (см. checks) — критерий 5 подтверждён на настоящих данных
     запроса №8, а не только на тестовых фикстурах.
+
+    Цикл 2: правка только в tests/test_export_pdf.py (продуктовый код цикла 1
+    не менялся — ревью перепроверило критерии 1–5, расширение границы,
+    отсутствие цикла импортов и предел 500 строк независимо и приняло без
+    замечаний). Два совета ревью («место test_fallback_summary_caveat_recognized_via_shared_constant
+    корректно», «500 строк в test_export_docx.py — предупреждение на
+    будущее») правки не требуют, не трогал.
