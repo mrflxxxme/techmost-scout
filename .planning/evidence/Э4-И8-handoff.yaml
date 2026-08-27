@@ -1,0 +1,36 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: "Э4-И8"
+  did:
+    - "Создан tests/test_stage4_e2e.py: один сквозной сценарий на модульной фикстуре `scenario`, без сети и без браузера"
+    - "Сценарий: сидирование запроса с 4 карточками (2 approve, 1 reject, 1 rework) → вердикты через POST /cards/{id}/verdict (TestClient) → статус validated → GET страницы отчёта → `scout export --pdf` (CliRunner, подменена только страница Chromium — page.pdf, render_print_html настоящий) → `scout export --docx` (реальный export_docx) → app.pipeline.demo.build_playback/play на строках pipeline_logs с подменённым ожиданием"
+    - "6 тестов читают уже собранные артефакты фикстуры: validated-статус; выборка карточек на странице; та же выборка в PDF-HTML; та же выборка в DOCX-тексте; дословное совпадение подписи РЕШ-197 во всех трёх видах; cost_rub до/после демо-показа не меняется"
+    - "Большой request_id (971001) — по инструкции из докстрины _make_request tests/test_web_demo.py: брокер прогресса общий синглтон на процесс"
+  artifacts:
+    - tests/test_stage4_e2e.py
+    - .planning/evidence/Э4-И8-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_stage4_e2e.py -v: 6 passed"
+    - "pytest -q: 1069 passed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 194 files already formatted"
+    - "wc -l tests/test_stage4_e2e.py: 397 (под пределом 500 строк, запись в test_tests_layout.py не требуется)"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (раздел «Э4-И8», волны 0–2)"
+    - "backend/app/verdicts.py"
+    - "backend/app/export/view.py"
+    - "tests/test_stage4_e2e.py"
+    - "tests/test_web_flow_e2e.py (образец сквозного теста)"
+  notes: >-
+    backend/ не тронут вовсе, дефектов в коде волн 0–2 не найдено — все
+    контракты (build_export_view, visible_report, signature_line,
+    REVIEWED_FOOTER, demo.build_playback/play) сработали ровно так, как
+    описано в PLAN.md, без доработок. Файл теста уложился в 397 строк —
+    запись в tests/test_tests_layout.py оркестратору вносить не нужно.
+    Для DOCX-выгрузки настоящая функция export_docx вызвана без подмен
+    (не требует сети/браузера); для PDF подменена только страница Chromium
+    (page.pdf), а не вся функция export_pdf, — так проверяется реальный
+    render_print_html, а не заглушка.
