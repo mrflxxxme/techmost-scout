@@ -1,0 +1,137 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: "Э4-П9"
+  did:
+    - "backend/app/export/view.py: ExportView.summary_text_edited заменён двумя
+       полями — recommendation_edited и caveats_edited. Оба выводятся в
+       build_export_view из SummaryOverrideData прямо (override.recommendation
+       is not None / override.caveats is not None) — одна точка правды, второй
+       не заводилось."
+    - "summary_text_printable расщеплён на две функции: recommendation_printable
+       и caveats_printable — каждая читает только свой флаг из ExportView, у
+       вызывающего нет параметра, куда можно случайно подставить чужой флаг."
+    - "Добавлено ExportView.comparison_table_hidden (РЕШ-212): build_export_view
+       вычисляет его новой функцией _comparison_table_hidden по данным, уже
+       посчитанным в самой build_export_view (edited_report.summary.comparison_rows
+       до фильтра, edited_report.cards, card_ids после _reindex_after_filter) —
+       условие дословно повторяет то, каким verdicts._visible_summary решает
+       'спрятать таблицу' (пустой список рядом не считается: пустая сводка
+       модели с самого начала флаг не поднимает), но без похода во внутренности
+       verdicts.py — файл читал только (не в списке моих файлов на запись)."
+    - "backend/app/export/markdown.py: две новые константы —
+       SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE (заглушка рекомендации, когда
+       таблица тоже спрятана — без ссылки на неё) и COMPARISON_TABLE_HIDDEN_NOTICE
+       (честная строка на месте спрятанной таблицы). Формулировки — на визу
+       владельца, см. notes."
+    - "backend/app/export/pdf.py и report_print.html: recommendation_printable/
+       caveats_printable решают печать рекомендации и оговорок независимо;
+       limitations_lines зовётся с caveats_printable, а не общим флагом. На
+       месте спрятанной таблицы (comparison_table_hidden) — секция с честной
+       строкой вместо тишины; заглушка рекомендации выбирает текст по тому,
+       напечатана ли таблица."
+    - "backend/app/export/docx.py: та же логика — _add_recommendation_section и
+       _add_comparison_table получили параметр table_hidden, _add_limitations_section
+       зовётся с caveats_printable."
+    - "Критерий 1 (воспроизведение БЛОК-5): tests/test_summary_field_gate.py —
+       новый файл, стенд-тест через настоящий build_export_view (SQLite,
+       реальные строки solution_cards/verdicts/summary_overrides), две карточки,
+       карточка 1 отклонена, эксперт правит только оговорки — проверено, что
+       recommendation_edited=False, нетронутая рекомендация модели
+       ('Первым берём вариант 1 — «Первый».') не попадает в реальный
+       render_print_html, а правленая оговорка попадает. Плюс зеркало (правка
+       только рекомендации) и два теста comparison_table_hidden тем же стендом."
+    - "Новые *_field_gate.py тестовые файлы (pdf, docx) и правки существующих
+       test_summary_overrides.py/test_export_pdf.py/test_export_docx.py —
+       из-за предела 500 строк в tests/test_export_docx.py (был ровно 500) и
+       риска приблизить к пределу test_summary_overrides.py/test_export_pdf.py,
+       новое поведение (независимость полей, comparison_table_hidden, выбор
+       формулировки заглушки) получило отдельные файлы
+       test_summary_field_gate.py, test_export_pdf_field_gate.py,
+       test_export_docx_field_gate.py — страж tests/test_tests_layout.py не
+       тронут, все три новых файла ниже 500 строк без записи в исключения."
+    - "Критерий 6 (три мутации) проверен вручную на живом коде: 1) общий гейт
+       вместо пополевого (recommendation_printable = ...or view.caveats_edited...) —
+       упало 4 теста; 2) печать непровленного поля (caveats_printable = True
+       безусловно) — упало 5 тестов; 3) заглушка рекомендации без учёта
+       comparison_table_hidden (recommendation_notice = SUMMARY_NOT_PRINTABLE_NOTICE
+       всегда) — упал 1 тест. Каждая мутация возвращена вручную сразу после
+       фиксации падения, git diff после всех трёх — пустой (grep МУТАЦИЯ по
+       обоим файлам ничего не находит)."
+  artifacts:
+    - backend/app/export/view.py
+    - backend/app/export/markdown.py
+    - backend/app/export/pdf.py
+    - backend/app/export/docx.py
+    - backend/app/web/templates/report_print.html
+    - tests/test_summary_overrides.py
+    - tests/test_export_pdf.py
+    - tests/test_export_docx.py
+    - tests/test_export_markdown.py
+    - tests/test_summary_field_gate.py
+    - tests/test_export_pdf_field_gate.py
+    - tests/test_export_docx_field_gate.py
+  self_audit: pass
+  checks:
+    - "pytest tests/test_summary_overrides.py tests/test_summary_field_gate.py tests/test_export_pdf.py tests/test_export_pdf_field_gate.py tests/test_export_docx.py tests/test_export_docx_field_gate.py tests/test_export_markdown.py -q → 133 passed"
+    - "pytest -q → 1182 passed, 1 warning (starlette/httpx deprecation, не моё)"
+    - "ruff check . → All checks passed!"
+    - "ruff format --check . → 201 files already formatted"
+    - "pytest tests/test_tests_layout.py tests/test_backend_layout.py tests/test_prompts.py -q → 57 passed"
+    - "wc -l tests/test_export_docx.py → 500 (не выросло сверх предела); tests/test_summary_overrides.py → 464; tests/test_export_pdf.py → 480; tests/test_export_markdown.py → 493 (диф нулевой — новый тест туда не лёг, унесён в test_export_pdf_field_gate.py)"
+    - "Мутация 1 (общий гейт): pytest tests/test_summary_field_gate.py tests/test_export_pdf_field_gate.py tests/test_export_docx_field_gate.py tests/test_summary_overrides.py -q → 4 failed, 42 passed; после возврата — 0 failed"
+    - "Мутация 2 (печать непровленного caveats): та же команда → 5 failed, 41 passed; после возврата — 0 failed"
+    - "Мутация 3 (заглушка не учитывает comparison_table_hidden): pytest tests/test_export_pdf_field_gate.py tests/test_summary_field_gate.py -q → 1 failed, 14 passed; после возврата — 0 failed"
+    - "git diff --stat после отката всех трёх мутаций совпадает с состоянием коммита; grep МУТАЦИЯ backend/app/export/view.py backend/app/export/pdf.py → пусто"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (раздел «Э4-П9 · пополевые ворота печати сводки»)"
+    - ".planning/DECISIONS.md (РЕШ-211, РЕШ-212, РЕШ-206, РЕШ-210)"
+    - ".planning/evidence/audit-Э4-финал.md (раздел «БЛОК-5», правка П-14)"
+    - "backend/app/export/view.py (build_export_view, _comparison_table_hidden, recommendation_printable/caveats_printable)"
+    - "tests/test_summary_field_gate.py (стенд критерия 1 через build_export_view)"
+    - "backend/app/export/pdf.py, backend/app/export/docx.py, backend/app/web/templates/report_print.html"
+  notes: |
+    Клиентские фразы на визу владельца (§9 CONVENTIONS, П-14 аудита требует
+    визы вместе с воротами):
+
+    1. SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE (заглушка рекомендации, когда
+       таблица тоже спрятана): "Сравнительная сводка не приводится: часть
+       найденных вариантов снята экспертом при проверке. Ориентируйтесь на
+       карточки ниже." — предложенная в постановке формулировка взята
+       дословно.
+    2. COMPARISON_TABLE_HIDDEN_NOTICE (честная строка на месте спрятанной
+       таблицы): "Таблица сравнения не построена: часть вариантов снята
+       экспертом при проверке, соответствие строк карточкам не подтверждено."
+       — тоже дословно из постановки.
+
+    SUMMARY_NOT_PRINTABLE_NOTICE (старая формулировка, "...Ориентируйтесь на
+    таблицу сравнения и карточки ниже.") не тронута и осталась в силе для
+    случая, когда таблица напечатана, а рекомендацию печатать нельзя.
+
+    По различению "таблица пуста, потому что спрятали" и "модель не дала строк
+    вовсе" (третий вопрос постановки): данных хватило. Условие вычисляется в
+    build_export_view до вызова visible_report — по трём числам: исходные
+    строки были (comparison_rows непуст ДО фильтра), хотя бы одна карточка
+    основной секции реально отклонена, и число исходных строк не совпало с
+    числом карточек до фильтра. Это дословно то же условие, которым
+    verdicts._visible_summary решает "спрятать таблицу целиком" (Э4-П8) —
+    я его не переопределял заново, а вычислил тем же числами, которые
+    build_export_view и так уже держит на руках (не заглядывая в приватную
+    _kept_positions verdicts.py). Проверено двумя стенд-тестами через реальный
+    build_export_view (test_summary_field_gate.py): совпадение с reject —
+    True; совпадение без reject — False (там же тест для "строк не было с
+    самого начала" — тоже False, там нечего было прятать).
+
+    За границами задачи: verdicts.py, summary_overrides.py, schemas.py,
+    web/routes/review.py, web/routes/report.py, report.html — не трогал
+    (только читал как справку). web/routes/review.py:344 несёт докстроку,
+    упоминающую "summary_text_edited" словами (не код) — конкретно эта
+    докстрока концептуально верна и без правки (resolve_summary_edit
+    поведение не менялось), в мою задачу правка чужого файла не входила —
+    не правил, оставил как есть, оркестратору на заметку, если понадобится
+    единообразие терминологии.
+
+    Живых вызовов моделей и платных источников не делал — вся работа на
+    фикстурах и подменённых страницах Chromium (page.pdf уже была заглушкой
+    в тестах, я её не трогал).
