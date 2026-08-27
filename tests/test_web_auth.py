@@ -22,7 +22,7 @@ def client() -> TestClient:
     return TestClient(main.app)
 
 
-@pytest.mark.parametrize("path", ["/", "/requests", "/showcase"])
+@pytest.mark.parametrize("path", ["/", "/requests", "/showcase", "/requests/1/review"])
 def test_routes_require_auth(client: TestClient, path: str):
     response = client.get(path)
     assert response.status_code == 401
