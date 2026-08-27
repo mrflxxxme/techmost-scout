@@ -57,15 +57,21 @@ def export_docx(view: ExportView, out_path: Path) -> Path:
     _add_recommendation_section(document, report)
     _add_comparison_table(document, report)
 
+    # Карточки без единого подтверждения в выгрузку не попадают вовсе
+    # (РЕШ-204) — той же логикой, что печатный PDF-шаблон: клиент не должен
+    # видеть карточку без evidence даже в урезанном виде.
+    printable_cards = [card for card in report.cards if card.evidence]
+    printable_contest_cards = [card for card in report.contest_cards if card.evidence]
+
     document.add_heading("Варианты решений", level=1)
-    if not report.cards:
+    if not printable_cards:
         document.add_paragraph("Пригодных вариантов не найдено.")
-    for index, card in enumerate(report.cards, start=1):
+    for index, card in enumerate(printable_cards, start=1):
         _add_card(document, card, index)
 
-    if report.contest_cards:
+    if printable_contest_cards:
         document.add_heading(CONTEST_SECTION_HEADING.removeprefix("## "), level=1)
-        for index, card in enumerate(report.contest_cards, start=1):
+        for index, card in enumerate(printable_contest_cards, start=1):
             _add_card(document, card, index)
 
     _add_limitations_section(document, report)
