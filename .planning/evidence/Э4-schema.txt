@@ -1,0 +1,6 @@
+Предпусковая сверка схемы Э4 (РЕШ-196 п. 2), 27.08.2026
+=== scout doctor (строки схемы) ===
+Проверяю схему базы…
+=== PRAGMA ===
+verdicts : id, card_id, reviewer_name, decision, rating, comment, created_at
+requests : id, created_at, raw_text, status, cost_rub, demo_flag, error, report_json
