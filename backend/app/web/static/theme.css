@@ -390,3 +390,13 @@ tr:hover td { background: var(--shell); }
 /* ── Режим правки карточки — экран И-12, `POST /cards/{card_id}/edit` ────── */
 .card-edit { border: 1px dashed var(--gold); }
 .card-edit .edit-actions { display: flex; gap: 10px; margin-top: var(--gap); }
+
+/* ── Форма вердикта — экран ревью эксперта, задача Э4-И3 (SPEC Э4-1) ──────
+   Экран открывается с телефона между делами: кнопка и поле, по которым надо
+   попасть пальцем, не меньше 44px по высоте. */
+.verdict-form select,
+.verdict-form input[type="text"],
+.verdict-form textarea,
+.verdict-form button {
+  min-height: 44px;
+}
