@@ -25,13 +25,15 @@ from typing import Protocol
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.export.markdown import (
+    COMPARISON_HEADERS_RU,
     CONFIDENCE_RU,
     CONTEST_SECTION_HEADING,
     MATURITY_RU,
+    SUMMARY_NOT_PRINTABLE_NOTICE,
     TEMPLATE_FILTERS,
     limitations_lines,
 )
-from app.export.view import ExportView
+from app.export.view import ExportView, summary_text_printable
 from app.verdicts import signature_line
 
 _WEB_DIR = Path(__file__).resolve().parents[1] / "web"
@@ -72,11 +74,23 @@ def render_print_html(view: ExportView) -> str:
     странице отчёта (`report.html`, `_card.html`), которую эта функция не
     строит. Относительный порядок остальных карточек и разбиение на секции
     сохраняются — фильтр только убирает элементы, не переставляет их.
+
+    Рекомендация и оговорки модели (РЕШ-206) печатаются только когда
+    `summary_text_printable` разрешает: число карточек, реально попавших в
+    печать (обе секции, уже после отсева пустого `evidence`), сравнивается с
+    `view.total_cards` — числом карточек до всех фильтров. Если хоть одна
+    карточка скрыта, а эксперт текст сводки не правил, вместо рекомендации и
+    оговорок печатается заглушка; строка о недоступных источниках при этом
+    остаётся (инвариант №5 — скрытый отказ источника хуже видимого).
     """
     report = view.report
     signature = ""
     if not view.is_draft and view.validated_at is not None:
         signature = signature_line(view.reviewer_name, view.validated_at)
+
+    print_cards = [card for card in report.cards if card.evidence]
+    print_contest_cards = [card for card in report.contest_cards if card.evidence]
+    printable = summary_text_printable(view, len(print_cards) + len(print_contest_cards))
 
     # `view.rework_keys` в шаблон не передаётся сознательно (РЕШ-198, контракт
     # `export/view.py`): пометка «на доработку» — подсказка оператору на
@@ -84,15 +98,18 @@ def render_print_html(view: ExportView) -> str:
     template = _environment().get_template("report_print.html")
     return template.render(
         report=report,
-        print_cards=[card for card in report.cards if card.evidence],
-        print_contest_cards=[card for card in report.contest_cards if card.evidence],
+        print_cards=print_cards,
+        print_contest_cards=print_contest_cards,
         is_draft=view.is_draft,
         signature=signature,
         print_css=_PRINT_CSS_PATH.read_text(encoding="utf-8"),
         maturity_ru=MATURITY_RU,
         confidence_ru=CONFIDENCE_RU,
         contest_heading=CONTEST_SECTION_HEADING.removeprefix("## "),
-        limitation_lines=limitations_lines(report),
+        summary_printable=printable,
+        summary_notice=SUMMARY_NOT_PRINTABLE_NOTICE,
+        comparison_headers_ru=COMPARISON_HEADERS_RU,
+        limitation_lines=limitations_lines(report, include_caveats=printable),
     )
 
 

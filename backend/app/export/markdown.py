@@ -72,6 +72,29 @@ PAID_LIMIT_NOTICE = "Часть поисковых формулировок не
 #: правка приводит его к дословной формулировке владельца.
 REVIEWED_FOOTER = "Подготовлено системой ТехМост Скаут, проверено: {name}, {date}"
 
+#: Русские заголовки таблицы сравнения вариантов (РЕШ-207) — латинские ключи
+#: `option`/`maturity`/`gives`/`needs_from_client` совпадают с ключами схемы
+#: сводки (промпт их не меняет), а клиент должен видеть человекочитаемый
+#: заголовок. Общий словарь для markdown, PDF и DOCX — три места печати одной
+#: таблицы не должны разойтись формулировками. Неизвестный ключ (запасная
+#: сводка `pipeline/summary.py::fallback_summary` уже отдаёт русские ключи)
+#: печатается как есть — вызывающий использует `COMPARISON_HEADERS_RU.get(key, key)`.
+COMPARISON_HEADERS_RU: dict[str, str] = {
+    "option": "Вариант",
+    "maturity": "Стадия зрелости",
+    "gives": "Что подтверждено",
+    "needs_from_client": "Что нужно от вас",
+}
+
+#: Заглушка вместо текста рекомендации и оговорок модели, когда печатать их
+#: клиенту нельзя (РЕШ-206, `export.view.summary_text_printable`): хотя бы
+#: одна карточка скрыта из клиентского вида, а эксперт текст сводки не правил.
+#: Формулировка дословная — идёт клиенту, поэтому в коде не переписывается.
+SUMMARY_NOT_PRINTABLE_NOTICE = (
+    "Сравнительная сводка не приводится: часть найденных вариантов снята "
+    "экспертом при проверке. Ориентируйтесь на таблицу сравнения и карточки ниже."
+)
+
 
 def developer_line(card: SolutionCard) -> str:
     """Строка «Разработчик» карточки для markdown, страницы отчёта и печати.
@@ -92,7 +115,7 @@ def developer_line(card: SolutionCard) -> str:
 TEMPLATE_FILTERS = {"developer_line": developer_line}
 
 
-def limitations_lines(report: Report) -> list[str]:
+def limitations_lines(report: Report, *, include_caveats: bool = True) -> list[str]:
     """Тело блока «Ограничения этого поиска» — без заголовка (РЕШ-189 п. 5).
 
     Единственное место, где собираются эти строки: markdown-экспорт и
@@ -106,6 +129,12 @@ def limitations_lines(report: Report) -> list[str]:
     себя прежний код до выноса в отдельную функцию (регрессия цикла 1 ревью
     И-12: разделитель исчез, `render_markdown` стал печатать другой байтовый
     вывод при том же входе, хотя задача — перенос без изменений).
+
+    `include_caveats=False` (РЕШ-206, клиентские выгрузки PDF и DOCX) убирает
+    только оговорки модели — строка о недоступных источниках остаётся в любом
+    случае: скрытый отказ источника хуже видимого (инвариант №5), а оговорки
+    могут ссылаться на карточки по нумерации, которая ушла со скрытой
+    карточкой.
     """
     lines: list[str] = []
     if report.sources_unavailable:
@@ -114,7 +143,7 @@ def limitations_lines(report: Report) -> list[str]:
             + ", ".join(report.sources_unavailable)
             + ". Выдача могла быть полнее — стоит повторить запрос позже."
         )
-    if report.summary.caveats:
+    if include_caveats and report.summary.caveats:
         if lines:
             lines.append("")
         lines.extend(f"- {caveat}" for caveat in report.summary.caveats)
@@ -169,9 +198,10 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
 
     if report.summary.comparison_rows:
         keys = list(report.summary.comparison_rows[0].keys())
+        headers = [COMPARISON_HEADERS_RU.get(key, key) for key in keys]
         lines.append("## Сравнение вариантов")
         lines.append("")
-        lines.append("| " + " | ".join(keys) + " |")
+        lines.append("| " + " | ".join(headers) + " |")
         lines.append("|" + "|".join(["---"] * len(keys)) + "|")
         for row in report.summary.comparison_rows:
             lines.append("| " + " | ".join(str(row.get(k, "")).replace("|", "\\|") for k in keys) + " |")
@@ -207,10 +237,9 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
 
     lines.append("---")
     lines.append("")
-    lines.append(
-        f"*Запрос №{report.request_id or '—'} · {report.generated_at:%d.%m.%Y %H:%M} · "
-        f"стоимость машинной обработки {report.cost_rub:.2f} ₽*"
-    )
+    # Стоимость машинной обработки — внутренняя экономика, из клиентской
+    # выгрузки убрана (РЕШ-207); номер запроса и дата остаются.
+    lines.append(f"*Запрос №{report.request_id or '—'} · {report.generated_at:%d.%m.%Y %H:%M}*")
     lines.append("")
     lines.append("*Кирилл Уклонский · uklonskiy.k@gmail.com*")
     return "\n".join(lines)

@@ -13,7 +13,7 @@ from pathlib import Path
 from docx import Document
 
 from app.export.docx import DRAFT_NOTICE, export_docx
-from app.export.markdown import REVIEWED_FOOTER
+from app.export.markdown import REVIEWED_FOOTER, SUMMARY_NOT_PRINTABLE_NOTICE
 from app.export.view import ExportView
 from app.schemas import (
     Evidence,
@@ -51,7 +51,19 @@ def _make_report(cards: list[SolutionCard], contest_cards: list[SolutionCard] | 
     return Report(**fields)
 
 
-def _make_view(report: Report, *, is_draft: bool = True, reviewer_name: str = "", validated_at=None) -> ExportView:
+def _make_view(
+    report: Report,
+    *,
+    is_draft: bool = True,
+    reviewer_name: str = "",
+    validated_at=None,
+    total_cards: int | None = None,
+    summary_text_edited: bool = False,
+) -> ExportView:
+    # По умолчанию ничего не скрыто (РЕШ-206): число карточек до фильтра
+    # совпадает с числом карточек переданного отчёта.
+    if total_cards is None:
+        total_cards = len(report.cards) + len(report.contest_cards)
     return ExportView(
         request_id=report.request_id,
         report=report,
@@ -59,6 +71,8 @@ def _make_view(report: Report, *, is_draft: bool = True, reviewer_name: str = ""
         is_draft=is_draft,
         reviewer_name=reviewer_name,
         validated_at=validated_at,
+        total_cards=total_cards,
+        summary_text_edited=summary_text_edited,
     )
 
 
@@ -251,3 +265,201 @@ def test_создаёт_недостающий_каталог(tmp_path: Path, br
     result = export_docx(view, out_path)
 
     assert result.exists()
+
+
+def _header_text(path: Path) -> str:
+    """Текст первого абзаца колонтитула первой (единственной) секции."""
+    document = Document(str(path))
+    header = document.sections[0].header
+    return header.paragraphs[0].text if header.paragraphs else ""
+
+
+def test_черновик_с_вердиктом_не_печатает_подпись(tmp_path: Path, brief):
+    """П-1 аудита: мутация «печатать подпись без проверки is_draft» убита —
+    даже при заполненном `validated_at` черновик подписи не печатает."""
+    report = _make_report([_make_card()], brief=brief)
+    view = _make_view(report, is_draft=True, reviewer_name="Иван Иванов", validated_at=datetime(2026, 8, 27))
+
+    export_docx(view, tmp_path / "report-1-2026-08-27.docx")
+
+    text = _full_text(tmp_path / "report-1-2026-08-27.docx")
+    assert "проверено:" not in text
+    assert DRAFT_NOTICE in text
+
+
+def test_черновик_печатает_пометку_в_колонтитуле(tmp_path: Path, brief):
+    """П-4 аудита: пометка черновика видна на каждой странице — в колонтитуле."""
+    report = _make_report([_make_card()], brief=brief)
+    view = _make_view(report, is_draft=True)
+    out_path = tmp_path / "report-1-2026-08-27.docx"
+
+    export_docx(view, out_path)
+
+    assert DRAFT_NOTICE in _header_text(out_path)
+
+
+def test_проверенный_документ_не_имеет_пометки_в_колонтитуле(tmp_path: Path, brief):
+    """У проверенного документа колонтитула с пометкой черновика быть не должно."""
+    report = _make_report([_make_card()], brief=brief)
+    view = _make_view(report, is_draft=False, reviewer_name="Иван Иванов", validated_at=datetime(2026, 8, 27))
+    out_path = tmp_path / "report-1-2026-08-27.docx"
+
+    export_docx(view, out_path)
+
+    assert DRAFT_NOTICE not in _header_text(out_path)
+
+
+def test_рекомендация_не_печатается_когда_карточка_скрыта_и_правки_нет(tmp_path: Path, brief):
+    """РЕШ-206: карточка скрыта (total_cards больше печатаемых), правки нет —
+    рекомендация и оговорки модели не печатаются, есть заглушка."""
+    report = _make_report(
+        [_make_card()],
+        brief=brief,
+        summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["В карточке 3 риск не подтверждён."]),
+    )
+    view = _make_view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    out_path = tmp_path / "report-1-2026-08-27.docx"
+
+    export_docx(view, out_path)
+
+    text = _full_text(out_path)
+    assert "Первым берём вариант 1." not in text
+    assert "В карточке 3 риск не подтверждён." not in text
+    assert SUMMARY_NOT_PRINTABLE_NOTICE in text
+
+
+def test_строка_недоступных_источников_остаётся_при_скрытой_сводке(tmp_path: Path, brief):
+    """Инвариант №5: строка о недоступных источниках остаётся, даже когда
+    рекомендация и оговорки скрыты из-за отклонённой карточки."""
+    report = _make_report(
+        [_make_card()],
+        brief=brief,
+        summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["Оговорка модели."]),
+        sources_unavailable=["cyberleninka"],
+    )
+    view = _make_view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    out_path = tmp_path / "report-1-2026-08-27.docx"
+
+    export_docx(view, out_path)
+
+    text = _full_text(out_path)
+    assert "Не ответили источники" in text
+    assert "Оговорка модели." not in text
+
+
+def test_рекомендация_печатается_целиком_когда_эксперт_правил_сводку(tmp_path: Path, brief):
+    """РЕШ-206 (зеркало): карточка скрыта, но эксперт правил сводку —
+    печатается его текст целиком, включая оговорки."""
+    report = _make_report(
+        [_make_card()],
+        brief=brief,
+        summary=ReportSummary(recommendation="Текст эксперта.", caveats=["Правленая оговорка."]),
+    )
+    view = _make_view(report, is_draft=True, total_cards=2, summary_text_edited=True)
+    out_path = tmp_path / "report-1-2026-08-27.docx"
+
+    export_docx(view, out_path)
+
+    text = _full_text(out_path)
+    assert "Текст эксперта." in text
+    assert "Правленая оговорка." in text
+    assert SUMMARY_NOT_PRINTABLE_NOTICE not in text
+
+
+def test_шапка_таблицы_сравнения_печатается_русскими_заголовками(tmp_path: Path, brief):
+    """РЕШ-207: латинские ключи строк сравнения печатаются русскими заголовками."""
+    report = _make_report(
+        [_make_card()],
+        brief=brief,
+        summary=ReportSummary(
+            recommendation="Начать с варианта №1.",
+            comparison_rows=[
+                {"option": "Молибден", "maturity": "pilot", "gives": "испытан", "needs_from_client": "образец"}
+            ],
+        ),
+    )
+    view = _make_view(report, is_draft=True)
+    out_path = tmp_path / "report-1-2026-08-27.docx"
+
+    export_docx(view, out_path)
+
+    document = Document(str(out_path))
+    header = [cell.text for cell in document.tables[0].rows[0].cells]
+    assert header == ["Вариант", "Стадия зрелости", "Что подтверждено", "Что нужно от вас"]
+
+
+def test_в_docx_нет_строки_о_стоимости(tmp_path: Path, brief):
+    """РЕШ-207: стоимости машинной обработки в клиентском DOCX нет."""
+    report = _make_report([_make_card()], brief=brief, cost_rub=11.3711)
+    view = _make_view(report, is_draft=True)
+    out_path = tmp_path / "report-1-2026-08-27.docx"
+
+    export_docx(view, out_path)
+
+    text = _full_text(out_path)
+    assert "стоимость" not in text
+    assert "₽" not in text
+
+
+def test_сквозной_отчёт_с_отклонённой_карточкой_без_правки_сводки(tmp_path: Path, brief):
+    """Сквозной сценарий: отчёт из 4 карточек, одна отклонена экспертом
+    (`build_export_view` её уже убрал бы) — в выгрузке 3 карточки, 3 строки
+    сравнения, текста рекомендации нет, оговорок нет, строка о недоступных
+    источниках на месте, стоимости нет, шапка таблицы русская."""
+    visible_cards = [_make_card(title=f"Карточка №{n}") for n in (1, 2, 3)]
+    report = _make_report(
+        visible_cards,
+        brief=brief,
+        summary=ReportSummary(
+            recommendation="Первым берём вариант 1.",
+            caveats=["В карточке 3 риск не подтверждён."],
+            comparison_rows=[
+                {"option": "Вариант 1", "maturity": "pilot", "gives": "испытан", "needs_from_client": "образец"},
+                {"option": "Вариант 2", "maturity": "lab", "gives": "статья", "needs_from_client": "команда"},
+                {"option": "Вариант 3", "maturity": "series", "gives": "патент", "needs_from_client": "лицензия"},
+            ],
+        ),
+        sources_unavailable=["cyberleninka"],
+        cost_rub=11.3711,
+    )
+    view = _make_view(report, is_draft=True, total_cards=4, summary_text_edited=False)
+    out_path = tmp_path / "report-1-2026-08-27.docx"
+
+    export_docx(view, out_path)
+
+    document = Document(str(out_path))
+    text = _full_text(out_path)
+    assert text.count("Карточка №") == 3
+    assert len(document.tables[0].rows) == 4  # заголовок + 3 строки сравнения
+    header = [cell.text for cell in document.tables[0].rows[0].cells]
+    assert header == ["Вариант", "Стадия зрелости", "Что подтверждено", "Что нужно от вас"]
+    assert "Первым берём вариант 1." not in text
+    assert "В карточке 3 риск не подтверждён." not in text
+    assert SUMMARY_NOT_PRINTABLE_NOTICE in text
+    assert "Не ответили источники" in text
+    assert "стоимость" not in text
+    assert "₽" not in text
+
+
+def test_сквозной_отчёт_с_отклонённой_карточкой_эксперт_правил_сводку(tmp_path: Path, brief):
+    """Зеркальный сценарий: та же ситуация, но эксперт правил сводку —
+    печатается его текст целиком."""
+    visible_cards = [_make_card(title=f"Карточка №{n}") for n in (1, 2, 3)]
+    report = _make_report(
+        visible_cards,
+        brief=brief,
+        summary=ReportSummary(
+            recommendation="Текст, который правил эксперт.",
+            caveats=["Оговорка, которую эксперт оставил."],
+            comparison_rows=[{"option": "Вариант 1"}, {"option": "Вариант 2"}, {"option": "Вариант 3"}],
+        ),
+    )
+    view = _make_view(report, is_draft=True, total_cards=4, summary_text_edited=True)
+    out_path = tmp_path / "report-1-2026-08-27.docx"
+
+    export_docx(view, out_path)
+
+    text = _full_text(out_path)
+    assert "Текст, который правил эксперт." in text
+    assert "Оговорка, которую эксперт оставил." in text
+    assert SUMMARY_NOT_PRINTABLE_NOTICE not in text
