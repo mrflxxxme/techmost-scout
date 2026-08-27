@@ -45,8 +45,9 @@ from app.models import SummaryOverride as SummaryOverrideRow
 from app.models import Verdict as VerdictRow
 from app.pipeline.persistence import ReportNotFoundError, load_report
 from app.report_overrides import OverrideMap, apply_overrides
+from app.schemas import SolutionCard
 from app.schemas import Verdict as VerdictDecision
-from app.summary_overrides import SummaryOverrideData, apply_summary_override
+from app.summary_overrides import SummaryOverrideData, apply_summary_override, resolve_summary_edit
 from app.verdicts import CardKey, all_cards_reviewed, effective_verdicts
 
 log = logging.getLogger(__name__)
@@ -66,6 +67,13 @@ DECISION_LABELS: dict[VerdictDecision, str] = {
     VerdictDecision.REWORK: "На доработку",
     VerdictDecision.REJECT: "Отклонено",
 }
+
+#: Причины, по которым карточка не уедет клиенту, — эксперт видит их на
+#: экране ревью рядом с формой правки сводки (аудит Э4, правка П-6): без
+#: этого блока номера карточек в рекомендации и оговорках, которые эксперт
+#: правит вручную, было не с чем сверить.
+HIDDEN_REJECTED = "отклонена экспертом"
+HIDDEN_NO_EVIDENCE = "нет ни одного подтверждения"
 
 
 def _templates(request: Request):
@@ -119,6 +127,63 @@ async def _load_summary_override_row(session: AsyncSession, request_id: int) -> 
     )
 
 
+async def _load_original_summary(session: AsyncSession, request_id: int) -> tuple[str, list[str]]:
+    """Рекомендация и оговорки сводки ДО правки эксперта — после наложения правок карточек.
+
+    Точка сравнения для `resolve_summary_edit` (П-6): текст модели, прошедший
+    те же правки оператора, что видит эксперт в предзаполненной форме
+    (`show_review`), но без наложения правки самой сводки — иначе сравнение с
+    уже сохранённой прежде правкой скрывало бы повторную правку эксперта.
+    """
+    report = await load_report(lambda: _session_scope(session), request_id)
+    overrides = await _load_overrides(session, request_id)
+    report = apply_overrides(report, overrides)
+    return report.summary.recommendation, list(report.summary.caveats)
+
+
+def _hidden_reason(card: SolutionCard, card_id: int | None, effective: dict[int, VerdictRow]) -> str | None:
+    """Причина, по которой карточка не уедет клиенту, либо `None`, если уедет.
+
+    Повторяет два независимых клиентских фильтра в одном месте: reject
+    эксперта (`app.verdicts.visible_report`, РЕШ-198) и пустой список
+    подтверждений (`app.export.pdf`/`docx`, РЕШ-204) — второй действует даже
+    для одобренной карточки, поэтому проверяется отдельно от вердикта.
+    """
+    verdict = effective.get(card_id) if card_id is not None else None
+    if verdict is not None and verdict.decision == VerdictDecision.REJECT:
+        return HIDDEN_REJECTED
+    if not card.evidence:
+        return HIDDEN_NO_EVIDENCE
+    return None
+
+
+def _annotate_client_view(
+    cards: list[SolutionCard],
+    card_ids: dict[CardKey, int],
+    effective: dict[int, VerdictRow],
+    *,
+    is_contest: bool,
+) -> list[tuple[SolutionCard, int | None, int | None, str | None]]:
+    """Разметить карточки секции: id строки, номер у клиента (или `None`) и причина скрытия (или `None`).
+
+    Номер у клиента считается заново с единицы в пределах секции — тем же
+    проходом, что и клиентский фильтр (`app.export.view._reindex_after_filter`),
+    но здесь дополнительно учитывается пустой `evidence` (РЕШ-204): фильтр
+    отчёта его не видит — он отрабатывает позже, уже в `pdf.py`/`docx.py`.
+    """
+    result: list[tuple[SolutionCard, int | None, int | None, str | None]] = []
+    client_num = 0
+    for position, card in enumerate(cards):
+        card_id = card_ids.get((is_contest, position))
+        reason = _hidden_reason(card, card_id, effective)
+        if reason is None:
+            client_num += 1
+            result.append((card, card_id, client_num, None))
+        else:
+            result.append((card, card_id, None, reason))
+    return result
+
+
 @router.get("/requests/{request_id}/review", response_class=HTMLResponse)
 async def show_review(request_id: int, request: Request, session: AsyncSession = Depends(get_session)) -> HTMLResponse:
     """Экран ревью: карточки обеих секций в одну колонку, форма вердикта на каждую.
@@ -162,9 +227,19 @@ async def show_review(request_id: int, request: Request, session: AsyncSession =
     )
     report = apply_summary_override(report, summary_override)
 
-    cards_with_ids = [(index + 1, card, card_ids.get((False, index))) for index, card in enumerate(report.cards)]
+    # П-6 (аудит Э4): эксперт правит рекомендацию и оговорки по номерам карточек
+    # с этого же экрана — рядом с формой правки нужно честно показать, какие
+    # карточки клиент вообще не увидит и под какими номерами уедут остальные.
+    main_visibility = _annotate_client_view(report.cards, card_ids, effective, is_contest=False)
+    contest_visibility = _annotate_client_view(report.contest_cards, card_ids, effective, is_contest=True)
+
+    cards_with_ids = [
+        (index + 1, card, card_id, client_num, reason)
+        for index, (card, card_id, client_num, reason) in enumerate(main_visibility)
+    ]
     contest_with_ids = [
-        (index + 1, card, card_ids.get((True, index))) for index, card in enumerate(report.contest_cards)
+        (index + 1, card, card_id, client_num, reason)
+        for index, (card, card_id, client_num, reason) in enumerate(contest_visibility)
     ]
 
     return _templates(request).TemplateResponse(
@@ -261,6 +336,12 @@ async def edit_summary(
     `submit_verdict`, здесь нет ценности хранить историю правок текста.
     `caveats` собирается формой построчно (по образцу `risks`/`contact_leads`
     в `report.py::edit_card`) и разбирается в список до записи.
+
+    Поле пишется как правка (`recommendation`/`caveats` строки, не `None`)
+    только если оно действительно отличается от исходного текста отчёта —
+    `resolve_summary_edit` сравнивает с текстом ДО правки сводки (после
+    правок карточек, П-6, аудит Э4). Один клик по «Сохранить» без единого
+    изменения формы больше не делает `summary_text_edited` истинным.
     """
     request_row = await session.get(RequestRow, request_id)
     if request_row is None:
@@ -272,12 +353,26 @@ async def edit_summary(
 
     caveats_list = [line.strip() for line in caveats.splitlines() if line.strip()]
 
+    try:
+        original_recommendation, original_caveats = await _load_original_summary(session, request_id)
+    except ReportNotFoundError:
+        # Отчёта ещё нет (запрос не дошёл до готового результата) — сравнивать
+        # правку не с чем, безопасный выбор — считать поля правкой как есть.
+        original_recommendation, original_caveats = "", []
+
+    resolved = resolve_summary_edit(
+        original_recommendation=original_recommendation,
+        original_caveats=original_caveats,
+        submitted_recommendation=recommendation_text,
+        submitted_caveats=caveats_list,
+    )
+
     override_row = await _load_summary_override_row(session, request_id)
     if override_row is None:
         override_row = SummaryOverrideRow(request_id=request_id)
         session.add(override_row)
-    override_row.recommendation = recommendation_text
-    override_row.caveats = caveats_list
+    override_row.recommendation = resolved.recommendation
+    override_row.caveats = resolved.caveats
     await session.flush()
 
     caveats_suffix = f" Оговорки: {escape('; '.join(caveats_list))}." if caveats_list else " Оговорок нет."

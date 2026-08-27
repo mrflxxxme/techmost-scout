@@ -454,6 +454,35 @@ def test_summary_post_несуществующий_запрос_отклоняе
     assert response.status_code == 404
 
 
+def test_summary_и_экран_ревью_честны_с_экспертом(client, db_session_factory, brief):
+    """Критерии 1 (П-6), 3 и 4 (П-9): дословный текст — не правка, HTML экранируется, скрытое — видно эксперту."""
+    cards = [_make_card(title="Первый"), _make_card(title="Второй"), _make_card(title="Третий", evidence=[])]
+    report = _make_report(cards, [], brief=brief, summary=ReportSummary(recommendation="Вариант 1.", caveats=["О."]))
+    request_id, main_ids, _ = asyncio.run(_seed(db_session_factory, report=report, status=RequestStatus.DRAFTED))
+    url = f"/requests/{request_id}/summary"
+
+    async def _reject_second() -> None:
+        async with db_session_factory() as session:
+            session.add(VerdictRow(card_id=main_ids[1], reviewer_name="И.И.", decision="reject"))
+
+    asyncio.run(_reject_second())
+
+    with client:
+        same = client.post(url, data={"recommendation": "Вариант 1.\n", "caveats": "О."}, auth=_AUTH)
+        rows = asyncio.run(_summary_override_rows(db_session_factory, request_id))
+        html = client.post(url, data={"recommendation": "<script>x</script>", "caveats": ""}, auth=_AUTH)
+        review = client.get(f"/requests/{request_id}/review", auth=_AUTH)
+
+    assert same.status_code == 200
+    assert rows[0].recommendation is None
+    assert rows[0].caveats is None
+    assert "<script>" not in html.text
+    assert "&lt;script&gt;x&lt;/script&gt;" in html.text
+    assert "уедет клиенту как вариант №1" in review.text
+    assert "клиенту не уедет: отклонена экспертом" in review.text
+    assert "клиенту не уедет: нет ни одного подтверждения" in review.text
+
+
 def test_summary_post_требует_авторизацию(client, db_session_factory, brief):
     """Критерий 5: маршрут правки сводки закрыт Basic auth наравне с остальными."""
     report = _make_report([_make_card()], [], brief=brief)
