@@ -13,9 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from app.export.markdown import PAID_LIMIT_NOTICE, SUMMARY_NOT_PRINTABLE_NOTICE
+from app.export.markdown import PAID_LIMIT_NOTICE, SUMMARY_FALLBACK_NOTICE, SUMMARY_NOT_PRINTABLE_NOTICE
 from app.export.pdf import export_pdf, render_print_html
 from app.export.view import ExportView
+from app.pipeline.summary import fallback_summary
 from app.schemas import Brief, Evidence, MaturityStage, Report, ReportSummary, SolutionCard
 
 
@@ -438,3 +439,21 @@ def test_render_print_html_printable_count_includes_contest_cards():
 
     assert "Начать с варианта №1." in html
     assert SUMMARY_NOT_PRINTABLE_NOTICE not in html
+
+
+def test_fallback_summary_caveat_recognized_via_shared_constant():
+    """Расширение границы Э4-П6: оговорка `fallback_summary` (pipeline/summary.py)
+    узнаётся как машинная через саму константу SUMMARY_FALLBACK_NOTICE, а не
+    совпадением строк, — pipeline/summary.py импортирует эту константу вместо
+    своего литерала (РЕШ-210). Разойдись они снова, `_machine_caveats()`
+    перестал бы узнавать оговорку `fallback_summary`, и она бы отфильтровалась
+    вместе с прозой модели — эта проверка ловит расхождение."""
+    summary = fallback_summary([_card()])
+    assert summary.caveats == [SUMMARY_FALLBACK_NOTICE]
+
+    report = _report([_card()], summary=summary)
+    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+
+    html = render_print_html(view)
+
+    assert SUMMARY_FALLBACK_NOTICE in html

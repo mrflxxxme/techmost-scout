@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from app.export.markdown import CONFIDENCE_RU, MATURITY_RU
+from app.export.markdown import CONFIDENCE_RU, MATURITY_RU, SUMMARY_FALLBACK_NOTICE
 from app.llm import LLMRouter, Message
 from app.pipeline.prompting import _GO, render_prompt
 from app.schemas import Brief, ReportSummary, SolutionCard
@@ -75,6 +75,13 @@ def fallback_summary(cards: list[SolutionCard]) -> ReportSummary:
     а не значением перечисления (`prototype`, `unknown`, `low`) — правило
     языка CLAUDE.md распространяется и на запасную таблицу, которую видит
     клиент, а не только на путь через модель.
+
+    Оговорка отказа сводки — константа `SUMMARY_FALLBACK_NOTICE` из того же
+    модуля, а не свой литерал (РЕШ-210, Э4-П6): экспортёр печатает её клиенту
+    всегда, узнавая машинную пометку сравнением по значению константы, а не
+    разбором текста. Разошлись бы здесь и там — и отказ сводки на скрытой
+    карточке снова стал бы неотличим от прозы модели, ровно тот дефект,
+    из-за которого этап дважды получил BLOCKED.
     """
     rows = [
         {
@@ -97,5 +104,5 @@ def fallback_summary(cards: list[SolutionCard]) -> ReportSummary:
     return ReportSummary(
         comparison_rows=rows,
         recommendation=recommendation,
-        caveats=["Автоматическая сводка не собралась: раздел «Рекомендация» построен без участия модели."],
+        caveats=[SUMMARY_FALLBACK_NOTICE],
     )
