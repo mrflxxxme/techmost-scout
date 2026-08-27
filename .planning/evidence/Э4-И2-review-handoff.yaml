@@ -1,32 +1,32 @@
 handoff:
   from: reviewer
-  to: implementer-A
+  to: orchestrator
   task: "Э4-И2"
   did:
-    - "Прочитаны PLAN.md (раздел Э4-И2 и Контракты), INVARIANTS.md, CONVENTIONS.md §5/§7, CLAUDE.md, diff и все изменённые файлы целиком"
-    - "Проверен на конкретном сценарии [A,B(reject),C,D(rework)] вручную запуском _reindex_after_filter: переиндексация верна, наложение editor_overrides идёт по дофильтровым позициям, POST /cards/{id}/edit адресуется по PK карточки, а не по паре (is_contest, position) — риск подмены карточки формой не воспроизводится"
-    - "Мутационная проверка по заданию: сдвиг переиндексации на 1 ловится (2 упавших теста); мутация 'забыли переномеровать позиции' и мутация 'правки после фильтра вместо до' переживают весь набор из 1001 теста — критическая ветка нового поведения не защищена ни одним тестом"
-    - "Прогнаны все требуемые команды: pytest точечно и полным набором, ruff check/format, greps по всем 10 инвариантам, сверка diff со списком файлов задачи (границы не нарушены), theme.css не тронут"
+    - "Цикл 1 (коммит c67b8fc): найдена дыра покрытия — мутации 'забыли переномеровать позиции после reject' и 'правки после фильтра вместо до' переживают весь набор из 1001 теста; сама реализация на сценарии задания корректна. Вердикт ДОРАБОТАТЬ."
+    - "Цикл 2 (коммит 55dbb8c, тесты — e5cec2d): подтверждено, что backend/ между циклами не менялся ни строкой (git diff c67b8fc..55dbb8c --stat -- backend/ пусто); исполнитель добавил ровно два теста в tests/test_export_view.py на найденные сценарии"
+    - "Обе мутации цикла 1 воспроизведены заново в рабочей копии и отменены после проверки: обе теперь ловятся точечным прогоном tests/test_export_view.py (2 failed и 1 failed соответственно), без обращения к полному набору"
+    - "Прогнаны pytest tests/test_export_view.py -v (9 passed), полный pytest -q (1003 passed), ruff check и ruff format --check (чисто), сверка diff границ (только tests/test_export_view.py + evidence исполнителя)"
+    - "Ветка review/e4i2 слита с коммитами цикла 2 (merge 55dbb8c, конфликтов нет), итоговое дерево идентично 55dbb8c — сверено diff'ом по view.py и test_export_view.py"
   artifacts:
-    - .planning/evidence/Э4-И2-review.md (закоммичен до ответа)
+    - .planning/evidence/Э4-И2-review.md (разделы «цикл 1» и «цикл 2», закоммичен до ответа)
     - .planning/evidence/Э4-И2-review-handoff.yaml
   self_audit: pass
   checks:
-    - "pytest tests/test_export_view.py tests/test_web_report_verdicts.py -v: 12 passed"
-    - "pytest tests/test_web_report.py tests/test_web_flow_e2e.py tests/test_web_templates.py -v: 23 passed, diff этих файлов пуст"
-    - "pytest -q: 1001 passed"
+    - "pytest tests/test_export_view.py -v: 9 passed"
+    - "pytest -q: 1003 passed"
     - "ruff check .: All checks passed; ruff format --check .: 180 files already formatted"
-    - "мутация 'new_key = key' (не переномерована позиция после reject): pytest -q полного набора — 1001 passed, мутацию не ловит никто"
-    - "мутация 'apply_overrides после visible_report' (обратный порядок): pytest -q полного набора — 1001 passed, мутацию не ловит никто"
+    - "мутация 'new_key = key' (не переномерована позиция после reject), перепроверка на дереве цикла 2: pytest tests/test_export_view.py -v — 2 failed, 7 passed (ловится)"
+    - "мутация 'apply_overrides после visible_report' (обратный порядок), перепроверка на дереве цикла 2: pytest tests/test_export_view.py -v — 1 failed, 8 passed (ловится)"
+    - "git diff e5cec2d~1..55dbb8c --name-only: tests/test_export_view.py + два evidence-файла исполнителя — границы задачи не расширены"
+    - "git diff c67b8fc..55dbb8c --stat -- backend/: пусто — код задачи между циклами не менялся"
   escalate: none
   read_first:
-    - .planning/PLAN.md (раздел «### Э4-И2» и «Контракты: Клиентский вид, Подпись эксперта»)
-    - backend/app/export/view.py (_reindex_after_filter и build_export_view)
-    - .planning/evidence/Э4-И2-review.md (раздел «Мутационная проверка» и «Блокирующие»)
+    - .planning/evidence/Э4-И2-review.md (раздел «Ревью Э4-И2 · цикл 2»)
+    - tests/test_export_view.py (два новых теста в конце файла)
   notes: >-
-    Это цикл 1. Реализация проверенного сценария сама по себе корректна (см.
-    ручной прогон в отчёте) — правка нужна только в тестах: добавить минимум
-    один тест на reject в середине списка из 3+ карточек с проверкой
-    card_ids/rework_keys, и один тест на editor_overrides карточки, идущей
-    после отклонённой (не вырожденный случай с одной картой, как сейчас).
-    Второй цикл — последний, дальше третьего не будет.
+    Вердикт ПРИНЯТЬ. Второй цикл был последним по правилу предела циклов
+    (§4 CONVENTIONS.md) — третьего не будет и не требуется: блокирующее
+    закрыто. Ветку review/e4i2 можно использовать как эталон дерева для
+    слияния Э4-И2 в main (совпадает с e4/i2@55dbb8c плюс два файла отчёта
+    ревьюера, которые в основную ветку не сливаются).
