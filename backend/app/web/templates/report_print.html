@@ -121,7 +121,11 @@
 
 <section class="print-section">
   <h2>Рекомендация</h2>
+  {% if summary_printable %}
   <p>{{ report.summary.recommendation }}</p>
+  {% else %}
+  <p class="print-muted">{{ summary_notice }}</p>
+  {% endif %}
 </section>
 
 {% if report.summary.comparison_rows %}
@@ -129,7 +133,7 @@
   <h2>Сравнение вариантов</h2>
   <table class="print-table">
     <thead>
-      <tr>{% for key in report.summary.comparison_rows[0].keys() %}<th>{{ key }}</th>{% endfor %}</tr>
+      <tr>{% for key in report.summary.comparison_rows[0].keys() %}<th>{{ comparison_headers_ru.get(key, key) }}</th>{% endfor %}</tr>
     </thead>
     <tbody>
       {% for comp_row in report.summary.comparison_rows %}
@@ -172,7 +176,10 @@
   {% if signature %}
   <p>{{ signature }}</p>
   {% endif %}
-  <p class="print-muted">Запрос №{{ report.request_id }} · {{ report.generated_at.strftime('%d.%m.%Y %H:%M') }} · стоимость машинной обработки {{ "%.2f"|format(report.cost_rub) }} ₽</p>
+  {# Стоимость машинной обработки — внутренняя экономика, из клиентской
+     выгрузки убрана (РЕШ-207); на операторской странице `report.html` она
+     остаётся. #}
+  <p class="print-muted">Запрос №{{ report.request_id }} · {{ report.generated_at.strftime('%d.%m.%Y %H:%M') }}</p>
 </footer>
 
 </body>

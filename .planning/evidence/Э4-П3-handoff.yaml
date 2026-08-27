@@ -1,0 +1,56 @@
+handoff:
+  from: "implementer"
+  to: "reviewer"
+  task: "Э4-П3"
+  cycle: 2
+  did:
+    - "РЕШ-206: render_print_html (pdf.py) и export_docx (docx.py) считают summary_text_printable(view, printed_cards) по числу карточек, реально попавших в печать (обе секции, после отсева пустого evidence, РЕШ-204) — печатать рекомендацию и оговорки модели можно, только когда ничего не скрыто либо эксперт правил текст сам"
+    - "Заглушка вместо рекомендации: заголовок «Рекомендация» остаётся, под ним одна строка (константа SUMMARY_NOT_PRINTABLE_NOTICE в markdown.py, дословный текст ниже — на визу владельца)"
+    - "limitations_lines (markdown.py) получила именованный параметр include_caveats (умолчание True — прежнее поведение); pdf.py и docx.py вызывают его с include_caveats=printable — строка о недоступных источниках остаётся всегда (инвариант №5), уходят только оговорки модели"
+    - "Таблица сравнения печатается всегда, вне зависимости от printable — её уже отфильтровал Э4-П1"
+    - "РЕШ-207: строка «стоимость машинной обработки … ₽» убрана из подвала markdown.py и подвала report_print.html (PDF); в docx.py такой строки не было изначально — добавлен только регрессионный тест на её отсутствие. Операторская страница report.html и хаб не трогались"
+    - "РЕШ-207: словарь COMPARISON_HEADERS_RU (markdown.py, рядом с MATURITY_RU/CONFIDENCE_RU) — option/maturity/gives/needs_from_client → русские заголовки; неизвестный ключ печатается как есть. Используется в render_markdown, report_print.html (шапка таблицы) и docx.py::_add_comparison_table"
+    - "П-1 аудита: тесты, убивающие мутацию «печатать подпись эксперта без проверки is_draft» в pdf.py и docx.py — is_draft=True с заполненным validated_at не должен печатать строку «проверено:»"
+    - "П-4 аудита: DRAFT_NOTICE вынесен дополнительно в колонтитул DOCX (document.sections[0].header) через _add_draft_header — печатается на каждой странице черновика; у проверенного документа колонтитул пустой. Строка статуса в теле документа осталась как была (видна на первой странице)"
+    - "Сквозные тесты (оба формата, зеркальная пара): отчёт из 4 карточек, одна отклонена (смоделировано как total_cards=4 при 3 карточках в отчёте) — 3 карточки, 3 строки сравнения, текста рекомендации нет, оговорок нет, строка о недоступных источниках на месте, стоимости нет, шапка русская; и обратный случай — эксперт правил сводку, печатается его текст целиком"
+    - "markdown.py::render_markdown не тронут по духу задачи (только удаление строки cost + русские заголовки таблицы) — ExportView к нему не подключался: он используется только из scout run, где скрытых карточек не бывает"
+    - "Цикл 2 (правка по блокирующему замечанию ревью): добавлен по одному тесту на pdf.py и docx.py — сценарий, где total_cards совпадает с числом карточек в report (reject-вердикта нет вовсе), а одна карточка скрывается самим экспортёром из-за evidence=[] (РЕШ-204). Прежние тесты моделировали «скрытую карточку» только рассинхронизацией total_cards и не задевали строку, которая считает printed_cards по уже отфильтрованным спискам — эта дыра закрыта. Код pdf.py и docx.py в этом цикле не менялся: реализация была верной изначально"
+  artifacts:
+    - "backend/app/export/pdf.py"
+    - "backend/app/export/docx.py"
+    - "backend/app/export/markdown.py"
+    - "backend/app/web/templates/report_print.html"
+    - "tests/test_export_pdf.py"
+    - "tests/test_export_docx.py"
+    - "tests/test_export_markdown.py"
+  self_audit: "pass"
+  checks:
+    - "pytest tests/test_export_pdf.py tests/test_export_docx.py tests/test_export_markdown.py -q: 79 passed"
+    - "pytest -q: 1131 passed (было 1108 на базовом SHA 74c9f98 — добавлено 23 теста за оба цикла)"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 196 files already formatted"
+    - "pytest tests/test_backend_layout.py tests/test_tests_layout.py -q: 6 passed"
+    - "Мутация П-1 (cycle 1, sed: 'if not view.is_draft and view.validated_at is not None:' → 'if view.validated_at is not None:' в pdf.py и docx.py): pytest tests/test_export_pdf.py tests/test_export_docx.py -q → 2 failed, 39 passed — упали ровно test_render_print_html_draft_with_verdict_does_not_print_signature и test_черновик_с_вердиктом_не_печатает_подпись. Мутация отменена (git diff пуст)"
+    - "Мутация ревью цикла 2 (printed_cards считался по нефильтрованным report.cards/report.contest_cards вместо print_cards/printable_cards в pdf.py и docx.py): pytest tests/test_export_pdf.py tests/test_export_docx.py -q → 2 failed, 41 passed — упали ровно новые test_render_print_html_summary_not_printable_when_hidden_by_empty_evidence и test_рекомендация_не_печатается_когда_карточка_скрыта_пустым_evidence, остальное зелёное. Мутация отменена: diff /tmp/pdf_backup2.py backend/app/export/pdf.py и diff /tmp/docx_backup2.py backend/app/export/docx.py — пусто; git diff backend/app/export/pdf.py backend/app/export/docx.py после отмены — пусто (продуктовый код в цикле 2 не менялся)"
+  escalate: "none"
+  read_first:
+    - ".planning/PLAN.md (раздел «Э4-П3 · клиентские выгрузки»)"
+    - ".planning/evidence/audit-Э4.md"
+    - ".planning/DECISIONS.md (РЕШ-206, РЕШ-207, РЕШ-198, РЕШ-204, РЕШ-203)"
+    - "backend/app/export/view.py (контракт ExportView, не трогал)"
+    - "backend/app/export/pdf.py"
+    - "backend/app/export/docx.py"
+    - "backend/app/export/markdown.py"
+    - "backend/app/web/templates/report_print.html"
+  notes: >-
+    Новая клиентская фраза на визу владельца (без изменений с цикла 1):
+    «Сравнительная сводка не приводится: часть найденных вариантов снята
+    экспертом при проверке. Ориентируйтесь на таблицу сравнения и карточки
+    ниже.» — константа SUMMARY_NOT_PRINTABLE_NOTICE в
+    backend/app/export/markdown.py. Два совета ревью цикла 1 (разнобой
+    русских/английских имён тестов между файлами Э4 и мёртвая ветка в
+    docx.py::_add_card) не трогал — оба унаследованы от более ранних задач,
+    границы задачи их не включают. docx.py не содержал строки о стоимости
+    изначально — плановый пункт про docx.py закрыт регрессионным тестом её
+    отсутствия. Боевую базу data/scout.db не открывал — все тесты на
+    фикстурах в памяти/tmp_path.

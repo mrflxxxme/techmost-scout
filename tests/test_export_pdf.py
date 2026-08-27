@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from app.export.markdown import SUMMARY_NOT_PRINTABLE_NOTICE
 from app.export.pdf import export_pdf, render_print_html
 from app.export.view import ExportView
 from app.schemas import Brief, Evidence, MaturityStage, Report, ReportSummary, SolutionCard
@@ -71,6 +72,11 @@ def _view(
         "reviewer_name": reviewer_name,
         "validated_at": validated_at,
         "rework_keys": set(),
+        # По умолчанию ничего не скрыто (РЕШ-206): число карточек до фильтра
+        # совпадает с числом карточек в переданном отчёте — тесты, которым
+        # важна ветка «сводка не печатается», задают `total_cards` сами.
+        "total_cards": len(report.cards) + len(report.contest_cards),
+        "summary_text_edited": False,
     }
     fields.update(overrides)
     return ExportView(**fields)
@@ -201,3 +207,173 @@ async def test_export_pdf_html_matches_render_print_html(tmp_path: Path, is_draf
     )
     await export_pdf(view, tmp_path / "report-42-2026-08-27.pdf", page=page)
     assert page.set_content_calls[0] == render_print_html(view)
+
+
+def test_render_print_html_draft_with_verdict_does_not_print_signature():
+    """П-1 аудита: мутация «печатать подпись без проверки is_draft» убита —
+    даже при заполненном `validated_at` черновик подписи не печатает."""
+    view = _view(
+        _report([_card()]),
+        is_draft=True,
+        reviewer_name="Мария Соколова",
+        validated_at=datetime(2026, 8, 28, 12, 0),
+    )
+    html = render_print_html(view)
+    assert "проверено:" not in html
+    assert "ЧЕРНОВИК — не проверено экспертом" in html
+
+
+def test_render_print_html_no_cost_line_in_footer():
+    """РЕШ-207: строки о стоимости машинной обработки в клиентском PDF нет."""
+    html = render_print_html(_view(_report([_card()], cost_rub=11.3711), is_draft=True))
+    assert "стоимость" not in html
+    assert "₽" not in html
+    assert "Запрос №42 · 27.08.2026 09:00" in html
+
+
+def test_render_print_html_comparison_table_headers_are_russian():
+    """РЕШ-207: латинские ключи таблицы сравнения печатаются русскими заголовками."""
+    report = _report(
+        [_card()],
+        summary=ReportSummary(
+            recommendation="Начать с варианта №1.",
+            comparison_rows=[
+                {"option": "Молибден", "maturity": "pilot", "gives": "испытан", "needs_from_client": "образец"}
+            ],
+        ),
+    )
+    html = render_print_html(_view(report, is_draft=True))
+    assert "<th>Вариант</th>" in html
+    assert "<th>Стадия зрелости</th>" in html
+    assert "<th>Что подтверждено</th>" in html
+    assert "<th>Что нужно от вас</th>" in html
+    assert "<th>option</th>" not in html
+
+
+def test_render_print_html_summary_not_printable_when_card_hidden_and_not_edited():
+    """РЕШ-206: карточка скрыта (total_cards больше печатаемых), правки нет —
+    рекомендация и оговорки модели не печатаются, заглушка есть."""
+    report = _report(
+        [_card()],
+        summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["В карточке 3 риск не подтверждён."]),
+    )
+    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+
+    html = render_print_html(view)
+
+    assert "Первым берём вариант 1." not in html
+    assert "В карточке 3 риск не подтверждён." not in html
+    assert SUMMARY_NOT_PRINTABLE_NOTICE in html
+
+
+def test_render_print_html_summary_not_printable_when_hidden_by_empty_evidence():
+    """РЕШ-206, регрессия ревью цикла 2: total_cards совпадает с числом карточек
+    в отчёте (reject-вердикта нет вовсе), но одна карточка скрывается самим
+    экспортёром из-за пустого evidence (РЕШ-204) — рекомендация и оговорки всё
+    равно не печатаются. Мутация «считать printed_cards по нефильтрованным
+    report.cards/contest_cards» сделала бы printed_cards == total_cards и
+    напечатала бы текст модели — эта проверка её убивает."""
+    bare = _card(title="Карточка без подтверждений", evidence=[], trl_estimate=None)
+    report = _report(
+        [_card(), bare],
+        summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["В карточке 3 риск не подтверждён."]),
+    )
+    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+
+    html = render_print_html(view)
+
+    assert "Первым берём вариант 1." not in html
+    assert "В карточке 3 риск не подтверждён." not in html
+    assert SUMMARY_NOT_PRINTABLE_NOTICE in html
+
+
+def test_render_print_html_sources_unavailable_line_survives_hidden_summary():
+    """Инвариант №5: строка о недоступных источниках остаётся, даже когда
+    рекомендация и оговорки скрыты из-за отклонённой карточки."""
+    report = _report(
+        [_card()],
+        summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["Оговорка модели."]),
+        sources_unavailable=["cyberleninka"],
+    )
+    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+
+    html = render_print_html(view)
+
+    assert "Не ответили источники: cyberleninka" in html
+    assert "Оговорка модели." not in html
+
+
+def test_render_print_html_summary_printable_when_expert_edited_recommendation():
+    """РЕШ-206 (зеркало): карточка скрыта, но эксперт правил сводку — печатается
+    его текст целиком, включая оговорки."""
+    report = _report(
+        [_card()],
+        summary=ReportSummary(recommendation="Текст эксперта.", caveats=["Правленая оговорка."]),
+    )
+    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=True)
+
+    html = render_print_html(view)
+
+    assert "Текст эксперта." in html
+    assert "Правленая оговорка." in html
+    assert SUMMARY_NOT_PRINTABLE_NOTICE not in html
+
+
+def test_сквозной_отчёт_с_отклонённой_карточкой_без_правки_сводки():
+    """Сквозной сценарий: отчёт из 4 карточек, одна отклонена экспертом
+    (`build_export_view` её уже убрал бы) — в выгрузке 3 карточки, 3 строки
+    сравнения, текста рекомендации нет, оговорок нет, строка о недоступных
+    источниках на месте, стоимости нет, шапка таблицы русская."""
+    visible_cards = [_card(title=f"Карточка №{n}") for n in (1, 2, 3)]
+    report = _report(
+        visible_cards,
+        summary=ReportSummary(
+            recommendation="Первым берём вариант 1.",
+            caveats=["В карточке 3 риск не подтверждён."],
+            comparison_rows=[
+                {"option": "Вариант 1", "maturity": "pilot", "gives": "испытан", "needs_from_client": "образец"},
+                {"option": "Вариант 2", "maturity": "lab", "gives": "статья", "needs_from_client": "команда"},
+                {"option": "Вариант 3", "maturity": "series", "gives": "патент", "needs_from_client": "лицензия"},
+            ],
+        ),
+        sources_unavailable=["cyberleninka"],
+        cost_rub=11.3711,
+    )
+    view = _view(report, is_draft=True, total_cards=4, summary_text_edited=False)
+
+    html = render_print_html(view)
+
+    assert html.count('<div class="print-card">') == 3
+    assert html.count("<tr>") == 4  # заголовок + 3 строки сравнения
+    assert "Первым берём вариант 1." not in html
+    assert "В карточке 3 риск не подтверждён." not in html
+    assert SUMMARY_NOT_PRINTABLE_NOTICE in html
+    assert "Не ответили источники: cyberleninka" in html
+    assert "стоимость" not in html
+    assert "₽" not in html
+    assert "<th>Вариант</th>" in html
+
+
+def test_сквозной_отчёт_с_отклонённой_карточкой_эксперт_правил_сводку():
+    """Зеркальный сценарий: та же ситуация, но эксперт правил сводку —
+    печатается его текст целиком."""
+    visible_cards = [_card(title=f"Карточка №{n}") for n in (1, 2, 3)]
+    report = _report(
+        visible_cards,
+        summary=ReportSummary(
+            recommendation="Текст, который правил эксперт.",
+            caveats=["Оговорка, которую эксперт оставил."],
+            comparison_rows=[
+                {"option": "Вариант 1"},
+                {"option": "Вариант 2"},
+                {"option": "Вариант 3"},
+            ],
+        ),
+    )
+    view = _view(report, is_draft=True, total_cards=4, summary_text_edited=True)
+
+    html = render_print_html(view)
+
+    assert "Текст, который правил эксперт." in html
+    assert "Оговорка, которую эксперт оставил." in html
+    assert SUMMARY_NOT_PRINTABLE_NOTICE not in html

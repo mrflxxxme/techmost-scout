@@ -20,14 +20,16 @@ from docx.document import Document as DocumentObject
 from docx.shared import Pt
 
 from app.export.markdown import (
+    COMPARISON_HEADERS_RU,
     CONFIDENCE_RU,
     CONSTRAINTS_UNRESOLVED_NOTICE,
     CONTEST_SECTION_HEADING,
     MATURITY_RU,
+    SUMMARY_NOT_PRINTABLE_NOTICE,
     developer_line,
     limitations_lines,
 )
-from app.export.view import ExportView
+from app.export.view import ExportView, summary_text_printable
 from app.schemas import Report, SolutionCard
 from app.verdicts import signature_line
 
@@ -49,19 +51,28 @@ def export_docx(view: ExportView, out_path: Path) -> Path:
     document = Document()
     _set_default_font(document)
 
+    if view.is_draft:
+        # Колонтитул — на каждой странице (П-4 аудита Э4): строка статуса
+        # ниже видна только на первой странице документа.
+        _add_draft_header(document)
+
     document.add_heading("Подбор научно-технических решений", level=0)
     document.add_paragraph(_status_line(view))
 
     report = view.report
-    _add_task_section(document, report)
-    _add_recommendation_section(document, report)
-    _add_comparison_table(document, report)
 
     # Карточки без единого подтверждения в выгрузку не попадают вовсе
     # (РЕШ-204) — той же логикой, что печатный PDF-шаблон: клиент не должен
-    # видеть карточку без evidence даже в урезанном виде.
+    # видеть карточку без evidence даже в урезанном виде. Считаем их до
+    # раздела «Рекомендация»: `summary_text_printable` (РЕШ-206) сравнивает
+    # число реально печатаемых карточек с числом карточек до фильтра.
     printable_cards = [card for card in report.cards if card.evidence]
     printable_contest_cards = [card for card in report.contest_cards if card.evidence]
+    printable_summary = summary_text_printable(view, len(printable_cards) + len(printable_contest_cards))
+
+    _add_task_section(document, report)
+    _add_recommendation_section(document, report, printable_summary)
+    _add_comparison_table(document, report)
 
     document.add_heading("Варианты решений", level=1)
     if not printable_cards:
@@ -74,11 +85,23 @@ def export_docx(view: ExportView, out_path: Path) -> Path:
         for index, card in enumerate(printable_contest_cards, start=1):
             _add_card(document, card, index)
 
-    _add_limitations_section(document, report)
+    _add_limitations_section(document, report, printable_summary)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     document.save(out_path)
     return out_path
+
+
+def _add_draft_header(document: DocumentObject) -> None:
+    """Пометка черновика в колонтитуле — видна на каждой странице (П-4 аудита).
+
+    Строка статуса в теле документа (`_status_line`) остаётся только на
+    первой странице; колонтитул печатается на всех. У проверенного документа
+    эта функция не вызывается вовсе — колонтитул остаётся пустым.
+    """
+    header = document.sections[0].header
+    paragraph = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+    paragraph.text = DRAFT_NOTICE
 
 
 def _set_default_font(document: DocumentObject) -> None:
@@ -114,13 +137,23 @@ def _add_task_section(document: DocumentObject, report: Report) -> None:
         document.add_paragraph(f"Требуемая готовность: {MATURITY_RU[brief.target_maturity]}")
 
 
-def _add_recommendation_section(document: DocumentObject, report: Report) -> None:
+def _add_recommendation_section(document: DocumentObject, report: Report, printable: bool) -> None:
+    """Раздел «Рекомендация» — заглушка вместо текста модели (РЕШ-206), пока
+    хоть одна карточка скрыта из клиентского вида и эксперт текст не правил.
+    """
     document.add_heading("Рекомендация", level=1)
-    document.add_paragraph(report.summary.recommendation)
+    if printable:
+        document.add_paragraph(report.summary.recommendation)
+    else:
+        document.add_paragraph(SUMMARY_NOT_PRINTABLE_NOTICE)
 
 
 def _add_comparison_table(document: DocumentObject, report: Report) -> None:
-    """Таблица сравнения вариантов — пусто, если `comparison_rows` не заполнены."""
+    """Таблица сравнения вариантов — пусто, если `comparison_rows` не заполнены.
+
+    Печатается всегда, вне зависимости от `printable`: строки уже
+    отфильтрованы вместе с карточками (Э4-П1), домысливать в них нечего.
+    """
     rows = report.summary.comparison_rows
     if not rows:
         return
@@ -129,7 +162,7 @@ def _add_comparison_table(document: DocumentObject, report: Report) -> None:
     table = document.add_table(rows=1, cols=len(keys))
     table.style = "Table Grid"
     for cell, key in zip(table.rows[0].cells, keys, strict=True):
-        cell.text = key
+        cell.text = COMPARISON_HEADERS_RU.get(key, key)
     for row in rows:
         cells = table.add_row().cells
         for cell, key in zip(cells, keys, strict=True):
@@ -195,9 +228,13 @@ def _add_card(document: DocumentObject, card: SolutionCard, index: int) -> None:
             document.add_paragraph(claim, style="List Bullet")
 
 
-def _add_limitations_section(document: DocumentObject, report: Report) -> None:
-    """Раздел «Ограничения этого поиска» — тем же текстом, что markdown и веб."""
-    lines = limitations_lines(report)
+def _add_limitations_section(document: DocumentObject, report: Report, printable: bool) -> None:
+    """Раздел «Ограничения этого поиска» — тем же текстом, что markdown и веб.
+
+    `printable=False` (РЕШ-206) убирает оговорки модели — строка о
+    недоступных источниках остаётся в любом случае (инвариант №5).
+    """
+    lines = limitations_lines(report, include_caveats=printable)
     if not lines:
         return
     document.add_heading("Ограничения этого поиска", level=1)
