@@ -1,42 +1,38 @@
 handoff:
   from: reviewer
-  to: verifier
+  to: orchestrator
   task: "Э4-И4"
   did:
-    - "Сверен diff (a8f5123, c6704cc от bf95465) со списком файлов задачи в PLAN.md — совпадает один в один, границы волны 1 не нарушены"
-    - "Прогнаны лично: pytest tests/test_export_pdf.py -v (9 passed), pytest tests/test_web_templates.py tests/test_backend_layout.py -v (8 passed), pytest -q (1012 passed), ruff check . и ruff format --check . (без замечаний), pytest tests/test_team_docs.py -q (35 passed, инвариант №10)"
-    - "Проверены все 8 критериев приёмки задачи и все 10 инвариантов способами из INVARIANTS.md; нарушений не найдено"
-    - "Сверена палитра print.css с SPEC 2а «Дизайн» построчно: 8 токенов совпадают дословно; три дополнительных токена (--hair-inner, --danger, --danger-bg) и оттенки .print-badge-gold/.print-badge-low — не новые, дословно повторяют theme.css (волна Э3), новых цветов задача не вводит"
-    - "Прицельные мутации на tests/test_export_pdf.py: снятие условия card.evidence и удаление повторяющегося элемента ЧЕРНОВИК — обе мутации убиты соответствующими тестами; рабочая копия после отката чиста"
-    - "Найдено 0 блокирующих находок, 2 совета (не блокируют): текст «Нельзя показывать клиенту: нет подтверждений» физически печатается в клиентском PDF-файле — вопрос для владельца на воротах, не дефект задачи; палитровые токены сверх списка SPEC не откомментированы явно как заимствованные из theme.css"
+    - "Ревью печатного шаблона и PDF (цикл 1, ветка e4/i4, коммиты a8f5123+c6704cc): diff сверен со списком файлов задачи, прогнаны все 8 критериев приёмки и все 10 инвариантов, pytest -q 1012 passed, ruff без замечаний; вердикт ПРИНЯТЬ"
+    - "Прицельные мутации цикла 1 (снятие условия card.evidence, удаление повторяющегося элемента ЧЕРНОВИК) — обе убиты тестами tests/test_export_pdf.py"
+    - "Сверена палитра print.css с SPEC 2а построчно: 8 базовых токенов совпадают дословно, три дополнительных (--hair-inner, --danger, --danger-bg) — не новые, дословно повторяют theme.css волны Э3"
+    - "Проверен точечный фикс по находке ревью Э4-И8 (ветка e4/i4-fix от 47f7e07, коммит 663c030): дефект (rework_keys передавался в клиентский печатный шаблон, печатался операторский бейдж «На доработку» — против РЕШ-198 и export/view.py:52-54) устранён по существу — сама передача данных убрана, а не только условие отрисовки; параметр rework убран из сигнатуры макроса и обоих вызовов"
+    - "git diff 47f7e07..663c030 --stat: только pdf.py, report_print.html, test_export_pdf.py + evidence — вне точечной правки ничего не тронуто"
+    - "pytest tests/test_export_pdf.py -v на 663c030: 10 passed (заявлено верно); полный pytest -q: 1064 passed, падений 0 (заявлено верно); ruff check . и ruff format --check . — без замечаний"
+    - "Своя (не чужая) мутация в обратную сторону: вручную воспроизведена версия с багом (возвращена передача rework_keys и параметр rework с бейджем) → новый тест test_render_print_html_rework_mark_stays_operator_only падает, остальные 9 проходят; мутация отменена, рабочая копия чиста"
+    - "Найдено 0 блокирующих находок по фиксу, 2 совета (не блокируют): неиспользуемый класс .print-badge-gold остался в print.css (безвредно, вне списка файлов точечного фикса); export/docx.py по аналогии стоит проверить в задаче Э4-И5, не в этом фиксе"
   artifacts:
-    - .planning/evidence/Э4-И4-review.md (закоммичен до ответа)
+    - .planning/evidence/Э4-И4-review.md (разделы «Печатный шаблон и PDF» цикл 1 и «Фикс rework» цикл 1 — закоммичены до ответа)
     - .planning/evidence/Э4-И4-review-handoff.yaml
   self_audit: pass
   checks:
-    - "pytest tests/test_export_pdf.py -v: 9 passed"
-    - "pytest tests/test_web_templates.py tests/test_backend_layout.py -v: 8 passed"
-    - "pytest -q: 1012 passed, 1 warning"
-    - "ruff check .: All checks passed!"
-    - "ruff format --check .: 182 files already formatted"
-    - "pytest tests/test_team_docs.py -q: 35 passed"
-    - "grep -n 'async_playwright|sync_playwright|chromium' tests/*.py: нет совпадений"
-    - "grep -n 'https?://fonts|@import' backend/app/web/static/print.css: нет совпадений"
-    - "grep -n 'httpx|LLMRouter' backend/app/export/pdf.py: нет совпадений"
-    - "мутация 1 (снято условие card.evidence): целевой тест падает — тест жив"
-    - "мутация 2 (убран повторяющийся элемент ЧЕРНОВИК): целевой тест падает — тест жив"
+    - "исходная задача: pytest -q: 1012 passed; ruff check .: All checks passed; ruff format --check .: 182 files already formatted"
+    - "фикс (663c030): pytest tests/test_export_pdf.py -v: 10 passed"
+    - "фикс (663c030): pytest -q: 1064 passed, падений 0"
+    - "фикс (663c030): ruff check .: All checks passed; ruff format --check .: 193 files already formatted"
+    - "фикс (663c030): git diff 47f7e07..663c030 --stat: pdf.py, report_print.html, test_export_pdf.py + evidence — без выхода за границы"
+    - "фикс: своя мутация (возврат rework_keys/rework в шаблон) — новый тест падает, остальные проходят; после отката git status --porcelain пуст"
   escalate: none
   read_first:
     - .planning/PLAN.md (раздел «### Э4-И4», «Контракты: Печатный шаблон, Подпись эксперта»)
     - .planning/evidence/Э4-И4-review.md
     - backend/app/export/pdf.py
     - backend/app/web/templates/report_print.html
-    - backend/app/web/static/print.css
   notes: >-
-    Вердикт: ПРИНЯТЬ. Цикл 1, второй не потребовался. Совет 1 из отчёта стоит
-    вынести в общий список вопросов владельцу на воротах этапа (вместе со
-    списком клиентских фраз, РЕШ-143 п. 7): печатается ли операторская фраза
-    «Нельзя показывать клиенту: нет подтверждений» в файле, который уходит
-    клиенту, — это не изобретение этой задачи (фраза одобрена на Э3 и
-    перечислена в PLAN.md как переиспользуемая), но вопрос по существу стоит
-    задать на воротах, а не молчать о нём.
+    Вердикт по задаче в целом: ПРИНЯТЬ. Основная реализация (цикл 1, коммит
+    c6704cc) и точечный фикс по находке Э4-И8 (коммит 663c030) оба проверены
+    лично, без опоры на заявленные исполнителем числа. Готово к слиянию
+    точечного фикса в основную ветку этапа; повторного цикла ревью не
+    требуется. Совет 1 из основного отчёта (операторская фраза «Нельзя
+    показывать клиенту: нет подтверждений» в клиентском PDF) остаётся в силе
+    и годится для списка вопросов владельцу на воротах этапа.
