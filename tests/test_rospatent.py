@@ -19,7 +19,12 @@ from app.schemas import SearchQuery, SourceType
 from app.search import build_adapters
 from app.search import rospatent as rospatent_module
 from app.search.base import SearchError
-from app.search.rospatent import SEARCH_PLATFORM_URL, RospatentAdapter, _shorten_query
+from app.search.rospatent import (
+    SEARCH_PLATFORM_URL,
+    RospatentAdapter,
+    _normalize_document_number,
+    _shorten_query,
+)
 
 APPLICANT = 'АКЦИОНЕРНОЕ ОБЩЕСТВО "ГАЗПРОМНЕФТЬ-ОМСКИЙ НПЗ"'
 
@@ -147,6 +152,56 @@ async def test_успешный_ответ_без_записей_это_пуст
     respx.post(SEARCH_PLATFORM_URL).mock(return_value=httpx.Response(200, json=_payload(total=0)))
     async with httpx.AsyncClient() as client:
         assert await adapter_factory(client).search(_query(), limit=5) == []
+
+
+# ── Нормализация номера в ссылке на патент (РЕШ-208, долг Э2) ───────────────
+#
+# Аудит Э4, живой запрос №8: платформа отдаёт `document_number` с ведущими
+# нулями (`EA0000026963`), Google Patents по такому адресу отвечает 404 —
+# читаемая ссылка ждёт номер без них (`EA26963`). Снимаем нули только у
+# числовой части, код страны и код вида документа не трогаем.
+
+
+@pytest.mark.parametrize(
+    ("raw", "normalized"),
+    [
+        ("EA0000026963B1", "EA26963B1"),
+        ("RU0002812345C1", "RU2812345C1"),
+    ],
+)
+def test_ведущие_нули_снимаются_у_числовой_части(raw, normalized):
+    assert _normalize_document_number(raw) == normalized
+
+
+def test_номер_без_ведущих_нулей_не_меняется():
+    assert _normalize_document_number("RU2812345C1") == "RU2812345C1"
+
+
+@pytest.mark.parametrize("raw", ["", "не-номер", "2020130881", "EA0000026963"])
+def test_нераспознанный_формат_номера_отдаётся_как_есть(raw):
+    """Критерий 3: молча ломать ссылку нельзя, но и выдумывать номер тоже —
+    номер без опознанной структуры «страна+цифры+вид» уходит без изменений."""
+    assert _normalize_document_number(raw) == raw
+
+
+@respx.mock
+async def test_ссылка_на_документ_строится_по_нормализованному_номеру(adapter_factory):
+    """Сквозной случай долга Э2 (аудит Э4, запрос №8): живой ответ платформы
+    с ведущими нулями должен давать открывающуюся ссылку Google Patents."""
+    hit = _hit(
+        common={
+            "publishing_office": "EA",
+            "document_number": "0000026963",
+            "kind": "B1",
+            "publication_date": "2015.03.31",
+        }
+    )
+    respx.post(SEARCH_PLATFORM_URL).mock(return_value=httpx.Response(200, json=_payload(hit)))
+    async with httpx.AsyncClient() as client:
+        found = await adapter_factory(client).search(_query(), limit=3)
+
+    assert len(found) == 1
+    assert str(found[0].url) == "https://patents.google.com/patent/EA26963B1"
 
 
 # ── Запрос ──────────────────────────────────────────────────────────────────
