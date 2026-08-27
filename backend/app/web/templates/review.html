@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Ревью эксперта — запрос №{{ row.id }} — ТехМост Скаут{% endblock %}
 
+{% macro visibility_line(label, card, client_num, hidden_reason) %}
+{% if hidden_reason %}
+<li>{{ label }} «{{ card.title }}» — клиенту не уедет: {{ hidden_reason }}.</li>
+{% else %}
+<li>{{ label }} «{{ card.title }}» — уедет клиенту как вариант №{{ client_num }}.</li>
+{% endif %}
+{% endmacro %}
+
 {% macro verdict_card(num, card, card_id) %}
 <div class="bezel appear mb-lg">
   <div class="core">
@@ -72,6 +80,18 @@
     <ul>{% for caveat in report.summary.caveats %}<li>{{ caveat }}</li>{% endfor %}</ul>
     {% endif %}
 
+    <div class="notice mb-md">
+      <p><strong>Что уедет клиенту сейчас</strong> (рекомендация и оговорки выше адресуются по этим номерам):</p>
+      <ul>
+        {% for num, card, card_id, client_num, hidden_reason in cards_with_ids %}
+        {{ visibility_line("Вариант " ~ num, card, client_num, hidden_reason) }}
+        {% endfor %}
+        {% for num, card, card_id, client_num, hidden_reason in contest_with_ids %}
+        {{ visibility_line(contest_heading ~ ", вариант " ~ num, card, client_num, hidden_reason) }}
+        {% endfor %}
+      </ul>
+    </div>
+
     <div id="summary-override">
       <form class="verdict-form brief-form mt-md" hx-post="/requests/{{ row.id }}/summary" hx-target="#summary-override" hx-swap="innerHTML">
         <div class="brief-field">
@@ -96,13 +116,13 @@
 {% if not cards_with_ids %}
 <p class="muted">Карточек к проверке нет.</p>
 {% endif %}
-{% for num, card, card_id in cards_with_ids %}
+{% for num, card, card_id, client_num, hidden_reason in cards_with_ids %}
 {{ verdict_card(num, card, card_id) }}
 {% endfor %}
 
 {% if contest_with_ids %}
 <h2 class="mt-xl">{{ contest_heading }}</h2>
-{% for num, card, card_id in contest_with_ids %}
+{% for num, card, card_id, client_num, hidden_reason in contest_with_ids %}
 {{ verdict_card(num, card, card_id) }}
 {% endfor %}
 {% endif %}

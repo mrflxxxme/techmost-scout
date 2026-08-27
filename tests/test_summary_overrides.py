@@ -24,7 +24,13 @@ from app.models import SummaryOverride as SummaryOverrideRow
 from app.models import Verdict as VerdictRow
 from app.schemas import Report, ReportSummary, SolutionCard
 from app.schemas import Verdict as VerdictDecision
-from app.summary_overrides import SummaryOverrideData, apply_summary_override
+from app.summary_overrides import (
+    SummaryOverrideData,
+    apply_summary_override,
+    is_summary_edited,
+    normalize_summary_text,
+    resolve_summary_edit,
+)
 
 
 def _make_card(**overrides) -> SolutionCard:
@@ -302,3 +308,106 @@ def test_build_export_view_отдаёт_правленый_текст_и_summary
     assert view.summary_text_edited is True
     assert view.report.summary.recommendation == "Правленая рекомендация."
     assert view.report.summary.caveats == ["Правленая оговорка."]
+
+
+def test_build_export_view_пустая_строка_overrides_не_считается_правкой(db_session_factory, brief):
+    """П-8: строка `summary_overrides` существует, но оба поля `None` — это не правка.
+
+    Такая строка появляется в жизни, когда эксперт сохраняет форму без единого
+    изменения (`resolve_summary_edit` пишет `None` в оба поля, П-6) — набор из
+    1132 тестов прежде не ловил мутацию `summary_text_edited = override is not
+    None`, потому что этого сценария нигде не было."""
+    report = _make_report(brief=brief)
+    request_id, _card_ids = asyncio.run(_seed_request(db_session_factory, report=report))
+
+    async def _seed_empty_override() -> None:
+        async with db_session_factory() as session:
+            session.add(SummaryOverrideRow(request_id=request_id))
+
+    asyncio.run(_seed_empty_override())
+
+    view = asyncio.run(_build_view(db_session_factory, request_id))
+
+    assert view.summary_text_edited is False
+    assert view.report.summary.recommendation == report.summary.recommendation
+
+
+# ── П-8: `is_summary_edited` — единственная точка расчёта флага правки ─────
+
+
+def test_is_summary_edited_false_когда_override_none():
+    assert is_summary_edited(None) is False
+
+
+def test_is_summary_edited_false_когда_оба_поля_none():
+    """Ловит мутацию `summary_text_edited = override is not None` (П-8):
+    объект правки существует (`override is not None`), но обе правки пусты —
+    флаг обязан остаться `False`."""
+    assert is_summary_edited(SummaryOverrideData()) is False
+    assert is_summary_edited(SummaryOverrideData(recommendation=None, caveats=None)) is False
+
+
+def test_is_summary_edited_true_если_хотя_бы_одно_поле_задано():
+    assert is_summary_edited(SummaryOverrideData(recommendation="")) is True
+    assert is_summary_edited(SummaryOverrideData(caveats=[])) is True
+    assert is_summary_edited(SummaryOverrideData(recommendation="Другая рекомендация.")) is True
+
+
+# ── Критерий 1 (П-6): дословное совпадение с исходником — не правка ────────
+
+
+def test_normalize_summary_text_обрезает_пробелы_и_пустые_строки_по_краям():
+    assert normalize_summary_text("  Текст.  \n\n") == "Текст."
+    assert normalize_summary_text("\nТекст.") == "Текст."
+    # Внутренние переносы строк нормализация не трогает.
+    assert normalize_summary_text("Первая строка.\nВторая строка.") == "Первая строка.\nВторая строка."
+
+
+def test_resolve_summary_edit_дословное_совпадение_не_считается_правкой():
+    """Критерий 1: пробелы и пустые строки по краям формы не превращают
+    сохранение исходного текста в правку."""
+    resolved = resolve_summary_edit(
+        original_recommendation="Первым берём вариант 1.",
+        original_caveats=["В карточке 3 нет данных о TRL."],
+        submitted_recommendation="  Первым берём вариант 1.  \n",
+        submitted_caveats=["В карточке 3 нет данных о TRL."],
+    )
+
+    assert resolved.recommendation is None
+    assert resolved.caveats is None
+    assert is_summary_edited(resolved) is False
+
+
+def test_resolve_summary_edit_правит_только_изменённое_поле():
+    """«Правкой считается изменённый текст»: если эксперт поменял только
+    рекомендацию, оговорки остаются `None` («не правил») и наоборот."""
+    only_recommendation = resolve_summary_edit(
+        original_recommendation="Первым берём вариант 1.",
+        original_caveats=["Оговорка модели."],
+        submitted_recommendation="Начать с варианта 2.",
+        submitted_caveats=["Оговорка модели."],
+    )
+    assert only_recommendation.recommendation == "Начать с варианта 2."
+    assert only_recommendation.caveats is None
+
+    only_caveats = resolve_summary_edit(
+        original_recommendation="Первым берём вариант 1.",
+        original_caveats=["Оговорка модели."],
+        submitted_recommendation="Первым берём вариант 1.",
+        submitted_caveats=["Оговорка модели.", "Новая оговорка эксперта."],
+    )
+    assert only_caveats.recommendation is None
+    assert only_caveats.caveats == ["Оговорка модели.", "Новая оговорка эксперта."]
+
+
+def test_resolve_summary_edit_реальная_правка_сохраняется_целиком():
+    resolved = resolve_summary_edit(
+        original_recommendation="Первым берём вариант 1.",
+        original_caveats=[],
+        submitted_recommendation="Начать с варианта 2 (правка эксперта).",
+        submitted_caveats=["Новая оговорка."],
+    )
+
+    assert resolved.recommendation == "Начать с варианта 2 (правка эксперта)."
+    assert resolved.caveats == ["Новая оговорка."]
+    assert is_summary_edited(resolved) is True

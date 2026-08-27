@@ -31,7 +31,7 @@ from app.pipeline.persistence import ReportNotFoundError, load_report
 from app.report_overrides import OverrideMap, apply_overrides
 from app.schemas import Report
 from app.schemas import Verdict as VerdictDecision
-from app.summary_overrides import SummaryOverrideData, apply_summary_override
+from app.summary_overrides import SummaryOverrideData, apply_summary_override, is_summary_edited
 from app.verdicts import CardKey, effective_verdicts, visible_report
 
 
@@ -109,7 +109,7 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
         else None
     )
     edited_report = apply_summary_override(edited_report, summary_override)
-    summary_text_edited = summary_override is not None and not summary_override.is_empty()
+    summary_text_edited = is_summary_edited(summary_override)
     total_cards = len(edited_report.cards) + len(edited_report.contest_cards)
 
     verdict_rows: list[VerdictRow] = []
