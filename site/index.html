@@ -20,6 +20,8 @@
 </head>
 <body>
 
+<div class="wash" aria-hidden="true"></div>
+
 <header class="hdr">
   <a class="bd" href="#top">Ситалл</a>
   <span class="spacer"></span>
@@ -58,20 +60,20 @@
 
   <div class="wrap dominant">
     <div class="big rise" data-rise="lift">
-      <span class="num">80–88&#8202;%</span>
+      <span class="num">80–88&#8239;%</span>
       <p>патентов никогда не доходят до коммерческого применения</p>
       <cite class="src">Оценка по патентам университетов ·
         <a href="https://mackinstitute.wharton.upenn.edu/wp-content/uploads/2019/08/FP0357b_WP_2019Jan.pdf" target="_blank" rel="noopener">Mack Institute, Wharton</a></cite>
     </div>
     <div class="minor rise">
       <article>
-        <span class="num">70&#8202;%</span>
+        <span class="num">70&#8239;%</span>
         <p>производителей застряли в пилотах и не выходят в масштаб</p>
         <cite class="src">Индустрия 4.0 ·
           <a href="https://www.mckinsey.com/capabilities/operations/our-insights/how-digital-manufacturing-can-escape-pilot-purgatory" target="_blank" rel="noopener">McKinsey</a></cite>
       </article>
       <article>
-        <span class="num">12,1&#8202;%</span>
+        <span class="num">12,1&#8239;%</span>
         <p>затрат вузов на исследования приходится на разработки</p>
         <cite class="src">2024 ·
           <a href="https://www.kommersant.ru/doc/8161522" target="_blank" rel="noopener">Коммерсантъ</a></cite>
@@ -161,6 +163,7 @@
 
 <!-- ── 4. Ситалл Скаут: наложение ────────────────────────────────── -->
 <section class="scout" id="scout">
+  <div class="field" aria-hidden="true"></div>
   <div class="wrap scout-grid">
     <div class="rise" data-rise="lift">
       <h2>Ситалл Скаут: подбор решений за сутки</h2>
@@ -222,7 +225,7 @@
       </div>
       <div>
       <div role="tabpanel" id="p-plant" aria-labelledby="t-plant">
-        <ul class="fork"><li><span class="num">до 70&#8202;%</span><p>стоимости исследований закрывает господдержка</p></li><li><span class="num">0</span><p>собственного R&amp;D-подразделения заводить не нужно</p></li><li><span class="num">1</span><p>подрядчик вместо десяти отдельных переговоров</p></li><li><span class="num">3–4</span><p>недели до ответа по задаче вместо двух лет</p></li></ul>
+        <ul class="fork"><li><span class="num">до 70&#8239;%</span><p>стоимости исследований закрывает господдержка</p></li><li><span class="num">0</span><p>собственного R&amp;D-подразделения заводить не нужно</p></li><li><span class="num">1</span><p>подрядчик вместо десяти отдельных переговоров</p></li><li><span class="num">3–4</span><p>недели до ответа по задаче вместо двух лет</p></li></ul>
         <div class="fork-cta">
           <a class="btn" href="mailto:uklonskiy.k@ya.ru?subject=Задача%20предприятия">Назовите задачу</a>
           <a class="txtlink" href="#cycle">Как устроен цикл</a>
@@ -236,7 +239,7 @@
         </div>
       </div>
       <div role="tabpanel" id="p-science" aria-labelledby="t-science" hidden>
-        <ul class="fork"><li><span class="num">0</span><p>стоимость участия для института или лаборатории</p></li><li><span class="num">1</span><p>заказчик с деньгами и понятным техническим заданием</p></li><li><span class="num">100&#8202;%</span><p>перевода на язык бизнеса берём на себя</p></li></ul>
+        <ul class="fork"><li><span class="num">0</span><p>стоимость участия для института или лаборатории</p></li><li><span class="num">1</span><p>заказчик с деньгами и понятным техническим заданием</p></li><li><span class="num">100&#8239;%</span><p>перевода на язык бизнеса берём на себя</p></li></ul>
         <div class="fork-cta">
           <a class="btn" href="mailto:uklonskiy.k@ya.ru?subject=Разработки%20института">Показать разработки</a>
           <a class="txtlink" href="#scout">Как выглядит карточка</a>
@@ -266,7 +269,7 @@
         <p>ФГУП «ЗащитаИнфоТранс»: импортозамещение системы и внесение в реестр
           отечественного ПО. Студия разработки — команда с четырёх до пятнадцати человек.</p>
       </li>
-      <li class="open">
+      <li>
         <h3>Партнёр в регионе</h3>
         <p class="role">Место открыто</p>
         <p>Один партнёр на регион. Он открывает двери и ведёт переговоры своим именем;
@@ -315,11 +318,12 @@
 
 <script type="module">
   import { startHero } from './assets/js/hero.js';
-  import { riseOnEnter, pointerLight, scrubCycle, expandSteps } from './assets/js/motion.js';
+  import { riseOnEnter, pointerLight, scrubCycle, expandSteps, stickyHeader } from './assets/js/motion.js';
   import { initFork, initSheet } from './assets/js/fork.js';
 
   const steps = [...document.querySelectorAll('#steps button')];
 
+  stickyHeader(document.querySelector('.hdr'), '.rail, .claim, .cycle, .fork-sec, .contact, .foot');
   startHero(document.getElementById('spark'));
   riseOnEnter([...document.querySelectorAll('.rise')]);
   pointerLight([...document.querySelectorAll('.card, .btn')]);

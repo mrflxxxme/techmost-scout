@@ -16,7 +16,7 @@ export function startHero(canvas) {
   const KEEP = [5 / 10, 2 / 5, 1 / 2, 1];
   const COUNT = 62;
 
-  const PAPER = '#F6F7F4';
+  const PAPER = '#F7F6F2';
   const dpr = Math.min(devicePixelRatio || 1, 2);
   let W = 0, H = 0, live = false;
   const parts = [];
@@ -54,7 +54,7 @@ export function startHero(canvas) {
 
     // створы: пунктир, как разметка на чертеже
     g.save();
-    g.strokeStyle = '#D8DAD2'; g.lineWidth = 1; g.setLineDash([2, 6]);
+    g.strokeStyle = '#DDDAD1'; g.lineWidth = 1; g.setLineDash([2, 6]);
     for (const gx of GATES) {
       g.beginPath(); g.moveTo(gx * W, H * 0.06); g.lineTo(gx * W, H * 0.94); g.stroke();
     }
@@ -75,22 +75,22 @@ export function startHero(canvas) {
         trail.addColorStop(0, 'rgba(212,86,42,0)');
         trail.addColorStop(1, 'rgba(212,86,42,.85)');
       } else {
-        trail.addColorStop(0, 'rgba(15,18,16,0)');
-        trail.addColorStop(1, `rgba(15,18,16,${0.1 + t * 0.3})`);
+        trail.addColorStop(0, 'rgba(20,23,26,0)');
+        trail.addColorStop(1, `rgba(20,23,26,${0.1 + t * 0.3})`);
       }
       g.strokeStyle = trail; g.lineWidth = passed ? 1.6 : 0.9 + t * 0.5;
       g.beginPath(); g.moveTo(x - len, y); g.lineTo(x, y); g.stroke();
-      g.fillStyle = passed ? 'rgba(212,86,42,.95)' : `rgba(15,18,16,${0.18 + t * 0.34})`;
+      g.fillStyle = passed ? 'rgba(212,86,42,.95)' : `rgba(20,23,26,${0.18 + t * 0.34})`;
       g.beginPath(); g.arc(x, y, passed ? 2 : 1 + t * 0.7, 0, 6.283); g.fill();
     }
 
     // набор стоит на чистом: мягкое высветление слева, не заливка поперёк экрана
     const sx = W * 0.24, sy = H * 0.48;
     const clear = g.createRadialGradient(sx, sy, 0, sx, sy, Math.max(W, H) * 0.82);
-    clear.addColorStop(0, 'rgba(246,247,244,1)');
-    clear.addColorStop(0.42, 'rgba(246,247,244,.96)');
-    clear.addColorStop(0.72, 'rgba(246,247,244,.42)');
-    clear.addColorStop(1, 'rgba(246,247,244,0)');
+    clear.addColorStop(0, 'rgba(247,246,242,1)');
+    clear.addColorStop(0.42, 'rgba(247,246,242,.96)');
+    clear.addColorStop(0.72, 'rgba(247,246,242,.42)');
+    clear.addColorStop(1, 'rgba(247,246,242,0)');
     g.fillStyle = clear; g.fillRect(0, 0, W, H);
 
     if (live && !reduce) { step(); requestAnimationFrame(draw); }

@@ -96,3 +96,40 @@ export function expandSteps(steps) {
     if (anyOpen || narrow()) steps.forEach((b, k) => setOpen(b, k === i));
   };
 }
+
+/** 5. Состояние шапки: капсула набирает плотность, когда под ней пошло содержимое. */
+export function stickyHeader(node, darkSelector) {
+  if (!node) return;
+  const darks = darkSelector ? [...document.querySelectorAll(darkSelector)] : [];
+  let stuck = null;
+  let dark = null;
+  const sync = () => {
+    const nextStuck = scrollY > 24;
+    if (nextStuck !== stuck) {
+      stuck = nextStuck;
+      node.classList.toggle('stuck', nextStuck);
+    }
+    // под шапкой смотрим не всю секцию, а полосу у её нижней кромки:
+    // именно она видна сквозь стекло
+    const y = node.getBoundingClientRect().bottom - 4;
+    const nextDark = darks.some((d) => {
+      const r = d.getBoundingClientRect();
+      return r.top <= y && r.bottom >= y;
+    });
+    if (nextDark !== dark) {
+      dark = nextDark;
+      node.classList.toggle('on-dark', nextDark);
+    }
+  };
+  // чтение геометрии на каждом событии прокрутки — принудительный пересчёт
+  // раскладки: без этого дросселя профиль кадров портился втрое
+  let ticking = false;
+  const onScroll = () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => { ticking = false; sync(); });
+  };
+  sync();
+  addEventListener('scroll', onScroll, { passive: true });
+  addEventListener('resize', onScroll, { passive: true });
+}

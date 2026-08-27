@@ -49,6 +49,9 @@ export function initSheet(btn, sheet, close) {
   const open = (on) => {
     sheet.classList.toggle('open', on);
     sheet.setAttribute('aria-hidden', String(!on));
+    btn.setAttribute('aria-expanded', String(on));
+    // шапка убирается: сквозь полупрозрачный лист она читалась как сбой слоёв
+    document.body.classList.toggle('sheet-on', on);
     document.body.style.overflow = on ? 'hidden' : '';
   };
   btn.addEventListener('click', () => open(true));
