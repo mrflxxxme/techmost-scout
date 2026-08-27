@@ -1,0 +1,117 @@
+=== pytest tests/test_export_view.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-acd61557684664df8
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 7 items
+
+tests/test_export_view.py::test_reject_карточка_не_попадает_в_view PASSED [ 14%]
+tests/test_export_view.py::test_rework_попадает_в_отчёт_и_в_rework_keys PASSED [ 28%]
+tests/test_export_view.py::test_правки_editor_overrides_наложены_до_фильтра PASSED [ 42%]
+tests/test_export_view.py::test_отсутствие_solution_cards_не_роняет_сборку PASSED [ 57%]
+tests/test_export_view.py::test_is_draft_снимается_только_при_validated_или_exported PASSED [ 71%]
+tests/test_export_view.py::test_reviewer_name_и_validated_at_из_последнего_вердикта PASSED [ 85%]
+tests/test_export_view.py::test_visible_report_не_мутирует_входной_report PASSED [100%]
+
+============================== 7 passed in 0.87s ===============================
+
+=== pytest tests/test_web_report_verdicts.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-acd61557684664df8
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+tests/test_web_report_verdicts.py::test_черновик_на_странице_drafted PASSED [ 20%]
+tests/test_web_report_verdicts.py::test_подпись_и_отсутствие_черновика_после_validated PASSED [ 40%]
+tests/test_web_report_verdicts.py::test_reject_карточка_не_видна_approve_видна PASSED [ 60%]
+tests/test_web_report_verdicts.py::test_edit_после_validated_возвращает_303_и_статус_не_меняется PASSED [ 80%]
+tests/test_web_report_verdicts.py::test_подсказка_карточка_уже_проверена_после_validated PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+========================= 5 passed, 1 warning in 1.06s =========================
+
+=== rg -n "NotImplementedError" backend/app/web/routes/report.py ===
+(нет совпадений)
+
+=== pytest tests/test_web_report.py tests/test_web_flow_e2e.py tests/test_web_templates.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-acd61557684664df8
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 23 items
+
+tests/test_web_report.py::test_report_renders_from_report_json_without_solution_cards_rows PASSED [  4%]
+tests/test_web_report.py::test_draft_banner_present_at_drafted_status PASSED [  8%]
+tests/test_web_report.py::test_draft_banner_survives_edit PASSED         [ 13%]
+tests/test_web_report.py::test_empty_evidence_hides_maturity_and_shows_danger_notice PASSED [ 17%]
+tests/test_web_report.py::test_edit_title_persists_and_report_json_unchanged PASSED [ 21%]
+tests/test_web_report.py::test_edit_ignores_confidence_and_cannot_add_evidence PASSED [ 26%]
+tests/test_web_report.py::test_edit_removes_evidence_line PASSED         [ 30%]
+tests/test_web_report.py::test_comparison_table_and_recommendation_from_summary PASSED [ 34%]
+tests/test_web_report.py::test_limitations_block_matches_limitations_lines PASSED [ 39%]
+tests/test_web_report.py::test_limitations_lines_keep_separator_between_sources_and_caveats PASSED [ 43%]
+tests/test_web_report.py::test_report_not_found_shows_human_text_without_raw_exception PASSED [ 47%]
+tests/test_web_report.py::test_evidence_links_are_clickable PASSED       [ 52%]
+tests/test_web_report.py::test_edit_with_garbage_request_does_not_500 PASSED [ 56%]
+tests/test_web_report.py::test_edit_unknown_card_returns_404 PASSED      [ 60%]
+tests/test_web_report.py::test_unknown_request_returns_404 PASSED        [ 65%]
+tests/test_web_report.py::test_templates_env_autoescape_is_enabled_for_html PASSED [ 69%]
+tests/test_web_report.py::test_card_title_with_script_tag_is_escaped_in_report_html PASSED [ 73%]
+tests/test_web_flow_e2e.py::test_full_operator_path_form_to_report_and_edit PASSED [ 78%]
+tests/test_web_templates.py::test_no_inline_style_outside_exempt_file PASSED [ 82%]
+tests/test_web_templates.py::test_no_hex_colors_in_templates PASSED      [ 86%]
+tests/test_web_templates.py::test_page_renders_without_errors[/] PASSED  [ 91%]
+tests/test_web_templates.py::test_page_renders_without_errors[/requests] PASSED [ 95%]
+tests/test_web_templates.py::test_page_renders_without_errors[/showcase] PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 23 passed, 1 warning in 2.42s =========================
+
+=== pytest -q (весь набор) ===
+........................................................................ [  7%]
+........................................................................ [ 14%]
+........................................................................ [ 21%]
+........................................................................ [ 28%]
+........................................................................ [ 35%]
+........................................................................ [ 43%]
+........................................................................ [ 50%]
+........................................................................ [ 57%]
+........................................................................ [ 64%]
+........................................................................ [ 71%]
+........................................................................ [ 79%]
+........................................................................ [ 86%]
+........................................................................ [ 93%]
+.................................................................        [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1001 passed, 1 warning in 66.34s (0:01:06)
+
+=== ruff check . ===
+All checks passed!
+
+=== ruff format --check . ===
+180 files already formatted
