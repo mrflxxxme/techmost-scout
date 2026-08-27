@@ -1,89 +1,97 @@
-/* Предмет первого экрана: поток задач через четыре створа.
+/* Предмет первого экрана: поток задач через четыре створа, нарисованный по бумаге.
    Механизм — воронка первого года из решения Р-21: десять задач предприятий,
    пять подборов с научной проверкой, две заявки на софинансирование, одно
    внедрение. Доли створов заданы этими числами, а не подобраны на глаз.
-   Тёплая искра лежит на холодном фоне — находка 02 разведки среды. */
+
+   На светлой базе поток идёт чернилами, а не свечением: тёплый сигнал
+   достаётся только тому, что дошло до последнего створа. */
 
 export function startHero(canvas) {
   if (!canvas) return;
   const g = canvas.getContext('2d', { alpha: false });
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const GATES = [0.36, 0.56, 0.74, 0.90];
-  const KEEP = [5 / 10, 2 / 5, 1 / 2, 1];
-  const COUNT = 78;
 
-  let W = 0, H = 0, live = false;
+  // воронка живёт в правой половине: под крупным заголовком чертежа быть не должно
+  const GATES = [0.50, 0.65, 0.78, 0.91];
+  const KEEP = [5 / 10, 2 / 5, 1 / 2, 1];
+  const COUNT = 62;
+
+  const PAPER = '#F6F7F4';
   const dpr = Math.min(devicePixelRatio || 1, 2);
+  let W = 0, H = 0, live = false;
   const parts = [];
 
   const spawn = (x) => parts.push({
-    x: x === undefined ? 0.015 : x,
-    y: 0.08 + Math.random() * 0.84,
-    v: 0.0016 + Math.random() * 0.0012,
+    x: x === undefined ? 0.30 : x,
+    y: 0.06 + Math.random() * 0.88,
+    v: 0.0014 + Math.random() * 0.0011,
     gate: 0, roll: Math.random(), fade: 0,
   });
-  for (let i = 0; i < COUNT; i++) spawn(Math.random());
+  for (let i = 0; i < COUNT; i++) spawn(0.30 + Math.random() * 0.68);
 
   function step() {
     for (let i = parts.length - 1; i >= 0; i--) {
       const p = parts[i];
-      if (p.fade) { p.fade++; if (p.fade > 30) parts.splice(i, 1); continue; }
+      if (p.fade) { p.fade++; if (p.fade > 26) parts.splice(i, 1); continue; }
       p.x += p.v;
       if (p.gate < GATES.length && p.x >= GATES[p.gate]) {
         if (p.roll > KEEP[p.gate]) { p.fade = 1; p.x = GATES[p.gate]; }
         p.gate++; p.roll = Math.random();
       }
-      if (p.x > 1.05) parts.splice(i, 1);
+      if (p.x > 1.04) parts.splice(i, 1);
     }
     while (parts.length < COUNT) spawn();
   }
 
   function draw() {
     W = canvas.clientWidth; H = canvas.clientHeight;
+    if (!W || !H) return;
     canvas.width = W * dpr; canvas.height = H * dpr;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    g.fillStyle = '#0E1620';
+    g.fillStyle = PAPER;
     g.fillRect(0, 0, W, H);
 
-    // источник света стоит там, где поток выходит из последнего створа
-    const lx = W * 0.9, ly = H * 0.42;
-    const lit = g.createRadialGradient(lx, ly, 0, lx, ly, Math.max(W, H) * 0.8);
-    lit.addColorStop(0, 'rgba(224,104,47,.15)');
-    lit.addColorStop(0.4, 'rgba(120,60,30,.06)');
-    lit.addColorStop(1, 'rgba(14,22,32,0)');
-    g.fillStyle = lit; g.fillRect(0, 0, W, H);
-
+    // створы: пунктир, как разметка на чертеже
+    g.save();
+    g.strokeStyle = '#D8DAD2'; g.lineWidth = 1; g.setLineDash([2, 6]);
     for (const gx of GATES) {
-      g.save(); g.globalAlpha = 0.3; g.strokeStyle = '#22303E'; g.lineWidth = 1;
-      g.beginPath(); g.moveTo(gx * W, H * 0.05); g.lineTo(gx * W, H * 0.95); g.stroke(); g.restore();
+      g.beginPath(); g.moveTo(gx * W, H * 0.06); g.lineTo(gx * W, H * 0.94); g.stroke();
     }
+    g.restore();
 
     for (const p of parts) {
       const x = p.x * W, y = p.y * H;
       if (p.fade) {
-        const f = 1 - p.fade / 30;
-        g.fillStyle = `rgba(150,70,40,${f * 0.4})`;
-        g.beginPath(); g.arc(x, y + p.fade * 0.5, 1.2 + (1 - f) * 4, 0, 6.283); g.fill();
+        const f = 1 - p.fade / 26;
+        g.fillStyle = `rgba(120,124,115,${f * 0.28})`;
+        g.beginPath(); g.arc(x, y, 1 + (1 - f) * 3, 0, 6.283); g.fill();
         continue;
       }
-      const t = Math.min(1, p.x), len = 18 + t * 46;
+      const passed = p.gate >= GATES.length;
+      const t = Math.max(0, Math.min(1, (p.x - 0.30) / 0.70)), len = 16 + t * 40;
       const trail = g.createLinearGradient(x - len, y, x, y);
-      trail.addColorStop(0, 'rgba(224,104,47,0)');
-      trail.addColorStop(1, `rgba(255,180,110,${0.18 + t * 0.6})`);
-      g.strokeStyle = trail; g.lineWidth = 0.9 + t * 1.5;
+      if (passed) {
+        trail.addColorStop(0, 'rgba(212,86,42,0)');
+        trail.addColorStop(1, 'rgba(212,86,42,.85)');
+      } else {
+        trail.addColorStop(0, 'rgba(15,18,16,0)');
+        trail.addColorStop(1, `rgba(15,18,16,${0.1 + t * 0.3})`);
+      }
+      g.strokeStyle = trail; g.lineWidth = passed ? 1.6 : 0.9 + t * 0.5;
       g.beginPath(); g.moveTo(x - len, y); g.lineTo(x, y); g.stroke();
-      g.fillStyle = `rgba(255,225,190,${0.3 + t * 0.6})`;
-      g.beginPath(); g.arc(x, y, 0.9 + t * 1.5, 0, 6.283); g.fill();
+      g.fillStyle = passed ? 'rgba(212,86,42,.95)' : `rgba(15,18,16,${0.18 + t * 0.34})`;
+      g.beginPath(); g.arc(x, y, passed ? 2 : 1 + t * 0.7, 0, 6.283); g.fill();
     }
 
-    // набор стоит на своём: мягкое радиальное затемнение, не заливка поперёк экрана
-    const sx = W * 0.1, sy = H * 0.5;
-    const shade = g.createRadialGradient(sx, sy, 0, sx, sy, Math.max(W, H) * 0.7);
-    shade.addColorStop(0, 'rgba(14,22,32,.9)');
-    shade.addColorStop(0.55, 'rgba(14,22,32,.55)');
-    shade.addColorStop(1, 'rgba(14,22,32,0)');
-    g.fillStyle = shade; g.fillRect(0, 0, W, H);
+    // набор стоит на чистом: мягкое высветление слева, не заливка поперёк экрана
+    const sx = W * 0.24, sy = H * 0.48;
+    const clear = g.createRadialGradient(sx, sy, 0, sx, sy, Math.max(W, H) * 0.82);
+    clear.addColorStop(0, 'rgba(246,247,244,1)');
+    clear.addColorStop(0.42, 'rgba(246,247,244,.96)');
+    clear.addColorStop(0.72, 'rgba(246,247,244,.42)');
+    clear.addColorStop(1, 'rgba(246,247,244,0)');
+    g.fillStyle = clear; g.fillRect(0, 0, W, H);
 
     if (live && !reduce) { step(); requestAnimationFrame(draw); }
   }
@@ -96,5 +104,5 @@ export function startHero(canvas) {
   io.observe(canvas);
 
   addEventListener('resize', () => { if (!live || reduce) draw(); }, { passive: true });
-  draw();
+  requestAnimationFrame(draw);
 }

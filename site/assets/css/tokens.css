@@ -13,46 +13,45 @@
   src:url("../fonts/mm-400.woff2") format("woff2")}
 
 :root{
-  /* холодная тёмная база */
-  --bg:#0E1620;
-  --bg-2:#131E2A;
-  --bg-3:#18242F;
-  --line:#1F2D3C;
-  --hair:#17222E;
+  /* холодная светлая база: значение снято с Impulse Space, проверено средой */
+  --bg:#F6F7F4;
+  --bg-2:#FBFBF9;
+  --bg-3:#EEEFEA;
+  --line:#E1E2DC;
+  --hair:#EAEBE5;
 
-  /* текст на тёмном */
-  --ink:#FFFFFF;
-  --text:#C3D0DB;
-  --dim:#7F94A6;
+  /* текст на светлом */
+  --ink:#0F1210;
+  --text:#41443E;
+  --dim:#797C73;
 
-  /* сигнал: один на страницу, не больше двух появлений на экран */
-  --sig:#E0682F;
-  --sig-hi:#F2814B;
-  --sig-dim:rgba(224,104,47,.16);
+  /* сигнал: тёплый на холодном, один на страницу */
+  --sig:#D4562A;
+  --sig-hi:#E96C3E;
+  --sig-dim:rgba(212,86,42,.12);
 
-  /* светлые секции: ритм для длинного текста */
-  --paper:#F2EFE9;
-  --paper-2:#FBFAF7;
-  --paper-ink:#14130F;
-  --paper-text:#4B463E;
-  --paper-dim:#867F72;
-  --paper-line:#DEDACF;
+  /* тёмное живёт в кульминации, рельсе и подвале, а не в базе */
+  --dark:#0E1013;
+  --dark-2:#171A1E;
+  --dark-line:#23272C;
+  --dark-ink:#FFFFFF;
+  --dark-text:#B9BDB6;
+  --dark-dim:#767B73;
 
   --disp:"Martian Grotesk",-apple-system,"Segoe UI",system-ui,sans-serif;
   --mono:"Martian Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,"Helvetica Neue",Arial,sans-serif;
 
   /* шкала: пять ступеней, середина почти пустует */
-  --t-display:clamp(36px,5.9vw,84px);
-  --t-title:clamp(26px,3.4vw,46px);
+  --t-display:clamp(38px,6.6vw,96px);
+  --t-title:clamp(26px,3.6vw,50px);
   --t-lead:clamp(16px,1.35vw,19px);
   --t-body:15.5px;
   --t-label:10.5px;
 
   --gut:clamp(22px,4vw,64px);
-  --sec:clamp(72px,9vw,132px);
+  --sec:clamp(76px,9.5vw,140px);
 
-  /* одна кривая и один набор длительностей на весь сайт */
   --ease:cubic-bezier(.4,0,.6,1);
   --fast:200ms;
   --base:320ms;
