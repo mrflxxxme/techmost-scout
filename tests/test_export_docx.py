@@ -2,7 +2,8 @@
 
 `export_docx` принимает уже готовый `ExportView` — тем же контрактом, что и
 страница отчёта, поэтому в тестах он собирается напрямую, без базы данных
-(инвариант №7: сети и файловой БД тест не требует, только `tmp_path`).
+(инвариант №7: сети и файловой БД тест не требует, только `tmp_path`). Тесты
+РЕШ-211/212 — в `test_export_docx_field_gate.py` (предел 500 строк).
 """
 
 from __future__ import annotations
@@ -58,10 +59,10 @@ def _make_view(
     reviewer_name: str = "",
     validated_at=None,
     total_cards: int | None = None,
-    summary_text_edited: bool = False,
+    recommendation_edited: bool = False,
+    caveats_edited: bool = False,
 ) -> ExportView:
-    # По умолчанию ничего не скрыто (РЕШ-206): число карточек до фильтра
-    # совпадает с числом карточек переданного отчёта.
+    # По умолчанию ничего не скрыто (РЕШ-206): совпадает с числом карточек отчёта.
     if total_cards is None:
         total_cards = len(report.cards) + len(report.contest_cards)
     return ExportView(
@@ -72,7 +73,8 @@ def _make_view(
         reviewer_name=reviewer_name,
         validated_at=validated_at,
         total_cards=total_cards,
-        summary_text_edited=summary_text_edited,
+        recommendation_edited=recommendation_edited,
+        caveats_edited=caveats_edited,
     )
 
 
@@ -310,14 +312,13 @@ def test_проверенный_документ_не_имеет_пометки_
 
 
 def test_рекомендация_не_печатается_когда_карточка_скрыта_и_правки_нет(tmp_path: Path, brief):
-    """РЕШ-206: карточка скрыта (total_cards больше печатаемых), правки нет —
-    рекомендация и оговорки модели не печатаются, есть заглушка."""
+    """РЕШ-206: карточка скрыта, правки нет — рекомендация не печатается, есть заглушка."""
     report = _make_report(
         [_make_card()],
         brief=brief,
         summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["В карточке 3 риск не подтверждён."]),
     )
-    view = _make_view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    view = _make_view(report, is_draft=True, total_cards=2, recommendation_edited=False, caveats_edited=False)
     out_path = tmp_path / "report-1-2026-08-27.docx"
 
     export_docx(view, out_path)
@@ -341,7 +342,7 @@ def test_рекомендация_не_печатается_когда_карт�
         brief=brief,
         summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["В карточке 3 риск не подтверждён."]),
     )
-    view = _make_view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    view = _make_view(report, is_draft=True, total_cards=2, recommendation_edited=False, caveats_edited=False)
     out_path = tmp_path / "report-1-2026-08-27.docx"
 
     export_docx(view, out_path)
@@ -353,15 +354,14 @@ def test_рекомендация_не_печатается_когда_карт�
 
 
 def test_строка_недоступных_источников_остаётся_при_скрытой_сводке(tmp_path: Path, brief):
-    """Инвариант №5: строка о недоступных источниках остаётся, даже когда
-    рекомендация и оговорки скрыты из-за отклонённой карточки."""
+    """Инвариант №5: строка о недоступных источниках остаётся, даже когда сводка скрыта."""
     report = _make_report(
         [_make_card()],
         brief=brief,
         summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["Оговорка модели."]),
         sources_unavailable=["cyberleninka"],
     )
-    view = _make_view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    view = _make_view(report, is_draft=True, total_cards=2, recommendation_edited=False, caveats_edited=False)
     out_path = tmp_path / "report-1-2026-08-27.docx"
 
     export_docx(view, out_path)
@@ -379,7 +379,7 @@ def test_рекомендация_печатается_целиком_когда
         brief=brief,
         summary=ReportSummary(recommendation="Текст эксперта.", caveats=["Правленая оговорка."]),
     )
-    view = _make_view(report, is_draft=True, total_cards=2, summary_text_edited=True)
+    view = _make_view(report, is_draft=True, total_cards=2, recommendation_edited=True, caveats_edited=True)
     out_path = tmp_path / "report-1-2026-08-27.docx"
 
     export_docx(view, out_path)
@@ -446,7 +446,7 @@ def test_сквозной_отчёт_с_отклонённой_карточко�
         sources_unavailable=["cyberleninka"],
         cost_rub=11.3711,
     )
-    view = _make_view(report, is_draft=True, total_cards=4, summary_text_edited=False)
+    view = _make_view(report, is_draft=True, total_cards=4, recommendation_edited=False, caveats_edited=False)
     out_path = tmp_path / "report-1-2026-08-27.docx"
 
     export_docx(view, out_path)
@@ -478,7 +478,7 @@ def test_сквозной_отчёт_с_отклонённой_карточко�
             comparison_rows=[{"option": "Вариант 1"}, {"option": "Вариант 2"}, {"option": "Вариант 3"}],
         ),
     )
-    view = _make_view(report, is_draft=True, total_cards=4, summary_text_edited=True)
+    view = _make_view(report, is_draft=True, total_cards=4, recommendation_edited=True, caveats_edited=True)
     out_path = tmp_path / "report-1-2026-08-27.docx"
 
     export_docx(view, out_path)

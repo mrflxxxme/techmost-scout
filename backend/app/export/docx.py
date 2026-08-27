@@ -21,15 +21,17 @@ from docx.shared import Pt
 
 from app.export.markdown import (
     COMPARISON_HEADERS_RU,
+    COMPARISON_TABLE_HIDDEN_NOTICE,
     CONFIDENCE_RU,
     CONSTRAINTS_UNRESOLVED_NOTICE,
     CONTEST_SECTION_HEADING,
     MATURITY_RU,
+    SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE,
     SUMMARY_NOT_PRINTABLE_NOTICE,
     developer_line,
     limitations_lines,
 )
-from app.export.view import ExportView, summary_text_printable
+from app.export.view import ExportView, caveats_printable, recommendation_printable
 from app.schemas import Report, SolutionCard
 from app.verdicts import signature_line
 
@@ -64,15 +66,18 @@ def export_docx(view: ExportView, out_path: Path) -> Path:
     # Карточки без единого подтверждения в выгрузку не попадают вовсе
     # (РЕШ-204) — той же логикой, что печатный PDF-шаблон: клиент не должен
     # видеть карточку без evidence даже в урезанном виде. Считаем их до
-    # раздела «Рекомендация»: `summary_text_printable` (РЕШ-206) сравнивает
-    # число реально печатаемых карточек с числом карточек до фильтра.
+    # раздела «Рекомендация»: пополевой гейт РЕШ-211
+    # (`recommendation_printable`/`caveats_printable`) сравнивает число
+    # реально печатаемых карточек с числом карточек до фильтра.
     printable_cards = [card for card in report.cards if card.evidence]
     printable_contest_cards = [card for card in report.contest_cards if card.evidence]
-    printable_summary = summary_text_printable(view, len(printable_cards) + len(printable_contest_cards))
+    printed_total = len(printable_cards) + len(printable_contest_cards)
+    printable_recommendation = recommendation_printable(view, printed_total)
+    printable_caveats = caveats_printable(view, printed_total)
 
     _add_task_section(document, report)
-    _add_recommendation_section(document, report, printable_summary)
-    _add_comparison_table(document, report)
+    _add_recommendation_section(document, report, printable_recommendation, view.comparison_table_hidden)
+    _add_comparison_table(document, report, view.comparison_table_hidden)
 
     document.add_heading("Варианты решений", level=1)
     if not printable_cards:
@@ -85,7 +90,7 @@ def export_docx(view: ExportView, out_path: Path) -> Path:
         for index, card in enumerate(printable_contest_cards, start=1):
             _add_card(document, card, index)
 
-    _add_limitations_section(document, report, printable_summary)
+    _add_limitations_section(document, report, printable_caveats)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     document.save(out_path)
@@ -137,25 +142,44 @@ def _add_task_section(document: DocumentObject, report: Report) -> None:
         document.add_paragraph(f"Требуемая готовность: {MATURITY_RU[brief.target_maturity]}")
 
 
-def _add_recommendation_section(document: DocumentObject, report: Report, printable: bool) -> None:
-    """Раздел «Рекомендация» — заглушка вместо текста модели (РЕШ-206), пока
-    хоть одна карточка скрыта из клиентского вида и эксперт текст не правил.
+def _add_recommendation_section(document: DocumentObject, report: Report, printable: bool, table_hidden: bool) -> None:
+    """Раздел «Рекомендация» — заглушка вместо текста модели (РЕШ-206, РЕШ-211),
+    пока хоть одна карточка скрыта из клиентского вида и эксперт рекомендацию
+    не правил.
+
+    `table_hidden` (РЕШ-212, `ExportView.comparison_table_hidden`) выбирает
+    формулировку заглушки: обычная ссылается на таблицу сравнения как на
+    ориентир, а если саму таблицу `_add_comparison_table` не напечатала,
+    отсылать клиента к разделу, которого в документе нет, нельзя.
     """
     document.add_heading("Рекомендация", level=1)
     if printable:
         document.add_paragraph(report.summary.recommendation)
+    elif table_hidden:
+        document.add_paragraph(SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE)
     else:
         document.add_paragraph(SUMMARY_NOT_PRINTABLE_NOTICE)
 
 
-def _add_comparison_table(document: DocumentObject, report: Report) -> None:
+def _add_comparison_table(document: DocumentObject, report: Report, table_hidden: bool) -> None:
     """Таблица сравнения вариантов — пусто, если `comparison_rows` не заполнены.
 
-    Печатается всегда, вне зависимости от `printable`: строки уже
+    Печатается всегда, вне зависимости от гейта рекомендации: строки уже
     отфильтрованы вместе с карточками (Э4-П1), домысливать в них нечего.
+
+    `table_hidden` (РЕШ-212) — таблицу спрятал `verdicts.visible_report`,
+    потому что построчное соответствие строк карточкам не сошлось (исходные
+    строки были, но после фильтра reject их число не совпало с числом
+    карточек). Раздел в этом случае не исчезает молча — на месте таблицы
+    печатается честная строка `COMPARISON_TABLE_HIDDEN_NOTICE`. Пустая сводка
+    модели без единой строки с самого начала (`table_hidden=False`) раздел
+    по-прежнему не печатает вовсе — там скрывать нечего.
     """
     rows = report.summary.comparison_rows
     if not rows:
+        if table_hidden:
+            document.add_heading("Сравнение вариантов", level=1)
+            document.add_paragraph(COMPARISON_TABLE_HIDDEN_NOTICE)
         return
     document.add_heading("Сравнение вариантов", level=1)
     keys = list(rows[0].keys())
@@ -231,10 +255,10 @@ def _add_card(document: DocumentObject, card: SolutionCard, index: int) -> None:
 def _add_limitations_section(document: DocumentObject, report: Report, printable: bool) -> None:
     """Раздел «Ограничения этого поиска» — тем же текстом, что markdown и веб.
 
-    `printable=False` (РЕШ-206) убирает только свободную прозу модели —
-    строка о недоступных источниках и машинные пометки (платный предел
-    поиска, отказ интейка/рефайна/сводки) остаются в любом случае
-    (инвариант №5, РЕШ-210).
+    `printable` — результат `caveats_printable` (РЕШ-206, РЕШ-211), не общего
+    гейта: `printable=False` убирает только свободную прозу модели — строка о
+    недоступных источниках и машинные пометки (платный предел поиска, отказ
+    интейка/рефайна/сводки) остаются в любом случае (инвариант №5, РЕШ-210).
     """
     lines = limitations_lines(report, include_caveats=printable)
     if not lines:

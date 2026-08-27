@@ -31,7 +31,7 @@ from app.pipeline.persistence import ReportNotFoundError, load_report
 from app.report_overrides import OverrideMap, apply_overrides
 from app.schemas import Report
 from app.schemas import Verdict as VerdictDecision
-from app.summary_overrides import SummaryOverrideData, apply_summary_override, is_summary_edited
+from app.summary_overrides import SummaryOverrideData, apply_summary_override
 from app.verdicts import CardKey, effective_verdicts, visible_report
 
 
@@ -57,14 +57,35 @@ class ExportView:
     #: только оператору на странице отчёта (РЕШ-198) — в выгрузки не попадает.
     rework_keys: set[CardKey] = field(default_factory=set)
     #: Число карточек в отчёте ДО фильтра reject, обе секции вместе (РЕШ-206) —
-    #: контракт для `summary_text_printable` и для задачи Э4-П3: сравнение с
-    #: числом карточек, которые реально печатаются, показывает, скрыла ли
-    #: выгрузка хоть одну карточку.
+    #: контракт для `recommendation_printable`/`caveats_printable` и для
+    #: задачи Э4-П3: сравнение с числом карточек, которые реально печатаются,
+    #: показывает, скрыла ли выгрузка хоть одну карточку.
     total_cards: int = 0
-    #: Эксперт правил рекомендацию и/или оговорки сводки (РЕШ-206) — иначе
-    #: печатается свободный текст модели, который мог адресоваться к
-    #: карточкам по нумерации, ушедшей вместе с отклонённым вариантом.
-    summary_text_edited: bool = False
+    #: Эксперт правил рекомендацию сводки (РЕШ-206, РЕШ-211) — иначе печатается
+    #: свободный текст модели, который мог адресоваться к карточкам по
+    #: нумерации, ушедшей вместе с отклонённым вариантом. Пополевой флаг, а не
+    #: общий `summary_text_edited` (задача Э4-П7 сделала поля независимыми,
+    #: БЛОК-5 финального аудита нашёл живой маршрут: эксперт правит только
+    #: оговорки — рекомендация модели с чужой нумерацией всё равно уезжает
+    #: клиенту, потому что общий флаг «правлено хоть что-то» считал её
+    #: печатной). `recommendation_edited` и `caveats_edited` выводятся из
+    #: `SummaryOverrideData` в одном месте — `build_export_view` — второй
+    #: точки правды не заводится.
+    recommendation_edited: bool = False
+    #: Эксперт правил прозу оговорок сводки — независимо от
+    #: `recommendation_edited` (см. докстроку выше). Печать/непечать текста
+    #: оговорок решает только этот флаг: правка рекомендации не делает
+    #: печатной непровленную прозу оговорок, и наоборот.
+    caveats_edited: bool = False
+    #: `verdicts.visible_report` спрятал таблицу сравнения целиком (РЕШ-212):
+    #: исходные строки сводки были, но после фильтра reject их число не
+    #: совпало с числом карточек — сопоставить строку с конкретной карточкой
+    #: нечем (см. `verdicts._visible_summary`). Пустая сводка модели без
+    #: единой строки с самого начала этот флаг не поднимает: там скрывать
+    #: нечего, а не «нечем сопоставить». Флаг решает, какой текст заглушки
+    #: печатать вместо рекомендации и печатать ли на месте таблицы честную
+    #: строку — второй раз логику `_visible_summary` в экспортёрах не считают.
+    comparison_table_hidden: bool = False
 
 
 @asynccontextmanager
@@ -109,7 +130,11 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
         else None
     )
     edited_report = apply_summary_override(edited_report, summary_override)
-    summary_text_edited = is_summary_edited(summary_override)
+    # Пополевой признак правки — читается прямо из `SummaryOverrideData`, а не
+    # из общего `is_summary_edited` (РЕШ-211): `override is None` считается
+    # «не правил» для обоих полей теми же условиями, что и `apply_summary_override`.
+    recommendation_edited = summary_override is not None and summary_override.recommendation is not None
+    caveats_edited = summary_override is not None and summary_override.caveats is not None
     total_cards = len(edited_report.cards) + len(edited_report.contest_cards)
 
     verdict_rows: list[VerdictRow] = []
@@ -120,6 +145,7 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
 
     visible = visible_report(edited_report, original_ids, effective)
     card_ids, rework_keys = _reindex_after_filter(original_ids, effective)
+    comparison_table_hidden = _comparison_table_hidden(edited_report, card_ids)
 
     latest = max(effective.values(), key=lambda row: (row.created_at, row.id), default=None)
 
@@ -132,25 +158,72 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
         validated_at=latest.created_at if latest is not None else None,
         rework_keys=rework_keys,
         total_cards=total_cards,
-        summary_text_edited=summary_text_edited,
+        recommendation_edited=recommendation_edited,
+        caveats_edited=caveats_edited,
+        comparison_table_hidden=comparison_table_hidden,
     )
 
 
-def summary_text_printable(view: ExportView, printed_cards: int) -> bool:
-    """Можно ли печатать рекомендацию и оговорки сводки в клиентской выгрузке.
+def _comparison_table_hidden(edited_report: Report, card_ids: dict[CardKey, int]) -> bool:
+    """True, когда `verdicts.visible_report` спрятал таблицу сравнения целиком (РЕШ-212).
 
-    Рекомендацию и оговорки пишет модель свободной прозой со ссылками на
-    карточки по номеру («Первым берём вариант 1», «В карточке 3…»). Если
-    хотя бы одна карточка скрыта из клиентского вида (reject или пустой
-    `evidence`), нумерация карточек в выгрузке отличается от той, что видела
-    модель при сборке сводки, — печатать такой текст клиенту нельзя (РЕШ-206,
-    аудит Э4: карточка 1 отклонена, но рекомендация всё равно советовала её
-    первой). Печатать можно в двух случаях: эксперт правил текст сам
-    (`view.summary_text_edited` — тогда нумерацию расставил человек заново) —
-    либо ни одна карточка не скрыта (`printed_cards == view.total_cards` —
-    нумерация, которую видела модель, не изменилась).
+    Повторяет то же условие, каким `verdicts._visible_summary` решает «не
+    печатать таблицу вовсе» — но без второго похода в приватную функцию
+    `verdicts`: те же числа уже посчитаны здесь. `edited_report` — отчёт ДО
+    фильтра reject (тот же вход, что видела `visible_report`), `card_ids` —
+    уже пересчитанные под порядок видимых карточек ключи (после фильтра).
+
+    Условие «спрятана» — три штуки разом: 1) исходные строки были
+    (`comparison_rows` непуст — пустая сводка `fallback_summary` или отчёт без
+    сравнения не получает пометки, там скрывать нечего с самого начала); 2)
+    хотя бы одна карточка основной секции реально отклонена (иначе таблица
+    и не трогалась); 3) число исходных строк не совпало с числом карточек до
+    фильтра — только это несовпадение и не даёт построчно сопоставить строку
+    с карточкой (`_visible_summary` в противном случае просто отфильтровывает
+    строки по тем же позициям, что и карточки, ничего не пряча).
     """
-    return view.summary_text_edited or printed_cards == view.total_cards
+    original_rows = edited_report.summary.comparison_rows
+    if not original_rows:
+        return False
+    original_main_cards = len(edited_report.cards)
+    visible_main_cards = sum(1 for is_contest, _position in card_ids if not is_contest)
+    if visible_main_cards == original_main_cards:
+        return False  # ни одна карточка не отклонена — скрывать нечего
+    return len(original_rows) != original_main_cards
+
+
+def recommendation_printable(view: ExportView, printed_cards: int) -> bool:
+    """Можно ли печатать рекомендацию сводки в клиентской выгрузке (РЕШ-211).
+
+    Рекомендацию пишет модель свободной прозой со ссылками на карточки по
+    номеру («Первым берём вариант 1»). Если хотя бы одна карточка скрыта из
+    клиентского вида (reject или пустой `evidence`), нумерация карточек в
+    выгрузке отличается от той, что видела модель при сборке сводки, —
+    печатать такой текст клиенту нельзя (РЕШ-206). Печатать можно в двух
+    случаях: эксперт правил рекомендацию сам (`view.recommendation_edited` —
+    тогда нумерацию расставил человек заново) — либо ни одна карточка не
+    скрыта (`printed_cards == view.total_cards`).
+
+    Читает только `view.recommendation_edited` — не `view.caveats_edited` и
+    не единый флаг «правлено хоть что-то» (БЛОК-5 финального аудита: общий
+    флаг печатал непровленную рекомендацию, потому что эксперт правил только
+    оговорки). Вызывающему негде перепутать поле — второго параметра, куда
+    можно подставить чужой флаг, у функции нет.
+    """
+    return view.recommendation_edited or printed_cards == view.total_cards
+
+
+def caveats_printable(view: ExportView, printed_cards: int) -> bool:
+    """Можно ли печатать свободную прозу оговорок сводки (РЕШ-211).
+
+    Симметрична `recommendation_printable`, но решает независимо: читает
+    `view.caveats_edited`, а не `view.recommendation_edited`. Машинные
+    пометки (РЕШ-210 — платный предел поиска, отказ интейка/рефайна/сводки)
+    в это решение не входят вовсе: они печатаются всегда, отдельным путём
+    (`app.export.markdown.limitations_lines` с `include_caveats=…`, где этот
+    флаг решает судьбу только свободной прозы, не машинных строк).
+    """
+    return view.caveats_edited or printed_cards == view.total_cards
 
 
 def _reindex_after_filter(
