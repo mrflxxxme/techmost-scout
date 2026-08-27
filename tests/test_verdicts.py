@@ -139,6 +139,96 @@ def test_visible_report_карточка_без_вердикта_остаётс�
     assert [c.title for c in result.cards] == ["Без вердикта"]
 
 
+def test_visible_report_фильтрует_строку_сравнения_вместе_с_карточкой(brief):
+    """Критерий 1: 4 карточки, вторая — reject → 3 карточки и 3 строки, порядок сохранён."""
+    cards = [_make_card(title=f"Вариант {n}") for n in range(4)]
+    rows = [{"Вариант": f"строка-{n}"} for n in range(4)]
+    report = _make_report(cards, brief=brief, summary=ReportSummary(comparison_rows=rows, recommendation="R"))
+    card_ids = {(False, n): n + 1 for n in range(4)}
+    effective = {2: _row(2, VerdictDecision.REJECT, id=1)}  # id=2 → карточка на позиции 1 (вторая)
+
+    result = visible_report(report, card_ids, effective)
+
+    assert [c.title for c in result.cards] == ["Вариант 0", "Вариант 2", "Вариант 3"]
+    assert result.summary.comparison_rows == [
+        {"Вариант": "строка-0"},
+        {"Вариант": "строка-2"},
+        {"Вариант": "строка-3"},
+    ]
+
+
+def test_visible_report_не_ловится_на_фильтр_по_позиции_после_фильтра_карточек(brief):
+    """Критерий 5 (адверсариальный): reject у третьей карточки (индекс 2), а не второй.
+
+    Мутация «фильтровать строки по позиции уже отфильтрованного списка карточек»
+    для этого набора данных даёт другой результат: у неё останется 2 строки
+    (`строка-0`, `строка-1`), а не 3 (`строка-0`, `строка-1`, `строка-3`) — она
+    по ошибке смотрит вердикт по новой (после фильтра) позиции строки, а не по
+    исходной позиции отклонённой карточки.
+    """
+    cards = [_make_card(title=f"Вариант {n}") for n in range(4)]
+    rows = [{"Вариант": f"строка-{n}"} for n in range(4)]
+    report = _make_report(cards, brief=brief, summary=ReportSummary(comparison_rows=rows, recommendation="R"))
+    card_ids = {(False, n): n + 1 for n in range(4)}
+    effective = {3: _row(3, VerdictDecision.REJECT, id=1)}  # id карточки на позиции 2
+
+    result = visible_report(report, card_ids, effective)
+
+    assert [c.title for c in result.cards] == ["Вариант 0", "Вариант 1", "Вариант 3"]
+    assert result.summary.comparison_rows == [
+        {"Вариант": "строка-0"},
+        {"Вариант": "строка-1"},
+        {"Вариант": "строка-3"},
+    ]
+
+
+def test_visible_report_не_трогает_строки_при_несовпадении_числа(brief):
+    """Критерий 2: число строк не совпадает с числом карточек — строки не трогаем вовсе."""
+    cards = [_make_card(title="Единственная")]
+    rows = [{"Вариант": "A"}, {"Вариант": "B"}]  # запасная сводка с другим числом строк
+    report = _make_report(cards, brief=brief, summary=ReportSummary(comparison_rows=rows, recommendation="R"))
+    card_ids = {(False, 0): 1}
+    effective = {1: _row(1, VerdictDecision.REJECT, id=1)}
+
+    result = visible_report(report, card_ids, effective)
+
+    assert result.cards == []
+    assert result.summary.comparison_rows == rows
+
+
+def test_visible_report_пустые_строки_сравнения_без_reject_не_меняются(brief):
+    """Критерий 3: пустые `comparison_rows` и отчёт без reject проходят без изменений."""
+    card = _make_card(title="Без вердикта")
+    report = _make_report([card], brief=brief, summary=ReportSummary(recommendation="R"))
+    card_ids = {(False, 0): 1}
+    effective = {1: _row(1, VerdictDecision.APPROVE, id=1)}
+
+    result = visible_report(report, card_ids, effective)
+
+    assert result.summary.comparison_rows == []
+    assert [c.title for c in result.cards] == ["Без вердикта"]
+
+
+def test_visible_report_reject_в_contest_cards_не_трогает_строки_сравнения(brief):
+    """Критерий 4: `contest_cards` на строки сравнения не влияют."""
+    main_cards = [_make_card(title="Основная")]
+    contest = _make_card(title="Конкурсная отклонённая")
+    rows = [{"Вариант": "строка-основной"}]
+    report = _make_report(
+        main_cards,
+        contest_cards=[contest],
+        brief=brief,
+        summary=ReportSummary(comparison_rows=rows, recommendation="R"),
+    )
+    card_ids = {(False, 0): 1, (True, 0): 2}
+    effective = {2: _row(2, VerdictDecision.REJECT, id=1)}
+
+    result = visible_report(report, card_ids, effective)
+
+    assert result.contest_cards == []
+    assert result.summary.comparison_rows == rows
+
+
 def test_all_cards_reviewed_false_пока_есть_карточка_без_вердикта():
     """Хотя бы одна строка `solution_cards` без вердикта — статус ещё не `validated`."""
     card_ids = {(False, 0): 1, (False, 1): 2}
