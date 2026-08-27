@@ -2,10 +2,10 @@
    десяти живо проверенных сайтов выборки; библиотека анимации не нужна. */
 
 export function riseOnEnter(nodes) {
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    nodes.forEach((n) => n.classList.add('in'));
-    return;
-  }
+  // Прячем только здесь: в CSS секции видны, и упавший скрипт их не стирает.
+  if (!('IntersectionObserver' in window)) return;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  nodes.forEach((n) => n.classList.add('armed'));
   const io = new IntersectionObserver((entries) => {
     for (const e of entries) {
       if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }

@@ -41,7 +41,9 @@ p{margin:0}
 /* ── 1. первый экран ── */
 .hero{position:relative;min-height:calc(100svh - 58px);display:flex;flex-direction:column;justify-content:center;
   padding:clamp(48px,7vw,96px) 0 0}
-#spark{position:absolute;inset:0;z-index:0}
+/* canvas — замещаемый элемент: без явных width/height он остаётся
+   собственным размером 300x150, и inset:0 его не растягивает */
+#spark{position:absolute;inset:0;width:100%;height:100%;z-index:0;display:block}
 .hero .wrap{position:relative;z-index:2}
 .hero h1{max-width:14ch}
 .hero .lead{margin-top:28px;max-width:46ch;font-size:var(--t-lead);line-height:1.58;color:var(--text)}
@@ -194,9 +196,12 @@ blockquote footer{margin-top:16px;font-family:var(--mono);font-size:11px;color:v
   color:#160A03;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase}
 
 /* ── вход секций ── */
-.rise{opacity:0;transform:translateY(14px);
-  transition:opacity 520ms var(--ease),transform 520ms var(--ease)}
-.rise.in{opacity:1;transform:none}
+/* Секция видна по умолчанию. Прятать её имеет право только скрипт,
+   и только после того, как убедился, что умеет показать обратно:
+   упавший скрипт не должен стирать половину страницы. */
+.rise{transition:opacity 520ms var(--ease),transform 520ms var(--ease)}
+.rise.armed{opacity:0;transform:translateY(14px)}
+.rise.armed.in{opacity:1;transform:none}
 
 @media(max-width:900px){
   .hdr nav{display:none}
@@ -214,6 +219,6 @@ blockquote footer{margin-top:16px;font-family:var(--mono);font-size:11px;color:v
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
-  .rise{opacity:1;transform:none}
+  .rise,.rise.armed{opacity:1;transform:none}
   .steps>div{opacity:1}
 }
