@@ -1,0 +1,160 @@
+# Ревью Э4-И4 · цикл 1
+Вердикт: ПРИНЯТЬ (блокирующих 0, советов 2)
+
+## Проверка соответствия задаче
+Diff (коммиты a8f5123, c6704cc от bf95465): `backend/app/export/pdf.py` (новый,
+118 строк), `backend/app/web/templates/report_print.html` (новый, 175 строк),
+`backend/app/web/static/print.css` (новый, 187 строк), `tests/test_export_pdf.py`
+(новый, 173 строки) плюс два файла в `.planning/evidence/`. Список файлов
+совпадает со списком задачи Э4-И4 в PLAN.md один в один: `report.html`,
+`theme.css`, `cli.py`, `docx.py` не тронуты — границы волны 1 (файлы Э4-И3 и
+Э4-И5) не задеты.
+
+## Критерии приёмки (проверены лично, не со слов исполнителя)
+1. `pytest tests/test_export_pdf.py -v` — 9 passed. Вызов `page.pdf` ровно
+   один раз, путь `out/report-42-2026-08-27.pdf` (тест
+   `test_export_pdf_calls_page_pdf_exactly_once`).
+2. Черновик/подпись — тестами на HTML: при `is_draft` строка «ЧЕРНОВИК — не
+   проверено экспертом» встречается дважды (обложка `print-cover-draft` +
+   повторяющийся `print-draft-mark`), «проверено:» отсутствует; при
+   `validated` — ровно строка РЕШ-197 и ни одного «ЧЕРНОВИК». Подтверждено
+   двумя целевыми тестами, зелёными.
+3. Инвариант №1 в печати: `test_render_print_html_empty_evidence_hides_maturity_and_trl`
+   — карточка с пустым `evidence` не печатает ни «Стадия зрелости», ни TRL;
+   строки «Подтверждений не приложено» (фраза markdown-экспорта) в шаблоне
+   нет — отдельный тест `test_template_never_uses_markdown_empty_evidence_phrase`.
+4. `grep -n "async_playwright|sync_playwright|chromium" tests/*.py` —
+   совпадений нет (docstring/имя класса `_FakePage` со словом «Chromium» с
+   заглавной буквы под этот шаблон не попадают — проверено точным паттерном
+   без `-i`, ровно как в критерии плана).
+5. `grep -n "https?://fonts|@import" backend/app/web/static/print.css` —
+   совпадений нет.
+6. `pytest tests/test_web_templates.py tests/test_backend_layout.py -v` —
+   8 passed: в `report_print.html` нет `style=` и hex-цветов (сам файл
+   шаблона, а не отрендеренный HTML — `print.css` подключается плейсхолдером
+   `{{ print_css }}`, что и требует контракт «Печатный шаблон» плана);
+   `pdf.py` — 118 строк, в пределах лимита 500 (и 200 для новых модулей).
+7. `grep -n "httpx|LLMRouter" backend/app/export/pdf.py` — совпадений нет.
+8. `pytest -q` — 1012 passed (не меньше 969 + 9 новых, падений 0);
+   `ruff check .` — All checks passed; `ruff format --check .` — 182 files
+   already formatted.
+
+## Инварианты (все десять)
+1. Факт без ссылки — не нарушен: карточка без `evidence` не печатает стадию/
+   TRL (критерий 3), выборочно сверены поля `card.evidence[].url` — рендерятся
+   как `<a href>` без искажений.
+2. Автоотправка клиенту — пути нет: `export_pdf` только пишет файл на диск
+   (`out_path.write_bytes`), никакой отправки почтой/API. Подпись «проверено:»
+   печатается строго при `not view.is_draft and view.validated_at is not None`
+   (`pdf.py:70-72`) — до валидации не появляется ни при каких данных вью.
+3. Секреты — `grep -rE "sk-|gigachat|Api-Key" backend/ tests/"` даёт только
+   легитимные вхождения адаптера YandexGPT (`llm/yandex.py`, `config.py`
+   комментарий), не относящиеся к задаче; значений ключей нигде не печатается.
+4. Незаполненная подстановка `{{...}}` — Jinja-шаблон `report_print.html`
+   рендерится через собственное `Environment` с `TEMPLATE_FILTERS`, все метки
+   (`report`, `is_draft`, `signature`, `rework_keys`, `print_css`, `maturity_ru`,
+   `confidence_ru`, `contest_heading`, `limitation_lines`) заполняются в
+   `render_print_html`; `pytest tests/test_prompts.py` задачу не касается (нет
+   `prompts/*.md` в diff) — не применимо, но сам механизм подстановок
+   (`render_prompt`) этой задачей не тронут.
+5. Отказ источника — не применимо: `pdf.py` источники не опрашивает.
+6. Прямой вызов внешнего API в обход слоёв — `grep -rln "httpx" backend/app
+   --include='*.py' | grep -vE "..."` пусто; в `pdf.py` `httpx`/`LLMRouter` не
+   встречаются (критерий 7); единственный внешний процесс — Chromium через
+   `playwright.async_api`, что и предписано планом для группы `export`.
+7. Тест обращается в сеть — нет: 9 новых тестов работают на подменённой
+   `_FakePage`, `render_print_html` — чистая функция над `ExportView`, сеть и
+   браузер не поднимаются (подтверждено критерием 4 и грепом).
+8. Новое поведение без теста — не нарушен: весь новый код в `pdf.py` покрыт
+   `tests/test_export_pdf.py`, обе мутации (см. ниже) ловятся набором.
+9. Расширение скоупа — не нарушено: CLI и кнопка выгрузки (Э4-И6), DOCX
+   (Э4-И5), `report.html` (Э4-И2) не тронуты; діфф ограничен списком файлов
+   задачи.
+10. YAML без кавычек — `pytest tests/test_team_docs.py -q` — 35 passed;
+    значения с двоеточием в `Э4-И4-handoff.yaml` заключены в кавычки.
+
+## Грабли §0.1 SPEC
+Незаполненных `{{...}}` нет; модель в задаче не вызывается вовсе (PDF —
+чистая функция + Chromium), просьбы вернуть входные данные нет; `max_tokens`
+не применим; YAML-шапка handoff процитирована в кавычках; `extract_json_block`
+не применим (нет разбора ответа модели); адрес GigaChat не фигурирует.
+
+## Мутационная проверка (сфокусированный прогон `tests/test_export_pdf.py`)
+1. Убрано условие `{% if card.evidence %}` вокруг блока «Стадия зрелости»
+   (заменено на `{% if True %}`) → `test_render_print_html_empty_evidence_hides_maturity_and_trl`
+   упал (`'Стадия зрелости' is contained here`). Мутация возвращена.
+2. Убран повторяющийся элемент `<div class="print-draft-mark">…</div>` из
+   тела документа → `test_render_print_html_draft_has_repeating_mark_and_no_signature`
+   упал (`assert 1 == 2`, повторное вхождение фразы). Мутация возвращена.
+Обе мутации убиты прицельным набором — полный прогон ради этого не
+потребовался. Рабочая копия после отката чиста (`git status --porcelain`
+пусто).
+
+## Дефекты логики
+Не найдено: обработка отсутствующих `contest_cards`, `comparison_rows`,
+`gov_support`, `requirement_checks` — везде `{% if %}`; каталог назначения
+создаётся (`out_path.parent.mkdir`); запись файла — через `asyncio.to_thread`
+(не блокирует цикл событий); подмена `page` полностью исключает боевой путь
+запуска Chromium из тестового прогона — реальный `async_playwright` лежит в
+ветке, недостижимой при переданном `page` (по коду и по гарантии грепа
+критерия 4).
+
+## Палитра (SPEC 2а «Дизайн», строки 243–251)
+Все токены `:root` в `print.css` сверены построчно: `--ink #10163a`,
+`--navy #1e2761`, `--text #1b2140`, `--muted #6b7699`, `--gold #c9a24b`,
+`--ice #cddcf9`, `--shell #f2f5fc`, `--hair #e3eaf8` — совпадают с палитрой
+SPEC посимвольно (регистр не считается отличием). Токены `--hair-inner
+#edf2fb`, `--danger #a3413f`, `--danger-bg #fdf1f1` и оттенки `.print-badge-
+gold`/`.print-badge-low` (`rgba(201,162,75,.12)/#8a6c25`,
+`#fdf1f1/#a3413f/#f4d4d4`) в списке SPEC 2а прямо не перечислены, но
+**не новые**: это дословное повторение уже существующих значений
+`backend/app/web/static/theme.css` (строки 22, 238–239 и `.notice.danger`,
+361–364), введённых в волне Э3 и одобренных на тех воротах. Новых оттенков,
+не имеющих прообраза ни в SPEC, ни в `theme.css`, задача не вводит — критерий
+«территория владельца» не срабатывает.
+
+## Советы (не блокируют)
+1. `report_print.html:78` печатает в PDF (в т.ч. потенциально в клиентский
+   PDF при `validated`, если эксперт всё же одобрил карточку без `evidence`)
+   ту же фразу-предупреждение «Нельзя показывать клиенту: нет подтверждений»,
+   что и операторский экран `_card.html`. Задача не изобретала эту фразу
+   заново (она одобрена ещё на Э3 и явно перечислена в PLAN.md как уже
+   одобренная, строка 39), и план требовал от Э4-И4 только «не печатать
+   стадию/TRL» без evidence (критерий 3) — большего задача не обязана
+   делать. Но стоит обсудить с владельцем на воротах: разумно ли, чтобы
+   операторская формулировка «нельзя показывать клиенту» физически попадала
+   в файл, который экспортируется именно клиенту, — или для PDF нужна другая
+   (более нейтральная) формулировка либо жёсткое условие «карточка без
+   evidence в клиентский PDF не идёт вовсе». Тот же вопрос касается строки
+   футера «стоимость машинной обработки … ₽» (уже в `report.html` и
+   `markdown.py` — не новость этой задачи).
+2. `_hair-inner`, `--danger`, `--danger-bg` и оттенки `.print-badge-gold`/
+   `.print-badge-low` в `print.css` дублируют значения `theme.css» построчно —
+   можно было явно пометить в комментарии, что это «расширенная» рабочая
+   палитра (все токены, использованные в `_card.html`/`report.html`), а не
+   только официальный список SPEC 2а — для будущего читателя, который будет
+   сверять только с разделом «Дизайн» и не найдёт источник этих трёх цветов
+   с первого взгляда (в текущем комментарии `print.css:7-11` они не
+   упомянуты явно).
+
+## Проверено (фактический вывод команд)
+- `pytest tests/test_export_pdf.py -v`: 9 passed
+- `pytest tests/test_web_templates.py tests/test_backend_layout.py -v`: 8 passed
+- `pytest -q`: 1012 passed, 1 warning
+- `ruff check .`: All checks passed!
+- `ruff format --check .`: 182 files already formatted
+- `pytest tests/test_team_docs.py -q`: 35 passed
+- `grep -n "async_playwright|sync_playwright|chromium" tests/*.py`: нет совпадений
+- `grep -n "https?://fonts|@import" backend/app/web/static/print.css`: нет совпадений
+- `grep -n "httpx|LLMRouter" backend/app/export/pdf.py`: нет совпадений
+- `grep -rE "sk-|gigachat|Api-Key" backend/ tests/`: только легитимные вхождения адаптера YandexGPT, не относящиеся к diff задачи
+- `grep -rn '"reject"' backend/app`: одно вхождение, `schemas.py:70` (как и до задачи)
+- Мутация 1 (снято условие `card.evidence`): целевой тест падает, откачено
+- Мутация 2 (убран повторяющийся элемент ЧЕРНОВИК): целевой тест падает, откачено
+- `git status --porcelain` после отката мутаций: пусто
+
+## Handoff исполнителя
+`artifacts` существуют, `did` описывает результат (а не процесс), `checks`
+содержат фактический вывод команд, `self_audit: pass` согласован с
+`escalate: none` — противоречия нет. Расхождений между заявленным и
+воспроизведённым мной не найдено.
