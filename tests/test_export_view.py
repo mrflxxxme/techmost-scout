@@ -208,6 +208,59 @@ async def test_reviewer_name_и_validated_at_из_последнего_верд�
     assert view.validated_at is not None
 
 
+async def test_reject_в_середине_списка_переиндексирует_card_ids_и_rework_keys(db_session_factory, brief):
+    """Reject в середине списка из 4 карточек (риск из PLAN.md «Риски»): id и
+    пометка rework обязаны сдвинуться на послефильтровые позиции, а не
+    остаться на дофильтровых — иначе правка или бейдж «уедут» не на ту
+    карточку. Вырожденные случаи (0/1 карточка после reject, reject
+    последней) этого не ловят — нужен reject строго в середине 3+ карточек."""
+    a = _make_card(title="A")
+    b = _make_card(title="B")
+    c = _make_card(title="C")
+    d = _make_card(title="D")
+    report = _make_report([a, b, c, d], brief=brief)
+    request_id, card_ids = await _seed(db_session_factory, report=report)
+    a_id, b_id, c_id, d_id = card_ids
+    await _add_verdict(db_session_factory, b_id, VerdictDecision.REJECT)
+    await _add_verdict(db_session_factory, d_id, VerdictDecision.REWORK)
+
+    async with db_session_factory() as session:
+        view = await build_export_view(session, request_id)
+
+    assert [card.title for card in view.report.cards] == ["A", "C", "D"]
+    # Позиция 1 после фильтра обязана указывать на C (её дофильтровая позиция
+    # была 2), а не на B (отклонена) и не остаться дофильтровой парой (False,2).
+    assert view.card_ids == {(False, 0): a_id, (False, 1): c_id, (False, 2): d_id}
+    # D была на дофильтровой позиции 3 — послефильтровая пометка rework обязана
+    # сдвинуться на (False, 2), а не остаться (False, 3).
+    assert view.rework_keys == {(False, 2)}
+
+
+async def test_правка_карточки_после_reject_остаётся_на_своей_карточке(db_session_factory, brief):
+    """`editor_overrides`, записанные в БД под дофильтровой позицией карточки C
+    (позиция 2, ПОСЛЕ отклонённой B), обязаны остаться на C и после фильтра —
+    порядок «правки до фильтра» не вырожденный случай с одной карточкой, а
+    минимум с тремя, одна из которых reject. Если фильтр сработает раньше
+    наложения правок, правка «уедет» на карточку D, которая после фильтра
+    окажется на той же дофильтровой позиции 2, что и правка."""
+    a = _make_card(title="A")
+    b = _make_card(title="B")
+    c = _make_card(title="C — исходный заголовок")
+    d = _make_card(title="D")
+    report = _make_report([a, b, c, d], brief=brief)
+    request_id, card_ids = await _seed(
+        db_session_factory, report=report, card_overrides={2: {"title": "C — правка оператора"}}
+    )
+    _a_id, b_id, c_id, _d_id = card_ids
+    await _add_verdict(db_session_factory, b_id, VerdictDecision.REJECT)
+
+    async with db_session_factory() as session:
+        view = await build_export_view(session, request_id)
+
+    assert [card.title for card in view.report.cards] == ["A", "C — правка оператора", "D"]
+    assert view.card_ids[(False, 1)] == c_id
+
+
 def test_visible_report_не_мутирует_входной_report(brief):
     """Совет ревью Э4-И1: `visible_report` не должна мутировать переданный
     `Report` — по образцу `test_report_overrides.py::
