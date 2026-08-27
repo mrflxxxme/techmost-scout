@@ -63,6 +63,35 @@
 <h1>Проверка решений — запрос №{{ row.id }}</h1>
 <p class="muted">Отрасль: {{ report.brief.industry }} · проверено {{ reviewed }} из {{ total }}</p>
 
+<h2 class="mt-xl">Сводка</h2>
+<div class="bezel appear mb-lg">
+  <div class="core">
+    <p><strong>Текущая рекомендация:</strong> {{ report.summary.recommendation }}</p>
+    {% if report.summary.caveats %}
+    <p class="mb-sm"><strong>Оговорки:</strong></p>
+    <ul>{% for caveat in report.summary.caveats %}<li>{{ caveat }}</li>{% endfor %}</ul>
+    {% endif %}
+
+    <div id="summary-override">
+      <form class="verdict-form brief-form mt-md" hx-post="/requests/{{ row.id }}/summary" hx-target="#summary-override" hx-swap="innerHTML">
+        <div class="brief-field">
+          <label for="summary-recommendation">Рекомендация (правка эксперта)</label>
+          <textarea id="summary-recommendation" name="recommendation">{{ report.summary.recommendation }}</textarea>
+        </div>
+
+        <div class="brief-field">
+          <label for="summary-caveats">Оговорки (по одной на строку)</label>
+          <textarea id="summary-caveats" name="caveats">{{ report.summary.caveats|join("\n") }}</textarea>
+        </div>
+
+        <div class="edit-actions">
+          <button class="btn" type="submit">Сохранить сводку</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <h2 class="mt-xl">Варианты решений</h2>
 {% if not cards_with_ids %}
 <p class="muted">Карточек к проверке нет.</p>
