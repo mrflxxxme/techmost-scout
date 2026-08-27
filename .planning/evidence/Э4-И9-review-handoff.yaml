@@ -1,0 +1,29 @@
+handoff:
+  from: "reviewer"
+  to: "orchestrator"
+  task: "Э4-И9"
+  did:
+    - "Сверены пять изменённых путей diff'а (SPEC.md, README.md, deps-manual.md, evidence handoff и проверки) со списком файлов задачи в PLAN.md — выхода за границы нет"
+    - "Все четыре правки SPEC.md перепроверены грепом по фактическому коду (config.py, cli.py, cli_export.py, pipeline/demo.py, export/pdf.py, export/docx.py, export/markdown.py, web/routes/review.py) — формулировки соответствуют факту, ничего не додумано"
+    - "Лично прогнаны все команды из критериев приёмки и повторены грепы задачи: rg по трём подстрокам, pytest tests/test_team_docs.py -q, pytest -q, ruff check ., ruff format --check ."
+    - "Проверены все десять инвариантов способами из INVARIANTS.md; проверены отметки готовности Э4-1…Э4-3 (не тронуты) и раздел «Вне скоупа MVP» (ничего не вписано)"
+    - "Handoff исполнителя сверен: артефакты существуют, checks воспроизведены, self_audit/escalate непротиворечивы"
+  artifacts:
+    - ".planning/evidence/Э4-И9-review.md (закоммичен до ответа)"
+    - ".planning/evidence/Э4-И9-review-handoff.yaml"
+  self_audit: "pass"
+  checks:
+    - "rg -n \"исходные пропорции\" docs/SPEC.md: совпадение есть, строка 682"
+    - "rg -n \"с сохранением исходных задержек\" docs/SPEC.md: совпадений нет"
+    - "rg -n \"scout export\" README.md docs/deps-manual.md: совпадения в обоих файлах"
+    - "pytest tests/test_team_docs.py -q: 35 passed"
+    - "pytest -q: 1063 passed, 1 warning"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 193 files already formatted"
+    - "git diff 6f9516e6..e4/i9 --numstat: README.md 12/0, docs/SPEC.md 11/1, docs/deps-manual.md 18/0 — совпадает с постановкой"
+  escalate: "none"
+  read_first:
+    - ".planning/PLAN.md (раздел «Э4-И9 · Документы этапа»)"
+    - ".planning/evidence/Э4-И9-review.md"
+    - "docs/SPEC.md §6 (627–690)"
+  notes: "Цикл 1. Блокирующих находок нет — вердикт ПРИНЯТО, дальнейшие циклы не требуются. Два совета не блокируют приёмку."
