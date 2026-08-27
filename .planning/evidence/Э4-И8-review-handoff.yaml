@@ -1,0 +1,43 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "Э4-И8"
+  did:
+    - "Проверены diff (только tests/test_stage4_e2e.py + evidence, backend/ не тронут), все 10 инвариантов и 4 критерия приёмки"
+    - "Дважды прогнаны pytest tests/test_stage4_e2e.py -v (6 passed оба раза) и pytest -q (1069 passed оба раза), без флаки"
+    - "ruff check . и ruff format --check . — без замечаний"
+    - "Две прицельные мутации: (1) снят фильтр reject в verdicts._visible_section — 3 из 6 тестов упали, сквозной тест реально ловит межвидовой рассинхрон по reject; (2) в pdf.py rework_keys приведён к документированному поведению (set() вместо view.rework_keys) — test_pdf_печать_... упал, чем подтверждено, что нынешний тест закрепляет расхождение PDF с контрактом verdicts.py/view.py/РЕШ-198 про rework"
+    - "Найдено 1 блокирующее (тест 'зелёный по неверной причине' — assert На доработку in html для PDF противоречит документированному контракту, баг предположительно в уже влитой Э4-И4, backend этой задачей не правится) и 2 совета"
+  artifacts:
+    - .planning/evidence/Э4-И8-review.md (закоммичен до ответа)
+    - .planning/evidence/Э4-И8-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_stage4_e2e.py -v: 6 passed (x2)"
+    - "pytest -q: 1069 passed (x2)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 194 files already formatted"
+    - "git diff 6f9516e6..e4/i8 --stat: только tests/test_stage4_e2e.py и .planning/evidence"
+  escalate: "вопрос владельцу"
+  read_first:
+    - ".planning/evidence/Э4-И8-review.md (раздел «Блокирующие»)"
+    - "backend/app/verdicts.py:42-77 (visible_report, комментарий про rework)"
+    - "backend/app/export/view.py:42-55 (ExportView.rework_keys, комментарий)"
+    - "backend/app/export/pdf.py:62-85 (render_print_html передаёт rework_keys в печать)"
+    - ".planning/DECISIONS.md (РЕШ-198)"
+  notes: >-
+    Это цикл 1. Блокирующая находка не в тестовом файле как таковом, а в
+    расхождении между уже влитым backend/app/export/pdf.py (задача Э4-И4) и
+    документированным контрактом РЕШ-198/verdicts.py/view.py: PDF-выгрузка
+    фактически показывает пометку «На доработку», хотя по контракту она
+    должна быть видна только оператору на странице. Тест Э4-И8 вместо того,
+    чтобы поймать это расхождение, зафиксировал его как норму (assert "На
+    доработку" in html для печатного HTML). tests/test_stage4_e2e.py сам по
+    себе Э4-И8 может поправить (сменить ассерт на not in), но backend/ этой
+    задачей не правится — нужно решение владельца, какое поведение верное:
+    (а) исправить pdf.py под документированный контракт и тогда поправить
+    ассерт в тесте на отсутствие пометки, или (б) признать, что rework в PDF
+    — осознанное решение, и тогда переписать оба комментария в verdicts.py/
+    view.py и, возможно, РЕШ-198. До этого решения тест Э4-И8 нельзя признать
+    готовым: его текущий ассерт по PDF+rework недостоверен. Второй цикл —
+    последний, дальше третьего не будет.
