@@ -108,6 +108,11 @@ SHORT_QUERY_WORDS = 4
 _TAG = re.compile(r"<[^>]+>")
 _WS = re.compile(r"\s+")
 _YEAR = re.compile(r"(19|20)\d{2}")
+#: Номер публикации: код страны (2 буквы), числовая часть, код вида документа
+#: (буква и обычно цифра — `B1`, `C1`, `A1`, `U1`). Шаблон нужен только затем,
+#: чтобы аккуратно отделить числовую часть при снятии ведущих нулей — сам
+#: собранный `number` (raw_id, dedup) им не трогаем.
+_PUBLICATION_NUMBER = re.compile(r"^([A-Za-z]{2})(\d+)([A-Za-z][A-Za-z0-9]*)$")
 
 
 class RospatentAdapter(SearchAdapter):
@@ -260,7 +265,7 @@ class RospatentAdapter(SearchAdapter):
             return Candidate(
                 source_type=SourceType.PATENT,
                 title=title,
-                url=DOCUMENT_URL.format(number=number),
+                url=DOCUMENT_URL.format(number=_normalize_document_number(number)),
                 org=org or None,
                 authors=_names(ru.get("inventor")) or _names(en.get("inventor")),
                 year=_year(common.get("publication_date")),
@@ -303,6 +308,23 @@ def _document_number(common: dict[str, Any]) -> str:
         return ""
     kind = _clean(common.get("kind"))
     return f"{office}{number}{kind}"
+
+
+def _normalize_document_number(number: str) -> str:
+    """Снять ведущие нули у числовой части номера публикации (РЕШ-208).
+
+    Платформа Роспатента отдаёт номер с ведущими нулями (`EA0000026963B1`),
+    Google Patents по такому адресу отвечает 404 — читаемая ссылка ждёт
+    номер без них (`EA26963B1`). Код страны и код вида документа не трогаем:
+    ведущий ноль имеет смысл только в числовой части. Номер, который не
+    разобрался по шаблону «страна+цифры+вид», отдаём как есть — молча
+    ломать ссылку нельзя, но и выдумывать структуру тоже (критерий 3).
+    """
+    match = _PUBLICATION_NUMBER.match(number)
+    if not match:
+        return number
+    country, digits, kind = match.groups()
+    return f"{country}{digits.lstrip('0') or '0'}{kind}"
 
 
 def _first_name(value: Any) -> str:

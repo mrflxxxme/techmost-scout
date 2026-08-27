@@ -1,0 +1,26 @@
+handoff:
+  from: "implementer-1"
+  to: "reviewer"
+  task: "Э4-П4"
+  did:
+    - "backend/app/search/rospatent.py: добавлена функция _normalize_document_number — снимает ведущие нули у числовой части номера публикации (страна и код вида документа не трогаются), нераспознанный формат отдаётся без изменений"
+    - "DOCUMENT_URL теперь собирается по нормализованному номеру (_to_candidate), raw_id и dedup-ключ не тронуты — задача была только про ссылку"
+    - "tests/test_rospatent.py: 4 новых теста/группы — снятие нулей на двух примерах из задачи (EA0000026963B1→EA26963B1, RU0002812345C1→RU2812345C1), номер без нулей не меняется, нераспознанный формат отдаётся как есть (4 варианта параметризацией), сквозной тест через search() на фикстуре ответа платформы, проверяющий итоговый URL"
+    - "Живых вызовов сети не было — только respx-фикстуры и прямой вызов функции нормализации"
+  artifacts:
+    - "backend/app/search/rospatent.py"
+    - "tests/test_rospatent.py"
+  self_audit: "pass"
+  checks:
+    - "pytest tests/test_rospatent.py -q: 33 passed"
+    - "pytest -q: 1083 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 194 files already formatted"
+    - "git diff --stat a495b1d..HEAD: ровно два файла (backend/app/search/rospatent.py, tests/test_rospatent.py)"
+  escalate: "none"
+  read_first:
+    - ".planning/PLAN.md (раздел «Э4-П4 · нормализация номера публикации в ссылке на патент»)"
+    - ".planning/DECISIONS.md (РЕШ-208)"
+    - "backend/app/search/rospatent.py"
+    - "tests/test_rospatent.py"
+  notes: "Файла tests/test_search_rospatent.py в репозитории не было — тесты адаптера живут в tests/test_rospatent.py, туда и добавлял по инструкции задачи. raw_id и dedup_key намеренно не нормализовал: задача и критерии приёмки говорят только про ссылку на документ, менять контракт дедупликации не входило в границы."
