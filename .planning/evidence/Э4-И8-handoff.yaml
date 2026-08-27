@@ -2,35 +2,43 @@ handoff:
   from: implementer-1
   to: reviewer
   task: "Э4-И8"
+  cycle: 2
   did:
     - "Создан tests/test_stage4_e2e.py: один сквозной сценарий на модульной фикстуре `scenario`, без сети и без браузера"
     - "Сценарий: сидирование запроса с 4 карточками (2 approve, 1 reject, 1 rework) → вердикты через POST /cards/{id}/verdict (TestClient) → статус validated → GET страницы отчёта → `scout export --pdf` (CliRunner, подменена только страница Chromium — page.pdf, render_print_html настоящий) → `scout export --docx` (реальный export_docx) → app.pipeline.demo.build_playback/play на строках pipeline_logs с подменённым ожиданием"
-    - "6 тестов читают уже собранные артефакты фикстуры: validated-статус; выборка карточек на странице; та же выборка в PDF-HTML; та же выборка в DOCX-тексте; дословное совпадение подписи РЕШ-197 во всех трёх видах; cost_rub до/после демо-показа не меняется"
+    - "6 тестов читают уже собранные артефакты фикстуры: validated-статус; выборка карточек и пометка «на доработку» на странице отчёта; та же выборка в PDF-HTML БЕЗ пометки «на доработку»; та же выборка в DOCX-тексте БЕЗ пометки; дословное совпадение подписи РЕШ-197 во всех трёх видах; cost_rub до/после демо-показа не меняется"
     - "Большой request_id (971001) — по инструкции из докстрины _make_request tests/test_web_demo.py: брокер прогресса общий синглтон на процесс"
+    - "Цикл 2: подтянут фикс влитого дефекта Э4-И4 (7fa316f) — печатный PDF/DOCX не несёт операторскую пометку «На доработку» (РЕШ-198). Ассерты test_pdf_печать_даёт_ту_же_выборку_и_подпись и test_docx_даёт_ту_же_выборку_и_подпись перевёрнуты с «пометка есть» на «пометки нет, заголовок карточки есть»; докстроки теста и модуля дополнены явным описанием межвидового контракта"
   artifacts:
     - tests/test_stage4_e2e.py
     - .planning/evidence/Э4-И8-pytest.txt
   self_audit: pass
   checks:
-    - "pytest tests/test_stage4_e2e.py -v: 6 passed"
-    - "pytest -q: 1069 passed"
+    - "pytest tests/test_stage4_e2e.py -v (прогон 1): 6 passed"
+    - "pytest tests/test_stage4_e2e.py -v (прогон 2): 6 passed"
+    - "pytest -q: 1070 passed (1064 верхушки волны + 6 моих)"
     - "ruff check .: All checks passed!"
     - "ruff format --check .: 194 files already formatted"
-    - "wc -l tests/test_stage4_e2e.py: 397 (под пределом 500 строк, запись в test_tests_layout.py не требуется)"
+    - "wc -l tests/test_stage4_e2e.py: 415 (под пределом 500 строк, запись в test_tests_layout.py не требуется)"
   escalate: none
   read_first:
     - ".planning/PLAN.md (раздел «Э4-И8», волны 0–2)"
     - "backend/app/verdicts.py"
     - "backend/app/export/view.py"
+    - "backend/app/export/pdf.py (фикс РЕШ-198, коммит 7fa316f)"
     - "tests/test_stage4_e2e.py"
     - "tests/test_web_flow_e2e.py (образец сквозного теста)"
   notes: >-
-    backend/ не тронут вовсе, дефектов в коде волн 0–2 не найдено — все
-    контракты (build_export_view, visible_report, signature_line,
-    REVIEWED_FOOTER, demo.build_playback/play) сработали ровно так, как
-    описано в PLAN.md, без доработок. Файл теста уложился в 397 строк —
-    запись в tests/test_tests_layout.py оркестратору вносить не нужно.
-    Для DOCX-выгрузки настоящая функция export_docx вызвана без подмен
-    (не требует сети/браузера); для PDF подменена только страница Chromium
-    (page.pdf), а не вся функция export_pdf, — так проверяется реальный
-    render_print_html, а не заглушка.
+    Цикл 1 моего теста закреплял дефект влитой Э4-И4: ассерт
+    `"На доработку" in html` на печатном HTML фиксировал ошибочное
+    поведение — операторская пометка «на доработку» печаталась в
+    клиентском PDF, против РЕШ-198 (пометка должна оставаться только на
+    странице отчёта у оператора). Дефект нашло ревью по моему же тесту —
+    в исходной сборке backend/ я его не заметил. Фикс (pdf.py,
+    report_print.html) внёс автор задачи Э4-И4 отдельным коммитом
+    7fa316ffef165f802959d7035439a261a376494e, влитым в ветку этапа;
+    ветка e4/i8 слита с ним (merge, конфликтов не было). Тест обновлён:
+    печать и DOCX проверяются на ОТСУТСТВИЕ пометки при сохранении
+    заголовка rework-карточки, страница отчёта — на её НАЛИЧИЕ. backend/
+    в этом цикле по-прежнему не правил — только слияние апстрима и правка
+    своего тестового файла.

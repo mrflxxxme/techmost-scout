@@ -9,6 +9,14 @@
 подпись → демо-воспроизведение того же запроса (`app.pipeline.demo.play` с
 подменённым ожиданием) не меняет `requests.cost_rub`.
 
+Межвидовой контракт РЕШ-198 (закреплён циклом 2 ревью этой задачи, фикс
+влитого дефекта Э4-И4): бейдж «На доработку» — подсказка **только для
+оператора** на странице отчёта; в клиентских выгрузках (печатный PDF и
+DOCX) сама rework-карточка остаётся видимой, но без пометки. Цикл 1 этого
+теста ошибочно закреплял обратное поведение печати как норму — исправлено
+здесь вместе с влитым фиксом `backend/app/export/pdf.py` и
+`report_print.html`.
+
 Сценарий собирается один раз на модуль (`scope="module"`) — фикстура сама
 проводит все шаги (сидирование базы, вердикты через `TestClient`, CLI-выгрузку,
 демо-показ) и складывает готовые артефакты (HTML страницы, HTML печати, текст
@@ -341,7 +349,10 @@ def test_вердикты_по_всем_карточкам_переводят_з
 
 
 def test_страница_отчёта_показывает_нужную_выборку_и_подпись(scenario: _Scenario) -> None:
-    """Клиентская страница: одобренные видны, отклонённая — нет, доработка помечена, подпись есть."""
+    """Страница отчёта (вид оператора): одобренные видны, отклонённая — нет,
+    доработка помечена бейджем «На доработку» — эта пометка живёт только
+    здесь (РЕШ-198), в клиентских выгрузках (PDF, DOCX) её нет — см. два
+    следующих теста."""
     html = scenario.report_html
     assert _APPROVE_TITLE_1 in html
     assert _APPROVE_TITLE_2 in html
@@ -353,24 +364,31 @@ def test_страница_отчёта_показывает_нужную_выб�
 
 
 def test_pdf_печать_даёт_ту_же_выборку_и_подпись(scenario: _Scenario) -> None:
-    """Печатный HTML (тот же, что уходит в `page.set_content`) — та же выборка карточек."""
+    """Печатный HTML (тот же, что уходит в `page.set_content`) — та же выборка карточек.
+
+    Пометки «на доработку» здесь нет (РЕШ-198, цикл 2 ревью — фикс
+    `backend/app/export/pdf.py`/`report_print.html`): это подсказка
+    оператору на странице отчёта, в клиентскую выгрузку она не попадает,
+    хотя сама rework-карточка в печати остаётся видимой.
+    """
     html = scenario.print_html
     assert _APPROVE_TITLE_1 in html
     assert _APPROVE_TITLE_2 in html
     assert _REJECT_TITLE not in html
     assert _REWORK_TITLE in html
-    assert "На доработку" in html
+    assert "На доработку" not in html
     assert "ЧЕРНОВИК" not in html
     assert _signature_in(html) is not None
 
 
 def test_docx_даёт_ту_же_выборку_и_подпись(scenario: _Scenario) -> None:
-    """Текст DOCX — та же выборка карточек, что на странице и в PDF."""
+    """Текст DOCX — та же выборка карточек, что на странице и в PDF, без операторской пометки (РЕШ-198)."""
     text = scenario.docx_text
     assert _APPROVE_TITLE_1 in text
     assert _APPROVE_TITLE_2 in text
     assert _REJECT_TITLE not in text
     assert _REWORK_TITLE in text
+    assert "На доработку" not in text
     assert "ЧЕРНОВИК" not in text
     assert _signature_in(text) is not None
 
