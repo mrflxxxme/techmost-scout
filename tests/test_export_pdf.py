@@ -125,6 +125,15 @@ def test_template_never_uses_markdown_empty_evidence_phrase():
     assert "Подтверждений не приложено" not in path.read_text(encoding="utf-8")
 
 
+def test_render_print_html_rework_mark_stays_operator_only():
+    """РЕШ-198: пометка «на доработку» — только для оператора, в PDF её нет."""
+    card = _card(title="Карточка на доработке")
+    view = _view(_report([card]), is_draft=True, rework_keys={(False, 0)})
+    html = render_print_html(view)
+    assert "На доработку" not in html
+    assert "Карточка на доработке" in html
+
+
 def test_render_print_html_links_are_anchors():
     """Ссылки источников печатаются тегом <a href> — в PDF они кликабельны."""
     html = render_print_html(_view(_report([_card()]), is_draft=True))

@@ -10,10 +10,14 @@
 </head>
 <body>
 
-{% macro render_card(card, index, is_contest=False, rework=False) %}
+{# Пометка «на доработку» здесь намеренно не рисуется: это подсказка
+   оператору на странице отчёта (РЕШ-198), в клиентскую выгрузку она не
+   попадает — макрос параметра `rework` не принимает вовсе, чтобы к нему
+   нечего было случайно передать. #}
+{% macro render_card(card, index, is_contest=False) %}
 <div class="print-card">
   <div class="print-card-core">
-    <h3>{{ index }}. {{ card.title }}{% if rework %} <span class="print-badge-gold">На доработку</span>{% endif %}</h3>
+    <h3>{{ index }}. {{ card.title }}</h3>
 
     {% if card.evidence %}
     <p class="print-muted print-maturity"><strong>Стадия зрелости:</strong> {{ maturity_ru.get(card.maturity_stage, card.maturity_stage) }}{% if card.trl_estimate %} (TRL ≈ {{ card.trl_estimate }}){% endif %}</p>
@@ -142,7 +146,7 @@
   <p class="print-muted">Пригодных вариантов не найдено.</p>
   {% endif %}
   {% for card in report.cards %}
-  {{ render_card(card, loop.index, is_contest=False, rework=(False, loop.index0) in rework_keys) }}
+  {{ render_card(card, loop.index, is_contest=False) }}
   {% endfor %}
 </section>
 
@@ -150,7 +154,7 @@
 <section class="print-section">
   <h2>{{ contest_heading }}</h2>
   {% for card in report.contest_cards %}
-  {{ render_card(card, loop.index, is_contest=True, rework=(True, loop.index0) in rework_keys) }}
+  {{ render_card(card, loop.index, is_contest=True) }}
   {% endfor %}
 </section>
 {% endif %}
