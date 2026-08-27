@@ -1,0 +1,77 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: "Э4-И6"
+  did:
+    - "Команда scout export (backend/app/cli.py объявление + backend/app/cli_export.py реализация): --pdf|--docx (ровно один), --draft, --out (меняет только каталог, имя строит export_filename)"
+    - "Без --pdf/--docx — человеческий отказ, код возврата 2, экспортёры не вызываются"
+    - "По запросу в статусе drafted без --draft — отказ «отчёт ещё не проверен экспертом» (РЕШ-199), код возврата 1, экспортёр не вызван, файл не создан, в тексте отказа нет внутренностей ReportNotFoundError"
+    - "С --draft по drafted — вызов export_pdf/export_docx проходит, во ExportView is_draft истинно"
+    - "Имя файла — report-<id>-<ГГГГ-ММ-ДД>.pdf|docx (export_filename в cli_export.py), каталог — settings.out_dir или --out"
+    - "Данные собираются только через export.view.build_export_view — greп load_report|apply_overrides и httpx по backend/app/cli_export.py пуст (критерии 4, инвариант №6)"
+    - "GET /requests/{id}/export.pdf (backend/app/web/routes/report.py, download_pdf): отдаёт FileResponse application/pdf при подменённом export_pdf; несуществующий запрос — 404 человеческой фразой PlainTextResponse (не JSON-исключением); drafted без ?draft=true — 400 человеческой фразой, экспортёр не вызван; с ?draft=true — 200"
+    - "Кнопка на странице отчёта (backend/app/web/templates/report.html): существующая фраза «Полный текст (PDF)» (РЕШ-202) на validated, «Полный текст (PDF, черновик)» на drafted — новая фраза, на визу; ссылка сама подставляет ?draft=true на черновике; классы только существующие .btn/.btn.ghost, theme.css не тронут"
+    - "tests/test_cli_export.py — 10 тестов на CliRunner с подменёнными export_pdf/export_docx (реальная временная база SQLite на tmp_path)"
+    - "tests/test_web_export.py — 6 тестов на TestClient с подменённым export_pdf"
+  artifacts:
+    - backend/app/cli.py
+    - backend/app/cli_export.py
+    - backend/app/web/routes/report.py
+    - backend/app/web/templates/report.html
+    - tests/test_cli_export.py
+    - tests/test_web_export.py
+    - .planning/evidence/Э4-И6-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_cli_export.py -v: 10 passed"
+    - "pytest tests/test_web_export.py -v: 6 passed"
+    - "pytest tests/test_cli_run.py tests/test_cli_doctor_schema_guard.py -v: 27 passed"
+    - "pytest -q: 1045 passed (было 1029 на базовой ветке + 16 новых)"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 189 files already formatted"
+    - "rg -n \"load_report|apply_overrides\" backend/app/cli_export.py: совпадений нет"
+    - "rg -n \"httpx\" backend/app/cli_export.py: совпадений нет"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (раздел «Э4-И6», «Имена файлов выгрузки», таблица «Маршруты»)"
+    - ".planning/DECISIONS.md (РЕШ-199, РЕШ-202)"
+    - "backend/app/cli_export.py"
+    - "backend/app/web/routes/report.py"
+    - "tests/test_cli_export.py"
+    - "tests/test_web_export.py"
+  notes: >-
+    Новые клиентские фразы на визу: 1) отказ CLI без формата — «Не указан формат
+    выгрузки: добавьте --pdf или --docx.»; 2) отказ CLI при обоих флагах сразу —
+    «Выберите один формат: --pdf или --docx, не оба сразу.»; 3) отказ CLI по
+    drafted без --draft — «Экспорт не выполнен: отчёт ещё не проверен экспертом.
+    Чтобы выгрузить черновик, повторите команду с флагом --draft.»; 4) отказ
+    веб-маршрута по неизвестному запросу — «Запрос №<id> не найден.»; 5) отказ
+    веб-маршрута по drafted без ?draft=true — «Отчёт ещё не проверен экспертом —
+    выгрузка черновика требует явного подтверждения.»; 6) подпись кнопки на
+    черновике — «Полный текст (PDF, черновик)» (подпись на validated — дословно
+    существующая фраза РЕШ-202, новой не является).
+
+    Маршрут GET /requests/{id}/export.pdf принимает необязательный query-параметр
+    draft (по умолчанию false) — веб-аналог CLI-флага --draft (инвариант №2):
+    кнопка страницы сама подставляет ?draft=true, когда отчёт ещё черновик;
+    прямой переход по ссылке без параметра на drafted-запросе получает 400, а
+    не тихо отдаёт черновик. В плане это явно не расписано отдельным критерием
+    приёмки для веб-маршрута (только для CLI), но текстом «Что делает» задачи
+    описано прямо («кнопка … передаёт признак черновика»), поэтому решение
+    реализовано и покрыто тестами — на усмотрение ревью, стоит ли фиксировать
+    отдельным пунктом критериев задним числом.
+
+    Важная находка перед стартом (п. 0 инструкции, РЕШ-158): HEAD рабочей копии
+    при входе в задачу был на ветке с материалами деков для партнёров (маркетинг,
+    ХМАО) — совершенно не в истории волны Э4, backend/app/export/{view,pdf,docx}.py
+    отсутствовали вовсе. Заданный базовый коммит 81817bb9 (Волна 1 Э4: отчёт
+    ревью Э4-И3) НЕ был предком HEAD. Своих коммитов в рабочей копии не было
+    (git status — чисто), поэтому вместо эскалации молча выполнено предписанное
+    в постановке действие: `git switch -c e4/i6 81817bb9ee2c077e46e5fd742ed82f729b6b643f`
+    — дальше работа шла на правильной базе. Сообщаю отдельно, потому что случай
+    совпадает с описанием РЕШ-158 (устаревшая/не та база рабочей копии) и
+    оркестратору стоит знать, что копия для этой задачи была создана не от
+    ветки волны, а от чего-то другого.
+
+    Живых вызовов export_pdf (Chromium)/export_docx не делалось — оба
+    подменены заглушками во всех тестах, платных вызовов не было.
