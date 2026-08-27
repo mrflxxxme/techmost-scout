@@ -1,0 +1,134 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-acd61557684664df8
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 11 items
+
+tests/test_verdicts.py::test_действующий_вердикт_последний_по_времени PASSED [  9%]
+tests/test_verdicts.py::test_при_равном_времени_побеждает_больший_id PASSED [ 18%]
+tests/test_verdicts.py::test_effective_verdicts_на_пустом_списке PASSED  [ 27%]
+tests/test_verdicts.py::test_visible_report_убирает_reject_из_обеих_секций_и_сохраняет_порядок PASSED [ 36%]
+tests/test_verdicts.py::test_visible_report_не_убирает_rework PASSED     [ 45%]
+tests/test_verdicts.py::test_visible_report_не_добивает_выдачу PASSED    [ 54%]
+tests/test_verdicts.py::test_visible_report_карточка_без_вердикта_остаётся PASSED [ 63%]
+tests/test_verdicts.py::test_all_cards_reviewed_false_пока_есть_карточка_без_вердикта PASSED [ 72%]
+tests/test_verdicts.py::test_all_cards_reviewed_true_когда_у_всех_есть_вердикт PASSED [ 81%]
+tests/test_verdicts.py::test_all_cards_reviewed_пустой_набор_карточек_не_пройден PASSED [ 90%]
+tests/test_verdicts.py::test_signature_line_использует_общий_формат PASSED [100%]
+
+============================== 11 passed in 0.27s ==============================
+
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-acd61557684664df8
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 7 items
+
+tests/test_export_signature.py::test_подпись_эксперта_дословна_символ_в_символ PASSED [ 14%]
+tests/test_export_signature.py::test_пустое_имя_проверяющего_оставляет_пометку_черновика PASSED [ 28%]
+tests/test_export_signature.py::test_в_markdown_нет_ёлочек_вокруг_названия_системы PASSED [ 42%]
+tests/test_export_signature.py::test_developer_line_не_печатает_не_найдено_хвостом PASSED [ 57%]
+tests/test_export_signature.py::test_developer_line_при_пустом_developer_org_остаётся_не_найдено PASSED [ 71%]
+tests/test_export_signature.py::test_developer_line_печатает_настоящую_команду PASSED [ 85%]
+tests/test_export_signature.py::test_template_filters_регистрирует_developer_line PASSED [100%]
+
+============================== 7 passed in 0.03s ===============================
+
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-acd61557684664df8
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 13 items
+
+tests/test_config.py::test_пример_окружения_читается_как_utf8_без_bom PASSED [  7%]
+tests/test_config.py::test_в_примере_окружения_нет_следов_двойного_кодирования PASSED [ 15%]
+tests/test_config.py::test_каждая_переменная_settings_объявлена_в_примере FAILED [ 23%]
+tests/test_config.py::test_в_примере_нет_переменных_которых_settings_не_читает PASSED [ 30%]
+tests/test_config.py::test_в_примере_окружения_нет_похожего_на_ключ[sk-] PASSED [ 38%]
+tests/test_config.py::test_в_примере_окружения_нет_похожего_на_ключ[Api-Key] PASSED [ 46%]
+tests/test_config.py::test_в_примере_окружения_нет_похожего_на_ключ[Bearer ] PASSED [ 53%]
+tests/test_config.py::test_переменные_с_ключами_и_токенами_объявлены_пустыми PASSED [ 61%]
+tests/test_config.py::test_настройки_набора_oai_киберленинки_больше_нет PASSED [ 69%]
+tests/test_config.py::test_маршруты_по_умолчанию_все_стадии_на_deepseek_резерв_yandex PASSED [ 76%]
+tests/test_config.py::test_second_pass_relevance_max_умолчание_шесть PASSED [ 84%]
+tests/test_config.py::test_reviewer_name_пусто_без_переменной_иначе_её_значение PASSED [ 92%]
+tests/test_config.py::test_demo_duration_seconds_умолчание_150 PASSED    [100%]
+
+=================================== FAILURES ===================================
+_____________ test_каждая_переменная_settings_объявлена_в_примере ______________
+
+    def test_каждая_переменная_settings_объявлена_в_примере():
+        """Настройка, которой нет в примере, до `.env` владельца не доедет."""
+        missing = sorted(_settings_names() - _example_names())
+    
+>       assert missing == [], f"нет в .env.example: {missing}"
+E       AssertionError: нет в .env.example: ['DEMO_DURATION_SECONDS', 'REVIEWER_NAME']
+E       assert ['DEMO_DURATI...EVIEWER_NAME'] == []
+E         
+E         Left contains 2 more items, first extra item: 'DEMO_DURATION_SECONDS'
+E         
+E         Full diff:
+E         - []
+E         + [
+E         +     'DEMO_DURATION_SECONDS',
+E         +     'REVIEWER_NAME',
+E         + ]
+
+tests/test_config.py:90: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_config.py::test_каждая_переменная_settings_объявлена_в_примере
+========================= 1 failed, 12 passed in 0.06s =========================
+
+rg-exit=1
+
+............................................................F........... [  7%]
+........................................................................ [ 14%]
+........................................................................ [ 21%]
+........................................................................ [ 29%]
+........................................................................ [ 36%]
+........................................................................ [ 43%]
+........................................................................ [ 50%]
+........................................................................ [ 58%]
+........................................................................ [ 65%]
+........................................................................ [ 72%]
+........................................................................ [ 80%]
+........................................................................ [ 87%]
+........................................................................ [ 94%]
+.....................................................                    [100%]
+=================================== FAILURES ===================================
+_____________ test_каждая_переменная_settings_объявлена_в_примере ______________
+
+    def test_каждая_переменная_settings_объявлена_в_примере():
+        """Настройка, которой нет в примере, до `.env` владельца не доедет."""
+        missing = sorted(_settings_names() - _example_names())
+    
+>       assert missing == [], f"нет в .env.example: {missing}"
+E       AssertionError: нет в .env.example: ['DEMO_DURATION_SECONDS', 'REVIEWER_NAME']
+E       assert ['DEMO_DURATI...EVIEWER_NAME'] == []
+E         
+E         Left contains 2 more items, first extra item: 'DEMO_DURATION_SECONDS'
+E         Use -v to get more diff
+
+tests/test_config.py:90: AssertionError
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_config.py::test_каждая_переменная_settings_объявлена_в_примере
+1 failed, 988 passed, 1 warning in 62.35s (0:01:02)
+
+All checks passed!
+
+177 files already formatted

@@ -65,6 +65,32 @@ CONSTRAINTS_UNRESOLVED_NOTICE = (
 #: владельца, как и прочие клиентские формулировки (§9 п. 4).
 PAID_LIMIT_NOTICE = "Часть поисковых формулировок не была выполнена — выдача по этой теме может быть неполной."
 
+#: Строка подписи эксперта — дословно РЕШ-197, единственное место определения:
+#: markdown, PDF, DOCX и страница отчёта печатают ровно её (`app.verdicts.
+#: signature_line` собирает готовую строку тем же форматом). До этой правки
+#: markdown печатал почти тот же текст, но с ёлочками вокруг названия системы —
+#: правка приводит его к дословной формулировке владельца.
+REVIEWED_FOOTER = "Подготовлено системой ТехМост Скаут, проверено: {name}, {date}"
+
+
+def developer_line(card: SolutionCard) -> str:
+    """Строка «Разработчик» карточки для markdown, страницы отчёта и печати.
+
+    Заглушка «не найдено» в `developer_team` не печатается хвостом строки —
+    иначе разработчик читается как «ООО «Ромашка» — не найдено» (совет С-3
+    ворот Э3). При пустом `developer_org` строка остаётся честным «не найдено».
+    """
+    developer = card.developer_org or "не найдено"
+    team = (card.developer_team or "").strip()
+    if team and team.casefold() != "не найдено":
+        developer += f" — {team}"
+    return developer
+
+
+#: Точка регистрации Jinja-фильтров экспортёра — общая для страницы отчёта и
+#: печатного шаблона (Э4-И2, Э4-И4), чтобы оба использовали одну реализацию.
+TEMPLATE_FILTERS = {"developer_line": developer_line}
+
 
 def limitations_lines(report: Report) -> list[str]:
     """Тело блока «Ограничения этого поиска» — без заголовка (РЕШ-189 п. 5).
@@ -114,7 +140,8 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
     lines.append("# Подбор научно-технических решений")
     lines.append("")
     if validated and reviewer:
-        lines.append(f"*Подготовлено системой «ТехМост Скаут», проверено: {reviewer}, {report.generated_at:%d.%m.%Y}*")
+        footer = REVIEWED_FOOTER.format(name=reviewer, date=f"{report.generated_at:%d.%m.%Y}")
+        lines.append(f"*{footer}*")
     else:
         lines.append("> **ЧЕРНОВИК — не проверено экспертом.** Не отправлять клиенту до научной валидации.")
     lines.append("")
@@ -241,10 +268,7 @@ def _render_card(card: SolutionCard, index: int, *, contest: bool = False) -> li
     lines.append(card.essence)
     lines.append("")
 
-    developer = card.developer_org or "не найдено"
-    if card.developer_team:
-        developer += f" — {card.developer_team}"
-    lines.append(f"**Разработчик:** {developer}")
+    lines.append(f"**Разработчик:** {developer_line(card)}")
     lines.append("")
     if card.contact_leads:
         lines.append("**Как выйти на связь:** " + "; ".join(card.contact_leads))
