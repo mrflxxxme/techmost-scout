@@ -3,9 +3,12 @@
 `GET /requests/{id}/review` показывает **все** карточки запроса обеих секций
 (включая уже отклонённые — эксперт видит их для контроля, в отличие от
 клиентского вида, который их прячет). Поэтому здесь сознательно не
-используется `export.view.build_export_view` — тот сборщик готовит вид ДЛЯ
-КЛИЕНТА (фильтр reject, переиндексация позиций), а ревью работает с сырым
-отчётом и исходными id строк `solution_cards`.
+используется `export.view.build_export_view` целиком (фильтр reject и
+переиндексация позиций той сборки ревью не нужны) — но правки оператора
+(`report_overrides.apply_overrides`) на отчёт всё же накладываются (РЕШ-205):
+эксперт должен валидировать ровно тот текст, что уедет клиенту, а не
+исходный вывод модели. Наложение правок делается по исходным id строк
+`solution_cards`, фильтр reject поверх не применяется.
 
 `POST /cards/{card_id}/verdict` пишет **новую** строку `verdicts` — ничего не
 обновляется и не удаляется (РЕШ-196 п. 3). Когда после записи у каждой
@@ -34,6 +37,7 @@ from app.models import RequestStatus
 from app.models import SolutionCard as SolutionCardRow
 from app.models import Verdict as VerdictRow
 from app.pipeline.persistence import ReportNotFoundError, load_report
+from app.report_overrides import OverrideMap, apply_overrides
 from app.schemas import Verdict as VerdictDecision
 from app.verdicts import CardKey, all_cards_reviewed, effective_verdicts
 
@@ -81,6 +85,14 @@ async def _load_card_ids(session: AsyncSession, request_id: int) -> dict[CardKey
     return {(row.is_contest, row.position): row.id for row in rows}
 
 
+async def _load_overrides(session: AsyncSession, request_id: int) -> OverrideMap:
+    """Правки оператора по ключу (секция, позиция) — тем же ключом, что и `_load_card_ids`."""
+    rows = (
+        (await session.execute(select(SolutionCardRow).where(SolutionCardRow.request_id == request_id))).scalars().all()
+    )
+    return {(row.is_contest, row.position): dict(row.editor_overrides or {}) for row in rows}
+
+
 async def _load_effective(session: AsyncSession, card_ids: dict[CardKey, int]) -> dict[int, VerdictRow]:
     """Действующие вердикты (последний по `created_at`, тай-брейк по `id`) по карточкам запроса."""
     if not card_ids:
@@ -115,6 +127,12 @@ async def show_review(request_id: int, request: Request, session: AsyncSession =
 
     card_ids = await _load_card_ids(session, request_id)
     effective = await _load_effective(session, card_ids)
+
+    # РЕШ-205: эксперт видит правленый текст, а не исходный вывод модели —
+    # ключи (is_contest, position) остаются позициями из БД, наложение их не
+    # сдвигает (в отличие от `build_export_view`, здесь нет фильтра reject).
+    overrides = await _load_overrides(session, request_id)
+    report = apply_overrides(report, overrides)
 
     cards_with_ids = [(index + 1, card, card_ids.get((False, index))) for index, card in enumerate(report.cards)]
     contest_with_ids = [

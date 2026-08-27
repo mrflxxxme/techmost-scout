@@ -116,18 +116,19 @@ def test_validated_ровно_подпись_и_ни_одного_чернови
     assert "ЧЕРНОВИК" not in text
 
 
-def test_пустой_evidence_не_печатает_стадию_и_trl(tmp_path: Path, brief):
-    """Инвариант №1: карточка без подтверждений не заявляет ни стадию, ни TRL."""
-    card = _make_card(maturity_stage=MaturityStage.LAB, trl_estimate=5, evidence=[])
-    report = _make_report([card], brief=brief)
+def test_карточка_без_evidence_не_попадает_в_docx(tmp_path: Path, brief):
+    """РЕШ-204: карточка без единого подтверждения не печатается вовсе."""
+    bare = _make_card(title="Карточка без подтверждений", maturity_stage=MaturityStage.LAB, trl_estimate=5, evidence=[])
+    report = _make_report([bare], brief=brief)
     view = _make_view(report, is_draft=True)
 
     export_docx(view, tmp_path / "report-1-2026-08-27.docx")
 
     text = _full_text(tmp_path / "report-1-2026-08-27.docx")
+    assert "Карточка без подтверждений" not in text
     assert "Стадия зрелости" not in text
     assert "TRL" not in text
-    assert "Нельзя показывать клиенту: нет подтверждений" in text
+    assert "Пригодных вариантов не найдено." in text
 
 
 def test_карточка_с_evidence_печатает_стадию_и_trl(tmp_path: Path, brief):
@@ -145,6 +146,35 @@ def test_карточка_с_evidence_печатает_стадию_и_trl(tmp_p
     text = _full_text(tmp_path / "report-1-2026-08-27.docx")
     assert "прошла пилот на объекте" in text
     assert "TRL ≈ 6" in text
+
+
+def test_карточка_без_evidence_пропускается_а_порядок_остальных_сохраняется(tmp_path: Path, brief):
+    """Смешанный список: карточка без evidence выпадает, соседние сохраняют порядок."""
+    first = _make_card(title="Первая с подтверждением")
+    bare = _make_card(title="Вторая без подтверждения", evidence=[])
+    third = _make_card(title="Третья с подтверждением")
+    report = _make_report([first, bare, third], brief=brief)
+    view = _make_view(report, is_draft=True)
+
+    export_docx(view, tmp_path / "report-1-2026-08-27.docx")
+
+    text = _full_text(tmp_path / "report-1-2026-08-27.docx")
+    assert "Вторая без подтверждения" not in text
+    assert text.index("Первая с подтверждением") < text.index("Третья с подтверждением")
+
+
+def test_конкурсная_карточка_без_evidence_не_попадает_и_секция_скрывается(tmp_path: Path, brief):
+    """Если у всех конкурсных карточек пустой evidence — заголовок секции не печатается."""
+    main_card = _make_card(title="Основная карточка")
+    bare_contest = _make_card(title="Конкурсная без подтверждения", evidence=[])
+    report = _make_report([main_card], contest_cards=[bare_contest], brief=brief)
+    view = _make_view(report, is_draft=True)
+
+    export_docx(view, tmp_path / "report-1-2026-08-27.docx")
+
+    text = _full_text(tmp_path / "report-1-2026-08-27.docx")
+    assert "Конкурсная без подтверждения" not in text
+    assert "Ранние разработки и команды" not in text
 
 
 def test_секция_сравнения_печатается_таблицей(tmp_path: Path, brief):

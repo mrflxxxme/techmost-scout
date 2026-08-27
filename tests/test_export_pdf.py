@@ -110,13 +110,34 @@ def test_render_print_html_validated_has_exact_footer_and_no_draft():
     assert "ЧЕРНОВИК" not in html
 
 
-def test_render_print_html_empty_evidence_hides_maturity_and_trl():
-    """Инвариант №1: без подтверждений карточка не заявляет ни зрелость, ни TRL."""
+def test_render_print_html_empty_evidence_card_is_not_printed():
+    """РЕШ-204: карточка без единого подтверждения в печать не попадает вовсе."""
     bare = _card(title="Карточка без подтверждений", evidence=[], trl_estimate=None)
     html = render_print_html(_view(_report([bare]), is_draft=True))
+    assert "Карточка без подтверждений" not in html
     assert "Стадия зрелости" not in html
     assert "TRL" not in html
-    assert "Нельзя показывать клиенту: нет подтверждений" in html
+    assert "Нельзя показывать клиенту: нет подтверждений" not in html
+    assert "Пригодных вариантов не найдено." in html
+
+
+def test_render_print_html_mixed_evidence_keeps_order_of_visible_cards():
+    """Смешанный список: карточка без evidence выпадает, соседние сохраняют порядок."""
+    first = _card(title="Первая с подтверждением")
+    bare = _card(title="Вторая без подтверждения", evidence=[])
+    third = _card(title="Третья с подтверждением")
+    html = render_print_html(_view(_report([first, bare, third]), is_draft=True))
+    assert "Вторая без подтверждения" not in html
+    assert html.index("Первая с подтверждением") < html.index("Третья с подтверждением")
+
+
+def test_render_print_html_contest_section_hidden_when_all_bare():
+    """Если у всех конкурсных карточек пустой evidence — секция вовсе не печатается."""
+    bare_contest = _card(title="Конкурсная без подтверждения", evidence=[])
+    view = _view(_report([_card()], contest_cards=[bare_contest]), is_draft=True)
+    html = render_print_html(view)
+    assert "Конкурсная без подтверждения" not in html
+    assert "Ранние разработки и команды" not in html
 
 
 def test_template_never_uses_markdown_empty_evidence_phrase():

@@ -176,6 +176,29 @@ def test_экран_открывается_и_содержит_формы_обе
     assert 'value="Мария Петрова"' in response.text
 
 
+def test_правка_title_видна_на_экране_ревью(client, db_session_factory, brief):
+    """РЕШ-205: экран ревью показывает текст после наложения `editor_overrides`."""
+    report = _make_report([_make_card(title="Исходный заголовок")], [], brief=brief)
+    request_id, main_ids, _ = asyncio.run(_seed(db_session_factory, report=report, status=RequestStatus.DRAFTED))
+
+    async def _apply_override() -> None:
+        async with db_session_factory() as session:
+            card_row = await session.get(SolutionCardRow, main_ids[0])
+            card_row.editor_overrides = {"title": "Правленый заголовок"}
+
+    asyncio.run(_apply_override())
+
+    with client:
+        response = client.get(f"/requests/{request_id}/review", auth=_AUTH)
+
+    assert response.status_code == 200
+    assert "Правленый заголовок" in response.text
+    assert "Исходный заголовок" not in response.text
+    # Ключ (секция, позиция) остаётся позицией из БД — форма вердикта всё
+    # так же ссылается на исходный id карточки, наложение правки его не сдвигает.
+    assert f"/cards/{main_ids[0]}/verdict" in response.text
+
+
 def test_вердикт_пишет_новую_строку_дважды(client, db_session_factory, brief):
     """Два вердикта подряд по одной карточке — две строки в `verdicts`."""
     report = _make_report([_make_card()], [], brief=brief)

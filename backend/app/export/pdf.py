@@ -65,6 +65,13 @@ def render_print_html(view: ExportView) -> str:
     Подпись эксперта показывается только при `not view.is_draft` — до
     валидации показ строки «проверено» был бы нарушением инварианта №2, даже
     если действующий вердикт уже частично проставлен.
+
+    Карточки с пустым `evidence` в печать не попадают вовсе (РЕШ-204): клиент
+    не должен видеть карточку без единого подтверждения даже в урезанном виде
+    — красная плашка «нет подтверждений» остаётся только на операторской
+    странице отчёта (`report.html`, `_card.html`), которую эта функция не
+    строит. Относительный порядок остальных карточек и разбиение на секции
+    сохраняются — фильтр только убирает элементы, не переставляет их.
     """
     report = view.report
     signature = ""
@@ -77,6 +84,8 @@ def render_print_html(view: ExportView) -> str:
     template = _environment().get_template("report_print.html")
     return template.render(
         report=report,
+        print_cards=[card for card in report.cards if card.evidence],
+        print_contest_cards=[card for card in report.contest_cards if card.evidence],
         is_draft=view.is_draft,
         signature=signature,
         print_css=_PRINT_CSS_PATH.read_text(encoding="utf-8"),

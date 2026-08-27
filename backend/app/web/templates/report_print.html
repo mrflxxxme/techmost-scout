@@ -142,18 +142,18 @@
 
 <section class="print-section">
   <h2>Варианты решений</h2>
-  {% if not report.cards %}
+  {% if not print_cards %}
   <p class="print-muted">Пригодных вариантов не найдено.</p>
   {% endif %}
-  {% for card in report.cards %}
+  {% for card in print_cards %}
   {{ render_card(card, loop.index, is_contest=False) }}
   {% endfor %}
 </section>
 
-{% if report.contest_cards %}
+{% if print_contest_cards %}
 <section class="print-section">
   <h2>{{ contest_heading }}</h2>
-  {% for card in report.contest_cards %}
+  {% for card in print_contest_cards %}
   {{ render_card(card, loop.index, is_contest=True) }}
   {% endfor %}
 </section>
