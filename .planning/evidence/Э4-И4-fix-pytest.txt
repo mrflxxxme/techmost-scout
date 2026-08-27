@@ -1,0 +1,56 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-acaa385dc61d95a09
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 10 items
+
+tests/test_export_pdf.py::test_render_print_html_draft_has_repeating_mark_and_no_signature PASSED [ 10%]
+tests/test_export_pdf.py::test_render_print_html_validated_has_exact_footer_and_no_draft PASSED [ 20%]
+tests/test_export_pdf.py::test_render_print_html_empty_evidence_hides_maturity_and_trl PASSED [ 30%]
+tests/test_export_pdf.py::test_template_never_uses_markdown_empty_evidence_phrase PASSED [ 40%]
+tests/test_export_pdf.py::test_render_print_html_rework_mark_stays_operator_only PASSED [ 50%]
+tests/test_export_pdf.py::test_render_print_html_links_are_anchors PASSED [ 60%]
+tests/test_export_pdf.py::test_export_pdf_calls_page_pdf_exactly_once PASSED [ 70%]
+tests/test_export_pdf.py::test_export_pdf_creates_parent_directory PASSED [ 80%]
+tests/test_export_pdf.py::test_export_pdf_html_matches_render_print_html[True] PASSED [ 90%]
+tests/test_export_pdf.py::test_export_pdf_html_matches_render_print_html[False] PASSED [100%]
+
+============================== 10 passed in 0.47s ==============================
+
+=== самопроверка мутацией (протокол сессии) ===
+git stash push -- backend/app/export/pdf.py backend/app/web/templates/report_print.html — откат к версии из HEAD (47f7e07, версия с багом)
+pytest tests/test_export_pdf.py::test_render_print_html_rework_mark_stays_operator_only -v -> 1 failed: 'На доработку' обнаружена в HTML (мутация поймана)
+git stash pop — фикс восстановлен, дальнейшие прогоны сделаны уже с фиксом
+
+=== pytest -q (весь набор) ===
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 27%]
+........................................................................ [ 33%]
+........................................................................ [ 40%]
+........................................................................ [ 47%]
+........................................................................ [ 54%]
+........................................................................ [ 60%]
+........................................................................ [ 67%]
+........................................................................ [ 74%]
+........................................................................ [ 81%]
+........................................................................ [ 87%]
+........................................................................ [ 94%]
+........................................................                 [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1064 passed, 1 warning in 61.56s (0:01:01)
+
+=== ruff check . ===
+All checks passed!
+
+=== ruff format --check . ===
+193 files already formatted
