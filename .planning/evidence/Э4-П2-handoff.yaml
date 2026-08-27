@@ -1,0 +1,60 @@
+handoff:
+  from: "implementer"
+  to: "reviewer"
+  task: "Э4-П2"
+  did:
+    - "backend/app/models.py: новая таблица summary_overrides (SummaryOverride) — request_id unique, recommendation Text nullable, caveats JSON nullable, updated_at. Отдельная таблица, а не колонка requests (грабля Э2-А: create_all не добавляет колонку в существующую таблицу)"
+    - "backend/app/summary_overrides.py (новый): чистые функции над schemas.Report в духе report_overrides.py — SummaryOverrideData(recommendation, caveats) и apply_summary_override(report, override); замена целиком, без частичного слияния текста; исходный Report не мутируется"
+    - "backend/app/export/view.py: ExportView получил total_cards (карточки обеих секций ДО фильтра reject) и summary_text_edited; build_export_view читает строку summary_overrides и накладывает её после apply_overrides и до visible_report; добавлена чистая функция summary_text_printable(view, printed_cards)"
+    - "backend/app/web/routes/review.py: GET /requests/{id}/review накладывает правку сводки на показываемый отчёт (РЕШ-205, тот же принцип, что и для карточек); новый POST /requests/{id}/summary — upsert одной строки summary_overrides, отказ 400 на пустую рекомендацию, отказ 404 на несуществующий запрос"
+    - "backend/app/web/templates/review.html: секция «Сводка» с формой правки рекомендации и оговорок (textarea, класс verdict-form — уже даёт min-height 44px по theme.css, новых стилей не добавлял)"
+    - "tests/test_summary_overrides.py (новый, 268 строк): чистые тесты apply_summary_override/SummaryOverrideData (без БД) + тесты summary_text_printable (три ветки) + тесты build_export_view (total_cards, summary_text_edited) на временной SQLite"
+    - "tests/test_web_review.py: добавлены тесты на форму (текущий и правленый текст), на POST /requests/{id}/summary (запись, повторная перезапись той же строки, пустая рекомендация, несуществующий запрос, 401 без авторизации); файл держится в пределах 500 строк — часть тестов на build_export_view вынесена в test_summary_overrides.py, чтобы не пробить лимит tests/test_tests_layout.py"
+  artifacts:
+    - "backend/app/models.py"
+    - "backend/app/summary_overrides.py"
+    - "backend/app/export/view.py"
+    - "backend/app/web/routes/review.py"
+    - "backend/app/web/templates/review.html"
+    - "tests/test_summary_overrides.py"
+    - "tests/test_web_review.py"
+  self_audit: "pass"
+  checks:
+    - "pytest tests/test_summary_overrides.py tests/test_web_review.py -q: 28 passed"
+    - "pytest -q: 1095 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 196 files already formatted"
+    - "DATABASE_URL=<временный файл вне data/> .venv/bin/python -m app.cli doctor: печатает «Схема базы совпадает с моделями.» (НЕ «разошлась»); дальнейший отказ в блоке проверки моделей (LLMError про неизвестный провайдер gigachat в .env этой рабочей копии) не связан с задачей — config.py и llm/router.py не входят в файлы задачи и не менялись"
+    - "git status --porcelain: изменены/добавлены ровно 7 файлов из списка задачи, боевая data/scout.db не создавалась и не открывалась"
+  escalate: "none"
+  read_first:
+    - ".planning/PLAN.md (раздел «Волна правок аудита Э4», задача Э4-П2)"
+    - ".planning/DECISIONS.md (РЕШ-206, РЕШ-186, РЕШ-197, РЕШ-198, РЕШ-205)"
+    - "backend/app/report_overrides.py (образец, которому подражает summary_overrides.py)"
+    - "backend/app/export/view.py (build_export_view, summary_text_printable)"
+    - "backend/app/web/routes/review.py (edit_summary, show_review)"
+    - "backend/app/web/templates/review.html (секция «Сводка»)"
+  notes: |
+    Новые человекочитаемые фразы задачи — на визу владельца:
+      - "Рекомендация (правка эксперта)" — подпись поля формы
+      - "Оговорки (по одной на строку)" — подпись поля формы
+      - "Сохранить сводку" — текст кнопки
+      - "Рекомендация не может быть пустой — опишите, с чего начать." — отказ 400 на пустую рекомендацию
+      - "Сводка сохранена. Рекомендация: {текст}. Оговорки: {текст}." / "Сводка сохранена. Рекомендация: {текст}. Оговорок нет." — фрагмент после успешной записи
+      - "Текущая рекомендация:" / "Оговорки:" — подписи в блоке просмотра сводки на экране ревью
+
+    Решение по валидации: POST отклоняет пустую (только пробелы) рекомендацию
+    400-й — по аналогии с REFUSAL_EMPTY_NAME для вердикта (пустой текст в
+    клиентской выгрузке хуже, чем отказ формы). В критериях приёмки задачи
+    этого явно не было — если владелец сочтёт разрешить пустую рекомендацию,
+    правка тривиальна (убрать одну проверку и REFUSAL_EMPTY_RECOMMENDATION).
+
+    За границами задачи замечено, не правил: `doctor` в этой рабочей копии
+    падает на проверке моделей из-за резервного провайдера "gigachat" в
+    настройках маршрутизации LLM (`fallback_order`), которого нет среди
+    известных провайдеров (`deepseek`, `yandex`) — это конфигурация
+    окружения (`.env`/`config.py`), не относится к задаче Э4-П2 и не входит
+    в список файлов задачи.
+
+    Живых вызовов моделей и источников не делал — задача целиком офлайн
+    (хранение и веб-экран), трат нет.

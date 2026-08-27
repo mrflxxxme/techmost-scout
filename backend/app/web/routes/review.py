@@ -15,6 +15,12 @@
 строки `solution_cards` запроса есть хотя бы один вердикт
 (`app.verdicts.all_cards_reviewed`), статус запроса становится `validated`;
 `exported` этим не понижается.
+
+`POST /requests/{id}/summary` — правка рекомендации и оговорок сводки
+(РЕШ-206): в отличие от вердиктов, здесь **одна** строка `summary_overrides`
+на запрос (`app.models.SummaryOverride`), повторный вызов перезаписывает её
+же, а не добавляет новую — текст сводки не обучающая выборка, ценность
+только в последней версии, которая уедет клиенту.
 """
 
 from __future__ import annotations
@@ -35,10 +41,12 @@ from app.export.markdown import CONTEST_SECTION_HEADING
 from app.models import Request as RequestRow
 from app.models import RequestStatus
 from app.models import SolutionCard as SolutionCardRow
+from app.models import SummaryOverride as SummaryOverrideRow
 from app.models import Verdict as VerdictRow
 from app.pipeline.persistence import ReportNotFoundError, load_report
 from app.report_overrides import OverrideMap, apply_overrides
 from app.schemas import Verdict as VerdictDecision
+from app.summary_overrides import SummaryOverrideData, apply_summary_override
 from app.verdicts import CardKey, all_cards_reviewed, effective_verdicts
 
 log = logging.getLogger(__name__)
@@ -50,6 +58,7 @@ CARD_NOT_FOUND = "Карточка №{card_id} не найдена."
 REFUSAL_EMPTY_NAME = "Укажите имя проверяющего — без имени вердикт не засчитывается."
 REFUSAL_RATING_RANGE = "Оценка должна быть от 1 до 5."
 REFUSAL_UNKNOWN_DECISION = "Неизвестное решение — выберите «Одобрить», «На доработку» или «Отклонить»."
+REFUSAL_EMPTY_RECOMMENDATION = "Рекомендация не может быть пустой — опишите, с чего начать."
 
 #: Русские подписи решения — общие для формы и фрагмента с записанным вердиктом.
 DECISION_LABELS: dict[VerdictDecision, str] = {
@@ -101,6 +110,15 @@ async def _load_effective(session: AsyncSession, card_ids: dict[CardKey, int]) -
     return effective_verdicts(found.scalars().all())
 
 
+async def _load_summary_override_row(session: AsyncSession, request_id: int) -> SummaryOverrideRow | None:
+    """Строка `summary_overrides` запроса — не более одной по построению (unique)."""
+    return (
+        (await session.execute(select(SummaryOverrideRow).where(SummaryOverrideRow.request_id == request_id)))
+        .scalars()
+        .one_or_none()
+    )
+
+
 @router.get("/requests/{request_id}/review", response_class=HTMLResponse)
 async def show_review(request_id: int, request: Request, session: AsyncSession = Depends(get_session)) -> HTMLResponse:
     """Экран ревью: карточки обеих секций в одну колонку, форма вердикта на каждую.
@@ -133,6 +151,16 @@ async def show_review(request_id: int, request: Request, session: AsyncSession =
     # сдвигает (в отличие от `build_export_view`, здесь нет фильтра reject).
     overrides = await _load_overrides(session, request_id)
     report = apply_overrides(report, overrides)
+
+    # РЕШ-206: то же правило для сводки — форма правки показывает текущий
+    # текст (правленый, если правка есть, иначе исходный вывод модели).
+    summary_override_row = await _load_summary_override_row(session, request_id)
+    summary_override = (
+        SummaryOverrideData(recommendation=summary_override_row.recommendation, caveats=summary_override_row.caveats)
+        if summary_override_row is not None
+        else None
+    )
+    report = apply_summary_override(report, summary_override)
 
     cards_with_ids = [(index + 1, card, card_ids.get((False, index))) for index, card in enumerate(report.cards)]
     contest_with_ids = [
@@ -214,6 +242,48 @@ async def submit_verdict(
         '<div class="notice mb-sm">'
         f"Вердикт записан: {label}, оценка {rating}/5, проверяющий {escape(name)}{comment_suffix}. "
         f"Проверено {len(effective)} из {len(card_ids)}."
+        "</div>"
+    )
+    return HTMLResponse(content=fragment, status_code=200)
+
+
+@router.post("/requests/{request_id}/summary", response_class=HTMLResponse)
+async def edit_summary(
+    request_id: int,
+    recommendation: str = Form(...),
+    caveats: str = Form(default=""),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    """Записать правку рекомендации и оговорок сводки (РЕШ-206).
+
+    Пишет ОДНУ строку `summary_overrides` на запрос: если строка уже есть,
+    её поля перезаписываются, новая строка не создаётся — в отличие от
+    `submit_verdict`, здесь нет ценности хранить историю правок текста.
+    `caveats` собирается формой построчно (по образцу `risks`/`contact_leads`
+    в `report.py::edit_card`) и разбирается в список до записи.
+    """
+    request_row = await session.get(RequestRow, request_id)
+    if request_row is None:
+        return _notice(REQUEST_NOT_FOUND.format(request_id=request_id), status_code=404)
+
+    recommendation_text = recommendation.strip()
+    if not recommendation_text:
+        return _notice(REFUSAL_EMPTY_RECOMMENDATION, status_code=400)
+
+    caveats_list = [line.strip() for line in caveats.splitlines() if line.strip()]
+
+    override_row = await _load_summary_override_row(session, request_id)
+    if override_row is None:
+        override_row = SummaryOverrideRow(request_id=request_id)
+        session.add(override_row)
+    override_row.recommendation = recommendation_text
+    override_row.caveats = caveats_list
+    await session.flush()
+
+    caveats_suffix = f" Оговорки: {escape('; '.join(caveats_list))}." if caveats_list else " Оговорок нет."
+    fragment = (
+        '<div class="notice mb-sm">'
+        f"Сводка сохранена. Рекомендация: {escape(recommendation_text)}.{caveats_suffix}"
         "</div>"
     )
     return HTMLResponse(content=fragment, status_code=200)
