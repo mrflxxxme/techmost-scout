@@ -20,6 +20,12 @@
 <h1>Подбор решений — запрос №{{ row.id }}</h1>
 <p class="muted">Отрасль: {{ report.brief.industry }} · статус: {{ row.status_label }} · стоимость машинной обработки {{ "%.2f"|format(report.cost_rub) }} ₽</p>
 
+<p class="mb-lg">
+  <a class="btn ghost" href="{{ export_href }}">
+    {% if is_draft %}Полный текст (PDF, черновик){% else %}Полный текст (PDF){% endif %}
+  </a>
+</p>
+
 <div class="bezel">
   <div class="core">
     <p><strong>Задача:</strong> {{ report.brief.task_summary }}</p>

@@ -14,12 +14,15 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cli_export import export_filename
+from app.config import get_settings
 from app.db import get_session
 from app.export.markdown import CONFIDENCE_RU, CONTEST_SECTION_HEADING, MATURITY_RU, limitations_lines
+from app.export.pdf import export_pdf
 from app.export.view import build_export_view
 from app.models import Request as RequestRow
 from app.models import SolutionCard as SolutionCardRow
@@ -87,6 +90,7 @@ async def show_report(request_id: int, request: Request, session: AsyncSession =
             "report": report,
             "is_draft": view.is_draft,
             "signature": signature,
+            "export_href": f"/requests/{request_id}/export.pdf" + ("?draft=true" if view.is_draft else ""),
             "cards_with_ids": cards_with_ids,
             "contest_with_ids": contest_with_ids,
             "contest_heading": CONTEST_SECTION_HEADING.removeprefix("## "),
@@ -95,6 +99,36 @@ async def show_report(request_id: int, request: Request, session: AsyncSession =
             "confidence_ru": CONFIDENCE_RU,
         },
     )
+
+
+@router.get("/requests/{request_id}/export.pdf")
+async def download_pdf(request_id: int, draft: bool = False, session: AsyncSession = Depends(get_session)) -> Response:
+    """Выгрузить PDF отчёта по кнопке страницы (Э4-И6, РЕШ-202).
+
+    Данные — тем же `build_export_view`, каким собрана сама страница отчёта:
+    второго пути правды нет. Черновик отдаётся только при явном `?draft=true`
+    в ссылке — тот же контракт по смыслу, что у `--draft` в `scout export`
+    (РЕШ-199), перенесённый на кнопку страницы (инвариант №2): кнопка сама
+    подставляет этот параметр, когда отчёт ещё черновик (см. `show_report`).
+    Отказы — читаемым текстом, а не `HTTPException`: у неё тело JSON, а
+    страница, открытая прямым переходом браузера, должна показать фразу, а не
+    служебный `{"detail": ...}`.
+    """
+    try:
+        view = await build_export_view(session, request_id)
+    except ReportNotFoundError as exc:
+        log.info("экспорт запроса №%s недоступен: %s", request_id, exc)
+        return PlainTextResponse(f"Запрос №{request_id} не найден.", status_code=404)
+
+    if view.is_draft and not draft:
+        return PlainTextResponse(
+            "Отчёт ещё не проверен экспертом — выгрузка черновика требует явного подтверждения.",
+            status_code=400,
+        )
+
+    out_path = get_settings().out_dir / export_filename(request_id, "pdf")
+    await export_pdf(view, out_path)
+    return FileResponse(out_path, media_type="application/pdf", filename=out_path.name)
 
 
 @router.post("/cards/{card_id}/edit")
