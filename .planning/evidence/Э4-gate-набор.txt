@@ -1,0 +1,3 @@
+1075 passed, 1 warning in 84.22s (0:01:24)
+All checks passed!
+194 files already formatted

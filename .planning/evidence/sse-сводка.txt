@@ -1,0 +1,16 @@
+=== SSE-запись прогона №8 (с таймстампами) ===
+952
+стадии:
+    702 "stage": "scorer"
+    123 "stage": "cards"
+     71 "stage": "search"
+     34 "stage": "summary"
+      8 "stage": "dedup_judge"
+      7 "stage": "planner"
+      5 "stage": "dedup"
+      1 "stage": "enrich"
+      1 "stage": "done"
+макс. пауза между событиями, с:
+2.02
+финальное событие:
+17:59:11.091 data: {"stage": "done", "message": "Отчёт готов. Стоимость запроса: 11.37 ₽", "fraction": 1.0}
