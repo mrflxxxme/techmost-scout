@@ -121,10 +121,10 @@
 
 <section class="print-section">
   <h2>Рекомендация</h2>
-  {% if summary_printable %}
+  {% if recommendation_printable %}
   <p>{{ report.summary.recommendation }}</p>
   {% else %}
-  <p class="print-muted">{{ summary_notice }}</p>
+  <p class="print-muted">{{ recommendation_notice }}</p>
   {% endif %}
 </section>
 
@@ -141,6 +141,13 @@
       {% endfor %}
     </tbody>
   </table>
+</section>
+{% elif comparison_table_hidden %}
+{# РЕШ-212: таблица спрятана (соответствие строк карточкам не подтверждено),
+   но раздел не исчезает молча — на её месте честная строка. #}
+<section class="print-section">
+  <h2>Сравнение вариантов</h2>
+  <p class="print-muted">{{ comparison_hidden_notice }}</p>
 </section>
 {% endif %}
 

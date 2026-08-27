@@ -78,7 +78,8 @@ def _view(
         # совпадает с числом карточек в переданном отчёте — тесты, которым
         # важна ветка «сводка не печатается», задают `total_cards` сами.
         "total_cards": len(report.cards) + len(report.contest_cards),
-        "summary_text_edited": False,
+        "recommendation_edited": False,
+        "caveats_edited": False,
     }
     fields.update(overrides)
     return ExportView(**fields)
@@ -259,7 +260,7 @@ def test_render_print_html_summary_not_printable_when_card_hidden_and_not_edited
         [_card()],
         summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["В карточке 3 риск не подтверждён."]),
     )
-    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    view = _view(report, is_draft=True, total_cards=2, recommendation_edited=False, caveats_edited=False)
 
     html = render_print_html(view)
 
@@ -280,7 +281,7 @@ def test_render_print_html_summary_not_printable_when_hidden_by_empty_evidence()
         [_card(), bare],
         summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["В карточке 3 риск не подтверждён."]),
     )
-    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    view = _view(report, is_draft=True, total_cards=2, recommendation_edited=False, caveats_edited=False)
 
     html = render_print_html(view)
 
@@ -297,7 +298,7 @@ def test_render_print_html_sources_unavailable_line_survives_hidden_summary():
         summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["Оговорка модели."]),
         sources_unavailable=["cyberleninka"],
     )
-    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    view = _view(report, is_draft=True, total_cards=2, recommendation_edited=False, caveats_edited=False)
 
     html = render_print_html(view)
 
@@ -312,7 +313,7 @@ def test_render_print_html_summary_printable_when_expert_edited_recommendation()
         [_card()],
         summary=ReportSummary(recommendation="Текст эксперта.", caveats=["Правленая оговорка."]),
     )
-    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=True)
+    view = _view(report, is_draft=True, total_cards=2, recommendation_edited=True, caveats_edited=True)
 
     html = render_print_html(view)
 
@@ -341,7 +342,7 @@ def test_сквозной_отчёт_с_отклонённой_карточко�
         sources_unavailable=["cyberleninka"],
         cost_rub=11.3711,
     )
-    view = _view(report, is_draft=True, total_cards=4, summary_text_edited=False)
+    view = _view(report, is_draft=True, total_cards=4, recommendation_edited=False, caveats_edited=False)
 
     html = render_print_html(view)
 
@@ -372,7 +373,7 @@ def test_сквозной_отчёт_с_отклонённой_карточко�
             ],
         ),
     )
-    view = _view(report, is_draft=True, total_cards=4, summary_text_edited=True)
+    view = _view(report, is_draft=True, total_cards=4, recommendation_edited=True, caveats_edited=True)
 
     html = render_print_html(view)
 
@@ -394,7 +395,7 @@ def test_render_print_html_machine_notice_survives_hidden_card_prose_does_not():
             caveats=[PAID_LIMIT_NOTICE, "В карточке 3 риск не подтверждён."],
         ),
     )
-    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    view = _view(report, is_draft=True, total_cards=2, recommendation_edited=False, caveats_edited=False)
 
     html = render_print_html(view)
 
@@ -413,7 +414,7 @@ def test_render_print_html_intake_refine_notices_survive_hidden_card(notice: str
         [_card()],
         summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=[notice, "проза модели"]),
     )
-    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    view = _view(report, is_draft=True, total_cards=2, recommendation_edited=False, caveats_edited=False)
 
     html = render_print_html(view)
 
@@ -431,7 +432,7 @@ def test_render_print_html_limitations_section_appears_for_machine_notice_only()
         summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=[PAID_LIMIT_NOTICE]),
         sources_unavailable=[],
     )
-    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    view = _view(report, is_draft=True, total_cards=2, recommendation_edited=False, caveats_edited=False)
 
     html = render_print_html(view)
 
@@ -453,7 +454,7 @@ def test_render_print_html_printable_count_includes_contest_cards():
         contest_cards=[contest_card],
         summary=ReportSummary(recommendation="Начать с варианта №1."),
     )
-    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    view = _view(report, is_draft=True, total_cards=2, recommendation_edited=False, caveats_edited=False)
 
     html = render_print_html(view)
 
@@ -472,7 +473,7 @@ def test_fallback_summary_caveat_recognized_via_shared_constant():
     assert summary.caveats == [SUMMARY_FALLBACK_NOTICE]
 
     report = _report([_card()], summary=summary)
-    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    view = _view(report, is_draft=True, total_cards=2, recommendation_edited=False, caveats_edited=False)
 
     html = render_print_html(view)
 

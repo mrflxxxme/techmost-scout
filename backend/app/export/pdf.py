@@ -26,14 +26,16 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.export.markdown import (
     COMPARISON_HEADERS_RU,
+    COMPARISON_TABLE_HIDDEN_NOTICE,
     CONFIDENCE_RU,
     CONTEST_SECTION_HEADING,
     MATURITY_RU,
+    SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE,
     SUMMARY_NOT_PRINTABLE_NOTICE,
     TEMPLATE_FILTERS,
     limitations_lines,
 )
-from app.export.view import ExportView, summary_text_printable
+from app.export.view import ExportView, caveats_printable, recommendation_printable
 from app.verdicts import signature_line
 
 _WEB_DIR = Path(__file__).resolve().parents[1] / "web"
@@ -75,15 +77,22 @@ def render_print_html(view: ExportView) -> str:
     строит. Относительный порядок остальных карточек и разбиение на секции
     сохраняются — фильтр только убирает элементы, не переставляет их.
 
-    Рекомендация и свободная проза модели в оговорках (РЕШ-206) печатаются
-    только когда `summary_text_printable` разрешает: число карточек, реально
-    попавших в печать (обе секции, уже после отсева пустого `evidence`),
-    сравнивается с `view.total_cards` — числом карточек до всех фильтров.
-    Если хоть одна карточка скрыта, а эксперт текст сводки не правил, вместо
-    рекомендации печатается заглушка; строка о недоступных источниках и
-    машинные пометки (платный предел поиска, отказ интейка/рефайна/сводки)
-    при этом остаются в любом случае (инвариант №5, РЕШ-210 — скрытый отказ
-    источника или недобор поиска хуже видимого).
+    Рекомендация и свободная проза оговорок (РЕШ-206) печатаются пополевым
+    гейтом (РЕШ-211, `export.view.recommendation_printable`/`caveats_printable`):
+    число карточек, реально попавших в печать (обе секции, уже после отсева
+    пустого `evidence`), сравнивается с `view.total_cards` — числом карточек
+    до всех фильтров. Эксперт мог поправить только одно из двух полей — второе
+    при этом остаётся непровленным и печатается заглушкой отдельно от первого
+    (БЛОК-5 финального аудита: общий гейт печатал непровленную рекомендацию,
+    потому что эксперт правил только оговорки). Строка о недоступных
+    источниках и машинные пометки (платный предел поиска, отказ
+    интейка/рефайна/сводки) при этом остаются в любом случае (инвариант №5,
+    РЕШ-210 — скрытый отказ источника или недобор поиска хуже видимого).
+
+    Таблица сравнения, спрятанная `verdicts.visible_report` из-за несовпадения
+    строк с карточками (РЕШ-212, `view.comparison_table_hidden`), заменяется
+    честной строкой на своём месте — заглушка вместо рекомендации при этом не
+    отсылает клиента к таблице, которой в документе нет.
     """
     report = view.report
     signature = ""
@@ -92,7 +101,12 @@ def render_print_html(view: ExportView) -> str:
 
     print_cards = [card for card in report.cards if card.evidence]
     print_contest_cards = [card for card in report.contest_cards if card.evidence]
-    printable = summary_text_printable(view, len(print_cards) + len(print_contest_cards))
+    printed_total = len(print_cards) + len(print_contest_cards)
+    recommendation_ok = recommendation_printable(view, printed_total)
+    caveats_ok = caveats_printable(view, printed_total)
+    recommendation_notice = (
+        SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE if view.comparison_table_hidden else SUMMARY_NOT_PRINTABLE_NOTICE
+    )
 
     # `view.rework_keys` в шаблон не передаётся сознательно (РЕШ-198, контракт
     # `export/view.py`): пометка «на доработку» — подсказка оператору на
@@ -108,10 +122,12 @@ def render_print_html(view: ExportView) -> str:
         maturity_ru=MATURITY_RU,
         confidence_ru=CONFIDENCE_RU,
         contest_heading=CONTEST_SECTION_HEADING.removeprefix("## "),
-        summary_printable=printable,
-        summary_notice=SUMMARY_NOT_PRINTABLE_NOTICE,
+        recommendation_printable=recommendation_ok,
+        recommendation_notice=recommendation_notice,
+        comparison_table_hidden=view.comparison_table_hidden,
+        comparison_hidden_notice=COMPARISON_TABLE_HIDDEN_NOTICE,
         comparison_headers_ru=COMPARISON_HEADERS_RU,
-        limitation_lines=limitations_lines(report, include_caveats=printable),
+        limitation_lines=limitations_lines(report, include_caveats=caveats_ok),
     )
 
 

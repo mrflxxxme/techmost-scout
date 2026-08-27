@@ -1,8 +1,10 @@
-"""Проверки наложения правки эксперта поверх сводки отчёта (РЕШ-206).
+"""Проверки наложения правки эксперта поверх сводки отчёта (РЕШ-206, РЕШ-211,
+РЕШ-212).
 
-Слой чистый: без БД и без сети (инвариант №7). Каждый тест собирает `Report`
-из фикстур и проверяет, что наложение не мутирует исходный отчёт и заменяет
-поля целиком, а не сливает текст частично.
+Слой чистый: без БД и без сети (инвариант №7), кроме отдельного блока стенда
+через `build_export_view` на временном файле SQLite. Каждый тест собирает
+`Report` из фикстур и проверяет, что наложение не мутирует исходный отчёт и
+заменяет поля целиком, а не сливает текст частично.
 """
 
 from __future__ import annotations
@@ -16,7 +18,12 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.export.view import ExportView, build_export_view, summary_text_printable
+from app.export.view import (
+    ExportView,
+    build_export_view,
+    caveats_printable,
+    recommendation_printable,
+)
 from app.models import Base, RequestStatus
 from app.models import Request as RequestRow
 from app.models import SolutionCard as SolutionCardRow
@@ -135,8 +142,11 @@ def test_is_empty_false_если_хотя_бы_одно_поле_задано():
     assert SummaryOverrideData(caveats=[]).is_empty() is False
 
 
-def _make_view(brief, *, total_cards: int, summary_text_edited: bool) -> ExportView:
-    """Минимальный `ExportView` для проверки чистой функции `summary_text_printable`."""
+def _make_view(
+    brief, *, total_cards: int, recommendation_edited: bool = False, caveats_edited: bool = False
+) -> ExportView:
+    """Минимальный `ExportView` для проверки чистых функций
+    `recommendation_printable`/`caveats_printable` (РЕШ-211)."""
     return ExportView(
         request_id=1,
         report=_make_report(brief=brief),
@@ -145,29 +155,60 @@ def _make_view(brief, *, total_cards: int, summary_text_edited: bool) -> ExportV
         reviewer_name="",
         validated_at=None,
         total_cards=total_cards,
-        summary_text_edited=summary_text_edited,
+        recommendation_edited=recommendation_edited,
+        caveats_edited=caveats_edited,
     )
 
 
-def test_summary_text_printable_true_когда_текст_правлен_экспертом(brief):
+def test_recommendation_printable_true_когда_рекомендация_правлена_экспертом(brief):
     """Правка эксперта печатается, даже если карточка скрыта."""
-    view = _make_view(brief, total_cards=3, summary_text_edited=True)
+    view = _make_view(brief, total_cards=3, recommendation_edited=True)
 
-    assert summary_text_printable(view, printed_cards=2) is True
+    assert recommendation_printable(view, printed_cards=2) is True
 
 
-def test_summary_text_printable_true_когда_ничего_не_скрыто(brief):
+def test_recommendation_printable_true_когда_ничего_не_скрыто(brief):
     """Текст модели без правки печатается, если ни одна карточка не скрыта."""
-    view = _make_view(brief, total_cards=3, summary_text_edited=False)
+    view = _make_view(brief, total_cards=3)
 
-    assert summary_text_printable(view, printed_cards=3) is True
+    assert recommendation_printable(view, printed_cards=3) is True
 
 
-def test_summary_text_printable_false_когда_карточка_скрыта_и_правки_нет(brief):
+def test_recommendation_printable_false_когда_карточка_скрыта_и_правки_нет(brief):
     """РЕШ-206: карточка скрыта, правки нет — текст модели печатать нельзя."""
-    view = _make_view(brief, total_cards=3, summary_text_edited=False)
+    view = _make_view(brief, total_cards=3)
 
-    assert summary_text_printable(view, printed_cards=2) is False
+    assert recommendation_printable(view, printed_cards=2) is False
+
+
+def test_caveats_printable_true_когда_оговорки_правлены_экспертом(brief):
+    """Симметрично рекомендации: правка оговорок печатается при скрытой карточке."""
+    view = _make_view(brief, total_cards=3, caveats_edited=True)
+
+    assert caveats_printable(view, printed_cards=2) is True
+
+
+def test_caveats_printable_false_когда_карточка_скрыта_и_правки_нет(brief):
+    view = _make_view(brief, total_cards=3)
+
+    assert caveats_printable(view, printed_cards=2) is False
+
+
+def test_recommendation_и_caveats_printable_решают_независимо_блок5(brief):
+    """БЛОК-5 финального аудита, пополевые ворота (РЕШ-211): карточка скрыта,
+    правил только оговорки — рекомендация остаётся непечатной, а оговорки
+    печатаются. Общий флаг «правлено хоть что-то» дал бы `True` обоим полям —
+    ровно тот дефект, который аудит нашёл на живом маршруте: клиенту уезжала
+    нетронутая рекомендация модели с советом взять отклонённый вариант."""
+    view = _make_view(brief, total_cards=3, caveats_edited=True)
+
+    assert recommendation_printable(view, printed_cards=2) is False
+    assert caveats_printable(view, printed_cards=2) is True
+
+    # Зеркало: правил только рекомендацию — оговорки остаются непечатными.
+    mirrored = _make_view(brief, total_cards=3, recommendation_edited=True)
+    assert recommendation_printable(mirrored, printed_cards=2) is True
+    assert caveats_printable(mirrored, printed_cards=2) is False
 
 
 # ── Критерий 3: `build_export_view` накладывает правку сводки ──────────────
@@ -257,7 +298,8 @@ def test_build_export_view_total_cards_обе_секции_до_фильтра(d
     view = asyncio.run(_build_view(db_session_factory, request_id))
 
     assert view.total_cards == 3
-    assert view.summary_text_edited is False
+    assert view.recommendation_edited is False
+    assert view.caveats_edited is False
     assert view.report.summary.recommendation == report.summary.recommendation
 
 
@@ -283,8 +325,9 @@ def test_build_export_view_total_cards_считает_и_отклонённую_
     assert view.total_cards > visible_count
 
 
-def test_build_export_view_отдаёт_правленый_текст_и_summary_text_edited(db_session_factory, brief):
-    """Критерий 3: с правкой — `summary_text_edited=True` и правленый текст в `view.report`."""
+def test_build_export_view_отдаёт_правленый_текст_и_оба_флага(db_session_factory, brief):
+    """Критерий 3: с правкой обоих полей — `recommendation_edited` и
+    `caveats_edited` оба `True`, правленый текст в `view.report`."""
     report = _make_report(
         brief=brief,
         summary=ReportSummary(recommendation="Исходная рекомендация.", caveats=["Исходная оговорка."]),
@@ -305,7 +348,8 @@ def test_build_export_view_отдаёт_правленый_текст_и_summary
 
     view = asyncio.run(_build_view(db_session_factory, request_id))
 
-    assert view.summary_text_edited is True
+    assert view.recommendation_edited is True
+    assert view.caveats_edited is True
     assert view.report.summary.recommendation == "Правленая рекомендация."
     assert view.report.summary.caveats == ["Правленая оговорка."]
 
@@ -328,8 +372,15 @@ def test_build_export_view_пустая_строка_overrides_не_считае
 
     view = asyncio.run(_build_view(db_session_factory, request_id))
 
-    assert view.summary_text_edited is False
+    assert view.recommendation_edited is False
+    assert view.caveats_edited is False
     assert view.report.summary.recommendation == report.summary.recommendation
+
+
+# Стенд-тесты критерия 1 (воспроизведение БЛОК-5 через настоящий
+# `build_export_view`) и РЕШ-212 (`comparison_table_hidden`) вынесены в
+# `tests/test_summary_field_gate.py` — этот файл уже на пределе 500 строк
+# (страж `test_tests_layout.py`), а тем тестам нужен собственный стенд БД.
 
 
 # ── П-8: `is_summary_edited` — единственная точка расчёта флага правки ─────
