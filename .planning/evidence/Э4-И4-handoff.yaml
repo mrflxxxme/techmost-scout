@@ -1,0 +1,58 @@
+handoff:
+  from: implementer-2
+  to: reviewer
+  task: "Э4-И4"
+  did:
+    - "backend/app/export/pdf.py (118 строк, ≤200): render_print_html(view) собирает самостоятельный HTML отчёта из ExportView (не наследует base.html) — обложка в стиле питч-дека, карточки, футер; export_pdf(view, out_path, *, page=None) печатает HTML в PDF."
+    - "Стили печати вынесены в новый backend/app/web/static/print.css и вставляются render_print_html содержимым в <style> (page.set_content не резолвит /static — контракт РЕШ-196 п. 7); внешних шрифтовых ссылок и @import нет, шрифт Segoe UI с системным запасным."
+    - "Человеческие строки — из app.export.markdown (MATURITY_RU, CONFIDENCE_RU, CONTEST_SECTION_HEADING, limitations_lines, TEMPLATE_FILTERS→developer_line) и app.verdicts.signature_line — та же точка правды, что у markdown-экспорта и страницы отчёта."
+    - "Пометка «ЧЕРНОВИК — не проверено экспертом» печатается дважды при is_draft: на обложке (class print-cover-draft) и в элементе с фиксированным позиционированием (class print-draft-mark), который в печати Chromium повторяется на каждой странице автоматически — второй копии в разметке не заводил. При validated в документе ровно одно вхождение строки РЕШ-197 (только в футере) и ни одного «ЧЕРНОВИК»."
+    - "Инвариант №1 в печати: карточка с пустым evidence не печатает ни стадию зрелости, ни TRL (условие на card.evidence, как в _card.html и markdown.py); вместо markdown-фразы «Подтверждений не приложено» используется уже одобренная фраза _card.html «Нельзя показывать клиенту: нет подтверждений» — новой клиентской фразы это не заводит."
+    - "export_pdf: без переданной page запускает Chromium из группы export (playwright.async_api.async_playwright, import — внутри функции); с переданной page (протокол PrintPage: set_content + pdf) браузер вообще не трогается — этим пользуются все тесты. Запись файла — через asyncio.to_thread (ASYNC240), каталог создаётся автоматически (out_path.parent.mkdir)."
+    - "Ссылки источников, чек-листа требований и господдержки печатаются тегом <a href> — остаются кликабельными в PDF."
+    - "Новых клиентских фраз, требующих визы, нет: весь текст шаблона переиспользует уже одобренные формулировки app.export.markdown и backend/app/web/templates/_card.html (заголовки секций, «ЧЕРНОВИК — не проверено экспертом», REVIEWED_FOOTER, «Нельзя показывать клиенту: нет подтверждений», «На доработку»)."
+  artifacts:
+    - backend/app/export/pdf.py
+    - backend/app/web/templates/report_print.html
+    - backend/app/web/static/print.css
+    - tests/test_export_pdf.py
+    - .planning/evidence/Э4-И4-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_export_pdf.py -v: 9 passed"
+    - "pytest tests/test_web_templates.py tests/test_backend_layout.py -v: 8 passed"
+    - "pytest -q (весь набор): 1012 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 182 files already formatted"
+    - "rg -n 'async_playwright|sync_playwright|chromium' tests/: совпадений нет"
+    - "rg -n 'https?://fonts|@import' backend/app/web/static/print.css: совпадений нет"
+    - "rg -n 'httpx|LLMRouter' backend/app/export/pdf.py: совпадений нет"
+    - "wc -l backend/app/export/pdf.py: 118 строк (лимит 200)"
+    - "git status --porcelain: только 4 новых файла задачи (pdf.py, print.css, report_print.html, test_export_pdf.py) плюс этот handoff и файл evidence — прочие файлы репозитория не тронуты"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (раздел «### Э4-И4 · Печатный шаблон и выгрузка в PDF» и «Контракты: Печатный шаблон, Подпись эксперта и пометка черновика, Имена файлов выгрузки»)"
+    - "backend/app/export/pdf.py"
+    - "backend/app/web/templates/report_print.html"
+    - "backend/app/web/static/print.css"
+    - "tests/test_export_pdf.py"
+    - "backend/app/export/view.py (ExportView), backend/app/export/markdown.py (REVIEWED_FOOTER, TEMPLATE_FILTERS)"
+  notes: >-
+    Ветка e4/i4 создана от bf95465 (верхушка волны 0 — Э4-И1 и Э4-И2 влиты,
+    export/view.py, verdicts.py, REVIEWED_FOOTER, TEMPLATE_FILTERS уже в базе).
+    Playwright установлен в .venv, но браузерных бинарников (chromium) на
+    машине нет — поэтому даже случайный вызов настоящего Chromium уронил бы
+    прогон; export_pdf устроен так, что путь к playwright.chromium.launch()
+    выполняется только при отсутствии параметра page, а весь набор тестов
+    передаёт page явно. Живой PDF (page.pdf по-настоящему, снимок обложки) —
+    задача ворот этапа (РЕШ-196 п. 12), в этой задаче не делался и не
+    проверялся: только собранный HTML и подменённые вызовы page.set_content/
+    page.pdf.
+
+    Имя файла out/report-<id>-<ГГГГ-ММ-ДД>.pdf в этой задаче не вычисляется
+    внутри pdf.py — по контракту плана (раздел «Имена файлов выгрузки»)
+    вычисление пути принадлежит команде scout export (Э4-И6, ещё не сделана);
+    export_pdf принимает уже готовый out_path и просто пишет туда файл. Тест
+    test_export_pdf_calls_page_pdf_exactly_once строит путь по этому шаблону
+    (out/report-42-2026-08-27.pdf) и проверяет, что export_pdf возвращает
+    ровно его.
