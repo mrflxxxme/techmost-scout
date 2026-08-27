@@ -1,0 +1,30 @@
+handoff:
+  from: "implementer"
+  to: "reviewer"
+  task: "Э4-П1"
+  did:
+    - "backend/app/verdicts.py: visible_report теперь фильтрует не только карточки обеих секций, но и summary.comparison_rows (РЕШ-206) — строка убирается по позиции в исходном (до фильтра) списке report.cards, тем же решением reject, что убрало саму карточку"
+    - "Добавлена вспомогательная _kept_positions (переиспользуется _visible_section и новой _visible_summary), чтобы позиция считалась ровно один раз и по исходному списку, а не по уже отфильтрованному"
+    - "Если число строк не совпадает с числом карточек до фильтра (fallback_summary, старый формат отчёта) — comparison_rows не трогаются вовсе"
+    - "contest_cards на таблицу сравнения не влияют — _visible_summary смотрит только на report.cards (is_contest=False), summarize строит таблицу только по основной секции"
+    - "tests/test_verdicts.py: 5 новых тестов — по одному на каждый критерий приёмки задачи, включая адверсариальный тест на мутацию «фильтр строк по позиции уже отфильтрованного списка карточек»"
+  artifacts:
+    - "backend/app/verdicts.py"
+    - "tests/test_verdicts.py"
+  self_audit: "pass"
+  checks:
+    - "pytest tests/test_verdicts.py -v: 16 passed"
+    - "pytest -q: 1080 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 194 files already formatted"
+    - "pytest tests/test_backend_layout.py tests/test_tests_layout.py -q: 3 passed, 3 passed (verdicts.py 144 строки, test_verdicts.py 260 строк — под пределом)"
+    - "git diff --stat a495b1d..HEAD: ровно два файла (backend/app/verdicts.py, tests/test_verdicts.py)"
+    - "Адверсариальный тест проверен вручную: временная подмена _visible_summary на «фильтр по позиции визуально уже отфильтрованного списка карточек» ловится обоими новыми тестами на конкретное содержимое (2 failed), после проверки код возвращён к исходному (diff с бэкапом — пусто)"
+  escalate: "none"
+  read_first:
+    - ".planning/PLAN.md (раздел «Э4-П1 · фильтр сводки: строки сравнения уходят вместе с карточками»)"
+    - ".planning/DECISIONS.md (РЕШ-206, РЕШ-198, РЕШ-181)"
+    - "backend/app/verdicts.py"
+    - "tests/test_verdicts.py"
+    - "backend/app/export/view.py (справочно, не трогался — задача Э4-П2)"
+  notes: "backend/app/export/view.py и backend/app/pipeline/summary.py читал только на справку по контракту, не правил — они вне списка файлов задачи. build_export_view вызывает visible_report(edited_report, original_ids, effective) уже после apply_overrides, поэтому правка сработает и в существующем пайплайне без дополнительных изменений в view.py. За границами задачи не замечено ничего требующего отдельной записи."
