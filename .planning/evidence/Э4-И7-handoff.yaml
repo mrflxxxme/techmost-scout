@@ -1,0 +1,60 @@
+handoff:
+  from: implementer-2
+  to: reviewer
+  task: "Э4-И7"
+  did:
+    - "Реализован backend/app/pipeline/demo.py: build_playback(logs, *, total_seconds) — чистая функция, доли и задержки шагов из настоящих started_at/finished_at, пропорционально масштабированные на demo_duration_seconds; play(request_id, steps, *, broker, sleep) — публикация в существующий ProgressBroker с паузами через подменяемый sleep"
+    - "Промежуточные доли ограничены потолком 0.99: без него ProgressBroker.subscribe закрывал поток на последней реальной стадии (fraction достигал 1.0 раньше done) и клиент не видел финального события — найдено тестом на настоящем брокере, не по чтению исходников"
+    - "Реализован backend/app/web/routes/demo.py: GET /demo — список запросов с demo_flag=true (отрасль, дата, кнопка), POST /demo/{id}/start — фоновая задача воспроизведения без пайплайна и без LLMRouter, ответ — тот же фрагмент _progress.html, что и у живого прогона; повторный старт активного показа задачу не дублирует"
+    - "Пустой журнал кейса (нет строк pipeline_logs) — честный отказ 409 с фразой на визу, а не падение страницы (инвариант №5)"
+    - "Подключён роутер в backend/app/web/routes/__init__.py, добавлена ссылка «Демо» в навигацию backend/app/web/templates/base.html, новый шаблон backend/app/web/templates/demo.html — без inline style и hex (страж tests/test_web_templates.py)"
+    - "Тесты tests/test_demo_playback.py (11 шт., чистые функции без базы и без сети) и tests/test_web_demo.py (7 шт., ASGI-клиент поверх настоящего брокера прогресса и временной SQLite)"
+  artifacts:
+    - backend/app/pipeline/demo.py
+    - backend/app/web/routes/demo.py
+    - backend/app/web/routes/__init__.py
+    - backend/app/web/templates/demo.html
+    - backend/app/web/templates/base.html
+    - tests/test_demo_playback.py
+    - tests/test_web_demo.py
+    - ".planning/evidence/Э4-И7-pytest.txt"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_demo_playback.py -v: 11 passed"
+    - "pytest tests/test_web_demo.py -v: 7 passed"
+    - "pytest -q: 1047 passed"
+    - "pytest tests/test_web_templates.py tests/test_pipeline_layout.py tests/test_backend_layout.py -v: 14 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 190 files already formatted"
+    - "rg -n \"LLMRouter|httpx|ScoutPipeline\" backend/app/pipeline/demo.py backend/app/web/routes/demo.py: нет совпадений"
+    - "rg -n demo_flag backend/app/pipeline/demo.py: нет совпадений"
+    - "grep -nE \"request_id *== *[0-9]\" backend/app/web/routes/demo.py: нет совпадений"
+    - "wc -l backend/app/pipeline/demo.py backend/app/web/routes/demo.py: 174 и 150 строк — оба в пределах лимита задачи"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (раздел «Э4-И7», «Контракты» → «Формат события демо», «Темп воспроизведения», «Разметка демо-кейсов»)"
+    - "docs/SPEC.md §6 (668–683)"
+    - "backend/app/pipeline/demo.py"
+    - "backend/app/web/routes/demo.py"
+    - "backend/app/web/progress.py (ProgressBroker.subscribe — закрытие потока на fraction>=1.0, важно для потолка 0.99)"
+    - "tests/test_web_demo.py (докстрока _make_request — почему id задаётся явно большим числом)"
+  notes: >
+    Новые клиентские фразы на визу владельца: DONE_MESSAGE «Показ демо-прогона
+    завершён.» и весь словарь STAGE_MESSAGES в pipeline/demo.py (14 стадий +
+    запасной текст «Выполняю этап «{stage}».»); REQUEST_NOT_FOUND и
+    REFUSAL_NO_LOG «Журнал прогона не сохранён — показать демо нечем.» в
+    web/routes/demo.py; текст кнопки «Показать» и заголовки demo.html.
+
+    theme.css не тронут — существующих классов (.progress-log, .progress-line,
+    .bezel, .btn.ghost, .badge) хватило, новых стилей не понадобилось.
+
+    За границами задачи замечено, но не правилось: известный долг
+    ProgressBroker (каналы не освобождаются после done, задокументирован в
+    progress.py) впервые проявился на практике при написании тестов — общий
+    на процесс брокер путал маленькие request_id между тестовыми файлами.
+    Решено в границах своей задачи (явные большие id в tests/test_web_demo.py,
+    задокументировано в докстроке _make_request), сам progress.py не правил —
+    это чужой файл вне границ задачи.
+
+    demo_flag тремя запросами не расставлял — это операция ворот этапа
+    (оркестратор), не поведение продукта; код только читает флаг.

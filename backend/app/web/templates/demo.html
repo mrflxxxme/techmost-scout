@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Демо — ТехМост Скаут{% endblock %}
+
+{% block content %}
+<p class="kicker">Демо-режим</p>
+<h1>Демо-показ прошедших прогонов</h1>
+<p class="lead">
+  Показ проигрывает уже сохранённый журнал прогона — без обращения к моделям
+  и источникам, без сети и без единого потраченного рубля.
+</p>
+
+<div class="bezel mb-lg">
+  <div class="core flush">
+    <table>
+      <thead>
+        <tr><th>№</th><th>Отрасль</th><th>Создан</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row, brief in cases %}
+        <tr>
+          <td>{{ row.id }}</td>
+          <td>{{ brief.industry if brief else "—" }}</td>
+          <td class="muted">{{ row.created_at.strftime("%d.%m.%Y %H:%M") }}</td>
+          <td>
+            <form hx-post="/demo/{{ row.id }}/start" hx-target="#demo-progress" hx-swap="innerHTML">
+              <button class="btn ghost" type="submit">Показать <span class="dot">▶</span></button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">Демо-кейсов пока нет — разметку ставит оператор на воротах этапа.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="demo-progress"></div>
+{% endblock %}
