@@ -1,0 +1,46 @@
+handoff:
+  from: verifier
+  to: orchestrator
+  task: "Э4-волны 0–1"
+  did:
+    - "Прогнаны 31 критерий приёмки из PLAN.md для задач Э4-И1…Э4-И5 (волны 0 и 1 этапа 4): все закрыты"
+    - "Полный набор тестов проходит: 1029 passed, 0 failed (включая 11+7+13+9+5+7+9+9 новых тестов по волнам)"
+    - "Подтверждены инварианты №1, 2, 3, 4, 6, 7, 8, 9, 10 способами из INVARIANTS.md"
+    - "Все handoff и review файлы для Э4-И1…Э4-И5 существуют (Э4-И2 имеет 2 цикла ревью)"
+    - "git status чист, ветка verify/e4w01 готова к коммиту"
+  artifacts:
+    - ".planning/evidence/Э4-верификация-волны01.md (отчёт верификации)"
+    - ".planning/evidence/Э4-верификация-волны01-handoff.yaml (этот файл)"
+  self_audit: "pass"
+  checks:
+    - "pytest -q: 1029 passed, 0 failed (включая волны 0–1)"
+    - "pytest tests/test_config.py -v: 13 passed (2 новых теста для REVIEWER_NAME и demo_duration_seconds)"
+    - "pytest tests/test_verdicts.py -v: 11 passed (effective_verdicts, visible_report, all_cards_reviewed, signature_line)"
+    - "pytest tests/test_export_signature.py -v: 7 passed (footer с дословной формулировкой РЕШ-197, developer_line)"
+    - "pytest tests/test_export_view.py -v: 9 passed (фильтр reject, правки, рework в выводе)"
+    - "pytest tests/test_web_report_verdicts.py -v: 5 passed (пометка ЧЕРНОВИК, подпись, заголовки)"
+    - "pytest tests/test_web_review.py -v: 7 passed (форма вердикта, статус validated, отказ при пустом имени)"
+    - "pytest tests/test_export_pdf.py -v: 9 passed (печатный шаблон, page.pdf один раз, empty evidence скрыта)"
+    - "pytest tests/test_export_docx.py -v: 9 passed (DOCX с подписью, черновик, empty evidence скрыта)"
+    - "ruff check . && ruff format --check .: All checks passed, 186 files formatted"
+    - "HTTPS_PROXY=http://127.0.0.1:1 pytest -q: 1029 passed (тесты без сети)"
+    - "grep -n 'NotImplementedError' backend/app/web/routes/report.py: 0 совпадений (стаб удалён)"
+    - "grep -n '«ТехМост Скаут»' backend/app/export/markdown.py: 0 совпадений (ёлочки убраны)"
+    - "grep -n 'min-height: 44px' backend/app/web/static/theme.css: 1 совпадение (высота кнопок)"
+    - "grep -E 'grid two|grid three' backend/app/web/templates/review.html: 0 совпадений (одна колонка)"
+    - "grep -rn 'async_playwright|sync_playwright|chromium' tests/: 0 совпадений"
+    - "grep -E 'fonts|@import' backend/app/web/static/print.css: 0 совпадений"
+    - "grep -n 'httpx|LLMRouter' backend/app/export/pdf.py: 0 совпадений"
+    - "grep -n 'httpx|LLMRouter|playwright' backend/app/export/docx.py: 0 совпадений"
+    - "grep -rn 'httpx' backend/app --include='*.py' | grep -vE '(llm/|search/|cli_doctor|pipeline_context|pipeline_search)': 0 совпадений (инвариант №6)"
+    - "pytest tests/test_prompts.py: 51 passed (инвариант №4)"
+  escalate: "none"
+  read_first:
+    - ".planning/PLAN.md (волны 0–1, разделы Э4-И1…Э4-И5)"
+    - "docs/team/INVARIANTS.md (инварианты №1, 2, 3, 4, 6, 7, 8)"
+    - ".planning/evidence/Э4-И1-review.md через Э4-И5-review.md (отчёты ревью)"
+  notes: >-
+    Верификация волн 0–1 этапа 4 завершена. Все 31 критерий закрыт, инварианты
+    подтверждены. Вердикт PASS по всем пяти задачам. Волны 0–1 готовы к слиянию
+    (волна 0 уже слита в работающей ветке). Следующий этап — волна 2 (Э4-И6 и
+    Э4-И7 параллельно). Э4-И2 прошла два цикла ревью и оба приняты.
