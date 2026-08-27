@@ -1,0 +1,45 @@
+handoff:
+  from: implementer-A
+  to: reviewer
+  task: "Э4-И1"
+  did:
+    - "Реализован backend/app/verdicts.py (99 строк, ≤200): effective_verdicts (действующий вердикт — последний по created_at, тай-брейк по id), visible_report (убирает reject из обеих секций report.cards/contest_cards, порядок сохраняет, rework не трогает, выдачу не добивает), all_cards_reviewed, signature_line. Сравнение решения только со schemas.Verdict.REJECT."
+    - "backend/app/config.py: добавлены reviewer_name (Field(default=\"\"), env REVIEWER_NAME) и demo_duration_seconds (Field(default=150.0, gt=0), РЕШ-201)."
+    - "backend/app/export/markdown.py (309→333 строки, ≤360): константа REVIEWED_FOOTER — дословная строка РЕШ-197 без ёлочек (rg -n «ТехМост Скаут» — пусто); функция developer_line (совет С-3: заглушка «не найдено» в developer_team не печатается хвостом, пустой developer_org даёт честное «не найдено»); TEMPLATE_FILTERS = {\"developer_line\": developer_line}; render_markdown переведён на REVIEWED_FOOTER."
+    - "Тесты: tests/test_verdicts.py (11 тестов, новый файл), tests/test_export_signature.py (7 тестов, новый файл — не дописано в test_export_markdown.py, там было 440/500 строк), tests/test_config.py дополнен двумя тестами (reviewer_name пусто/из окружения, demo_duration_seconds умолчание 150)."
+  artifacts:
+    - backend/app/verdicts.py
+    - backend/app/config.py
+    - backend/app/export/markdown.py
+    - tests/test_verdicts.py
+    - tests/test_export_signature.py
+    - tests/test_config.py
+    - .planning/evidence/Э4-И1-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_verdicts.py -v: 11 passed"
+    - "pytest tests/test_export_signature.py -v: 7 passed"
+    - "pytest tests/test_config.py -v: 1 failed (ожидаемо, см. escalate), 12 passed"
+    - "rg -n «ТехМост Скаут» backend/app/export/markdown.py: совпадений нет"
+    - "pytest -q (весь набор): 1 failed, 988 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 177 files already formatted"
+    - "pytest tests/test_backend_layout.py -v: 3 passed"
+  escalate: "строка для .env.example — файл под deny-правилом, агент не может ни читать, ни писать его. Нужно внести ДВЕ строки при слиянии: REVIEWER_NAME= и DEMO_DURATION_SECONDS= (второе в постановке задачи не упомянуто явно, но settings.demo_duration_seconds без записи в .env.example ломает test_config.py::test_каждая_переменная_settings_объявлена_в_примере тем же способом, что и REVIEWER_NAME). Без этих двух строк один тест в pytest -q остаётся красным: tests/test_config.py::test_каждая_переменная_settings_объявлена_в_примере (сейчас red по решению задачи, не подавлен и не обойдён)."
+  read_first:
+    - ".planning/PLAN.md (раздел «### Э4-И1 · Слой вердиктов, подпись эксперта, настройки этапа» и «Контракты: Вердикты / Клиентский вид / Подпись эксперта»)"
+    - "docs/SPEC.md §6 (строки 627–666)"
+    - "backend/app/verdicts.py"
+    - "backend/app/export/markdown.py"
+    - "backend/app/config.py"
+    - ".planning/DECISIONS.md РЕШ-196…РЕШ-199, РЕШ-201 (точечным поиском)"
+  notes: >-
+    Ветка e4/i1 создана от fb2aa20 (верный базис волны 0, сверено — рабочая
+    копия агента изначально стояла на устаревшем main без плана этапа 4,
+    переключился на fb2aa20 до первой строки кода, РЕШ-158). Модели и модуль
+    report_overrides.py не правились — verdicts.py определяет свой локальный
+    тип CardKey = tuple[bool, int], не импортируя OverrideKey из
+    report_overrides.py, чтобы не создавать лишней связи между модулями с
+    разными задачами; ключ совместим побитово с (is_contest, position).
+    Живых вызовов модели и БД не было — весь слой чистый, тесты строят
+    app.models.Verdict напрямую без сессии.
