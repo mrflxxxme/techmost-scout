@@ -1,0 +1,78 @@
+handoff:
+  from: "implementer"
+  to: "reviewer"
+  task: "Э4-П2"
+  cycle: 2
+  did:
+    - "Цикл 1: backend/app/models.py — новая таблица summary_overrides (SummaryOverride): request_id unique, recommendation Text nullable, caveats JSON nullable, updated_at. Отдельная таблица, а не колонка requests (грабля Э2-А: create_all не добавляет колонку в существующую таблицу)"
+    - "Цикл 1: backend/app/summary_overrides.py (новый) — чистые функции над schemas.Report в духе report_overrides.py: SummaryOverrideData(recommendation, caveats) и apply_summary_override(report, override); замена целиком, без частичного слияния текста; исходный Report не мутируется"
+    - "Цикл 1: backend/app/export/view.py — ExportView получил total_cards (карточки обеих секций ДО фильтра reject) и summary_text_edited; build_export_view читает строку summary_overrides и накладывает её после apply_overrides и до visible_report; добавлена чистая функция summary_text_printable(view, printed_cards)"
+    - "Цикл 1: backend/app/web/routes/review.py — GET /requests/{id}/review накладывает правку сводки на показываемый отчёт (РЕШ-205, тот же принцип, что и для карточек); новый POST /requests/{id}/summary — upsert одной строки summary_overrides, отказ 400 на пустую рекомендацию, отказ 404 на несуществующий запрос"
+    - "Цикл 1: backend/app/web/templates/review.html — секция «Сводка» с формой правки рекомендации и оговорок (textarea, класс verdict-form — уже даёт min-height 44px по theme.css, новых стилей не добавлял)"
+    - "Цикл 2 (правка по ревью, код не менялся): tests/test_summary_overrides.py дополнен тестом test_build_export_view_total_cards_считает_и_отклонённую_карточку — заводит действующий вердикт reject у одной из трёх карточек (card_ids[(False, 1)]) и проверяет total_cards == 3 строго больше числа видимых карточек (2). Прежний тест без reject не отличал «до фильтра» от «после» и не ловил мутацию, которую поставил ревьюер (перенос вычисления total_cards с edited_report на visible)"
+    - "Цикл 2: мутацию ревьюера воспроизвёл вручную в backend/app/export/view.py (строка total_cards перенесена после visible_report), новый тест покраснел (assert 2 == 3), затем git checkout -- backend/app/export/view.py вернул файл в исходное состояние — git diff после возврата пуст (подтверждено отдельной командой)"
+    - "Цикл 2: добавлены хелперы _add_verdict и расширен _seed_request (возвращает ещё и id строк solution_cards по ключу (is_contest, position) — нужен, чтобы завести вердикт по конкретной карточке); два существующих вызова _seed_request обновлены под новую сигнатуру"
+  artifacts:
+    - "backend/app/models.py"
+    - "backend/app/summary_overrides.py"
+    - "backend/app/export/view.py"
+    - "backend/app/web/routes/review.py"
+    - "backend/app/web/templates/review.html"
+    - "tests/test_summary_overrides.py"
+    - "tests/test_web_review.py"
+  self_audit: "pass"
+  checks:
+    - "pytest tests/test_summary_overrides.py -v: 14 passed (был 13 в цикле 1)"
+    - "pytest -q: 1096 passed (было 1095 в цикле 1)"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 196 files already formatted"
+    - "Мутационная проверка вручную: total_cards = len(visible.cards) + len(visible.contest_cards) после visible_report — новый тест падает (assert 2 == 3); после git checkout -- backend/app/export/view.py: git diff backend/app/export/view.py | wc -l → 0"
+    - "git status --porcelain (цикл 2): изменён ровно один файл — tests/test_summary_overrides.py"
+  escalate: "none"
+  read_first:
+    - ".planning/PLAN.md (раздел «Волна правок аудита Э4», задача Э4-П2)"
+    - ".planning/DECISIONS.md (РЕШ-206, РЕШ-186, РЕШ-197, РЕШ-198, РЕШ-205)"
+    - "backend/app/report_overrides.py (образец, которому подражает summary_overrides.py)"
+    - "backend/app/export/view.py (build_export_view, summary_text_printable) — код не менялся в цикле 2"
+    - "tests/test_summary_overrides.py (test_build_export_view_total_cards_считает_и_отклонённую_карточку — новый тест цикла 2)"
+    - "backend/app/web/routes/review.py (edit_summary, show_review)"
+    - "backend/app/web/templates/review.html (секция «Сводка»)"
+  notes: |
+    Новые человекочитаемые фразы задачи — на визу владельца (без изменений
+    с цикла 1):
+      - "Рекомендация (правка эксперта)" — подпись поля формы
+      - "Оговорки (по одной на строку)" — подпись поля формы
+      - "Сохранить сводку" — текст кнопки
+      - "Рекомендация не может быть пустой — опишите, с чего начать." — отказ 400 на пустую рекомендацию
+      - "Сводка сохранена. Рекомендация: {текст}. Оговорки: {текст}." / "Сводка сохранена. Рекомендация: {текст}. Оговорок нет." — фрагмент после успешной записи
+      - "Текущая рекомендация:" / "Оговорки:" — подписи в блоке просмотра сводки на экране ревью
+
+    Решение по валидации (цикл 1, без изменений): POST отклоняет пустую
+    (только пробелы) рекомендацию 400-й — по аналогии с REFUSAL_EMPTY_NAME
+    для вердикта. В критериях приёмки задачи этого явно не было — если
+    владелец сочтёт разрешить пустую рекомендацию, правка тривиальна.
+
+    Совет ревью (не блокирующий) про `.card-edit .edit-actions` в
+    review.html: правило из theme.css действительно не применяется к
+    `<div class="edit-actions">` ни в форме вердикта (была до этой задачи),
+    ни в новой форме правки сводки — оба блока лежат внутри `.bezel`/`.core`,
+    а не внутри `.card-edit`. Не правил: обернуть `edit-actions` в
+    `.card-edit` подтянуло бы чужой визуальный эффект (пунктирная золотая
+    рамка режима правки карточки, `.card-edit { border: 1px dashed
+    var(--gold); }`) — то самое «ничего лишнего», от которого предостерегал
+    ревьюер. Чистая правка — отдельное правило `.edit-actions` в theme.css
+    без завязки на `.card-edit`, а этот файл не входит в список задачи.
+
+    За границами задачи замечено, не правил: `doctor` в этой рабочей копии
+    падает на проверке моделей из-за резервного провайдера "gigachat" в
+    настройках маршрутизации LLM (`fallback_order`), которого нет среди
+    известных провайдеров (`deepseek`, `yandex`) — это конфигурация
+    окружения (`.env`/`config.py`), не относится к задаче Э4-П2 и не входит
+    в список файлов задачи. Схема базы при этом проверяется раньше и
+    печатает «Схема базы совпадает с моделями.» — критерий 6 задачи выполнен.
+
+    Второй совет ревью (`_reindex_after_filter` дублирует условие
+    `decision == REJECT`) не мой — не трогал, как и было указано.
+
+    Живых вызовов моделей и источников не делал — задача целиком офлайн
+    (хранение и веб-экран), трат нет.

@@ -24,6 +24,7 @@ from app.config import get_settings
 from app.models import Base, RequestStatus
 from app.models import Request as RequestRow
 from app.models import SolutionCard as SolutionCardRow
+from app.models import SummaryOverride as SummaryOverrideRow
 from app.models import Verdict as VerdictRow
 from app.schemas import Evidence, Report, ReportSummary, SolutionCard
 
@@ -318,3 +319,151 @@ def test_exported_не_понижается_до_validated(client, db_session_fa
         )
 
     assert asyncio.run(_status(db_session_factory, request_id)) == RequestStatus.EXPORTED.value
+
+
+async def _summary_override_rows(session_factory, request_id: int) -> list[SummaryOverrideRow]:
+    async with session_factory() as session:
+        rows = (
+            (await session.execute(select(SummaryOverrideRow).where(SummaryOverrideRow.request_id == request_id)))
+            .scalars()
+            .all()
+        )
+        return rows
+
+
+def test_экран_показывает_поля_правки_сводки_с_исходным_текстом(client, db_session_factory, brief):
+    """Критерий 2: форма правки предзаполнена текущим (пока непраленым) текстом модели."""
+    report = _make_report(
+        [_make_card()],
+        [],
+        brief=brief,
+        summary=ReportSummary(recommendation="Рекомендация модели.", caveats=["Оговорка модели."]),
+    )
+    request_id, _, _ = asyncio.run(_seed(db_session_factory, report=report, status=RequestStatus.DRAFTED))
+
+    with client:
+        response = client.get(f"/requests/{request_id}/review", auth=_AUTH)
+
+    assert response.status_code == 200
+    assert "Рекомендация модели." in response.text
+    assert "Оговорка модели." in response.text
+    assert f"/requests/{request_id}/summary" in response.text
+
+
+def test_экран_показывает_правленый_текст_сводки_вместо_исходного(client, db_session_factory, brief):
+    """РЕШ-206/205: правка эксперта видна на экране ревью вместо исходного вывода модели."""
+    report = _make_report(
+        [_make_card()],
+        [],
+        brief=brief,
+        summary=ReportSummary(recommendation="Исходная рекомендация.", caveats=["Исходная оговорка."]),
+    )
+    request_id, _, _ = asyncio.run(_seed(db_session_factory, report=report, status=RequestStatus.DRAFTED))
+
+    async def _seed_override() -> None:
+        async with db_session_factory() as session:
+            session.add(
+                SummaryOverrideRow(
+                    request_id=request_id,
+                    recommendation="Правленая рекомендация.",
+                    caveats=["Правленая оговорка."],
+                )
+            )
+
+    asyncio.run(_seed_override())
+
+    with client:
+        response = client.get(f"/requests/{request_id}/review", auth=_AUTH)
+
+    assert response.status_code == 200
+    assert "Правленая рекомендация." in response.text
+    assert "Исходная рекомендация." not in response.text
+
+
+def test_summary_post_пишет_строку_и_возвращает_правленый_текст(client, db_session_factory, brief):
+    """Критерий 1: `POST /requests/{id}/summary` пишет строку и отдаёт правленый текст."""
+    report = _make_report([_make_card()], [], brief=brief)
+    request_id, _, _ = asyncio.run(_seed(db_session_factory, report=report, status=RequestStatus.DRAFTED))
+
+    with client:
+        response = client.post(
+            f"/requests/{request_id}/summary",
+            data={"recommendation": "Начать с варианта 2.", "caveats": "Оговорка первая\nОговорка вторая"},
+            auth=_AUTH,
+        )
+
+    assert response.status_code == 200
+    assert "Начать с варианта 2." in response.text
+    assert "Оговорка первая" in response.text
+
+    rows = asyncio.run(_summary_override_rows(db_session_factory, request_id))
+    assert len(rows) == 1
+    assert rows[0].recommendation == "Начать с варианта 2."
+    assert rows[0].caveats == ["Оговорка первая", "Оговорка вторая"]
+
+
+def test_summary_post_повторно_перезаписывает_ту_же_строку(client, db_session_factory, brief):
+    """Критерий 1: повторный `POST` перезаписывает строку, а не добавляет вторую."""
+    report = _make_report([_make_card()], [], brief=brief)
+    request_id, _, _ = asyncio.run(_seed(db_session_factory, report=report, status=RequestStatus.DRAFTED))
+
+    with client:
+        client.post(
+            f"/requests/{request_id}/summary",
+            data={"recommendation": "Первая правка.", "caveats": ""},
+            auth=_AUTH,
+        )
+        client.post(
+            f"/requests/{request_id}/summary",
+            data={"recommendation": "Вторая правка.", "caveats": "Новая оговорка"},
+            auth=_AUTH,
+        )
+
+    rows = asyncio.run(_summary_override_rows(db_session_factory, request_id))
+    assert len(rows) == 1
+    assert rows[0].recommendation == "Вторая правка."
+    assert rows[0].caveats == ["Новая оговорка"]
+
+
+def test_summary_post_пустая_рекомендация_отклоняется(client, db_session_factory, brief):
+    """Пустая рекомендация — отказ 400, строка не пишется."""
+    report = _make_report([_make_card()], [], brief=brief)
+    request_id, _, _ = asyncio.run(_seed(db_session_factory, report=report, status=RequestStatus.DRAFTED))
+
+    with client:
+        response = client.post(
+            f"/requests/{request_id}/summary",
+            data={"recommendation": "   ", "caveats": ""},
+            auth=_AUTH,
+        )
+
+    assert response.status_code == 400
+    assert "Рекомендация не может быть пустой" in response.text
+    assert asyncio.run(_summary_override_rows(db_session_factory, request_id)) == []
+
+
+def test_summary_post_несуществующий_запрос_отклоняется(client, db_session_factory):
+    """Запроса нет в базе — человеческий отказ 404, а не 500."""
+    with client:
+        response = client.post(
+            "/requests/999999/summary",
+            data={"recommendation": "Что-то", "caveats": ""},
+            auth=_AUTH,
+        )
+
+    assert response.status_code == 404
+
+
+def test_summary_post_требует_авторизацию(client, db_session_factory, brief):
+    """Критерий 5: маршрут правки сводки закрыт Basic auth наравне с остальными."""
+    report = _make_report([_make_card()], [], brief=brief)
+    request_id, _, _ = asyncio.run(_seed(db_session_factory, report=report, status=RequestStatus.DRAFTED))
+
+    with client:
+        response = client.post(
+            f"/requests/{request_id}/summary",
+            data={"recommendation": "Что-то", "caveats": ""},
+        )
+
+    assert response.status_code == 401
+    assert response.headers.get("www-authenticate") == "Basic"

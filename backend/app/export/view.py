@@ -3,6 +3,8 @@
 `build_export_view` — общий путь для страницы отчёта (Э4-И2), PDF (Э4-И4),
 DOCX (Э4-И5) и команды `scout export` (Э4-И6): читает `requests.report_json`,
 накладывает правки оператора (`report_overrides.apply_overrides`), затем
+правку эксперта поверх рекомендации и оговорок сводки
+(`summary_overrides.apply_summary_override`, РЕШ-206) и только потом
 фильтрует reject-карточки (`verdicts.visible_report`, РЕШ-198). Порядок
 операций важен: правки накладываются ДО фильтра — иначе правленый текст ещё
 не отклонённой карточки не дошёл бы до клиентского вида. Свой разбор
@@ -23,11 +25,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Request as RequestRow
 from app.models import RequestStatus
 from app.models import SolutionCard as SolutionCardRow
+from app.models import SummaryOverride as SummaryOverrideRow
 from app.models import Verdict as VerdictRow
 from app.pipeline.persistence import ReportNotFoundError, load_report
 from app.report_overrides import OverrideMap, apply_overrides
 from app.schemas import Report
 from app.schemas import Verdict as VerdictDecision
+from app.summary_overrides import SummaryOverrideData, apply_summary_override
 from app.verdicts import CardKey, effective_verdicts, visible_report
 
 
@@ -52,6 +56,15 @@ class ExportView:
     #: карточек с действующим вердиктом rework. Пометка «на доработку» видна
     #: только оператору на странице отчёта (РЕШ-198) — в выгрузки не попадает.
     rework_keys: set[CardKey] = field(default_factory=set)
+    #: Число карточек в отчёте ДО фильтра reject, обе секции вместе (РЕШ-206) —
+    #: контракт для `summary_text_printable` и для задачи Э4-П3: сравнение с
+    #: числом карточек, которые реально печатаются, показывает, скрыла ли
+    #: выгрузка хоть одну карточку.
+    total_cards: int = 0
+    #: Эксперт правил рекомендацию и/или оговорки сводки (РЕШ-206) — иначе
+    #: печатается свободный текст модели, который мог адресоваться к
+    #: карточкам по нумерации, ушедшей вместе с отклонённым вариантом.
+    summary_text_edited: bool = False
 
 
 @asynccontextmanager
@@ -85,6 +98,20 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
 
     edited_report = apply_overrides(raw_report, overrides)
 
+    summary_override_row = (
+        (await session.execute(select(SummaryOverrideRow).where(SummaryOverrideRow.request_id == request_id)))
+        .scalars()
+        .one_or_none()
+    )
+    summary_override = (
+        SummaryOverrideData(recommendation=summary_override_row.recommendation, caveats=summary_override_row.caveats)
+        if summary_override_row is not None
+        else None
+    )
+    edited_report = apply_summary_override(edited_report, summary_override)
+    summary_text_edited = summary_override is not None and not summary_override.is_empty()
+    total_cards = len(edited_report.cards) + len(edited_report.contest_cards)
+
     verdict_rows: list[VerdictRow] = []
     if original_ids:
         found = await session.execute(select(VerdictRow).where(VerdictRow.card_id.in_(original_ids.values())))
@@ -104,7 +131,26 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
         reviewer_name=latest.reviewer_name if latest is not None else "",
         validated_at=latest.created_at if latest is not None else None,
         rework_keys=rework_keys,
+        total_cards=total_cards,
+        summary_text_edited=summary_text_edited,
     )
+
+
+def summary_text_printable(view: ExportView, printed_cards: int) -> bool:
+    """Можно ли печатать рекомендацию и оговорки сводки в клиентской выгрузке.
+
+    Рекомендацию и оговорки пишет модель свободной прозой со ссылками на
+    карточки по номеру («Первым берём вариант 1», «В карточке 3…»). Если
+    хотя бы одна карточка скрыта из клиентского вида (reject или пустой
+    `evidence`), нумерация карточек в выгрузке отличается от той, что видела
+    модель при сборке сводки, — печатать такой текст клиенту нельзя (РЕШ-206,
+    аудит Э4: карточка 1 отклонена, но рекомендация всё равно советовала её
+    первой). Печатать можно в двух случаях: эксперт правил текст сам
+    (`view.summary_text_edited` — тогда нумерацию расставил человек заново) —
+    либо ни одна карточка не скрыта (`printed_cards == view.total_cards` —
+    нумерация, которую видела модель, не изменилась).
+    """
+    return view.summary_text_edited or printed_cards == view.total_cards
 
 
 def _reindex_after_filter(
