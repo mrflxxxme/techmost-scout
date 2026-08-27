@@ -6,7 +6,7 @@
    тем же путём везде. #}
 <div class="bezel hoverable appear">
   <div class="core">
-    <h3>{{ num }}. {{ card.title }}</h3>
+    <h3>{{ num }}. {{ card.title }}{% if is_rework %} <span class="badge gold">На доработку</span>{% endif %}</h3>
 
     {% if card.evidence %}
     <div class="maturity mb-sm" title="Стадия зрелости">
@@ -21,7 +21,7 @@
 
     <p>{{ card.essence }}</p>
 
-    <p><strong>Разработчик:</strong> {{ card.developer_org or "не найдено" }}{% if card.developer_team %} — {{ card.developer_team }}{% endif %}</p>
+    <p><strong>Разработчик:</strong> {{ card|developer_line }}</p>
     {% if card.contact_leads %}
     <p><strong>Как выйти на связь:</strong> {{ card.contact_leads|join('; ') }}</p>
     {% endif %}
@@ -84,6 +84,9 @@
     {% if card_id %}
     <details class="card-edit mt-lg">
       <summary>Править карточку</summary>
+      {% if not is_draft %}
+      <p class="muted mt-sm">Карточка уже проверена экспертом.</p>
+      {% endif %}
       <form method="post" action="/cards/{{ card_id }}/edit" class="brief-form mt-md">
         <div class="brief-field">
           <label for="title-{{ card_id }}">Название</label>

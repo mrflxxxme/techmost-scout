@@ -1,0 +1,312 @@
+=== pytest tests/test_export_view.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-acd61557684664df8
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 7 items
+
+tests/test_export_view.py::test_reject_карточка_не_попадает_в_view PASSED [ 14%]
+tests/test_export_view.py::test_rework_попадает_в_отчёт_и_в_rework_keys PASSED [ 28%]
+tests/test_export_view.py::test_правки_editor_overrides_наложены_до_фильтра PASSED [ 42%]
+tests/test_export_view.py::test_отсутствие_solution_cards_не_роняет_сборку PASSED [ 57%]
+tests/test_export_view.py::test_is_draft_снимается_только_при_validated_или_exported PASSED [ 71%]
+tests/test_export_view.py::test_reviewer_name_и_validated_at_из_последнего_вердикта PASSED [ 85%]
+tests/test_export_view.py::test_visible_report_не_мутирует_входной_report PASSED [100%]
+
+============================== 7 passed in 0.87s ===============================
+
+=== pytest tests/test_web_report_verdicts.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-acd61557684664df8
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+tests/test_web_report_verdicts.py::test_черновик_на_странице_drafted PASSED [ 20%]
+tests/test_web_report_verdicts.py::test_подпись_и_отсутствие_черновика_после_validated PASSED [ 40%]
+tests/test_web_report_verdicts.py::test_reject_карточка_не_видна_approve_видна PASSED [ 60%]
+tests/test_web_report_verdicts.py::test_edit_после_validated_возвращает_303_и_статус_не_меняется PASSED [ 80%]
+tests/test_web_report_verdicts.py::test_подсказка_карточка_уже_проверена_после_validated PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+========================= 5 passed, 1 warning in 1.06s =========================
+
+=== rg -n "NotImplementedError" backend/app/web/routes/report.py ===
+(нет совпадений)
+
+=== pytest tests/test_web_report.py tests/test_web_flow_e2e.py tests/test_web_templates.py -v ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-acd61557684664df8
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 23 items
+
+tests/test_web_report.py::test_report_renders_from_report_json_without_solution_cards_rows PASSED [  4%]
+tests/test_web_report.py::test_draft_banner_present_at_drafted_status PASSED [  8%]
+tests/test_web_report.py::test_draft_banner_survives_edit PASSED         [ 13%]
+tests/test_web_report.py::test_empty_evidence_hides_maturity_and_shows_danger_notice PASSED [ 17%]
+tests/test_web_report.py::test_edit_title_persists_and_report_json_unchanged PASSED [ 21%]
+tests/test_web_report.py::test_edit_ignores_confidence_and_cannot_add_evidence PASSED [ 26%]
+tests/test_web_report.py::test_edit_removes_evidence_line PASSED         [ 30%]
+tests/test_web_report.py::test_comparison_table_and_recommendation_from_summary PASSED [ 34%]
+tests/test_web_report.py::test_limitations_block_matches_limitations_lines PASSED [ 39%]
+tests/test_web_report.py::test_limitations_lines_keep_separator_between_sources_and_caveats PASSED [ 43%]
+tests/test_web_report.py::test_report_not_found_shows_human_text_without_raw_exception PASSED [ 47%]
+tests/test_web_report.py::test_evidence_links_are_clickable PASSED       [ 52%]
+tests/test_web_report.py::test_edit_with_garbage_request_does_not_500 PASSED [ 56%]
+tests/test_web_report.py::test_edit_unknown_card_returns_404 PASSED      [ 60%]
+tests/test_web_report.py::test_unknown_request_returns_404 PASSED        [ 65%]
+tests/test_web_report.py::test_templates_env_autoescape_is_enabled_for_html PASSED [ 69%]
+tests/test_web_report.py::test_card_title_with_script_tag_is_escaped_in_report_html PASSED [ 73%]
+tests/test_web_flow_e2e.py::test_full_operator_path_form_to_report_and_edit PASSED [ 78%]
+tests/test_web_templates.py::test_no_inline_style_outside_exempt_file PASSED [ 82%]
+tests/test_web_templates.py::test_no_hex_colors_in_templates PASSED      [ 86%]
+tests/test_web_templates.py::test_page_renders_without_errors[/] PASSED  [ 91%]
+tests/test_web_templates.py::test_page_renders_without_errors[/requests] PASSED [ 95%]
+tests/test_web_templates.py::test_page_renders_without_errors[/showcase] PASSED [100%]
+
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 23 passed, 1 warning in 2.42s =========================
+
+=== pytest -q (весь набор) ===
+........................................................................ [  7%]
+........................................................................ [ 14%]
+........................................................................ [ 21%]
+........................................................................ [ 28%]
+........................................................................ [ 35%]
+........................................................................ [ 43%]
+........................................................................ [ 50%]
+........................................................................ [ 57%]
+........................................................................ [ 64%]
+........................................................................ [ 71%]
+........................................................................ [ 79%]
+........................................................................ [ 86%]
+........................................................................ [ 93%]
+.................................................................        [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1001 passed, 1 warning in 66.34s (0:01:06)
+
+=== ruff check . ===
+All checks passed!
+
+=== ruff format --check . ===
+180 files already formatted
+
+
+=== ЦИКЛ 2 (ревью вернуло на доработку: дыра покрытия, инвариант №8) ===
+
+--- pytest tests/test_export_view.py -v ---
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-acd61557684664df8
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 9 items
+
+tests/test_export_view.py::test_reject_карточка_не_попадает_в_view PASSED [ 11%]
+tests/test_export_view.py::test_rework_попадает_в_отчёт_и_в_rework_keys PASSED [ 22%]
+tests/test_export_view.py::test_правки_editor_overrides_наложены_до_фильтра PASSED [ 33%]
+tests/test_export_view.py::test_отсутствие_solution_cards_не_роняет_сборку PASSED [ 44%]
+tests/test_export_view.py::test_is_draft_снимается_только_при_validated_или_exported PASSED [ 55%]
+tests/test_export_view.py::test_reviewer_name_и_validated_at_из_последнего_вердикта PASSED [ 66%]
+tests/test_export_view.py::test_reject_в_середине_списка_переиндексирует_card_ids_и_rework_keys PASSED [ 77%]
+tests/test_export_view.py::test_правка_карточки_после_reject_остаётся_на_своей_карточке PASSED [ 88%]
+tests/test_export_view.py::test_visible_report_не_мутирует_входной_report PASSED [100%]
+
+============================== 9 passed in 0.80s ===============================
+
+--- Самопроверка мутациями ревью (backend/app/export/view.py временно правился, отменён — git diff после чист) ---
+
+Мутация 2 (в _reindex_after_filter: new_key = key вместо new_key = (is_contest, new_position) — "забыли переномеровать позиции после вычета reject"):
+......FF......                                                           [100%]
+=================================== FAILURES ===================================
+_____ test_reject_в_середине_списка_переиндексирует_card_ids_и_rework_keys _____
+
+db_session_factory = <function db_session_factory.<locals>.factory at 0x7f35135849a0>
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+
+    async def test_reject_в_середине_списка_переиндексирует_card_ids_и_rework_keys(db_session_factory, brief):
+        """Reject в середине списка из 4 карточек (риск из PLAN.md «Риски»): id и
+        пометка rework обязаны сдвинуться на послефильтровые позиции, а не
+        остаться на дофильтровых — иначе правка или бейдж «уедут» не на ту
+        карточку. Вырожденные случаи (0/1 карточка после reject, reject
+        последней) этого не ловят — нужен reject строго в середине 3+ карточек."""
+        a = _make_card(title="A")
+        b = _make_card(title="B")
+        c = _make_card(title="C")
+        d = _make_card(title="D")
+        report = _make_report([a, b, c, d], brief=brief)
+        request_id, card_ids = await _seed(db_session_factory, report=report)
+        a_id, b_id, c_id, d_id = card_ids
+        await _add_verdict(db_session_factory, b_id, VerdictDecision.REJECT)
+        await _add_verdict(db_session_factory, d_id, VerdictDecision.REWORK)
+    
+        async with db_session_factory() as session:
+            view = await build_export_view(session, request_id)
+    
+        assert [card.title for card in view.report.cards] == ["A", "C", "D"]
+        # Позиция 1 после фильтра обязана указывать на C (её дофильтровая позиция
+        # была 2), а не на B (отклонена) и не остаться дофильтровой парой (False,2).
+>       assert view.card_ids == {(False, 0): a_id, (False, 1): c_id, (False, 2): d_id}
+E       assert {(False, 0): ...(False, 3): 4} == {(False, 0): ...(False, 2): 4}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {(False, 2): 3} != {(False, 2): 4}
+E         Left contains 1 more item:
+E         {(False, 3): 4}
+E         Right contains 1 more item:
+E         {(False, 1): 3}
+E         Use -v to get more diff
+
+tests/test_export_view.py:233: AssertionError
+_________ test_правка_карточки_после_reject_остаётся_на_своей_карточке _________
+
+db_session_factory = <function db_session_factory.<locals>.factory at 0x7f35133ed120>
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+
+    async def test_правка_карточки_после_reject_остаётся_на_своей_карточке(db_session_factory, brief):
+        """`editor_overrides`, записанные в БД под дофильтровой позицией карточки C
+        (позиция 2, ПОСЛЕ отклонённой B), обязаны остаться на C и после фильтра —
+        порядок «правки до фильтра» не вырожденный случай с одной карточкой, а
+        минимум с тремя, одна из которых reject. Если фильтр сработает раньше
+        наложения правок, правка «уедет» на карточку D, которая после фильтра
+        окажется на той же дофильтровой позиции 2, что и правка."""
+        a = _make_card(title="A")
+        b = _make_card(title="B")
+        c = _make_card(title="C — исходный заголовок")
+        d = _make_card(title="D")
+        report = _make_report([a, b, c, d], brief=brief)
+        request_id, card_ids = await _seed(
+            db_session_factory, report=report, card_overrides={2: {"title": "C — правка оператора"}}
+        )
+        a_id, b_id, c_id, d_id = card_ids
+        await _add_verdict(db_session_factory, b_id, VerdictDecision.REJECT)
+    
+        async with db_session_factory() as session:
+            view = await build_export_view(session, request_id)
+    
+        assert [card.title for card in view.report.cards] == ["A", "C — правка оператора", "D"]
+>       assert view.card_ids[(False, 1)] == c_id
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: (False, 1)
+
+tests/test_export_view.py:261: KeyError
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_export_view.py::test_reject_в_середине_списка_переиндексирует_card_ids_и_rework_keys
+FAILED tests/test_export_view.py::test_правка_карточки_после_reject_остаётся_на_своей_карточке
+2 failed, 12 passed, 1 warning in 1.52s
+
+Результат: 2 failed (обе новые), 12 passed — мутация поймана.
+
+Мутация 3 (в build_export_view: filtered_first = visible_report(raw_report, ...); visible = apply_overrides(filtered_first, overrides) — порядок операций "фильтр до правок" вместо "правки до фильтра"):
+.......F......                                                           [100%]
+=================================== FAILURES ===================================
+_________ test_правка_карточки_после_reject_остаётся_на_своей_карточке _________
+
+db_session_factory = <function db_session_factory.<locals>.factory at 0x7f8f474b4d60>
+brief = Brief(industry='нефтепереработка', task_summary='Катализатор гидроочистки теряет активность за 8 месяцев вместо 24. За...тализатор гидроочистки', 'дезактивация катализатора'], keywords_en=['hydrotreating catalyst', 'catalyst deactivation'])
+
+    async def test_правка_карточки_после_reject_остаётся_на_своей_карточке(db_session_factory, brief):
+        """`editor_overrides`, записанные в БД под дофильтровой позицией карточки C
+        (позиция 2, ПОСЛЕ отклонённой B), обязаны остаться на C и после фильтра —
+        порядок «правки до фильтра» не вырожденный случай с одной карточкой, а
+        минимум с тремя, одна из которых reject. Если фильтр сработает раньше
+        наложения правок, правка «уедет» на карточку D, которая после фильтра
+        окажется на той же дофильтровой позиции 2, что и правка."""
+        a = _make_card(title="A")
+        b = _make_card(title="B")
+        c = _make_card(title="C — исходный заголовок")
+        d = _make_card(title="D")
+        report = _make_report([a, b, c, d], brief=brief)
+        request_id, card_ids = await _seed(
+            db_session_factory, report=report, card_overrides={2: {"title": "C — правка оператора"}}
+        )
+        a_id, b_id, c_id, d_id = card_ids
+        await _add_verdict(db_session_factory, b_id, VerdictDecision.REJECT)
+    
+        async with db_session_factory() as session:
+            view = await build_export_view(session, request_id)
+    
+>       assert [card.title for card in view.report.cards] == ["A", "C — правка оператора", "D"]
+E       AssertionError: assert ['A', 'C — ис...ка оператора'] == ['A', 'C — пр...ератора', 'D']
+E         
+E         At index 1 diff: 'C — исходный заголовок' != 'C — правка оператора'
+E         Use -v to get more diff
+
+tests/test_export_view.py:260: AssertionError
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_export_view.py::test_правка_карточки_после_reject_остаётся_на_своей_карточке
+1 failed, 13 passed, 1 warning in 1.64s
+
+Результат: 1 failed (test_правка_карточки_после_reject_остаётся_на_своей_карточке), 13 passed — мутация поймана.
+
+git diff --stat backend/app/export/view.py после отмены обеих мутаций (обязано быть пусто):
+(пусто)
+
+--- pytest -q (весь набор) ---
+........................................................................ [  7%]
+........................................................................ [ 14%]
+........................................................................ [ 21%]
+........................................................................ [ 28%]
+........................................................................ [ 35%]
+........................................................................ [ 43%]
+........................................................................ [ 50%]
+........................................................................ [ 57%]
+........................................................................ [ 64%]
+........................................................................ [ 71%]
+........................................................................ [ 78%]
+........................................................................ [ 86%]
+........................................................................ [ 93%]
+...................................................................      [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1003 passed, 1 warning in 60.97s (0:01:00)
+
+--- ruff check . ---
+All checks passed!
+
+--- ruff format --check . ---
+180 files already formatted

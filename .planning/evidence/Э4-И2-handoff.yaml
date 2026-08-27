@@ -1,0 +1,75 @@
+handoff:
+  from: implementer-A
+  to: reviewer
+  task: "Э4-И2"
+  cycle: 2
+  did:
+    - "ЦИКЛ 2 (правка по ревью, вердикт ДОРАБОТАТЬ, блокирующий №1 — дыра покрытия, инвариант №8): добавлены два теста в tests/test_export_view.py на сценарий [A, B(reject), C, D(rework)] — 4 карточки, reject в СЕРЕДИНЕ списка (существующие тесты были вырожденными: 0/1 карточка после reject или reject последней, где ошибка индексации не проявляется)."
+    - "test_reject_в_середине_списка_переиндексирует_card_ids_и_rework_keys: card_ids сопоставляет послефильтровую позицию 1 с PK карточки C (не B), позицию 2 — с D; rework_keys == {(False, 2)}."
+    - "test_правка_карточки_после_reject_остаётся_на_своей_карточке: editor_overrides, записанные под ДОфильтровой позицией карточки C (позиция 2 в БД, ПОСЛЕ отклонённой B), остаются на C и после фильтра — порядок «правки до фильтра» проверен не вырожденным случаем с одной карточкой, а тремя, одна из которых reject."
+    - "Самопроверка обеими мутациями из отчёта ревью (временная правка backend/app/export/view.py, отменена — git diff после чист, см. .planning/evidence/Э4-И2-pytest.txt): мутация «new_key = key вместо (is_contest, new_position)» («забыли переномеровать») — 2 failed (оба новых теста), 12 passed; мутация «visible_report до apply_overrides вместо после» («правки после фильтра вместо до») — 1 failed (тест на правку после reject), 13 passed. Обе целевые мутации из блокирующего замечания теперь ловятся."
+    - "Код (backend/app/export/view.py и все остальные файлы задачи) не менялся — ревью признало его корректным, правка только в tests/test_export_view.py. Советы ревью (объединение двух SELECT RequestRow, дублирование условия REJECT в _reindex_after_filter) не правились — не в границах цикла 2 (задание оркестратора: «советы... не правь — в журнал»)."
+  cycle_1_did:
+    - "Реализован backend/app/export/view.py (136 строк, ≤160): ExportView и build_export_view(session, request_id). Порядок операций: load_report → apply_overrides (правки ДО фильтра) → visible_report (РЕШ-198). Позиции карточек пересчитаны под порядок отфильтрованного отчёта (_reindex_after_filter), чтобы card_ids и rework_keys совпадали с enumerate(view.report.cards)/enumerate(view.report.contest_cards). reviewer_name/validated_at берутся из последнего действующего вердикта (не из settings.reviewer_name — та настройка только предзаполняет форму вердикта, РЕШ-197)."
+    - "backend/app/web/routes/report.py (166 строк, ≤230): show_report переведён на build_export_view, свой разбор report_json и apply_overrides удалены; стаб submit_verdict удалён целиком (rg -n NotImplementedError — пусто)."
+    - "backend/app/web/templates/report.html: при is_draft — прежняя плашка ЧЕРНОВИК; иначе при наличии signature — строка «Подготовлено системой ТехМост Скаут, проверено: …»; циклы карточек передают четвёртым элементом is_rework."
+    - "backend/app/web/templates/_card.html: строка «Разработчик» через фильтр card|developer_line (Э4-И1, TEMPLATE_FILTERS); пометка «На доработку» (badge.gold) у rework-карточек; подсказка «Карточка уже проверена экспертом.» у формы правки при not is_draft (РЕШ-196 п. 6)."
+    - "backend/app/main.py: регистрация TEMPLATE_FILTERS в Jinja (импорт + templates.env.filters.update, 2 строки)."
+    - "theme.css не тронут — обе новых пометки обошлись существующими классами (badge.gold, notice, muted, mt-sm), новый CSS не понадобился."
+    - "Тесты: tests/test_export_view.py (7, новый файл) — reject убран, rework виден и в rework_keys, правки наложены до фильтра, отсутствие solution_cards не роняет сборку, is_draft по статусу, reviewer_name/validated_at из вердикта, и по совету ревью Э4-И1 — тест немутируемости verdicts.visible_report на входном Report. tests/test_web_report_verdicts.py (5, новый файл — test_web_report.py занят на 465/500): черновик на drafted, подпись и отсутствие черновика после validated, reject скрыт/approve виден, POST /cards/{id}/edit при validated отдаёт 303 и не меняет requests.status, подсказка «карточка уже проверена» видна."
+    - "Прежние тесты страницы отчёта (test_web_report.py, test_web_flow_e2e.py, test_web_templates.py) — 23 passed, git diff --stat по всем трём пуст (перевод на build_export_view не изменил наблюдаемое поведение для запроса без вердиктов)."
+  artifacts:
+    - backend/app/export/view.py
+    - backend/app/web/routes/report.py
+    - backend/app/web/templates/report.html
+    - backend/app/web/templates/_card.html
+    - backend/app/main.py
+    - tests/test_export_view.py
+    - tests/test_web_report_verdicts.py
+    - .planning/evidence/Э4-И2-pytest.txt
+  self_audit: pass
+  checks:
+    - "ЦИКЛ 2: pytest tests/test_export_view.py -v: 9 passed (было 7, добавлено 2)"
+    - "ЦИКЛ 2: самопроверка мутацией «забыли переномеровать» (new_key = key): pytest tests/test_export_view.py tests/test_web_report_verdicts.py -q → 2 failed, 12 passed — ловится"
+    - "ЦИКЛ 2: самопроверка мутацией «правки после фильтра» (visible_report до apply_overrides): pytest tests/test_export_view.py tests/test_web_report_verdicts.py -q → 1 failed, 13 passed — ловится"
+    - "ЦИКЛ 2: git diff --stat backend/app/export/view.py после отмены обеих мутаций: пусто (код не менялся)"
+    - "ЦИКЛ 2: pytest -q (весь набор): 1003 passed"
+    - "ЦИКЛ 2: ruff check .: All checks passed"
+    - "ЦИКЛ 2: ruff format --check .: 180 files already formatted"
+    - "ЦИКЛ 2: git status --porcelain: только tests/test_export_view.py и evidence/Э4-И2-pytest.txt"
+    - "цикл 1: pytest tests/test_export_view.py -v: 7 passed"
+    - "цикл 1: pytest tests/test_web_report_verdicts.py -v: 5 passed"
+    - "цикл 1: rg -n \"NotImplementedError\" backend/app/web/routes/report.py: совпадений нет"
+    - "цикл 1: pytest tests/test_web_report.py tests/test_web_flow_e2e.py tests/test_web_templates.py -v: 23 passed (git diff --stat по всем трём пуст)"
+    - "цикл 1: pytest -q (весь набор): 1001 passed"
+    - "цикл 1: ruff check .: All checks passed"
+    - "цикл 1: ruff format --check .: 180 files already formatted"
+    - "цикл 1: pytest tests/test_backend_layout.py -v: 3 passed"
+    - "цикл 1: wc -l backend/app/export/view.py backend/app/web/routes/report.py: 136 и 166 строк"
+  escalate: "не изменилось с цикла 1: две новые клиентские фразы на визу владельца (правило 4 общих правил этапа Э4, PLAN.md): (1) «На доработку» — короткая пометка-бейдж у карточки с действующим вердиктом rework на странице отчёта (текст РЕШ-196 п. 6 задаёт смысл «пометка ‘на доработку’», дословную короткую форму подобрал я); (2) «Карточка уже проверена экспертом.» — подсказка под кнопкой «Править карточку» у карточек после validated/exported (РЕШ-196 п. 6, «владелец при грилле не переопределил» — вариант формулировки тоже мой). Обе фразы уже в коде и в тестах, но не выдавались молча как окончательные — использованы ровно эти строки, менять их может только решение владельца."
+  read_first:
+    - ".planning/PLAN.md (раздел «### Э4-И2 · Клиентский вид отчёта: фильтр reject, подпись, сборщик выгрузки» и «Контракты: Клиентский вид, Подпись эксперта и пометка черновика»)"
+    - "backend/app/export/view.py"
+    - "backend/app/web/routes/report.py"
+    - "backend/app/web/templates/report.html"
+    - "backend/app/web/templates/_card.html"
+    - ".planning/DECISIONS.md РЕШ-196 п. 6 и 8, РЕШ-197, РЕШ-198 (точечным поиском)"
+  notes: >-
+    Ветка e4/i2 создана от 3b85ac5 (верхушка волны 0 после ревью Э4-И1 —
+    verdicts.py, REVIEWED_FOOTER, TEMPLATE_FILTERS уже в базе, красный тест
+    test_config.py погашен оркестратором). ExportView.card_ids и rework_keys
+    сознательно ре-индексированы под ПОСЛЕФИЛЬТРОВЫЕ позиции (а не позиции
+    исходных solution_cards) — иначе enumerate(view.report.cards) в шаблоне
+    разъехался бы с ключами после удаления reject-карточек. Для этого
+    _reindex_after_filter в view.py повторяет ту же проверку на REJECT/REWORK,
+    что и внутри verdicts._visible_section — это не второй путь принятия
+    решения (решение о видимости принимает только visible_report), а
+    бухгалтерия соответствия id новым позициям; отдельно объяснено в
+    докстроке функции. Живых вызовов модели и БД не было — вся логика на
+    временной SQLite (tmp_path) и TestClient.
+
+    Цикл 2: коммит e5cec2d, правка только в tests/test_export_view.py по
+    прямому указанию оркестратора после ревью (review/e4i2, вердикт
+    ДОРАБОТАТЬ). Код задачи не менялся ни строкой — блокирующее замечание
+    было дырой покрытия (два новых теста на reject в середине списка 3+
+    карточек), а не дефектом реализации.
