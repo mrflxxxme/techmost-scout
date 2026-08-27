@@ -1,10 +1,10 @@
-# Дорожная карта запуска «ТехМост» (рабочее название)
+# Дорожная карта запуска «Ситалл»
 
 Версия 2.0 — 8 августа 2026. Составлена по итогам интервью с основателем и исследования рынка. Полная картина рынка — в [market-overview.md](market-overview.md), сценарии интервью — в [custdev-interviews.md](custdev-interviews.md).
 
 **Позиционирование (закреплено):** внешний офис трансфера технологий для промышленности. Находим, проверяем и доводим до производства научные разработки под задачи вашего бизнеса — с привлечением господдержки, покрывающей до 70% стоимости исследований.
 
-**Контакт:** Кирилл Уклонский · uklonskiy.k@gmail.com
+**Контакт:** Кирилл Уклонский · uklonskiy.k@ya.ru
 
 ---
 
@@ -227,4 +227,4 @@
 
 ---
 
-*Кирилл Уклонский · uklonskiy.k@gmail.com. Приложения: [market-overview.md](market-overview.md) — картина рынка; [custdev-interviews.md](custdev-interviews.md) — сценарии интервью; [deck/techmost-pitch-deck-v1.pptx](deck/techmost-pitch-deck-v1.pptx) — презентация.*
+*Кирилл Уклонский · uklonskiy.k@ya.ru. Приложения: [market-overview.md](market-overview.md) — картина рынка; [custdev-interviews.md](custdev-interviews.md) — сценарии интервью; [deck/sitall-pitch-deck.pptx](deck/sitall-pitch-deck.pptx) — презентация.*

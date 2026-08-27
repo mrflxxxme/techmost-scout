@@ -12,7 +12,7 @@
 - Правила работы агентов в репозитории: [CLAUDE.md](CLAUDE.md)
 - Где мы сейчас: [.planning/STATE.md](.planning/STATE.md)
 - Что нужно донести вручную (ключи, регистрации): [docs/deps-manual.md](docs/deps-manual.md)
-- Материалы компании — рынок, дорожная карта, интервью, дек: [docs/marketing/](docs/marketing/README.md)
+- Материалы компании — бренд, рынок, дорожная карта, презентации, регионы: [marketing/](marketing/README.md)
 
 ## Разработка ведётся командой агентов
 
