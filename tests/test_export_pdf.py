@@ -16,6 +16,7 @@ import pytest
 from app.export.markdown import PAID_LIMIT_NOTICE, SUMMARY_FALLBACK_NOTICE, SUMMARY_NOT_PRINTABLE_NOTICE
 from app.export.pdf import export_pdf, render_print_html
 from app.export.view import ExportView
+from app.pipeline.intake_flow import INTAKE_FALLBACK_CAVEAT, REFINE_FALLBACK_CAVEAT
 from app.pipeline.summary import fallback_summary
 from app.schemas import Brief, Evidence, MaturityStage, Report, ReportSummary, SolutionCard
 
@@ -399,6 +400,25 @@ def test_render_print_html_machine_notice_survives_hidden_card_prose_does_not():
 
     assert PAID_LIMIT_NOTICE in html
     assert "В карточке 3 риск не подтверждён." not in html
+
+
+@pytest.mark.parametrize("notice", [INTAKE_FALLBACK_CAVEAT, REFINE_FALLBACK_CAVEAT])
+def test_render_print_html_intake_refine_notices_survive_hidden_card(notice: str):
+    """Блокирующее ревью цикла 1: intake/refine-оговорки (РЕШ-210) — те же
+    машинные пометки, что PAID_LIMIT_NOTICE, и должны переживать скрытую
+    карточку так же. Мутация «убрать константу из _machine_caveats()»
+    для этих двух ловилась только по совпадению с другим тестом — эта
+    проверка ловит каждую константу отдельно."""
+    report = _report(
+        [_card()],
+        summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=[notice, "проза модели"]),
+    )
+    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+
+    html = render_print_html(view)
+
+    assert notice in html
+    assert "проза модели" not in html
 
 
 def test_render_print_html_limitations_section_appears_for_machine_notice_only():
