@@ -328,6 +328,30 @@ def test_рекомендация_не_печатается_когда_карт�
     assert SUMMARY_NOT_PRINTABLE_NOTICE in text
 
 
+def test_рекомендация_не_печатается_когда_карточка_скрыта_пустым_evidence(tmp_path: Path, brief):
+    """РЕШ-206, регрессия ревью цикла 2: total_cards совпадает с числом карточек
+    в отчёте (reject-вердикта нет вовсе), но одна карточка скрывается самим
+    экспортёром из-за пустого evidence (РЕШ-204) — рекомендация и оговорки всё
+    равно не печатаются. Мутация «считать printed_cards по нефильтрованным
+    report.cards/contest_cards» сделала бы printed_cards == total_cards и
+    напечатала бы текст модели — эта проверка её убивает."""
+    bare = _make_card(title="Карточка без подтверждений", evidence=[])
+    report = _make_report(
+        [_make_card(), bare],
+        brief=brief,
+        summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["В карточке 3 риск не подтверждён."]),
+    )
+    view = _make_view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+    out_path = tmp_path / "report-1-2026-08-27.docx"
+
+    export_docx(view, out_path)
+
+    text = _full_text(out_path)
+    assert "Первым берём вариант 1." not in text
+    assert "В карточке 3 риск не подтверждён." not in text
+    assert SUMMARY_NOT_PRINTABLE_NOTICE in text
+
+
 def test_строка_недоступных_источников_остаётся_при_скрытой_сводке(tmp_path: Path, brief):
     """Инвариант №5: строка о недоступных источниках остаётся, даже когда
     рекомендация и оговорки скрыты из-за отклонённой карточки."""

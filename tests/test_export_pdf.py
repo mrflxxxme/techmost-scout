@@ -266,6 +266,27 @@ def test_render_print_html_summary_not_printable_when_card_hidden_and_not_edited
     assert SUMMARY_NOT_PRINTABLE_NOTICE in html
 
 
+def test_render_print_html_summary_not_printable_when_hidden_by_empty_evidence():
+    """РЕШ-206, регрессия ревью цикла 2: total_cards совпадает с числом карточек
+    в отчёте (reject-вердикта нет вовсе), но одна карточка скрывается самим
+    экспортёром из-за пустого evidence (РЕШ-204) — рекомендация и оговорки всё
+    равно не печатаются. Мутация «считать printed_cards по нефильтрованным
+    report.cards/contest_cards» сделала бы printed_cards == total_cards и
+    напечатала бы текст модели — эта проверка её убивает."""
+    bare = _card(title="Карточка без подтверждений", evidence=[], trl_estimate=None)
+    report = _report(
+        [_card(), bare],
+        summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["В карточке 3 риск не подтверждён."]),
+    )
+    view = _view(report, is_draft=True, total_cards=2, summary_text_edited=False)
+
+    html = render_print_html(view)
+
+    assert "Первым берём вариант 1." not in html
+    assert "В карточке 3 риск не подтверждён." not in html
+    assert SUMMARY_NOT_PRINTABLE_NOTICE in html
+
+
 def test_render_print_html_sources_unavailable_line_survives_hidden_summary():
     """Инвариант №5: строка о недоступных источниках остаётся, даже когда
     рекомендация и оговорки скрыты из-за отклонённой карточки."""
