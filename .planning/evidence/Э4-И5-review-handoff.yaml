@@ -1,0 +1,35 @@
+handoff:
+  from: reviewer
+  to: verifier
+  task: "Э4-И5"
+  did:
+    - "Сверен diff со списком файлов задачи (docx.py, test_export_docx.py) — выхода за границы нет"
+    - "Проверены все десять инвариантов способами из INVARIANTS.md; №3/№4/№5 к задаче не применимы (нет секретов, промптов, адаптеров источников)"
+    - "Прогнаны pytest tests/test_export_docx.py -v (9 passed), pytest -q (1012 passed), ruff check/format (0 замечаний)"
+    - "Проверена дословность фраз построчной сверкой с export/markdown.py и web/templates/_card.html — новых фраз не найдено"
+    - "Поставлены две прицельные мутации (условие evidence у стадии; REVIEWED_FOOTER с ёлочками) — обе пойманы (вторая — полным набором через test_export_signature.py), правки возвращены"
+    - "Ручной проверкой подтверждено структурное соблюдение фильтра reject: docx.py не импортирует Verdict/verdicts и работает только над уже отфильтрованным ExportView.report"
+  artifacts:
+    - .planning/evidence/Э4-И5-review.md (закоммичен до ответа)
+    - .planning/evidence/Э4-И5-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_export_docx.py -v: 9 passed"
+    - "pytest -q: 1012 passed, 1 warning"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 182 files already formatted"
+    - "rg -n \"httpx|LLMRouter|playwright\" backend/app/export/docx.py: совпадений нет"
+    - "wc -l backend/app/export/docx.py: 200"
+    - "git diff --stat bf95465f e4/i5: только docx.py, test_export_docx.py и файлы доказательств"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел Э4-И5, «Контракты»)
+    - backend/app/export/docx.py
+    - backend/app/export/markdown.py
+    - backend/app/export/view.py
+    - tests/test_export_docx.py
+  notes: >-
+    Цикл 1, блокирующих находок нет — вердикт ПРИНЯТО. Два совета не
+    блокируют: кликабельные ссылки в DOCX (не требуются критериями задачи) и
+    дублирование текстовой логики карточки с markdown.py (оправдано разным
+    форматом вывода). Дальнейших циклов ревью для этой задачи не требуется.
