@@ -1,0 +1,224 @@
+{
+ "hadrian": {
+  "labels": [
+   "Menu"
+  ],
+  "count": 1,
+  "burger": false,
+  "sticky": true
+ },
+ "anduril": {
+  "labels": [],
+  "count": 0,
+  "burger": false,
+  "sticky": true
+ },
+ "boom": {
+  "labels": [
+   "Join Boom",
+   "Open Roles",
+   "Intern / New Grad"
+  ],
+  "count": 3,
+  "burger": true,
+  "sticky": true
+ },
+ "helion": {
+  "labels": [
+   "AboutAbout",
+   "TechnologyTechnology",
+   "PolarisPolaris",
+   "OrionOrion",
+   "NewsroomNewsroom",
+   "BlogBlog",
+   "FaqFaq",
+   "CareersCareers"
+  ],
+  "count": 8,
+  "burger": false,
+  "sticky": false
+ },
+ "cfs": {
+  "labels": [
+   "Technology",
+   "Company",
+   "News &amp; Media",
+   "Locations",
+   "Careers"
+  ],
+  "count": 5,
+  "burger": true,
+  "sticky": false
+ },
+ "varda": {
+  "labels": [
+   "Explore W-Series",
+   "Government",
+   "Biopharma",
+   "Microgravity Research",
+   "About Varda",
+   "Media Center",
+   "Careers"
+  ],
+  "count": 7,
+  "burger": false,
+  "sticky": false
+ },
+ "impulse": {
+  "labels": [
+   "Helios",
+   "Mira",
+   "Rideshare",
+   "Mojave",
+   "Careers",
+   "Approach"
+  ],
+  "count": 6,
+  "burger": true,
+  "sticky": true
+ },
+ "applied": {
+  "labels": [
+   "Join us"
+  ],
+  "count": 1,
+  "burger": false,
+  "sticky": true
+ },
+ "terraform": {
+  "labels": [
+   "Product Information",
+   "Updates",
+   "hydrogen",
+   "CO2",
+   "simulator!",
+   "The Economist",
+   "end to end demo",
+   "Atoms vs Bits",
+   "Commonwealth Fusion Systems"
+  ],
+  "count": 33,
+  "burger": false,
+  "sticky": false
+ },
+ "radiant": {
+  "labels": [],
+  "count": 0,
+  "burger": false,
+  "sticky": false
+ },
+ "machina": {
+  "labels": [
+   "Skip to content",
+   "Close",
+   "/Capabilities",
+   "/Applications",
+   "Airframes",
+   "Automotive",
+   "Missiles + Hypersonics",
+   "/Resources",
+   "/Careers"
+  ],
+  "count": 18,
+  "burger": true,
+  "sticky": true
+ },
+ "formlabs": {
+  "labels": [
+   "3D Printers",
+   "Materials",
+   "Software",
+   "Applications",
+   "Learn",
+   "Support",
+   "Contact",
+   "Store"
+  ],
+  "count": 8,
+  "burger": true,
+  "sticky": false
+ },
+ "dsv": {
+  "labels": [],
+  "count": 0,
+  "burger": false,
+  "sticky": false
+ },
+ "cambridge": {
+  "labels": [
+   "Deep tech",
+   "Industries",
+   "Insights",
+   "Careers",
+   "About us",
+   "Contact",
+   "Global EN",
+   "日本語",
+   "Advanced computing"
+  ],
+  "count": 46,
+  "burger": false,
+  "sticky": true
+ },
+ "sciencegroup": {
+  "labels": [
+   "[email&#160;protected]",
+   "+44 1223 875200",
+   "+1 617 896 0213",
+   "Home",
+   "About",
+   "Investor information",
+   "Financial reports",
+   "Investor news",
+   "Contact"
+  ],
+  "count": 9,
+  "burger": true,
+  "sticky": false
+ },
+ "ef": {
+  "labels": [
+   "[START]",
+   "Apply",
+   "Insights",
+   "FAQs",
+   "[MENU]",
+   "About us",
+   "Portfolio",
+   "Careers",
+   "Entrepreneurs First"
+  ],
+  "count": 17,
+  "burger": true,
+  "sticky": false
+ },
+ "embacy": {
+  "labels": [
+   "Works",
+   "About",
+   "Blog",
+   "Originals",
+   "Contacts",
+   "Fill the form✏️",
+   "Branding",
+   "Web Design",
+   "UI+UX"
+  ],
+  "count": 31,
+  "burger": true,
+  "sticky": false
+ },
+ "typetoday": {
+  "labels": [
+   "О проекте",
+   "Лицензии",
+   "FAQ",
+   "Журнал",
+   "EN",
+   "type.today"
+  ],
+  "count": 6,
+  "burger": false,
+  "sticky": false
+ }
+}
