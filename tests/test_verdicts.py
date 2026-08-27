@@ -182,17 +182,37 @@ def test_visible_report_не_ловится_на_фильтр_по_позици�
     ]
 
 
-def test_visible_report_не_трогает_строки_при_несовпадении_числа(brief):
-    """Критерий 2: число строк не совпадает с числом карточек — строки не трогаем вовсе."""
+def test_visible_report_несовпадение_числа_строк_с_reject_прячет_таблицу(brief):
+    """Критерий 1 (воспроизведение аудита, правка П-7): 3 карточки, 4 строки от
+    модели, карточка 1 отклонена — сопоставить строки с карточками нечем,
+    печатать неотфильтрованную таблицу нельзя (в ней уехала бы строка
+    отклонённой карточки), поэтому таблица не печатается вовсе.
+    """
+    cards = [_make_card(title=f"Карточка {n}") for n in range(3)]
+    rows = [{"Вариант": f"строка-{n}"} for n in range(4)]  # запасная сводка с другим числом строк
+    report = _make_report(cards, brief=brief, summary=ReportSummary(comparison_rows=rows, recommendation="R"))
+    card_ids = {(False, n): n + 1 for n in range(3)}
+    effective = {1: _row(1, VerdictDecision.REJECT, id=1)}  # карточка 0 отклонена
+
+    result = visible_report(report, card_ids, effective)
+
+    assert [c.title for c in result.cards] == ["Карточка 1", "Карточка 2"]
+    assert result.summary.comparison_rows == []
+
+
+def test_visible_report_несовпадение_числа_строк_без_reject_не_трогает_таблицу(brief):
+    """Критерий 2: несовпадение числа строк без единого reject таблицу не трогает —
+    отклонённых карточек нет, скрывать в таблице нечего.
+    """
     cards = [_make_card(title="Единственная")]
     rows = [{"Вариант": "A"}, {"Вариант": "B"}]  # запасная сводка с другим числом строк
     report = _make_report(cards, brief=brief, summary=ReportSummary(comparison_rows=rows, recommendation="R"))
     card_ids = {(False, 0): 1}
-    effective = {1: _row(1, VerdictDecision.REJECT, id=1)}
+    effective = {1: _row(1, VerdictDecision.APPROVE, id=1)}
 
     result = visible_report(report, card_ids, effective)
 
-    assert result.cards == []
+    assert result.cards[0].title == "Единственная"
     assert result.summary.comparison_rows == rows
 
 
