@@ -1,0 +1,72 @@
+handoff:
+  from: "implementer-1"
+  to: "reviewer"
+  task: "Э4-П7"
+  did:
+    - "backend/app/summary_overrides.py: normalize_summary_text (обрезка пробелов и пустых строк по краям), resolve_summary_edit (сравнивает форму правки с исходным текстом отчёта — рекомендацию и оговорки независимо — и пишет None в поле, если оно дословно совпадает с исходником), is_summary_edited (единственная точка расчёта флага правки, вынесена из инлайна в export/view.py специально под мутацию П-8)"
+    - "backend/app/export/view.py: build_export_view переиспользует is_summary_edited вместо инлайновой проверки `override is not None and not override.is_empty()`"
+    - "backend/app/web/routes/review.py: edit_summary больше не пишет форму как есть — сначала грузит исходный текст (report после apply_overrides, ДО правки сводки) через новую _load_original_summary и решает через resolve_summary_edit, что реально изменилось; show_review считает для каждой карточки обеих секций причину скрытия от клиента (_hidden_reason: reject эксперта или пустой evidence, РЕШ-198/204) и клиентский номер после фильтра (_annotate_client_view) — передаёт это в шаблон"
+    - "backend/app/web/templates/review.html: честный блок «Что уедет клиенту сейчас» рядом с формой правки сводки — по каждой карточке обеих секций либо номер, под которым она уедет клиенту, либо причина, почему не уедет"
+    - "tests/test_summary_overrides.py: +8 тестов — is_summary_edited на границе (override None, оба поля None, хотя бы одно задано), normalize_summary_text, resolve_summary_edit (дословное совпадение, правка только одного поля, правка обоих полей), build_export_view со строкой summary_overrides с обоими полями None (сценарий, который раньше нигде не проверялся и который ловит мутацию П-8)"
+    - "tests/test_web_review.py: +1 тест на все три критерия сразу (файл иначе перерос страж 500 строк, tests/test_tests_layout.py не в списке моих файлов) — дословное сохранение формы не пишет правку, HTML в форме экранируется (П-9), экран ревью показывает и клиентский номер видимой карточки, и причину скрытия отклонённой/без evidence карточки"
+    - "Три мутации аудита проверены вручную (см. checks) — код каждый раз восстановлен из бэкапа, git diff после восстановления пуст"
+  artifacts:
+    - "backend/app/summary_overrides.py"
+    - "backend/app/export/view.py"
+    - "backend/app/web/routes/review.py"
+    - "backend/app/web/templates/review.html"
+    - "tests/test_summary_overrides.py"
+    - "tests/test_web_review.py"
+  self_audit: "pass"
+  checks:
+    - "pytest -q: 1141 passed"
+    - "pytest tests/test_summary_overrides.py tests/test_web_review.py -v: 38 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 163 files already formatted"
+    - "pytest tests/test_backend_layout.py tests/test_tests_layout.py: 6 passed (test_web_review.py — 498 строк, под пределом 500 без записи в исключения)"
+    - "Мутация П-8 (is_summary_edited: `return override is not None` без `and not override.is_empty()`): pytest tests/test_summary_overrides.py → 3 failed (test_build_export_view_пустая_строка_overrides_не_считается_правкой, test_is_summary_edited_false_когда_оба_поля_none, test_resolve_summary_edit_дословное_совпадение_не_считается_правкой); код восстановлен, git diff --stat backend/app/summary_overrides.py пуст"
+    - "Мутация П-9 (edit_summary: escape() убран из caveats_suffix и recommendation_text во фрагменте-ответе): pytest tests/test_web_review.py → 1 failed (test_summary_и_экран_ревью_честны_с_экспертом, AssertionError на '<script>' в ответе); код восстановлен, git diff --stat backend/app/web/routes/review.py пуст"
+    - "Мутация П-6 (edit_summary: вызов resolve_summary_edit убран, override_row пишется из формы напрямую — воспроизведение исходного дефекта аудита): pytest tests/test_web_review.py → 1 failed (тот же тест, AssertionError: rows[0].recommendation == 'Вариант 1.' вместо None); код восстановлен, git diff --stat backend/app/web/routes/review.py пуст"
+  escalate: "none"
+  read_first:
+    - ".planning/PLAN.md (раздел «Э4-П7 · правкой считается изменённый текст; эксперт видит, что скрыто»)"
+    - ".planning/DECISIONS.md (РЕШ-206, РЕШ-197, РЕШ-198, РЕШ-205)"
+    - ".planning/evidence/audit-Э4-повтор.md (правки П-6, П-8, П-9)"
+    - "backend/app/summary_overrides.py"
+    - "backend/app/web/routes/review.py"
+    - "backend/app/web/templates/review.html"
+  notes: |
+    Новые человекочитаемые фразы задачи — на визу владельца:
+    - "отклонена экспертом" (причина скрытия карточки на экране ревью)
+    - "нет ни одного подтверждения" (причина скрытия карточки на экране ревью)
+    - "Что уедет клиенту сейчас" (заголовок честного блока рядом с формой правки сводки)
+    - "рекомендация и оговорки выше адресуются по этим номерам" (пояснение под заголовком блока)
+    - "Вариант N «title» — клиенту не уедет: <причина>." (строка скрытой карточки)
+    - "Вариант N «title» — уедет клиенту как вариант №M." (строка видимой карточки)
+
+    Решение по нормализации сравнения (критерий 1): сравниваю по `str.strip()`
+    — убираю пробелы и пустые строки только по краям текста целиком, внутренние
+    переносы строк и пробелы не трогаю. Обоснование в докстроке
+    normalize_summary_text: задача явно ограничивает нормализацию краями
+    («лишние пробелы и пустые строки по краям не считаются правкой»), а более
+    агрессивная нормализация (схлопывание пробелов внутри текста) рискует
+    счесть неправкой то, что эксперт изменил осознанно — например, перенос
+    строки внутри рекомендации.
+
+    Оговорки правятся как поле целиком (список), а не построчно: если хотя бы
+    одна строка оговорок отличается от исходной после нормализации — всё поле
+    caveats считается правкой и сохраняется целиком (как и раньше, РЕШ-206
+    прямо требует замену списка целиком, частичного слияния текста нет).
+
+    tests/test_web_review.py вырос с 469 до 498 строк — под пределом 500, но
+    вплотную: для этого пришлось объединить три критерия (1, 3, 4) в один тест
+    (test_summary_и_экран_ревью_честны_с_экспертом) вместо трёх отдельных —
+    иначе файл ушёл бы за 500 строк, а tests/test_tests_layout.py не входит в
+    список моих файлов на эту задачу. Если ревью сочтёт объединённый тест
+    менее читаемым, чем три отдельных, — потребуется либо добавить
+    tests/test_web_review.py в исключения test_tests_layout.py отдельной
+    правкой (не входит в границы этой задачи), либо разнести часть проверок в
+    tests/test_summary_overrides.py.
+
+    Живых вызовов модели и внешних API не было — задача полностью на
+    фикстурах и синтетических отчётах, сеть не задействована.
