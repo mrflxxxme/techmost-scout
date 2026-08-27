@@ -1,0 +1,34 @@
+handoff:
+  from: verifier
+  to: orchestrator
+  task: "Э4-волны23"
+  did:
+    - "Прогнаны 48 критериев приёмки из PLAN.md для Э4-И6, И7, И8, И9, И4-fix"
+    - "Целевые тесты: test_cli_export 10, test_web_export 6, test_demo_playback 11, test_web_demo 7, test_stage4_e2e 6, test_export_pdf 10 — все 50 passed"
+    - "Полный набор: 1070 passed, 0 failed (дважды)"
+    - "Grep-проверки: load_report|apply_overrides=пусто, httpx в cli_export.py=пусто, LLMRouter|httpx|ScoutPipeline в demo.*=пусто, demo_flag в pipeline/demo.py=пусто, request_id==N в routes/demo.py=пусто"
+    - "Документы: 'исходные пропорции' в SPEC есть (строка 682), 'с сохранением исходных задержек'=пусто, 'scout export' в README и deps-manual есть"
+    - "Инварианты №1–10 подтверждены способами из INVARIANTS.md"
+    - "Э4-И4-fix: rework в pdf.py/report_print.html — только комментарии, test_render_print_html_rework_mark_stays_operator_only=passed"
+  artifacts:
+    - ".planning/evidence/Э4-верификация-волны23.md"
+    - ".planning/evidence/Э4-верификация-волны23-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest -q: 1070 passed, 1 warning (дважды)"
+    - "pytest tests/test_cli_export.py tests/test_web_export.py tests/test_demo_playback.py tests/test_web_demo.py tests/test_stage4_e2e.py tests/test_export_pdf.py -v: 50 passed"
+    - "ruff check . && ruff format --check .: All checks passed + 161 files already formatted"
+    - "grep -rE sk-|gigachat|Api-Key: только комментарии и тесты с фиктивными ключами (sk-test, sk-fake-*)"
+    - "pytest tests/test_secret_leak_guard.py: 7 passed"
+    - "pytest tests/test_prompts.py: 51 passed"
+    - "pytest tests/test_export_markdown.py: 33 passed (в т.ч. empty_evidence)"
+    - "pytest tests/test_team_docs.py: 35 passed"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (разделы Э4-И6–Э4-И9, Э4-И4-fix)"
+    - "docs/team/INVARIANTS.md"
+    - ".planning/evidence/Э4-верификация-волны23.md"
+  notes: >-
+    Все критерии закрыты. Инварианты подтверждены. Вердикт PASS.
+    Все handoff файлы существуют в git history. Review ветки влиты.
+    git status чист на verify/e4w23.
