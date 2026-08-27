@@ -1,0 +1,37 @@
+handoff:
+  from: reviewer
+  to: verifier
+  task: "Э4-И6"
+  did:
+    - "Прочитаны PLAN.md (раздел Э4-И6, «Имена файлов выгрузки»), INVARIANTS.md, CONVENTIONS.md §5/§7, CLAUDE.md, SPEC.md §0.1, РЕШ-199/РЕШ-202"
+    - "Diff сверен со списком файлов задачи — файлов вне границ нет, границы (theme.css, содержимое PDF/DOCX, кнопка DOCX) соблюдены"
+    - "Прогнаны своими руками: tests/test_cli_export.py -v (10), tests/test_web_export.py -v (6), tests/test_cli_run.py+test_cli_doctor_schema_guard.py -v (27), полный pytest -q (1045), ruff check/format"
+    - "Проверены все 10 инвариантов способами INVARIANTS.md; ключевой №2 (замок черновика) — двумя целевыми мутациями, обе убиты нужными тестами с первого раза"
+    - "Проверены грабли §0.1 SPEC.md — не применимы к задаче (нет промптов, нет вызовов моделей)"
+    - "Handoff исполнителя сверен: артефакты на месте, checks воспроизведены и совпадают, self_audit/escalate непротиворечивы"
+    - "Найдено 0 блокирующих находок, 2 совета (гонка записи файла при параллельных GET, унификация текста 404 для повреждённого report_json)"
+  artifacts:
+    - ".planning/evidence/Э4-И6-review.md (закоммичен до ответа)"
+    - ".planning/evidence/Э4-И6-review-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_cli_export.py -v: 10 passed"
+    - "pytest tests/test_web_export.py -v: 6 passed"
+    - "pytest tests/test_cli_run.py tests/test_cli_doctor_schema_guard.py -v: 27 passed"
+    - "pytest -q: 1045 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 189 files already formatted"
+    - "мутация 1 (cli_export.py, снята проверка drafted): test_drafted_without_draft_flag_refuses_with_code_1_and_no_export_call упал, файл возвращён"
+    - "мутация 2 (report.py, снята проверка drafted): test_export_pdf_drafted_without_draft_param_refuses_without_calling_exporter упал, файл возвращён"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (раздел Э4-И6)"
+    - ".planning/evidence/Э4-И6-review.md"
+    - "backend/app/cli_export.py"
+    - "backend/app/web/routes/report.py"
+  notes: >-
+    Цикл 1, вердикт ПРИНЯТЬ — блокирующих находок нет, доработка не требуется.
+    Два совета не блокируют приёмку и вынесены в раздел «Советы» отчёта.
+    Новые клиентские фразы («Полный текст (PDF, черновик)» и тексты отказов
+    CLI/веба) исполнитель сам перечислил в notes своего handoff для визы
+    владельца на воротах этапа — вопросов к формулировкам у ревью нет.
