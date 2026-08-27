@@ -87,9 +87,12 @@ export function expandSteps(steps) {
       if (btn.getAttribute('aria-expanded') === 'true') setOpen(btn, true);
     }
   }, { passive: true });
+  // на узком экране раскрытый шаг ведёт скролл сам: там кульминация держит
+  // экран, и список из четырёх заголовков без содержимого читать нечего
+  const narrow = () => innerWidth <= 900;
   return (i) => {
     // скролл ведёт шаг: раскрытый следует за активным, если владелец уже раскрывал
     const anyOpen = steps.some((b) => b.getAttribute('aria-expanded') === 'true');
-    if (anyOpen) steps.forEach((b, k) => setOpen(b, k === i));
+    if (anyOpen || narrow()) steps.forEach((b, k) => setOpen(b, k === i));
   };
 }

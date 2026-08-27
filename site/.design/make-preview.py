@@ -26,14 +26,10 @@ title = re.search(r"<title>(.*?)</title>", html, re.S).group(1)
 body = re.search(r"<body>(.*)</body>", html, re.S).group(1)
 body = re.sub(r'<script type="module">.*?</script>', "", body, flags=re.S)
 
-boot = """
-startHero(document.getElementById('spark'));
-riseOnEnter([...document.querySelectorAll('.rise')]);
-scrubCycle(document.getElementById('track'), [...document.querySelectorAll('#steps > div')]);
-initFork(document.getElementById('fork'));
-initSheet(document.getElementById('burger'), document.getElementById('sheet'),
-          document.getElementById('sheetClose'));
-"""
+# Загрузку берём из самой страницы, а не переписываем здесь второй раз: копия
+# уже расходилась с боевым файлом и превью показывало сломанный цикл.
+boot = re.search(r'<script type="module">(.*?)</script>', html, re.S).group(1)
+boot = re.sub(r"^\s*import\s.*?;\s*$", "", boot, flags=re.M)
 
 OUT.write_text(
     f"<title>{title}</title>\n<style>\n{tokens}\n{site_css}\n</style>\n"

@@ -1,5 +1,8 @@
 import { chromium } from 'playwright';
 
+// снимки ложатся рядом со скриптом, откуда бы его ни запустили
+const here = new URL('.', import.meta.url).pathname;
+
 const b = await chromium.launch({ headless: true, executablePath: '/opt/pw-browsers/chromium' });
 const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
 const p = await ctx.newPage();
@@ -48,10 +51,10 @@ console.log(`без JS: скрытых секций ${nojs.hidden} из ${nojs.t
 
 await p.evaluate(() => scrollTo(0, 0));
 await p.waitForTimeout(1600);
-await p.screenshot({ path: 'fixed-top.jpg', type: 'jpeg', quality: 72 });
+await p.screenshot({ path: here + 'fixed-top.jpg', type: 'jpeg', quality: 72 });
 await p.setViewportSize({ width: 390, height: 844 });
 await p.waitForTimeout(1200);
-await p.screenshot({ path: 'fixed-390.jpg', type: 'jpeg', quality: 72 });
+await p.screenshot({ path: here + 'fixed-390.jpg', type: 'jpeg', quality: 72 });
 
 console.log('проблемы:', bad.length ? [...new Set(bad)].join(' | ') : 'нет');
 await b.close();
