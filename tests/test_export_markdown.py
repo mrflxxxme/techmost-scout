@@ -8,7 +8,7 @@ from datetime import datetime
 
 import pytest
 
-from app.export.markdown import CONSTRAINTS_UNRESOLVED_NOTICE, render_markdown
+from app.export.markdown import CONSTRAINTS_UNRESOLVED_NOTICE, PAID_LIMIT_NOTICE, limitations_lines, render_markdown
 from app.schemas import (
     Evidence,
     MaturityStage,
@@ -483,3 +483,11 @@ def test_comparison_table_unknown_key_printed_as_is(brief):
     text = render_markdown(report)
 
     assert "| Вариант |" in text
+
+
+def test_limitations_lines_false_keeps_machine_notice_drops_prose(brief):
+    """РЕШ-210: без прозы модели PAID_LIMIT_NOTICE (машинная пометка) остаётся."""
+    report = _make_report(
+        [_make_card()], brief=brief, summary=ReportSummary(recommendation="x", caveats=[PAID_LIMIT_NOTICE, "проза"])
+    )
+    assert limitations_lines(report, include_caveats=False) == [f"- {PAID_LIMIT_NOTICE}"]

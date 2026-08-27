@@ -231,8 +231,10 @@ def _add_card(document: DocumentObject, card: SolutionCard, index: int) -> None:
 def _add_limitations_section(document: DocumentObject, report: Report, printable: bool) -> None:
     """Раздел «Ограничения этого поиска» — тем же текстом, что markdown и веб.
 
-    `printable=False` (РЕШ-206) убирает оговорки модели — строка о
-    недоступных источниках остаётся в любом случае (инвариант №5).
+    `printable=False` (РЕШ-206) убирает только свободную прозу модели —
+    строка о недоступных источниках и машинные пометки (платный предел
+    поиска, отказ интейка/рефайна/сводки) остаются в любом случае
+    (инвариант №5, РЕШ-210).
     """
     lines = limitations_lines(report, include_caveats=printable)
     if not lines:

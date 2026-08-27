@@ -13,7 +13,7 @@ from pathlib import Path
 from docx import Document
 
 from app.export.docx import DRAFT_NOTICE, export_docx
-from app.export.markdown import REVIEWED_FOOTER, SUMMARY_NOT_PRINTABLE_NOTICE
+from app.export.markdown import PAID_LIMIT_NOTICE, REVIEWED_FOOTER, SUMMARY_NOT_PRINTABLE_NOTICE
 from app.export.view import ExportView
 from app.schemas import (
     Evidence,
@@ -487,3 +487,14 @@ def test_сквозной_отчёт_с_отклонённой_карточко�
     assert "Текст, который правил эксперт." in text
     assert "Оговорка, которую эксперт оставил." in text
     assert SUMMARY_NOT_PRINTABLE_NOTICE not in text
+
+
+def test_машинная_пометка_и_учёт_конкурсных_карточек(tmp_path: Path, brief):
+    """Критерии 1, 3 (РЕШ-210) и 4 (П-10), в одном тесте ради предела 500 строк."""
+    view = lambda **kw: _make_view(_make_report([_make_card()], brief=brief, **kw), total_cards=2)  # noqa: E731
+    export_docx(view(summary=ReportSummary(recommendation="x", caveats=[PAID_LIMIT_NOTICE, "проза"])), tmp_path / "a")
+    text = _full_text(tmp_path / "a")
+    assert "Ограничения этого поиска" in text and PAID_LIMIT_NOTICE in text and "проза" not in text
+    rec = "Рекомендация-42"
+    export_docx(view(contest_cards=[_make_card(title="К")], summary=ReportSummary(recommendation=rec)), tmp_path / "b")
+    assert rec in _full_text(tmp_path / "b")

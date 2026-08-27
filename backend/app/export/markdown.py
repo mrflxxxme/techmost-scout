@@ -95,6 +95,48 @@ SUMMARY_NOT_PRINTABLE_NOTICE = (
     "экспертом при проверке. Ориентируйтесь на таблицу сравнения и карточки ниже."
 )
 
+#: Оговорка клиенту, когда стадия «Сводка» отказала и таблицу сравнения собрал
+#: запасной путь без участия модели (Ф-7, `pipeline/summary.py::fallback_summary`).
+#: Значение — точная копия литерала из того модуля: `summary.py` не заводит для
+#: него отдельной именованной константы, а завести её здесь для него нельзя —
+#: `pipeline/summary.py` уже импортирует из этого модуля `MATURITY_RU` и
+#: `CONFIDENCE_RU`, обратный импорт constant→pipeline создал бы цикл через
+#: пакет `app.pipeline.__init__` (тот тянет `orchestrator.py`, а он снова этот
+#: модуль за `PAID_LIMIT_NOTICE`). Опознание машинной пометки идёт по точному
+#: значению этой строки, а не по эвристике; разойдётся текст в `summary.py` —
+#: тест на константу в `test_export_markdown.py` обязан упасть, не смолчать.
+SUMMARY_FALLBACK_NOTICE = "Автоматическая сводка не собралась: раздел «Рекомендация» построен без участия модели."
+
+
+def _machine_caveats() -> frozenset[str]:
+    """Множество оговорок, написанных кодом, а не моделью (РЕШ-210).
+
+    Печатаются клиенту всегда, наравне со строкой «Не ответили источники» —
+    в отличие от свободной прозы модели, которая может ссылаться на карточки
+    по нумерации, ушедшей вместе со скрытой карточкой (РЕШ-206). Опознание —
+    сравнение с константами кода по точному значению, а не разбор текста и не
+    эвристика: смена формулировки любой из них не должна тихо переставать
+    распознаваться, а обязана уронить тест на константу.
+
+    Импорт `INTAKE_FALLBACK_CAVEAT`/`REFINE_FALLBACK_CAVEAT` отложен до вызова
+    функции, а не вынесен на уровень модуля: `app.pipeline.intake_flow` входит
+    в пакет `app.pipeline`, чей `__init__.py` тянет `orchestrator.py`, а тот —
+    обратно этот же модуль (`app.export.markdown`) за `PAID_LIMIT_NOTICE`.
+    Импорт на уровне модуля словил бы частично инициализированный модуль на
+    первом же запуске приложения — тот же приём отложенного импорта уже
+    применяется в `pipeline/run_flow.py` для `PAID_LIMIT_NOTICE`.
+    """
+    from app.pipeline.intake_flow import INTAKE_FALLBACK_CAVEAT, REFINE_FALLBACK_CAVEAT
+
+    return frozenset(
+        {
+            PAID_LIMIT_NOTICE,
+            INTAKE_FALLBACK_CAVEAT,
+            REFINE_FALLBACK_CAVEAT,
+            SUMMARY_FALLBACK_NOTICE,
+        }
+    )
+
 
 def developer_line(card: SolutionCard) -> str:
     """Строка «Разработчик» карточки для markdown, страницы отчёта и печати.
@@ -130,11 +172,16 @@ def limitations_lines(report: Report, *, include_caveats: bool = True) -> list[s
     И-12: разделитель исчез, `render_markdown` стал печатать другой байтовый
     вывод при том же входе, хотя задача — перенос без изменений).
 
-    `include_caveats=False` (РЕШ-206, клиентские выгрузки PDF и DOCX) убирает
-    только оговорки модели — строка о недоступных источниках остаётся в любом
-    случае: скрытый отказ источника хуже видимого (инвариант №5), а оговорки
-    могут ссылаться на карточки по нумерации, которая ушла со скрытой
-    карточкой.
+    `include_caveats=False` (РЕШ-206, клиентские выгрузки PDF и DOCX, когда
+    хотя бы одна карточка скрыта, а эксперт сводку не правил) убирает только
+    свободную прозу модели — она может ссылаться на карточки по нумерации,
+    которая ушла со скрытой карточкой. Машинные пометки (`_machine_caveats`)
+    печатаются в любом случае, наравне со строкой о недоступных источниках:
+    скрытый отказ источника или платного предела поиска хуже видимого
+    (инвариант №5, РЕШ-210). До этой правки `include_caveats=False` выбрасывал
+    оговорки целиком, и завизированная строка о неполном поиске (РЕШ-129)
+    пропадала из клиентской выгрузки вместе с прозой модели (регрессия
+    повторного аудита Э4, БЛОК-4).
     """
     lines: list[str] = []
     if report.sources_unavailable:
@@ -143,10 +190,14 @@ def limitations_lines(report: Report, *, include_caveats: bool = True) -> list[s
             + ", ".join(report.sources_unavailable)
             + ". Выдача могла быть полнее — стоит повторить запрос позже."
         )
-    if include_caveats and report.summary.caveats:
+    caveats = report.summary.caveats
+    if not include_caveats:
+        machine_caveats = _machine_caveats()
+        caveats = [caveat for caveat in caveats if caveat in machine_caveats]
+    if caveats:
         if lines:
             lines.append("")
-        lines.extend(f"- {caveat}" for caveat in report.summary.caveats)
+        lines.extend(f"- {caveat}" for caveat in caveats)
     return lines
 
 
