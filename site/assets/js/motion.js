@@ -1,30 +1,53 @@
-/* Вход секций и скраб кульминации. Пиннинг — нативный sticky, как у всех
-   десяти живо проверенных сайтов выборки; библиотека анимации не нужна. */
+/* Четыре роли движения, каждая там, где что-то значит.
+   1. вход сцены      — riseOnEnter, разный жест для разных типов блоков
+   2. отклик на курсор — pointerLight, свет идёт за курсором по материалу
+   3. скраб по скроллу — scrubCycle, положение внутри трека выбирает шаг
+   4. смена состояния  — expandSteps и вкладки развилки (fork.js)
 
+   Кривая и набор длительностей общие на весь сайт: цельность читается как дорогое. */
+
+const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** 1. Вход сцены. Прячет только скрипт: без него секции видны (см. site.css). */
 export function riseOnEnter(nodes) {
-  // Прячем только здесь: в CSS секции видны, и упавший скрипт их не стирает.
-  if (!('IntersectionObserver' in window)) return;
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!('IntersectionObserver' in window) || calm()) return;
   nodes.forEach((n) => n.classList.add('armed'));
   const io = new IntersectionObserver((entries) => {
     for (const e of entries) {
-      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      if (!e.isIntersecting) continue;
+      e.target.classList.add('in');
+      io.unobserve(e.target);
     }
-  }, { rootMargin: '0px 0px -12% 0px', threshold: 0.05 });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0 });
   nodes.forEach((n) => io.observe(n));
 }
 
-/** Один шаг цикла на экран: положение скролла внутри трека выбирает активный. */
-export function scrubCycle(track, steps) {
+/** 2. Отклик на курсор: свет по материалу и в кнопках. */
+export function pointerLight(nodes) {
+  if (calm() || !matchMedia('(hover: hover)').matches) return;
+  for (const n of nodes) {
+    n.addEventListener('pointermove', (e) => {
+      const r = n.getBoundingClientRect();
+      n.style.setProperty('--mx', `${((e.clientX - r.left) / r.width) * 100}%`);
+      n.style.setProperty('--my', `${((e.clientY - r.top) / r.height) * 100}%`);
+    }, { passive: true });
+  }
+}
+
+/** 3. Скраб по скроллу: один шаг цикла на экран. */
+export function scrubCycle(track, steps, onChange) {
   if (!track || !steps.length) return;
-  const setActive = (i) => steps.forEach((s, k) => s.classList.toggle('on', k === i));
-  setActive(0);
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const mark = (i) => {
+    steps.forEach((s, k) => s.classList.toggle('on', k === i));
+    onChange?.(i);
+  };
+  if (calm() || getComputedStyle(track).height === 'auto') {
     steps.forEach((s) => s.classList.add('on'));
     return;
   }
+  mark(0);
   let ticking = false;
-  const onScroll = () => {
+  addEventListener('scroll', () => {
     if (ticking) return;
     ticking = true;
     requestAnimationFrame(() => {
@@ -33,9 +56,40 @@ export function scrubCycle(track, steps) {
       const span = r.height - innerHeight;
       if (span <= 0) return;
       const p = Math.min(1, Math.max(0, -r.top / span));
-      setActive(Math.min(steps.length - 1, Math.floor(p * steps.length)));
+      mark(Math.min(steps.length - 1, Math.floor(p * steps.length)));
     });
+  }, { passive: true });
+}
+
+/** 4. Смена состояния: шаг цикла разворачивает, кто что делает. */
+export function expandSteps(steps) {
+  const setOpen = (btn, open) => {
+    const panel = btn.querySelector('.detail');
+    if (!panel) return;
+    btn.setAttribute('aria-expanded', String(open));
+    panel.style.height = open ? `${panel.scrollHeight}px` : '0px';
   };
-  addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
+  for (const btn of steps) {
+    setOpen(btn, false);
+    btn.addEventListener('click', () => {
+      const open = btn.getAttribute('aria-expanded') !== 'true';
+      steps.forEach((b) => {
+        setOpen(b, b === btn && open);
+        // раскрытый шаг становится активным: иначе владелец открывает один,
+        // а подсвечен другой, и это читается как рассинхрон
+        b.classList.toggle('on', open ? b === btn : b.classList.contains('on'));
+      });
+      if (open) steps.forEach((b) => b.classList.toggle('on', b === btn));
+    });
+  }
+  addEventListener('resize', () => {
+    for (const btn of steps) {
+      if (btn.getAttribute('aria-expanded') === 'true') setOpen(btn, true);
+    }
+  }, { passive: true });
+  return (i) => {
+    // скролл ведёт шаг: раскрытый следует за активным, если владелец уже раскрывал
+    const anyOpen = steps.some((b) => b.getAttribute('aria-expanded') === 'true');
+    if (anyOpen) steps.forEach((b, k) => setOpen(b, k === i));
+  };
 }
