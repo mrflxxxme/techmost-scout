@@ -71,12 +71,14 @@ def render_print_html(view: ExportView) -> str:
     if not view.is_draft and view.validated_at is not None:
         signature = signature_line(view.reviewer_name, view.validated_at)
 
+    # `view.rework_keys` в шаблон не передаётся сознательно (РЕШ-198, контракт
+    # `export/view.py`): пометка «на доработку» — подсказка оператору на
+    # странице отчёта, в клиентские выгрузки (PDF, DOCX) она не попадает.
     template = _environment().get_template("report_print.html")
     return template.render(
         report=report,
         is_draft=view.is_draft,
         signature=signature,
-        rework_keys=view.rework_keys,
         print_css=_PRINT_CSS_PATH.read_text(encoding="utf-8"),
         maturity_ru=MATURITY_RU,
         confidence_ru=CONFIDENCE_RU,

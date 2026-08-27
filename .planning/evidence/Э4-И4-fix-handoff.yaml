@@ -1,0 +1,43 @@
+handoff:
+  from: implementer-2
+  to: reviewer
+  task: "Э4-И4-fix"
+  did:
+    - "Устранён дефект, найденный ревью сквозного теста Э4-И8: render_print_html (backend/app/export/pdf.py) передавал настоящий view.rework_keys в печатный шаблон, и report_print.html рисовал бейдж «На доработку» — это нарушало РЕШ-198 и контракт export/view.py:52-54 (пометка «на доработку» видна только оператору на странице отчёта, в клиентские выгрузки не попадает)."
+    - "backend/app/export/pdf.py: строка rework_keys=view.rework_keys убрана из template.render(...); добавлен комментарий-объяснение, почему её там нет намеренно."
+    - "backend/app/web/templates/report_print.html: макрос render_card лишён параметра rework и условной отрисовки бейджа «На доработку»; в обоих местах вызова (основная секция и секция конкурсных решений) убран аргумент rework=(...) in rework_keys. DOCX задача не трогалась — по отчёту ревью там поведение уже верное."
+    - "tests/test_export_pdf.py: добавлен тест test_render_print_html_rework_mark_stays_operator_only — view с карточкой, у которой rework_keys содержит её ключ, не печатает «На доработку» в HTML, при этом сама карточка (её заголовок) в HTML присутствует."
+    - "Самопроверка мутацией: git stash push на оба правленых файла временно вернул их к версии из HEAD (47f7e07, версия с багом, влитая как часть Э4-И4) — новый тест упал (найдена подстрока «На доработку» в HTML), затем git stash pop вернул фикс, тест снова зелёный."
+  artifacts:
+    - backend/app/export/pdf.py
+    - backend/app/web/templates/report_print.html
+    - tests/test_export_pdf.py
+    - .planning/evidence/Э4-И4-fix-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_export_pdf.py -v: 10 passed (было 9, добавлен 1)"
+    - "самопроверка мутацией (git stash push/pop версии с багом): pytest tests/test_export_pdf.py::test_render_print_html_rework_mark_stays_operator_only -v → 1 failed (регрессия ловится), после git stash pop → PASSED"
+    - "pytest -q (весь набор): 1064 passed, падений 0"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 193 files already formatted"
+    - "git diff --stat: только 2 правленых файла задачи (pdf.py, report_print.html) плюс новый тест в test_export_pdf.py — 20 insertions, 5 deletions, вне списка задачи ничего не тронуто"
+  escalate: none
+  read_first:
+    - "сообщение оркестратора с описанием дефекта (ревью Э4-И8)"
+    - "backend/app/export/pdf.py"
+    - "backend/app/web/templates/report_print.html"
+    - "tests/test_export_pdf.py (новый тест test_render_print_html_rework_mark_stays_operator_only)"
+    - "backend/app/export/view.py (докстрока ExportView.rework_keys, строки 52-54 — контракт «только оператору»)"
+  notes: >-
+    Ветка e4/i4-fix создана от 47f7e07 (полный SHA, «Волна 3 Э4: отчёт ревью
+    Э4-И9» — верхушка этапа на момент правки, все волны 0-3 уже влиты).
+    Полный набор дал 1064 passed вместо ожидавшихся в сообщении ~1069 —
+    расхождение не расследовалось отдельно (набор целиком зелёный, падений
+    нет, задача — точечный фикс одного дефекта, а не сверка счётчика тестов);
+    если ожидание было по другой точке ветвления, значение легко пересчитать
+    заново на верхушке слияния. DOCX (export/docx.py) не проверялся и не
+    правился — по докладу оркестратора там rework уже не попадает в вывод.
+    class .print-badge-gold в print.css после правки в report_print.html
+    больше не используется этим шаблоном — файл print.css не входил в список
+    правки задачи и не тронут; неиспользуемый класс безвреден (валидного CSS
+    без последствий для тестов и для печати).
