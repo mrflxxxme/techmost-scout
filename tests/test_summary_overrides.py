@@ -21,7 +21,9 @@ from app.models import Base, RequestStatus
 from app.models import Request as RequestRow
 from app.models import SolutionCard as SolutionCardRow
 from app.models import SummaryOverride as SummaryOverrideRow
+from app.models import Verdict as VerdictRow
 from app.schemas import Report, ReportSummary, SolutionCard
+from app.schemas import Verdict as VerdictDecision
 from app.summary_overrides import SummaryOverrideData, apply_summary_override
 
 
@@ -189,8 +191,10 @@ async def db_session_factory(tmp_path: Path):
     await engine.dispose()
 
 
-async def _seed_request(session_factory, *, report: Report) -> int:
-    """Строка `requests` с готовым `report_json` и строками `solution_cards` обеих секций."""
+async def _seed_request(session_factory, *, report: Report) -> tuple[int, dict[tuple[bool, int], int]]:
+    """Строка `requests` с готовым `report_json` и строками `solution_cards` обеих
+    секций. Возвращает id запроса и id строк `solution_cards` по ключу
+    (is_contest, position) — по ним заводится вердикт конкретной карточки."""
     async with session_factory() as session:
         row = RequestRow(
             raw_text="катализатор теряет активность раньше срока",
@@ -200,26 +204,34 @@ async def _seed_request(session_factory, *, report: Report) -> int:
         session.add(row)
         await session.flush()
         request_id = int(row.id)
+        card_rows: dict[tuple[bool, int], SolutionCardRow] = {}
 
         def _add_section(cards: list[SolutionCard], *, is_contest: bool) -> None:
             for position, card in enumerate(cards):
-                session.add(
-                    SolutionCardRow(
-                        request_id=request_id,
-                        position=position,
-                        is_contest=is_contest,
-                        title=card.title,
-                        essence=card.essence,
-                        maturity_stage=card.maturity_stage.value,
-                        applicability=card.applicability,
-                        next_step=card.next_step,
-                        confidence=card.confidence.value,
-                    )
+                card_row = SolutionCardRow(
+                    request_id=request_id,
+                    position=position,
+                    is_contest=is_contest,
+                    title=card.title,
+                    essence=card.essence,
+                    maturity_stage=card.maturity_stage.value,
+                    applicability=card.applicability,
+                    next_step=card.next_step,
+                    confidence=card.confidence.value,
                 )
+                session.add(card_row)
+                card_rows[(is_contest, position)] = card_row
 
         _add_section(report.cards, is_contest=False)
         _add_section(report.contest_cards, is_contest=True)
-    return request_id
+        await session.flush()
+        card_ids = {key: int(card_row.id) for key, card_row in card_rows.items()}
+    return request_id, card_ids
+
+
+async def _add_verdict(session_factory, card_id: int, decision: VerdictDecision) -> None:
+    async with session_factory() as session:
+        session.add(VerdictRow(card_id=card_id, reviewer_name="Иван Иванов", decision=decision.value))
 
 
 async def _build_view(session_factory, request_id: int) -> ExportView:
@@ -234,7 +246,7 @@ def test_build_export_view_total_cards_обе_секции_до_фильтра(d
         cards=[_make_card(title="A"), _make_card(title="B")],
         contest_cards=[_make_card(title="C")],
     )
-    request_id = asyncio.run(_seed_request(db_session_factory, report=report))
+    request_id, _card_ids = asyncio.run(_seed_request(db_session_factory, report=report))
 
     view = asyncio.run(_build_view(db_session_factory, request_id))
 
@@ -243,13 +255,35 @@ def test_build_export_view_total_cards_обе_секции_до_фильтра(d
     assert view.report.summary.recommendation == report.summary.recommendation
 
 
+def test_build_export_view_total_cards_считает_и_отклонённую_карточку(db_session_factory, brief):
+    """Критерий 3 (правка ревью, цикл 2): `total_cards` — счёт ДО фильтра reject,
+    а не после. Без действующего вердикта reject «до» и «после» совпадают и не
+    ловят мутацию «вычислять total_cards по отфильтрованному отчёту» — здесь
+    одна из трёх карточек отклонена, видимых остаётся две, а `total_cards`
+    обязан остаться равным трём и быть строго больше числа видимых карточек."""
+    report = _make_report(
+        brief=brief,
+        cards=[_make_card(title="A"), _make_card(title="B")],
+        contest_cards=[_make_card(title="C")],
+    )
+    request_id, card_ids = asyncio.run(_seed_request(db_session_factory, report=report))
+    asyncio.run(_add_verdict(db_session_factory, card_ids[(False, 1)], VerdictDecision.REJECT))
+
+    view = asyncio.run(_build_view(db_session_factory, request_id))
+
+    visible_count = len(view.report.cards) + len(view.report.contest_cards)
+    assert visible_count == 2
+    assert view.total_cards == 3
+    assert view.total_cards > visible_count
+
+
 def test_build_export_view_отдаёт_правленый_текст_и_summary_text_edited(db_session_factory, brief):
     """Критерий 3: с правкой — `summary_text_edited=True` и правленый текст в `view.report`."""
     report = _make_report(
         brief=brief,
         summary=ReportSummary(recommendation="Исходная рекомендация.", caveats=["Исходная оговорка."]),
     )
-    request_id = asyncio.run(_seed_request(db_session_factory, report=report))
+    request_id, _card_ids = asyncio.run(_seed_request(db_session_factory, report=report))
 
     async def _seed_override() -> None:
         async with db_session_factory() as session:
