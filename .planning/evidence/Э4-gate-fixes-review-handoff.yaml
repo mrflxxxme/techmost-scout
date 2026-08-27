@@ -1,0 +1,33 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "Э4-gate-fixes"
+  did:
+    - "Прочитаны РЕШ-204/РЕШ-205 (DECISIONS.md), diff 0ef27574..e4/gate-fixes целиком, все четыре изменённых файла и три тестовых файла"
+    - "Прогнаны лично: целевые 31 тест -v (31 passed), полный pytest -q дважды (1075 passed / 1075 passed), ruff check и ruff format --check (оба чисто)"
+    - "Проверено диффом: build_export_view/visible_report/report.html/_card.html не тронуты; фильтр reject в review.py не добавлен; подпись/ЧЕРНОВИК-логика pdf.py не задета"
+    - "Поставлены и прогнаны лично обе мутации (снятие фильтра evidence в docx.py, снятие apply_overrides в review.py) — обе поймались целевыми тестами, изменения полностью откачены (git status чист)"
+    - "Проверены все десять инвариантов и грабли §0.1 SPEC — нарушений не найдено"
+  artifacts:
+    - .planning/evidence/Э4-gate-fixes-review.md (закоммичен до ответа)
+    - .planning/evidence/Э4-gate-fixes-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_export_pdf.py tests/test_export_docx.py tests/test_web_review.py -v: 31 passed"
+    - "pytest -q (1-й прогон): 1075 passed"
+    - "pytest -q (2-й прогон): 1075 passed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 194 files already formatted"
+    - "git diff 0ef27574..e4/gate-fixes --stat: только названные 4 кодовых + 3 тестовых файла + 2 evidence-файла исполнителя"
+    - "мутация docx.py (снят фильтр evidence): pytest tests/test_export_docx.py -q -> 3 failed, откачено"
+    - "мутация review.py (снято apply_overrides): pytest tests/test_web_review.py -q -> 1 failed, откачено"
+  escalate: none
+  read_first:
+    - ".planning/evidence/Э4-gate-fixes-review.md"
+    - ".planning/DECISIONS.md (РЕШ-204, РЕШ-205)"
+  notes: >
+    Вердикт ПРИНЯТО, блокирующих находок нет, советов нет. Обе правки владельца
+    (РЕШ-204, РЕШ-205) реализованы точно по формулировке решений, без выхода
+    за границы задачи и без побочных правок общих контрактов
+    (export/view.py, операторские шаблоны не тронуты). Цикл 1, второй не
+    требуется.
