@@ -1,0 +1,82 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: Э4-П13
+  did:
+    - "Добавлена публичная app.verdicts.hidden_reason(card, verdict, *, require_evidence=False)
+       -> Literal[\"rejected\", \"no_evidence\"] | None — единственный источник причины
+       скрытия ОДНОЙ карточки из клиентского вида (РЕШ-215)."
+    - "_kept_positions переписана на вызов hidden_reason на каждой позиции секции вместо
+       собственного дублирующего условия — второго расчёта не появилось; visible_report
+       и visible_position_count поведение не меняли (тесты test_verdicts.py прошли без
+       единой правки самого файла)."
+    - "web/routes/review.py::_hidden_reason зовёт app.verdicts.hidden_reason напрямую.
+       Синтетический отчёт-зонд _PROBE_REPORT убран целиком вместе с ставшими лишними
+       импортами (Report, Brief, ReportSummary, datetime, visible_report)."
+    - "Тексты подсказок эксперту HIDDEN_REJECTED = \"отклонена экспертом\" и
+       HIDDEN_NO_EVIDENCE = \"нет ни одного подтверждения\" не менялись (РЕШ-205) —
+       остаются клиентскими формулировками в web-слое, verdicts отдаёт только признак."
+    - "tests/test_web_review_visibility_source.py переписан: монкипатчит публичную
+       review_module.hidden_reason (имя, под которым review.py импортирует функцию),
+       а не приватную verdicts._kept_positions — страж больше не покраснеет от
+       безобидного переименования внутреннего устройства verdicts.py."
+  artifacts:
+    - backend/app/verdicts.py
+    - backend/app/web/routes/review.py
+    - tests/test_web_review_visibility_source.py
+  self_audit: pass
+  checks:
+    - "pytest -q tests/test_web_review_visibility_source.py tests/test_verdicts.py tests/test_web_review.py: 39 passed"
+    - "pytest -q (весь набор): 1202 passed, 1 warning (starlette/httpx testclient deprecation, не моё)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 204 files already formatted"
+    - "pytest -q tests/test_backend_layout.py tests/test_tests_layout.py tests/test_pipeline_layout.py tests/test_scripts_layout.py tests/test_prompts.py tests/test_team_docs.py: 100 passed"
+    - "wc -l backend/app/verdicts.py backend/app/web/routes/review.py tests/test_web_review_visibility_source.py: 255 / 387 / 184 строк — все в пределе 500"
+  mutation_criterion_5:
+    what: "Убрана ветка require_evidence в теле hidden_reason (backend/app/verdicts.py) —
+      настоящая правка общего условия видимости, а не подмена в тесте."
+    result_red: |
+      $ pytest -q tests/test_web_review_visibility_source.py tests/test_verdicts.py
+      FAILED tests/test_web_review_visibility_source.py::test_подсказка_экрана_ревью_меняется_вместе_с_общим_признаком_verdicts
+        AssertionError: assert 'клиенту не уедет: нет ни одного подтверждения' in '...' (подсказка вообще пропала — сработало ещё на первом запросе, до монкипатча)
+      FAILED tests/test_verdicts.py::test_visible_report_require_evidence_убирает_карточку_и_её_строку_блок6
+      FAILED tests/test_verdicts.py::test_visible_report_require_evidence_и_reject_вместе
+      FAILED tests/test_verdicts.py::test_visible_report_require_evidence_убирает_из_contest_cards
+      FAILED tests/test_verdicts.py::test_visible_position_count_считает_reject_и_evidence_вместе
+      5 failed, 18 passed
+    revert: "cp резервной копии backend/app/verdicts.py обратно; git diff -- backend/app/verdicts.py после
+      возврата равен диффу реализации (git diff --stat из коммита) — лишних правок не осталось."
+    checks_after_revert:
+      - "pytest -q: 1202 passed, 1 warning"
+      - "ruff check .: All checks passed!"
+      - "ruff format --check .: 204 files already formatted"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел Э4-П13)
+    - .planning/DECISIONS.md (РЕШ-215, РЕШ-213, РЕШ-204, РЕШ-205)
+    - .planning/evidence/Э4-П12-review.md (советы 1 и 2 — источник постановки этой задачи)
+    - backend/app/verdicts.py
+    - backend/app/web/routes/review.py
+    - tests/test_web_review_visibility_source.py
+  notes: |
+    Сигнатура hidden_reason(card, verdict, *, require_evidence=False) выбрана по образцу
+    предложения исполнителя из ревью Э4-П12 (совет 1), но принимает уже разрешённый
+    VerdictRow | None (как и было в review.py), а не card_id/effective — так функцию можно
+    вызвать и из _kept_positions (у неё уже есть verdict на руках), и из review.py без
+    лишней прокладки.
+
+    Публичная функция названа hidden_reason и живёт в verdicts.py; локальная приватная
+    _hidden_reason в review.py осталась с тем же именем намеренно (она отвечает за перевод
+    признака в завизированный русский текст, РЕШ-205) — коллизии имён нет, разные модули.
+
+    Мутация критерия 5 показала важный нюанс биндинга: монкипатч в тесте нацелен на
+    review_module.hidden_reason (имя, под которым review.py импортировало функцию по
+    `from app.verdicts import hidden_reason`), а не на verdicts_module.hidden_reason —
+    иначе подмена не была бы видна review.py (Python копирует ссылку при `from ... import`
+    в момент импорта). Настоящая правка исходного тела функции в verdicts.py (что и есть
+    буквальное прочтение критерия 5) отражается на обоих потребителях одинаково — это
+    проверено отдельно и запротоколировано в mutation_criterion_5 выше, а комментарий в
+    самом тесте (_reject_only_hidden_reason) объясняет разницу без ссылки на этот handoff.
+
+    Синтетический отчёт-зонд убран целиком, как того требовал критерий 2 — сборки
+    Report/Brief/ReportSummary для проверки одной карточки в review.py больше нет.
