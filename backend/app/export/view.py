@@ -38,7 +38,7 @@ from app.report_overrides import OverrideMap, apply_overrides
 from app.schemas import Report
 from app.schemas import Verdict as VerdictDecision
 from app.summary_overrides import SummaryOverrideData, apply_summary_override
-from app.verdicts import CardKey, effective_verdicts, visible_position_count, visible_report
+from app.verdicts import CardKey, effective_verdicts, hidden_reason, visible_position_count, visible_report
 
 
 @dataclass
@@ -186,7 +186,7 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
 
     visible = visible_report(edited_report, original_ids, effective)
     client_visible = visible_report(edited_report, original_ids, effective, require_evidence=True)
-    card_ids, rework_keys = _reindex_after_filter(original_ids, effective)
+    card_ids, rework_keys = _reindex_after_filter(edited_report, original_ids, effective)
     comparison_table_hidden = _comparison_table_hidden(edited_report, original_ids, effective)
 
     latest = max(effective.values(), key=lambda row: (row.created_at, row.id), default=None)
@@ -279,25 +279,35 @@ def caveats_printable(view: ExportView, printed_cards: int) -> bool:
 
 
 def _reindex_after_filter(
-    original_ids: dict[CardKey, int], effective: dict[int, VerdictRow]
+    edited_report: Report,
+    original_ids: dict[CardKey, int],
+    effective: dict[int, VerdictRow],
 ) -> tuple[dict[CardKey, int], set[CardKey]]:
     """Пересчитать (секция, позиция) под порядок, который отдаёт `visible_report`.
 
-    `visible_report` убирает reject-карточки, сохраняя относительный порядок
-    остальных, — эта функция не принимает отдельного решения о видимости
-    карточки, а лишь повторяет тот же обход (та же проверка на `REJECT`, что
-    и внутри `verdicts._visible_section`), чтобы id и пометка «на доработку»
-    совпадали с позициями уже отфильтрованного отчёта.
+    Решение «карточка скрыта» берёт `verdicts.hidden_reason` (РЕШ-215) —
+    своего сравнения с `REJECT` эта функция больше не ведёт, вызывается без
+    `require_evidence` (по умолчанию `False`): результат обязан совпадать с
+    `visible_report(edited_report, ..., require_evidence=False)`, тем самым
+    отчётом, что видит `ExportView.report` (операторский вид, а не
+    `client_report`) — см. докстроку поля `ExportView.card_ids`, от этого
+    согласования зависит, какой карточке принадлежит правка оператора.
+    Пометка `rework` — второй, независимый признак (она не про скрытие,
+    карточка с `rework` клиенту уезжает): считается по-прежнему, отдельно от
+    решения `hidden_reason`.
     """
+    sections = {False: edited_report.cards, True: edited_report.contest_cards}
     card_ids: dict[CardKey, int] = {}
     rework_keys: set[CardKey] = set()
     for is_contest in (False, True):
+        cards = sections[is_contest]
         ordered_keys = sorted(key for key in original_ids if key[0] == is_contest)
         new_position = 0
         for key in ordered_keys:
             card_id = original_ids[key]
             verdict = effective.get(card_id)
-            if verdict is not None and verdict.decision == VerdictDecision.REJECT:
+            card = cards[key[1]]
+            if hidden_reason(card, verdict) is not None:
                 continue
             new_key = (is_contest, new_position)
             card_ids[new_key] = card_id
