@@ -205,8 +205,10 @@ def test_ru_ведущие_нули_снимаются_у_числовой_ча�
 
 @pytest.mark.parametrize("raw", ДРУГИЕ_ОФИСЫ_ИЗ_БАЗЫ)
 def test_прочие_офисы_реальные_номера_из_базы_не_меняются(raw):
-    """Критерий 3: BY, WO, US, SU не нормализуются — для них формат
-    Google Patents не проверен, выдумывать нельзя (РЕШ-209)."""
+    """Критерий 3: WO, US, SU не нормализуются — формат Google Patents для
+    них не проверен, выдумывать нельзя (РЕШ-209). `BY` тоже входит в выборку:
+    сама функция для него по-прежнему номер не трогает (её результат для `BY`
+    в сборке ссылки не используется — см. `test_rospatent_by.py`, РЕШ-217)."""
     assert _normalize_document_number(raw) == raw
 
 
@@ -217,24 +219,16 @@ def test_нераспознанный_формат_номера_отдаётся
     assert _normalize_document_number(raw) == raw
 
 
-@pytest.mark.parametrize(
-    ("office", "raw_number", "kind", "expected_number"),
-    [
-        ("EA", "0000026963", "B1", "EA026963B1"),  # БЛОК-3: живой номер из базы
-        ("BY", "0000022510", "C1", "BY0000022510C1"),  # РЕШ-209: формат BY не найден
-    ],
-)
 @respx.mock
-async def test_ссылка_на_документ_строится_по_нормализованному_номеру(
-    adapter_factory, office, raw_number, kind, expected_number
-):
+async def test_ссылка_на_документ_строится_по_нормализованному_номеру(adapter_factory):
     """Сквозной случай: ответ платформы должен давать ссылку по правилу
-    офиса, а не общим снятием нулей."""
+    офиса, а не общим снятием нулей. Случай `BY` (реестр Белгоспатента, а не
+    Google Patents) закреплён отдельно в `test_rospatent_by.py` — РЕШ-217."""
     hit = _hit(
         common={
-            "publishing_office": office,
-            "document_number": raw_number,
-            "kind": kind,
+            "publishing_office": "EA",
+            "document_number": "0000026963",
+            "kind": "B1",
             "publication_date": "2015.03.31",
         }
     )
@@ -243,7 +237,7 @@ async def test_ссылка_на_документ_строится_по_норм
         found = await adapter_factory(client).search(_query(), limit=3)
 
     assert len(found) == 1
-    assert str(found[0].url) == f"https://patents.google.com/patent/{expected_number}"
+    assert str(found[0].url) == "https://patents.google.com/patent/EA026963B1"
 
 
 # ── Запрос ──────────────────────────────────────────────────────────────────
