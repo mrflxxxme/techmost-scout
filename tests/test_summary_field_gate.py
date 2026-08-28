@@ -4,6 +4,12 @@
 Вынесены из `tests/test_summary_overrides.py`, чтобы не растить его сверх
 500 строк (страж `tests/test_tests_layout.py`) — свой стенд БД на временном
 файле SQLite, сеть не задействована (инвариант №7).
+
+В конце файла — тесты Э4-П14 (совет 1 ревью Э4-П13): `export.view.
+_reindex_after_filter` больше не держит собственного сравнения с `REJECT`, а
+берёт решение у `verdicts.hidden_reason` тем же вызовом, что и `visible_report`
+без `require_evidence` (операторский вид, `ExportView.card_ids`/`rework_keys`,
+не `client_report`).
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ import pytest
 from docx import Document
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.export import view as view_module
 from app.export.docx import export_docx
 from app.export.markdown import SUMMARY_NOT_PRINTABLE_NOTICE
 from app.export.pdf import render_print_html
@@ -364,3 +371,81 @@ def test_блок6_бессылочная_карточка_не_печатает
     assert "Присадка молибдена" not in text
     # Заголовок + ровно одна строка сравнения (без строки бессылочной карточки).
     assert len(document.tables[0].rows) == 2
+
+
+def test_reindex_after_filter_reject_rework_evidence_и_конкурсная_секция(db_session_factory, brief):
+    """Э4-П14, критерий 3: `_reindex_after_filter` больше не считает видимость
+    сама, а берёт её у `verdicts.hidden_reason` — стенд с четырьмя условиями
+    сразу (reject, rework, пустой `evidence`, конкурсная секция) на настоящем
+    `build_export_view`.
+
+    Ключевая проверка — согласование: `view.card_ids`/`rework_keys` обязаны
+    остаться режимом операторской страницы (`require_evidence=False`, только
+    reject), поэтому карточка без единого подтверждения из `card_ids` НЕ
+    убирается (иначе правка оператора и пометка «на доработку» перестали бы
+    попадать на свою позицию операторской страницы) — убирается она только из
+    `client_report` (`require_evidence=True`, критерий 3 задачи Э4-П13)."""
+    rejected = _make_card(title="Отклонённая")
+    bare = _make_card(title="БезПодтверждений", evidence=[])
+    reworked = _make_card(title="НаДоработку")
+    plain = _make_card(title="Обычная")
+    contest_rejected = _make_card(title="КонкурснаяОтклонённая")
+    contest_plain = _make_card(title="КонкурснаяОбычная")
+    report = _make_report(
+        brief=brief,
+        cards=[rejected, bare, reworked, plain],
+        contest_cards=[contest_rejected, contest_plain],
+    )
+    request_id, card_ids = asyncio.run(_seed_request(db_session_factory, report=report))
+    asyncio.run(_add_verdict(db_session_factory, card_ids[(False, 0)], VerdictDecision.REJECT))
+    asyncio.run(_add_verdict(db_session_factory, card_ids[(False, 2)], VerdictDecision.REWORK))
+    asyncio.run(_add_verdict(db_session_factory, card_ids[(True, 0)], VerdictDecision.REJECT))
+
+    view = asyncio.run(_build_view(db_session_factory, request_id))
+
+    # Операторский вид (`view.report`/`card_ids`): только reject убран, порядок
+    # сохранён, бессылочная карточка остаётся — тот же признак, что и раньше.
+    assert [c.title for c in view.report.cards] == ["БезПодтверждений", "НаДоработку", "Обычная"]
+    assert [c.title for c in view.report.contest_cards] == ["КонкурснаяОбычная"]
+    assert view.card_ids == {
+        (False, 0): card_ids[(False, 1)],  # БезПодтверждений
+        (False, 1): card_ids[(False, 2)],  # НаДоработку
+        (False, 2): card_ids[(False, 3)],  # Обычная
+        (True, 0): card_ids[(True, 1)],  # КонкурснаяОбычная
+    }
+    # rework — второй, независимый признак: карточка «на доработку» видна
+    # клиенту в `view.report`, пометка живёт только в `rework_keys`.
+    assert view.rework_keys == {(False, 1)}
+
+    # Клиентский вид (`view.client_report`): reject и пустой `evidence` убраны
+    # одним проходом (require_evidence=True) — этой задачей не меняется.
+    assert [c.title for c in view.client_report.cards] == ["НаДоработку", "Обычная"]
+    assert [c.title for c in view.client_report.contest_cards] == ["КонкурснаяОбычная"]
+
+
+def test_reindex_after_filter_зовёт_verdicts_hidden_reason_а_не_свою_копию(db_session_factory, brief, monkeypatch):
+    """Э4-П14, критерий 4 (мутация «вернуть прямое сравнение с `REJECT`,
+    игнорируя пустой `evidence`»): подменяем импортированную в `export.view`
+    `hidden_reason` заглушкой «никогда не скрыто» и проверяем, что отклонённая
+    карточка возвращается в `card_ids`.
+
+    Если `_reindex_after_filter` держит свою копию сравнения с `REJECT` (как
+    до этой задачи), подмена `hidden_reason` на это не повлияет — отклонённая
+    карточка всё равно останется убрана, и эта проверка покраснеет. Она красна
+    именно на мутации, которую называет критерий 4."""
+    rejected = _make_card(title="Отклонённая")
+    plain = _make_card(title="Обычная")
+    report = _make_report(brief=brief, cards=[rejected, plain])
+    request_id, card_ids = asyncio.run(_seed_request(db_session_factory, report=report))
+    asyncio.run(_add_verdict(db_session_factory, card_ids[(False, 0)], VerdictDecision.REJECT))
+
+    monkeypatch.setattr(view_module, "hidden_reason", lambda card, verdict, **kwargs: None)
+
+    view = asyncio.run(_build_view(db_session_factory, request_id))
+
+    assert [c.title for c in view.report.cards] == ["Обычная"]  # visible_report фильтрует независимо
+    assert view.card_ids == {
+        (False, 0): card_ids[(False, 0)],  # Отклонённая — вернулась под заглушкой hidden_reason
+        (False, 1): card_ids[(False, 1)],  # Обычная
+    }
+    assert view.rework_keys == set()

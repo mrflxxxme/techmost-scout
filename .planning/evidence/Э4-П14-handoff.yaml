@@ -1,0 +1,44 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: Э4-П14
+  did:
+    - "_reindex_after_filter в backend/app/export/view.py больше не сравнивает verdict.decision с REJECT сама: решение берёт verdicts.hidden_reason(card, verdict) без require_evidence (по умолчанию False) — тот же режим, каким собран ExportView.report/card_ids (операторский вид, не client_report)"
+    - "Для вызова hidden_reason нужен объект карточки на позиции — функция теперь принимает edited_report и берёт card из edited_report.cards/contest_cards по key[1] (position сохраняется apply_overrides, проверено по коду persistence_write._card_row/report_overrides.apply_overrides)"
+    - "Пометка rework считается отдельно от hidden_reason, как и раньше — её поведение не менялось"
+    - "tests/test_summary_field_gate.py: добавлены два теста — комбинированный стенд (reject + rework + пустой evidence + конкурсная секция) через настоящий build_export_view, и мутационный тест (подмена export.view.hidden_reason заглушкой «никогда не скрыто» показывает, что _reindex_after_filter зовёт именно эту функцию, а не считает REJECT сама)"
+    - "Критерий 3 закрыт отдельным стендом (не в pytest — сравнение с историческим коммитом хрупко для CI): backend/app/export/view.py на e7710ba загружен через importlib, _reindex_after_filter вызван на тех же данных (reject/rework/пустой evidence/конкурсная секция), что и на ветке — результаты побайтово совпали"
+    - "Критерий 4 проверен вручную: временно вернул прямое сравнение с REJECT (мутация из формулировки задачи), мутационный тест покраснел (assert card_ids не совпал), код возвращён, git diff -- backend/app/export/view.py пуст"
+  artifacts:
+    - backend/app/export/view.py
+    - tests/test_summary_field_gate.py
+  self_audit: pass
+  checks:
+    - "pytest -q tests/test_summary_field_gate.py -v: 10 passed"
+    - "pytest -q: 1204 passed, 1 warning"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 204 files already formatted"
+    - "grep -rn \"REJECT\\b\" backend/app --include=\"*.py\": единственное сравнение — verdicts.py:132 (hidden_reason); остальные совпадения — display-словарь review.py:68, enum schemas.py:70, упоминание в докстроке export/view.py:289"
+    - "мутация «вернуть прямое сравнение с REJECT»: pytest -q tests/test_summary_field_gate.py → 1 failed (test_reindex_after_filter_зовёт_verdicts_hidden_reason_а_не_свою_копию); после возврата git diff -- backend/app/export/view.py пуст"
+    - "wc -l backend/app/export/view.py tests/test_summary_field_gate.py: 317 / 451 — оба в пределе 500, страж tests/test_tests_layout.py зелёный без правки списка исключений"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел Э4-П14)
+    - .planning/DECISIONS.md (РЕШ-215, РЕШ-213, РЕШ-198)
+    - .planning/evidence/Э4-П13-review.md (совет 1)
+    - backend/app/export/view.py
+    - tests/test_summary_field_gate.py
+  notes: |
+    Согласование require_evidence проверено по коду и оказалось полным, а не
+    частичным — расширять задачу не пришлось. ExportView.card_ids/rework_keys
+    (результат _reindex_after_filter) читает только web/routes/report.py
+    (операторская страница, view.card_ids.get((is_contest, index)) по
+    view.report.cards — тому же require_evidence=False отчёту). export/pdf.py
+    и export/docx.py печатают из view.client_report и своими номерами с
+    единицы, card_ids не используют вовсе; web/routes/review.py ведёт свой
+    независимый _load_card_ids (не через build_export_view) и rework_keys не
+    трогает. Второго потребителя, которому был бы нужен require_evidence=True
+    вариант этой функции, в проекте нет — если такой появится, ему
+    понадобится отдельный вызов hidden_reason(card, verdict,
+    require_evidence=True), а не расширение этой функции лишним параметром.
+    Живых вызовов модели не делал — задача не требует.
