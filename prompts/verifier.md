@@ -32,7 +32,8 @@
 6. Проверь правдоподобие домена по типу источника:
    - `publication` — `doi.org`, `elibrary.ru`, `cyberleninka.ru`, `sciencedirect.com`, `springer.com`,
      `mdpi.com`, `pubmed.ncbi.nlm.nih.gov`, сайты научных журналов и институтов;
-   - `patent` — `patents.google.com`, `fips.ru`, `new.fips.ru`, `espacenet.com`, `patentscope.wipo.int`;
+   - `patent` — `patents.google.com`, `fips.ru`, `new.fips.ru`, `espacenet.com`, `patentscope.wipo.int`,
+     `search.ncip.by` (реестр Национального центра интеллектуальной собственности Беларуси, РЕШ-217);
    - `grant` — сайты фондов и программ (например `rscf.ru`, `fasie.ru`), страницы конкурсов;
    - `org` — официальный сайт организации, домены `.ru`, `.edu`, `.ac.ru`, сайт вуза или института;
    - `showcase` — домен витрины партнёров;
@@ -226,4 +227,4 @@
 {{GROUP_CANDIDATES_JSON}}
 ```
 
-<!-- версия 2.3 -->
+<!-- версия 2.4 -->
