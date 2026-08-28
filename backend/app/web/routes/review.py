@@ -28,7 +28,6 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime
 from html import escape
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -46,10 +45,10 @@ from app.models import SummaryOverride as SummaryOverrideRow
 from app.models import Verdict as VerdictRow
 from app.pipeline.persistence import ReportNotFoundError, load_report
 from app.report_overrides import OverrideMap, apply_overrides
-from app.schemas import Brief, Report, ReportSummary, SolutionCard
+from app.schemas import SolutionCard
 from app.schemas import Verdict as VerdictDecision
 from app.summary_overrides import SummaryOverrideData, apply_summary_override, resolve_summary_edit
-from app.verdicts import CardKey, all_cards_reviewed, effective_verdicts, visible_report
+from app.verdicts import CardKey, all_cards_reviewed, effective_verdicts, hidden_reason
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -142,41 +141,21 @@ async def _load_original_summary(session: AsyncSession, request_id: int) -> tupl
     return report.summary.recommendation, list(report.summary.caveats)
 
 
-#: Отчёт-заглушка для проверки видимости одной карточки в `_hidden_reason`
-#: (Э4-П12, совет 1 ревью Э4-П11): брифа и сводки решение не касается —
-#: `verdicts.visible_report` меняет только `cards`/`contest_cards`/
-#: `summary.comparison_rows`, остальные поля Report существуют лишь потому,
-#: что схема требует валидный отчёт целиком.
-_PROBE_REPORT = Report(
-    request_id=0,
-    brief=Brief(industry="", task_summary=""),
-    cards=[],
-    summary=ReportSummary(recommendation=""),
-    generated_at=datetime(1970, 1, 1),
-)
-
-
 def _hidden_reason(card: SolutionCard, card_id: int | None, effective: dict[int, VerdictRow]) -> str | None:
     """Причина, по которой карточка не уедет клиенту, либо `None`, если уедет.
 
-    Решение «видна ли карточка» берётся у общего признака клиентской
-    видимости (`app.verdicts.visible_report`, РЕШ-213), а не у собственной
-    копии условия (третья копия, о которой честно предупредило ревью
-    Э4-П11): карточка проверяется как единственная в одноразовом отчёте-
-    заглушке `_PROBE_REPORT`, тем же вызовом, каким `export.view.
-    build_export_view` строит `ExportView.client_report`. Второй проверкой
-    остаётся только выбор ТЕКСТА причины — reject или пустой evidence,
-    `verdicts.visible_report` факт видимости не объясняет, только его
-    печатает (см. handoff задачи) — но саму видимость больше не пересчитывает
-    отдельно ни один код на этом экране.
+    Признак берётся напрямую у единственного источника причины скрытия —
+    `app.verdicts.hidden_reason` (РЕШ-215), тем же условием и в том же
+    порядке, что решает видимость карточки в клиентском экспорте
+    (`require_evidence=True`, режим клиентского вида, РЕШ-213). Здесь
+    остаётся только перевод машинного признака в завизированный русский
+    текст (РЕШ-205) — саму видимость эта функция не пересчитывает.
     """
     verdict = effective.get(card_id) if card_id is not None else None
-    probe_ids: dict[CardKey, int] = {(False, 0): card_id} if card_id is not None else {}
-    probe = _PROBE_REPORT.model_copy(update={"cards": [card]})
-    visible = visible_report(probe, probe_ids, effective, require_evidence=True)
-    if visible.cards:
+    reason = hidden_reason(card, verdict, require_evidence=True)
+    if reason is None:
         return None
-    if verdict is not None and verdict.decision == VerdictDecision.REJECT:
+    if reason == "rejected":
         return HIDDEN_REJECTED
     return HIDDEN_NO_EVIDENCE
 

@@ -5,27 +5,38 @@
 (инвариант №7). Второго перечисления решений в проекте нет — сравнение везде
 идёт с `schemas.Verdict`, а не со строковым литералом.
 
-`_kept_positions` — единственное место, где решается, видна ли карточка
-(РЕШ-213): признак один на весь проект — «отклонена эксперт (reject)» и,
-опционально флагом `require_evidence`, «нет ни одного подтверждения». Флаг
-разводит два разных потребителя одной функции: операторская страница отчёта
-(`web/routes/report.py`) видит бессылочные карточки с красной плашкой и зовёт
-`visible_report` без флага (только reject, поведение не меняется, РЕШ-204/205);
-клиентский экспорт (`export/pdf.py`, `export/docx.py`, через
-`export/view.build_export_view`) зовёт ту же функцию с `require_evidence=True`
-и получает карточки и строки таблицы сравнения, отфильтрованные одним и тем же
-проходом. Второго расчёта видимости (свой фильтр по `evidence` в `pdf.py`/
-`docx.py`, как было до РЕШ-213) в проекте больше нет.
+`hidden_reason` — единственный источник причины скрытия ОДНОЙ карточки
+(РЕШ-215): признак один на весь проект — «отклонена экспертом (reject)» и,
+опционально флагом `require_evidence`, «нет ни одного подтверждения».
+`_kept_positions` вызывает её на каждой позиции секции — второго расчёта
+условия видимости в проекте нет. Флаг разводит два разных потребителя:
+операторская страница отчёта (`web/routes/report.py`) видит бессылочные
+карточки с красной плашкой и зовёт `visible_report` без флага (только reject,
+поведение не меняется, РЕШ-204/205); клиентский экспорт (`export/pdf.py`,
+`export/docx.py`, через `export/view.build_export_view`) и экран ревью эксперта
+(`web/routes/review.py`, РЕШ-215) зовут `hidden_reason`/`visible_report` с
+`require_evidence=True` и получают одно и то же решение — карточки, строки
+таблицы сравнения и подсказку эксперту, отфильтрованные и объяснённые одним и
+тем же проходом. Второго расчёта видимости (свой фильтр по `evidence` в
+`pdf.py`/`docx.py`, как было до РЕШ-213; синтетический отчёт-зонд в
+`review.py`, как было до РЕШ-215) в проекте больше нет.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from app.export.markdown import REVIEWED_FOOTER
 from app.models import Verdict as VerdictRow
 from app.schemas import Report, ReportSummary, SolutionCard
 from app.schemas import Verdict as VerdictDecision
+
+#: Причина, по которой карточка скрыта из клиентского вида. Тексты для экрана
+#: (РЕШ-205: «отклонена экспертом», «нет ни одного подтверждения») — уже
+#: завизированные клиентские формулировки, они живут в `web/routes/review.py`,
+#: а не здесь: этот модуль отдаёт признак, а не готовую фразу.
+HiddenReason = Literal["rejected", "no_evidence"]
 
 #: Ключ карточки в секции отчёта: «конкурсная секция?» и порядковый номер в
 #: своей секции — тот же ключ, каким `report_overrides.OverrideKey` находит
@@ -96,6 +107,35 @@ def visible_report(
     return result
 
 
+def hidden_reason(
+    card: SolutionCard,
+    verdict: VerdictRow | None,
+    *,
+    require_evidence: bool = False,
+) -> HiddenReason | None:
+    """Причина, по которой карточка скрыта из клиентского вида, либо `None`, если видна.
+
+    Единственный источник причины скрытия карточки в проекте (РЕШ-215):
+    `_kept_positions` вызывает эту же функцию на каждой позиции секции, второго
+    расчёта условия видимости не остаётся ни там, ни в экране ревью эксперта
+    (`web/routes/review.py::_hidden_reason`), который зовёт её напрямую вместо
+    прежнего синтетического отчёта-зонда. Порядок проверки важен: reject
+    важнее пустого `evidence` — карточка с обоими признаками сразу считается
+    отклонённой, а не «без подтверждений».
+
+    `require_evidence=False` (по умолчанию) — режим операторской страницы
+    отчёта (РЕШ-204/205): скрывает только reject. `require_evidence=True` —
+    режим клиентского вида (РЕШ-213): скрывает ещё и карточку без единого
+    подтверждения. Возвращаемое значение — признак, а не текст: русские фразы
+    для экрана (РЕШ-205) собираются в `web/routes/review.py`.
+    """
+    if verdict is not None and verdict.decision == VerdictDecision.REJECT:
+        return "rejected"
+    if require_evidence and not card.evidence:
+        return "no_evidence"
+    return None
+
+
 def _kept_positions(
     cards: list[SolutionCard],
     card_ids: dict[CardKey, int],
@@ -106,16 +146,14 @@ def _kept_positions(
 ) -> list[int]:
     """Позиции карточек секции в исходном порядке, которые остаются видимыми.
 
-    Единственное место, где решается видимость карточки (РЕШ-213): reject
-    убирает всегда, пустой `evidence` — только при `require_evidence=True`.
+    Решение по каждой карточке берётся у `hidden_reason` (РЕШ-215) — второго
+    расчёта условия видимости здесь нет, только сборка списка позиций.
     """
     kept: list[int] = []
     for position, card in enumerate(cards):
         card_id = card_ids.get((is_contest, position))
         verdict = effective.get(card_id) if card_id is not None else None
-        if verdict is not None and verdict.decision == VerdictDecision.REJECT:
-            continue
-        if require_evidence and not card.evidence:
+        if hidden_reason(card, verdict, require_evidence=require_evidence) is not None:
             continue
         kept.append(position)
     return kept
