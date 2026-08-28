@@ -16,6 +16,7 @@ from app.schemas import Verdict as VerdictDecision
 from app.verdicts import (
     all_cards_reviewed,
     effective_verdicts,
+    hidden_reason,
     signature_line,
     visible_position_count,
     visible_report,
@@ -364,3 +365,35 @@ def test_visible_position_count_считает_reject_и_evidence_вместе(b
     count = visible_position_count(cards, card_ids, effective, is_contest=False, require_evidence=True)
 
     assert count == 1
+
+
+def test_hidden_reason_reject_важнее_пустого_evidence(brief):
+    """П-24 пятой проверки аудита: мутация «поменять порядок причин в
+    `hidden_reason`» (вернуть проверку `no_evidence` раньше `rejected`)
+    переживала весь набор — ни один прежний тест не ставил карточку
+    одновременно и отклонённой, и без единого подтверждения.
+
+    Докстрока `hidden_reason` прямо обещает: при `REJECT` и пустом `evidence`
+    одновременно причиной называется отклонение, а не отсутствие
+    подтверждений — от этого порядка зависит завизированная фраза экрана
+    ревью (РЕШ-205): `web/routes/review.py::_hidden_reason` переводит
+    `"rejected"` в «отклонена экспертом», а `"no_evidence"` — в «нет ни
+    одного подтверждения». Перепутанный порядок покажет эксперту неверную
+    причину ровно в этом сочетании условий."""
+    bare_and_rejected = _make_card(title="Отклонённая и без подтверждений", evidence=[])
+    verdict = _row(1, VerdictDecision.REJECT, id=1)
+
+    reason = hidden_reason(bare_and_rejected, verdict, require_evidence=True)
+
+    assert reason == "rejected"
+
+
+def test_hidden_reason_no_evidence_без_reject(brief):
+    """Обратная сторона предыдущего теста: без вердикта причина — только
+    пустой `evidence`, а не отклонение (различать эти строки и должен
+    порядок проверок)."""
+    bare = _make_card(title="Без подтверждений, без вердикта", evidence=[])
+
+    reason = hidden_reason(bare, None, require_evidence=True)
+
+    assert reason == "no_evidence"
