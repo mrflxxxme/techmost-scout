@@ -186,7 +186,7 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
 
     visible = visible_report(edited_report, original_ids, effective)
     client_visible = visible_report(edited_report, original_ids, effective, require_evidence=True)
-    card_ids, rework_keys = _reindex_after_filter(edited_report, original_ids, effective)
+    card_ids, rework_keys = _reindex_after_filter(original_ids, effective)
     comparison_table_hidden = _comparison_table_hidden(edited_report, original_ids, effective)
 
     latest = max(effective.values(), key=lambda row: (row.created_at, row.id), default=None)
@@ -279,7 +279,6 @@ def caveats_printable(view: ExportView, printed_cards: int) -> bool:
 
 
 def _reindex_after_filter(
-    edited_report: Report,
     original_ids: dict[CardKey, int],
     effective: dict[int, VerdictRow],
 ) -> tuple[dict[CardKey, int], set[CardKey]]:
@@ -295,19 +294,29 @@ def _reindex_after_filter(
     Пометка `rework` — второй, независимый признак (она не про скрытие,
     карточка с `rework` клиенту уезжает): считается по-прежнему, отдельно от
     решения `hidden_reason`.
+
+    Карточка в вызов `hidden_reason` не передаётся (П-25 пятой проверки
+    аудита): при `require_evidence=False` (значение по умолчанию, единственное
+    здесь) функция саму карточку не читает вовсе — короткое замыкание `if
+    require_evidence and not card.evidence` останавливается на первом
+    операнде раньше, чем дошло бы до `card.evidence` (см. докстроку
+    `verdicts.hidden_reason`). Раньше сюда индексировали
+    `edited_report.cards[key[1]]`/`edited_report.contest_cards[key[1]]` ради
+    аргумента, который так и не читался, — при рассинхроне («строк
+    `solution_cards` в базе больше, чем карточек в `report_json`») это падало
+    `IndexError` (500 на операторской странице отчёта и на выгрузке) вместо
+    честного результата, который отдавала версия кода до четвёртой волны, —
+    она вообще не индексировала карточки по позиции здесь.
     """
-    sections = {False: edited_report.cards, True: edited_report.contest_cards}
     card_ids: dict[CardKey, int] = {}
     rework_keys: set[CardKey] = set()
     for is_contest in (False, True):
-        cards = sections[is_contest]
         ordered_keys = sorted(key for key in original_ids if key[0] == is_contest)
         new_position = 0
         for key in ordered_keys:
             card_id = original_ids[key]
             verdict = effective.get(card_id)
-            card = cards[key[1]]
-            if hidden_reason(card, verdict) is not None:
+            if hidden_reason(None, verdict) is not None:
                 continue
             new_key = (is_contest, new_position)
             card_ids[new_key] = card_id

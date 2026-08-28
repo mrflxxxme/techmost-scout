@@ -169,10 +169,16 @@ def _annotate_client_view(
 ) -> list[tuple[SolutionCard, int | None, int | None, str | None]]:
     """Разметить карточки секции: id строки, номер у клиента (или `None`) и причина скрытия (или `None`).
 
-    Номер у клиента считается заново с единицы в пределах секции — тем же
-    проходом, что и клиентский фильтр (`app.export.view._reindex_after_filter`),
-    но здесь дополнительно учитывается пустой `evidence` (РЕШ-204): фильтр
-    отчёта его не видит — он отрабатывает позже, уже в `pdf.py`/`docx.py`.
+    Номер у клиента считается заново с единицы в пределах секции — по тому же
+    признаку, что решает видимость в клиентском экспорте (РЕШ-213): вызванная
+    здесь `_hidden_reason` зовёт `verdicts.hidden_reason` с
+    `require_evidence=True`, тем же условием, каким `export.view.
+    build_export_view` строит `client_report`, а `export.view.
+    _comparison_table_hidden` решает, прятать ли таблицу сравнения. Пустой
+    `evidence` учитывается здесь же, одним проходом — не позже, в
+    `pdf.py`/`docx.py` (так было до РЕШ-213): с четвёртой волны экспортёры
+    своего фильтра по `evidence` не ведут вовсе, только печатают уже
+    отфильтрованный `ExportView.client_report`.
     """
     result: list[tuple[SolutionCard, int | None, int | None, str | None]] = []
     client_num = 0
