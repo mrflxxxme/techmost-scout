@@ -19,12 +19,14 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import get_settings
 from app.db import init_db
+from app.export.markdown import TEMPLATE_FILTERS
 
 log = logging.getLogger(__name__)
 settings = get_settings()
 
 WEB_DIR = Path(__file__).parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
+templates.env.filters.update(TEMPLATE_FILTERS)  # общий фильтр developer_line (Э4-И1)
 security = HTTPBasic(auto_error=True)
 
 

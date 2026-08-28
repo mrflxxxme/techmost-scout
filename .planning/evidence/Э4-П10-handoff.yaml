@@ -1,0 +1,48 @@
+handoff:
+  from: implementer-e4-p10
+  to: reviewer
+  task: Э4-П10
+  did:
+    - "П-11: добавлен тест на экранирование строки оговорок фрагмента edit_summary
+       (`<img src=x onerror=alert(1)>` в поле caveats) — мутация «убрать escape()
+       у строки оговорок» поставлена вручную, тест падает, мутация возвращена."
+    - "П-12: новый файл tests/test_summary_caveats_normalization.py — прямые тесты
+       на _normalize_caveats (strip краёв, отсев пустых строк); мутация
+       `_normalize_caveats -> list(caveats)` поставлена вручную, три из четырёх
+       тестов падают, мутация возвращена."
+    - "П-13: тест на клиентскую нумерацию с фикстурой «скрытая карточка первой,
+       видимая второй» — мутация «нумеровать клиентскими номерами и скрытые
+       карточки» поставлена вручную, тест падает («№2» вместо верного «№1»),
+       мутация возвращена."
+    - "Код продукта (backend/) не тронут: git diff --stat -- backend/ пуст."
+    - "tests/test_web_review.py был у предела 500 строк (498) — тесты П-11 и П-13
+       вынесены в новый файл tests/test_web_review_coverage_holes.py, а не
+       дописаны туда; страж tests/test_tests_layout.py зелёный, файл в список
+       исключений добавлять не потребовалось."
+  artifacts:
+    - tests/test_summary_caveats_normalization.py
+    - tests/test_web_review_coverage_holes.py
+  self_audit: pass
+  checks:
+    - "pytest -q: 1164 passed (было 1158 в аудите + 6 новых)"
+    - "pytest tests/test_summary_caveats_normalization.py tests/test_web_review_coverage_holes.py -v: 6 passed"
+    - "pytest tests/test_tests_layout.py -q: 3 passed (страж роста тестовых файлов зелёный)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 165 files already formatted"
+    - "git diff --stat -- backend/: пусто (кода продукта не меняли)"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача Э4-П10, раздел «Третья волна правок аудита Э4»)
+    - .planning/evidence/audit-Э4-финал.md (правки П-11, П-12, П-13)
+    - backend/app/web/routes/review.py (edit_summary, _annotate_client_view — только на чтение)
+    - backend/app/summary_overrides.py (_normalize_caveats — только на чтение)
+    - tests/test_web_review_coverage_holes.py
+    - tests/test_summary_caveats_normalization.py
+  notes: >-
+    Поведение кода во всех трёх случаях подтвердилось верным (аудит был прав) —
+    дыры были только в покрытии, не в логике. Мутации ставились вручную по
+    очереди, каждая проверена падением своего нового теста и возвращена перед
+    следующей; финальный git diff по backend/ пуст. Файл tests/test_web_review.py
+    не редактировался вовсе (был указан в списке «своих файлов» в постановке,
+    но на 498 из 500 строк добавлять в него было некуда без ужимания существующих
+    тестов — использован путь, прямо разрешённый постановкой: новый файл).

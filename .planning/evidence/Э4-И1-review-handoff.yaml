@@ -1,0 +1,33 @@
+handoff:
+  from: reviewer
+  to: verifier
+  task: "Э4-И1"
+  did:
+    - "Сверен diff (fb2aa20e..e4/i1) со списком файлов задачи из PLAN.md — выхода за границы нет, .env.example не тронут (deny агента, эскалация исполнителя корректна)"
+    - "Проверены все 10 инвариантов способами из INVARIANTS.md; ключевые для задачи №2, №6, №7, №8 — отдельными командами и мутациями"
+    - "Прицельная мутация тай-брейка effective_verdicts и фильтра reject в visible_report — обе убиты соответствующими тестами; до полного набора дело не дошло"
+    - "Прогнаны pytest -q (988 passed, 1 failed — ожидаемый test_каждая_переменная_settings_объявлена_в_примере по DEMO_DURATION_SECONDS/REVIEWER_NAME), ruff check, ruff format --check"
+    - "Сверена строка REVIEWED_FOOTER с РЕШ-197 посимвольно, ключ CardKey — с report_overrides.OverrideKey и индексацией _apply_to_card"
+    - "Найдено 0 блокирующих находок, 2 совета (нет теста на немутируемость visible_report по образцу И-7; стилевая непоследовательность validation_alias)"
+  artifacts:
+    - .planning/evidence/Э4-И1-review.md (закоммичен до ответа)
+    - .planning/evidence/Э4-И1-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_verdicts.py tests/test_export_signature.py tests/test_config.py -v: 30 passed, 1 failed (ожидаемо)"
+    - "pytest -q: 988 passed, 1 failed (тот же ожидаемый тест)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 177 files already formatted"
+    - "мутация тай-брейка по id: падает test_при_равном_времени_побеждает_больший_id"
+    - "мутация REJECT→APPROVE в фильтре: падают 2 теста visible_report"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «### Э4-И1»)
+    - .planning/evidence/Э4-И1-handoff.yaml
+    - backend/app/verdicts.py
+    - backend/app/export/markdown.py
+  notes: >-
+    Цикл 1, вердикт ПРИНЯТЬ. Известный красный тест — единственный, ровно по
+    двум переменным (DEMO_DURATION_SECONDS, REVIEWER_NAME), закрывается
+    правкой .env.example оркестратором при слиянии. Второго цикла ревью не
+    требуется.

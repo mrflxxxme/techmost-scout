@@ -65,8 +65,125 @@ CONSTRAINTS_UNRESOLVED_NOTICE = (
 #: владельца, как и прочие клиентские формулировки (§9 п. 4).
 PAID_LIMIT_NOTICE = "Часть поисковых формулировок не была выполнена — выдача по этой теме может быть неполной."
 
+#: Строка подписи эксперта — дословно РЕШ-197, единственное место определения:
+#: markdown, PDF, DOCX и страница отчёта печатают ровно её (`app.verdicts.
+#: signature_line` собирает готовую строку тем же форматом). До этой правки
+#: markdown печатал почти тот же текст, но с ёлочками вокруг названия системы —
+#: правка приводит его к дословной формулировке владельца.
+REVIEWED_FOOTER = "Подготовлено системой ТехМост Скаут, проверено: {name}, {date}"
 
-def limitations_lines(report: Report) -> list[str]:
+#: Русские заголовки таблицы сравнения вариантов (РЕШ-207) — латинские ключи
+#: `option`/`maturity`/`gives`/`needs_from_client` совпадают с ключами схемы
+#: сводки (промпт их не меняет), а клиент должен видеть человекочитаемый
+#: заголовок. Общий словарь для markdown, PDF и DOCX — три места печати одной
+#: таблицы не должны разойтись формулировками. Неизвестный ключ (запасная
+#: сводка `pipeline/summary.py::fallback_summary` уже отдаёт русские ключи)
+#: печатается как есть — вызывающий использует `COMPARISON_HEADERS_RU.get(key, key)`.
+COMPARISON_HEADERS_RU: dict[str, str] = {
+    "option": "Вариант",
+    "maturity": "Стадия зрелости",
+    "gives": "Что подтверждено",
+    "needs_from_client": "Что нужно от вас",
+}
+
+#: Заглушка вместо текста рекомендации, когда печатать её клиенту нельзя
+#: (РЕШ-206, РЕШ-211, `export.view.recommendation_printable`): хотя бы одна
+#: карточка скрыта из клиентского вида, а эксперт рекомендацию не правил.
+#: Формулировка дословная — идёт клиенту, поэтому в коде не переписывается.
+#: Печатается, только когда таблица сравнения НЕ спрятана (`ExportView.
+#: comparison_table_hidden` ложен) — она ссылается на таблицу как на ориентир,
+#: а если таблицы в документе нет, вызывающий обязан взять
+#: `SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE` вместо этой константы (РЕШ-212).
+SUMMARY_NOT_PRINTABLE_NOTICE = (
+    "Сравнительная сводка не приводится: часть найденных вариантов снята "
+    "экспертом при проверке. Ориентируйтесь на таблицу сравнения и карточки ниже."
+)
+
+#: Тот же случай, что у `SUMMARY_NOT_PRINTABLE_NOTICE`, но таблица сравнения
+#: тоже не напечатана (`ExportView.comparison_table_hidden` истинен, РЕШ-212,
+#: правка П-14 финального аудита): прежняя формулировка отсылала клиента к
+#: разделу, которого в документе нет, — «Ориентируйтесь на таблицу сравнения
+#: и карточки ниже» при спрятанной таблице. Текст без упоминания таблицы, идёт
+#: клиенту дословно.
+SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE = (
+    "Сравнительная сводка не приводится: часть найденных вариантов снята "
+    "экспертом при проверке. Ориентируйтесь на карточки ниже."
+)
+
+#: Строка на месте спрятанной таблицы сравнения (РЕШ-212, Э4-П8/Э4-П9):
+#: `verdicts.visible_report` убрал таблицу целиком, потому что построчное
+#: соответствие строк карточкам после фильтра reject не сошлось —
+#: `ExportView.comparison_table_hidden` истинен. Пустая сводка модели без
+#: единой строки (запасной путь `fallback_summary` или отчёт без сравнения) на
+#: эту строку права не даёт: там скрывать нечего с самого начала, а не
+#: «нечем сопоставить». Формулировка дословная — идёт клиенту.
+COMPARISON_TABLE_HIDDEN_NOTICE = (
+    "Таблица сравнения не построена: часть вариантов снята экспертом при "
+    "проверке, соответствие строк карточкам не подтверждено."
+)
+
+#: Оговорка клиенту, когда стадия «Сводка» отказала и таблицу сравнения собрал
+#: запасной путь без участия модели (Ф-7). Единственная точка правды — как и
+#: MATURITY_RU/CONFIDENCE_RU, `pipeline/summary.py::fallback_summary` не хранит
+#: свой литерал, а импортирует эту константу и подставляет её в `caveats`
+#: (РЕШ-210, Э4-П6): опознание машинной пометки на печати идёт сравнением по
+#: значению, и если бы у оговорки было два независимых источника текста, они
+#: могли бы разойтись молча — ровно тот класс дефекта, из-за которого этап
+#: дважды получил BLOCKED. Тест на разрыв связи — в test_export_pdf.py
+#: (`test_fallback_summary_caveat_recognized_via_shared_constant`).
+SUMMARY_FALLBACK_NOTICE = "Автоматическая сводка не собралась: раздел «Рекомендация» построен без участия модели."
+
+
+def _machine_caveats() -> frozenset[str]:
+    """Множество оговорок, написанных кодом, а не моделью (РЕШ-210).
+
+    Печатаются клиенту всегда, наравне со строкой «Не ответили источники» —
+    в отличие от свободной прозы модели, которая может ссылаться на карточки
+    по нумерации, ушедшей вместе со скрытой карточкой (РЕШ-206). Опознание —
+    сравнение с константами кода по точному значению, а не разбор текста и не
+    эвристика: смена формулировки любой из них не должна тихо переставать
+    распознаваться, а обязана уронить тест на константу.
+
+    Импорт `INTAKE_FALLBACK_CAVEAT`/`REFINE_FALLBACK_CAVEAT` отложен до вызова
+    функции, а не вынесен на уровень модуля: `app.pipeline.intake_flow` входит
+    в пакет `app.pipeline`, чей `__init__.py` тянет `orchestrator.py`, а тот —
+    обратно этот же модуль (`app.export.markdown`) за `PAID_LIMIT_NOTICE`.
+    Импорт на уровне модуля словил бы частично инициализированный модуль на
+    первом же запуске приложения — тот же приём отложенного импорта уже
+    применяется в `pipeline/run_flow.py` для `PAID_LIMIT_NOTICE`.
+    """
+    from app.pipeline.intake_flow import INTAKE_FALLBACK_CAVEAT, REFINE_FALLBACK_CAVEAT
+
+    return frozenset(
+        {
+            PAID_LIMIT_NOTICE,
+            INTAKE_FALLBACK_CAVEAT,
+            REFINE_FALLBACK_CAVEAT,
+            SUMMARY_FALLBACK_NOTICE,
+        }
+    )
+
+
+def developer_line(card: SolutionCard) -> str:
+    """Строка «Разработчик» карточки для markdown, страницы отчёта и печати.
+
+    Заглушка «не найдено» в `developer_team` не печатается хвостом строки —
+    иначе разработчик читается как «ООО «Ромашка» — не найдено» (совет С-3
+    ворот Э3). При пустом `developer_org` строка остаётся честным «не найдено».
+    """
+    developer = card.developer_org or "не найдено"
+    team = (card.developer_team or "").strip()
+    if team and team.casefold() != "не найдено":
+        developer += f" — {team}"
+    return developer
+
+
+#: Точка регистрации Jinja-фильтров экспортёра — общая для страницы отчёта и
+#: печатного шаблона (Э4-И2, Э4-И4), чтобы оба использовали одну реализацию.
+TEMPLATE_FILTERS = {"developer_line": developer_line}
+
+
+def limitations_lines(report: Report, *, include_caveats: bool = True) -> list[str]:
     """Тело блока «Ограничения этого поиска» — без заголовка (РЕШ-189 п. 5).
 
     Единственное место, где собираются эти строки: markdown-экспорт и
@@ -80,6 +197,18 @@ def limitations_lines(report: Report) -> list[str]:
     себя прежний код до выноса в отдельную функцию (регрессия цикла 1 ревью
     И-12: разделитель исчез, `render_markdown` стал печатать другой байтовый
     вывод при том же входе, хотя задача — перенос без изменений).
+
+    `include_caveats=False` (РЕШ-206, РЕШ-211, клиентские выгрузки PDF и DOCX,
+    вызывается с `export.view.caveats_printable(view, …)`, когда хотя бы одна
+    карточка скрыта, а эксперт оговорки не правил) убирает только
+    свободную прозу модели — она может ссылаться на карточки по нумерации,
+    которая ушла со скрытой карточкой. Машинные пометки (`_machine_caveats`)
+    печатаются в любом случае, наравне со строкой о недоступных источниках:
+    скрытый отказ источника или платного предела поиска хуже видимого
+    (инвариант №5, РЕШ-210). До этой правки `include_caveats=False` выбрасывал
+    оговорки целиком, и завизированная строка о неполном поиске (РЕШ-129)
+    пропадала из клиентской выгрузки вместе с прозой модели (регрессия
+    повторного аудита Э4, БЛОК-4).
     """
     lines: list[str] = []
     if report.sources_unavailable:
@@ -88,10 +217,14 @@ def limitations_lines(report: Report) -> list[str]:
             + ", ".join(report.sources_unavailable)
             + ". Выдача могла быть полнее — стоит повторить запрос позже."
         )
-    if report.summary.caveats:
+    caveats = report.summary.caveats
+    if not include_caveats:
+        machine_caveats = _machine_caveats()
+        caveats = [caveat for caveat in caveats if caveat in machine_caveats]
+    if caveats:
         if lines:
             lines.append("")
-        lines.extend(f"- {caveat}" for caveat in report.summary.caveats)
+        lines.extend(f"- {caveat}" for caveat in caveats)
     return lines
 
 
@@ -114,7 +247,8 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
     lines.append("# Подбор научно-технических решений")
     lines.append("")
     if validated and reviewer:
-        lines.append(f"*Подготовлено системой «ТехМост Скаут», проверено: {reviewer}, {report.generated_at:%d.%m.%Y}*")
+        footer = REVIEWED_FOOTER.format(name=reviewer, date=f"{report.generated_at:%d.%m.%Y}")
+        lines.append(f"*{footer}*")
     else:
         lines.append("> **ЧЕРНОВИК — не проверено экспертом.** Не отправлять клиенту до научной валидации.")
     lines.append("")
@@ -142,9 +276,10 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
 
     if report.summary.comparison_rows:
         keys = list(report.summary.comparison_rows[0].keys())
+        headers = [COMPARISON_HEADERS_RU.get(key, key) for key in keys]
         lines.append("## Сравнение вариантов")
         lines.append("")
-        lines.append("| " + " | ".join(keys) + " |")
+        lines.append("| " + " | ".join(headers) + " |")
         lines.append("|" + "|".join(["---"] * len(keys)) + "|")
         for row in report.summary.comparison_rows:
             lines.append("| " + " | ".join(str(row.get(k, "")).replace("|", "\\|") for k in keys) + " |")
@@ -180,10 +315,9 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
 
     lines.append("---")
     lines.append("")
-    lines.append(
-        f"*Запрос №{report.request_id or '—'} · {report.generated_at:%d.%m.%Y %H:%M} · "
-        f"стоимость машинной обработки {report.cost_rub:.2f} ₽*"
-    )
+    # Стоимость машинной обработки — внутренняя экономика, из клиентской
+    # выгрузки убрана (РЕШ-207); номер запроса и дата остаются.
+    lines.append(f"*Запрос №{report.request_id or '—'} · {report.generated_at:%d.%m.%Y %H:%M}*")
     lines.append("")
     lines.append("*Кирилл Уклонский · uklonskiy.k@gmail.com*")
     return "\n".join(lines)
@@ -241,10 +375,7 @@ def _render_card(card: SolutionCard, index: int, *, contest: bool = False) -> li
     lines.append(card.essence)
     lines.append("")
 
-    developer = card.developer_org or "не найдено"
-    if card.developer_team:
-        developer += f" — {card.developer_team}"
-    lines.append(f"**Разработчик:** {developer}")
+    lines.append(f"**Разработчик:** {developer_line(card)}")
     lines.append("")
     if card.contact_leads:
         lines.append("**Как выйти на связь:** " + "; ".join(card.contact_leads))

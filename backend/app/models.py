@@ -258,6 +258,32 @@ class Verdict(Base):
     card: Mapped[SolutionCard] = relationship(back_populates="verdicts")
 
 
+class SummaryOverride(Base):
+    """Правка эксперта поверх рекомендации и оговорок сводки отчёта (РЕШ-206).
+
+    Отдельная таблица, а не колонка `requests`: `init_db` — это `create_all`,
+    он заводит новую таблицу в уже существующей боевой базе, но не добавляет
+    колонку в уже существующую таблицу (грабля Э2-А — см. докстроку
+    `Request.report_json` и комментарий к `PipelineLog` ниже). Одна строка на
+    запрос: `request_id` уникален, повторный `POST /requests/{id}/summary`
+    перезаписывает эту же строку, а не добавляет новую — в отличие от
+    `Verdict`, здесь нет ценности хранить историю правок текста, только
+    последнюю версию, которая уедет клиенту.
+    """
+
+    __tablename__ = "summary_overrides"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), unique=True, index=True)
+    #: `None` — эксперт ещё не правил рекомендацию; отличается от пустой
+    #: строки, которую эксперт мог сохранить осознанно.
+    recommendation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: `None` — эксперт ещё не правил оговорки; отличается от пустого списка,
+    #: которым эксперт мог осознанно снять все оговорки модели.
+    caveats: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class ShowcaseItem(Base):
     """Витрина разработок партнёрских институтов — приоритетный слой выдачи."""
 

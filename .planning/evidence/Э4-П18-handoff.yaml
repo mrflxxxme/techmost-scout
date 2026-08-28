@@ -1,0 +1,50 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: Э4-П18
+  did:
+    - "prompts/verifier.md: правило 6 — в перечень доверенных доменов для типа patent добавлен
+       search.ncip.by (реестр Национального центра интеллектуальной собственности Беларуси).
+       Домен взят из константы BY_DOCUMENT_URL в backend/app/search/rospatent.py (файл только
+       читал, не правил) — сверил дословно, чтобы в промпт попал тот же домен, что реально
+       строит адаптер"
+    - "Прочие домены и правила промпта не тронуты; правила 7 и 13 (задача Э4-П17) не изменял"
+    - "prompts/CHANGELOG.md: новая запись версии 2.4 — дата, что изменено (домен search.ncip.by
+       в правиле 6), почему (Э4-П16, РЕШ-217, совет 3 ревью Э4-П16), в формате соседних записей.
+       Метка версии файла verifier.md поднята 2.3 -> 2.4 (уточнение списка доменов — младшая
+       цифра, структура ответа не менялась)"
+    - "tests/test_prompts.py: новый тест
+       test_verifier_доверяет_домену_реестра_нцис_для_patent — вырезает текст правила 6 (между
+       литералами '6.' и '7.', других вхождений этих подстрок в файле нет — проверено grep) и
+       ищет там search.ncip.by. Проверен мутацией: домен временно убран из правила 6 — тест
+       упал (AssertionError, 1 failed), домен возвращён — git diff пуст"
+    - "Подстановки {{...}} не трогал: verifier.md как был в EXPECTED_PLACEHOLDERS
+       {CARD_JSON, GROUP_CANDIDATES_JSON}, так и остался"
+  artifacts:
+    - prompts/verifier.md
+    - prompts/CHANGELOG.md
+    - tests/test_prompts.py
+  self_audit: pass
+  checks:
+    - "pytest tests/test_prompts.py -q → 54 passed"
+    - "pytest tests/test_team_docs.py -q → 35 passed"
+    - "pytest -q → 1226 passed, 1 warning (сторонний StarletteDeprecationWarning, не по задаче)"
+    - "ruff check . → All checks passed!"
+    - "ruff format --check . → 206 files already formatted"
+    - "Мутация «домен убран из правила 6»: pytest
+       tests/test_prompts.py::test_verifier_доверяет_домену_реестра_нцис_для_patent -q →
+       1 failed (AssertionError: search.ncip.by not in rule_6); после возврата домена — снова
+       зелёный, git diff пуст"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «Э4-П18»)
+    - .planning/DECISIONS.md (РЕШ-217)
+    - .planning/evidence/Э4-П16-review.md (совет 3)
+    - prompts/verifier.md (правило 6)
+    - prompts/CHANGELOG.md (запись 2.4)
+    - tests/test_prompts.py (test_verifier_доверяет_домену_реестра_нцис_для_patent)
+  notes: |
+    Кода продукта не трогал — только prompts/verifier.md, prompts/CHANGELOG.md,
+    tests/test_prompts.py, как и требовала постановка. backend/app/search/rospatent.py читал
+    только для сверки домена (BY_DOCUMENT_URL = "https://search.ncip.by/..."), на запись не
+    открывал. Живых вызовов моделей не делал.

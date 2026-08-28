@@ -1,0 +1,87 @@
+handoff:
+  from: "implementer"
+  to: "reviewer"
+  task: "Э4-П6"
+  cycle: 2
+  did:
+    - "РЕШ-210: limitations_lines (markdown.py) при include_caveats=False больше не выбрасывает все caveats — только свободную прозу модели. Машинные пометки распознаются по точному значению против набора констант кода (_machine_caveats), а не по подстроке текста или эвристике, и печатаются всегда, наравне со строкой «Не ответили источники»"
+    - "_machine_caveats() собирает: PAID_LIMIT_NOTICE (уже жил в markdown.py), INTAKE_FALLBACK_CAVEAT и REFINE_FALLBACK_CAVEAT (импортированы из pipeline/intake_flow.py отложенным импортом внутри функции — на уровне модуля это дало бы циклический импорт через app.pipeline.__init__ → orchestrator.py → app.export.markdown), SUMMARY_FALLBACK_NOTICE (константа markdown.py)"
+    - "pdf.py и docx.py не потребовали изменений логики — оба уже вызывали limitations_lines(report, include_caveats=printable) и получили исправленное поведение через общую функцию. Обновлены только докстроки: 'убирает оговорки модели' → 'убирает свободную прозу модели, машинные пометки остаются'"
+    - "Критерий 2 (регрессия include_caveats=True/render_markdown): побайтовое сравнение вывода render_markdown на богатой фикстуре (caveats с PAID_LIMIT_NOTICE и прозой, sources_unavailable, contest_cards, comparison_rows) до и после правки — через git stash markdown.py/pdf.py/docx.py, повторный прогон, diff before.md after.md → пусто. Компактный тест на limitations_lines(include_caveats=False) добавлен в test_export_markdown.py как постоянный регрессионный страж"
+    - "Критерий 3 (регрессия БЛОК-4): новый тест test_render_print_html_limitations_section_appears_for_machine_notice_only — sources_unavailable=[], caveats=[PAID_LIMIT_NOTICE], карточка скрыта → раздел «Ограничения этого поиска» появляется и несёт пометку (до правки раздела не было бы вовсе)"
+    - "Критерий 4 (П-10 повторного аудита): новые тесты с непустой конкурсной секцией и всеми карточками видимыми (test_render_print_html_printable_count_includes_contest_cards в pdf.py, часть test_машинная_пометка_и_учёт_конкурсных_карточек в docx.py) — вручную проверены мутацией 'len(print_cards)'/'len(printable_cards)' без прибавления конкурсной секции: тест падает с сообщением, что рекомендация заменена заглушкой хотя скрытых карточек нет; мутация отменена, git diff после отмены пуст (см. checks)"
+    - "Критерий 5: реальный ExportView запроса №8 собран на копии боевой базы (data/scout.db скопирован в scratchpad, DATABASE_URL указывал на копию, оригинал не открывался на запись — md5 до/после совпадает) — PAID_LIMIT_NOTICE снова печатается и в PDF, и в DOCX; вся остальная проза из caveats (5 оговорок модели) корректно скрыта"
+    - "РАСШИРЕНИЕ ГРАНИЦЫ (по указанию оркестратора, один файл — backend/app/pipeline/summary.py): fallback_summary больше не хранит свой литерал оговорки — импортирует SUMMARY_FALLBACK_NOTICE из app.export.markdown тем же путём, каким уже импортирует MATURITY_RU/CONFIDENCE_RU (обратного импорта markdown.py → pipeline не заводил, цикла нет). Убрана исходная эскалация из первого прохода задачи: единственная точка правды теперь в markdown.py, а не два независимых литерала"
+    - "grep 'построен без участия модели' по pipeline/summary.py после правки — пусто (см. checks); остаются только неродственные строки recommendation ('Автоматическая сводка не собралась. Сравните варианты…' / '…а карточек для сравнения тоже нет…') — это другой текст, не оговорка, не трогал"
+    - "Новый тест tests/test_export_pdf.py::test_fallback_summary_caveat_recognized_via_shared_constant — вызывает настоящий fallback_summary(), сверяет caveats с импортированной SUMMARY_FALLBACK_NOTICE (не с хардкодом в тесте) и проверяет печать в PDF. Тест положен в test_export_pdf.py (мой файл, не tests/test_pipeline_summary.py — чужой, не трогал; см. notes, почему не там)"
+    - "ЦИКЛ 2 (блокирующее ревью): _machine_caveats() ловил регресс только по PAID_LIMIT_NOTICE и SUMMARY_FALLBACK_NOTICE — убрать INTAKE_FALLBACK_CAVEAT или REFINE_FALLBACK_CAVEAT из множества набор не замечал (совпадение с другим тестом маскировало дыру). Новый параметризованный тест test_render_print_html_intake_refine_notices_survive_hidden_card (tests/test_export_pdf.py) проверяет каждую константу по отдельности: карточка скрыта, caveats=[notice, \"проза модели\"] — notice в HTML, прозы нет"
+  artifacts:
+    - "backend/app/export/markdown.py"
+    - "backend/app/export/pdf.py"
+    - "backend/app/export/docx.py"
+    - "backend/app/pipeline/summary.py"
+    - "tests/test_export_markdown.py"
+    - "tests/test_export_pdf.py"
+    - "tests/test_export_docx.py"
+  self_audit: "pass"
+  checks:
+    - "pytest tests/test_export_markdown.py tests/test_export_pdf.py tests/test_export_docx.py tests/test_pipeline_summary.py -q: 89 passed"
+    - "pytest -q: 1140 passed (было 1132 на базовом SHA 5298ccc)"
+    - "Мутация цикла 2 (убрать INTAKE_FALLBACK_CAVEAT из _machine_caveats()): pytest tests/test_export_pdf.py -k intake_refine -q → 1 failed, 1 passed — упал ровно параметр INTAKE_FALLBACK_CAVEAT, REFINE_FALLBACK_CAVEAT остался виден. Мутация отменена: git diff backend/app/export/markdown.py после отмены — пусто"
+    - "Мутация цикла 2 (убрать REFINE_FALLBACK_CAVEAT из _machine_caveats()): pytest tests/test_export_pdf.py -k intake_refine -q → 1 failed, 1 passed — упал ровно параметр REFINE_FALLBACK_CAVEAT, INTAKE_FALLBACK_CAVEAT остался виден. Мутация отменена: git diff backend/app/export/markdown.py после отмены — пусто"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 198 files already formatted"
+    - "pytest tests/test_backend_layout.py tests/test_tests_layout.py tests/test_pipeline_layout.py -q: 12 passed (test_export_docx.py ровно 500 строк — граница, не превышение)"
+    - "grep -n 'построен без участия модели' backend/app/pipeline/summary.py → нет вхождений (литерал оговорки убран, заменён на SUMMARY_FALLBACK_NOTICE)"
+    - "Мутация критерия 4 в pdf.py (summary_text_printable(view, len(print_cards) + len(print_contest_cards)) → без + len(print_contest_cards)): pytest tests/test_export_pdf.py::test_render_print_html_printable_count_includes_contest_cards -q → 1 failed, AssertionError на 'Начать с варианта №1.' — вместо рекомендации напечаталась заглушка SUMMARY_NOT_PRINTABLE_NOTICE. Мутация отменена: git diff backend/app/export/pdf.py после отмены — пусто"
+    - "Мутация критерия 4 в docx.py (summary_text_printable(view, len(printable_cards) + len(printable_contest_cards)) → без + len(printable_contest_cards)): pytest tests/test_export_docx.py::test_машинная_пометка_и_учёт_конкурсных_карточек -q → 1 failed, AssertionError на 'Рекомендация-42' не найдена в тексте. Мутация отменена: git diff backend/app/export/docx.py после отмены — пусто"
+    - "Мутация расширения границы (pipeline/summary.py: caveats=[SUMMARY_FALLBACK_NOTICE] → caveats=['Автоматическая сводка не собралась — раздел построен без модели.'], текстово похожий, но другой литерал): pytest tests/test_export_pdf.py::test_fallback_summary_caveat_recognized_via_shared_constant -q → 1 failed, AssertionError на несовпадение caveats со SUMMARY_FALLBACK_NOTICE. Мутация отменена: git diff backend/app/pipeline/summary.py после отмены — пусто"
+    - "Критерий 2 (побайтовое сравнение): git stash push -- backend/app/export/{markdown,pdf,docx}.py; python render_fixture.py > before.md; git stash pop; python render_fixture.py > after.md; diff before.md after.md → пусто (exit 0)"
+    - "Критерий 5 (боевые данные, копия только на чтение): DATABASE_URL на копию data/scout.db в scratchpad → view.total_cards=6, печатаемых карточек=5, PAID_LIMIT_NOTICE в PDF-HTML и в DOCX-тексте — True; вся остальная проза из caveats скрыта в обоих форматах. md5sum data/scout.db до и после запуска совпал — файл не менялся"
+  escalate: "none"
+  read_first:
+    - ".planning/PLAN.md (раздел «Э4-П6 · машинные оговорки печатаются всегда»)"
+    - ".planning/DECISIONS.md (РЕШ-210, РЕШ-206, РЕШ-129)"
+    - ".planning/evidence/audit-Э4-повтор.md (раздел «БЛОК-4»)"
+    - "backend/app/export/markdown.py (limitations_lines, _machine_caveats, SUMMARY_FALLBACK_NOTICE)"
+    - "backend/app/pipeline/summary.py (fallback_summary — расширение границы)"
+    - "backend/app/export/pdf.py"
+    - "backend/app/export/docx.py"
+    - "tests/test_export_markdown.py"
+    - "tests/test_export_pdf.py"
+    - "tests/test_export_docx.py"
+  notes: >-
+    Расширение границы задачи (сообщение оркестратора в ходе работы): было
+    разрешено дополнительно править backend/app/pipeline/summary.py — ровно
+    этот один файл, вне обычной границы задачи. Исходная эскалация из первого
+    прохода («SUMMARY_FALLBACK_NOTICE — дублирующий литерал, разойдётся молча»)
+    этим закрыта: pipeline/summary.py импортирует константу из markdown.py,
+    второго источника текста для этой оговорки больше нет.
+
+    Тест на связь через константу (test_fallback_summary_caveat_recognized_via_shared_constant)
+    положен в tests/test_export_pdf.py, а не в tests/test_pipeline_summary.py
+    (файл стадии сводки, логически ближе к fallback_summary, но не мой —
+    в списке границ задачи и в списке чужих файлов не значился, трогать не
+    стал по прямому указанию «tests/test_summary*.py и прочие чужие файлы не
+    трогай»). Если ревьюер или оркестратор сочтут более уместным место в
+    test_pipeline_summary.py — перенос через отдельную правку, не мной.
+
+    Файлы test_export_docx.py (ровно 500 строк) и test_export_markdown.py
+    (493 строки) были уже близки к пределу test_tests_layout.py на входе в
+    задачу — тесты по критериям 1/3/4 пришлось писать предельно компактно
+    (лямбда вместо вложенной функции в docx-тесте, объединение трёх критериев
+    в один тест), а новый тест для расширения границы пришлось разместить в
+    test_export_pdf.py (там был запас) вместо test_export_markdown.py именно
+    из-за этого потолка. test_tests_layout.py не в списке моих файлов,
+    править не мог.
+
+    Живой вызов модели не делался. Боевая база открывалась только на чтение
+    через копию (см. checks) — критерий 5 подтверждён на настоящих данных
+    запроса №8, а не только на тестовых фикстурах.
+
+    Цикл 2: правка только в tests/test_export_pdf.py (продуктовый код цикла 1
+    не менялся — ревью перепроверило критерии 1–5, расширение границы,
+    отсутствие цикла импортов и предел 500 строк независимо и приняло без
+    замечаний). Два совета ревью («место test_fallback_summary_caveat_recognized_via_shared_constant
+    корректно», «500 строк в test_export_docx.py — предупреждение на
+    будущее») правки не требуют, не трогал.

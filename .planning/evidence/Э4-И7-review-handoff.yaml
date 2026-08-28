@@ -1,0 +1,47 @@
+handoff:
+  from: reviewer
+  to: verifier
+  task: "Э4-И7"
+  did:
+    - "Прочитаны PLAN.md (раздел Э4-И7 и «Контракты»), INVARIANTS.md, CLAUDE.md, handoff исполнителя; изучен diff и все изменённые файлы целиком в отдельном worktree"
+    - "Прогнаны tests/test_demo_playback.py (11 passed) и tests/test_web_demo.py (7 passed), полный pytest -q дважды подряд (1047 passed оба раза), tests/test_web_flow_e2e.py отдельно (1 passed) — интерференция через общий ProgressBroker не проявилась"
+    - "Проверены все грепы критериев задачи: LLMRouter|httpx|ScoutPipeline и demo_flag в demo.* — пусто; request_id == N в routes/demo.py — пусто; секреты в новых файлах — пусто"
+    - "Мутационно проверена находка исполнителя (потолок fraction 0.99): без потолка падают test_only_final_done_step_reaches_full_fraction и test_start_publishes_events_stream_gets_stage_message_fraction (последний — на настоящем ProgressBroker через SSE); файл восстановлен после проверки, git diff чист"
+    - "Мутационно проверен инвариант №1 в показе: подмена числа в _search_message на выдуманное валит test_search_message_uses_real_sources_hit_numbers_not_invented"
+    - "Проверены все десять инвариантов и раздел «Границы» задачи — нарушений и выхода за границы не найдено"
+    - "ruff check . и ruff format --check . — 0 замечаний"
+  artifacts:
+    - .planning/evidence/Э4-И7-review.md (закоммичен до ответа)
+    - .planning/evidence/Э4-И7-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_demo_playback.py -v: 11 passed"
+    - "pytest tests/test_web_demo.py -v: 7 passed"
+    - "pytest -q (прогон 1): 1047 passed"
+    - "pytest -q (прогон 2): 1047 passed"
+    - "pytest tests/test_web_flow_e2e.py -v: 1 passed"
+    - "pytest tests/test_web_templates.py tests/test_pipeline_layout.py tests/test_backend_layout.py -v: 14 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 190 files already formatted"
+    - "rg -n \"LLMRouter|httpx|ScoutPipeline\" backend/app/pipeline/demo.py backend/app/web/routes/demo.py: пусто"
+    - "rg -n demo_flag backend/app/pipeline/demo.py: пусто"
+    - "grep -nE \"request_id *== *[0-9]\" backend/app/web/routes/demo.py: пусто"
+    - "мутация (убран потолок 0.99): 2 теста упали (unit + real-broker SSE), файл восстановлен"
+    - "мутация (выдуманное число в _search_message): 1 тест упал, файл восстановлен"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э4-И7-review.md
+    - .planning/PLAN.md (раздел «Э4-И7», «Контракты»)
+    - backend/app/pipeline/demo.py
+    - backend/app/web/routes/demo.py
+  notes: >-
+    Вердикт ПРИНЯТЬ, цикл 1, блокирующих нет. Два совета не блокируют:
+    неиспользуемый log в web/routes/demo.py при отсутствии обработки
+    исключений фоновой задачи (по аналогии с run.py, риск практически
+    низкий), и неполный список клиентских фраз demo.html в handoff (текст
+    вводного абзаца и пустого состояния списка). Отдельно для аудита волны
+    отмечен межзадачный риск: общий на процесс ProgressBroker не освобождает
+    каналы после done (известный долг, РЕШ-191 отложен на Э5-1); эта задача
+    закрыла свой риск явными большими id, но структурная бомба для будущих
+    тестов с маленькими id остаётся — стоит зафиксировать в DECISIONS.md или
+    в аудите волны, не как повторную находку той же задачи.

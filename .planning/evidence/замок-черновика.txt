@@ -1,0 +1,141 @@
+=== 1. scout export 8 --pdf БЕЗ --draft (ожидание: отказ, файла нет) ===
+Экспорт не выполнен: отчёт ещё не проверен экспертом. Чтобы выгрузить черновик, 
+повторите команду с флагом --draft.
+код возврата: 1
+pdf-файлов в out/: 0
+
+=== 2. scout export 8 --pdf --draft (ожидание: файл с пометкой ЧЕРНОВИК) ===
+╭───────────────────── Traceback (most recent call last) ──────────────────────╮
+│ /home/user/techmost-scout/backend/app/cli.py:139 in export                   │
+│                                                                              │
+│   136 │   out: Path = typer.Option(None, "--out", "-o", help="Каталог для    │
+│       файла выгрузки (по умолчанию out/)"),                                  │
+│   137 ) -> None:                                                             │
+│   138 │   """Выгрузить отчёт запроса в PDF или DOCX — ровно один формат за   │
+│       раз."""                                                                │
+│ ❱ 139 │   asyncio.run(_export(request_id, pdf=pdf, docx=docx, draft=draft,   │
+│       out=out))                                                              │
+│   140                                                                        │
+│   141                                                                        │
+│   142 # ── serve                                                             │
+│       ───────────────────────────────────────────────────────────────────    │
+│                                                                              │
+│ /usr/lib/python3.12/asyncio/runners.py:194 in run                            │
+│                                                                              │
+│   191 │   │   │   "asyncio.run() cannot be called from a running event       │
+│       loop")                                                                 │
+│   192 │                                                                      │
+│   193 │   with Runner(debug=debug, loop_factory=loop_factory) as runner:     │
+│ ❱ 194 │   │   return runner.run(main)                                        │
+│   195                                                                        │
+│   196                                                                        │
+│   197 def _cancel_all_tasks(loop):                                           │
+│                                                                              │
+│ /usr/lib/python3.12/asyncio/runners.py:118 in run                            │
+│                                                                              │
+│   115 │   │                                                                  │
+│   116 │   │   self._interrupt_count = 0                                      │
+│   117 │   │   try:                                                           │
+│ ❱ 118 │   │   │   return self._loop.run_until_complete(task)                 │
+│   119 │   │   except exceptions.CancelledError:                              │
+│   120 │   │   │   if self._interrupt_count > 0:                              │
+│   121 │   │   │   │   uncancel = getattr(task, "uncancel", None)             │
+│                                                                              │
+│ /usr/lib/python3.12/asyncio/base_events.py:687 in run_until_complete         │
+│                                                                              │
+│    684 │   │   if not future.done():                                         │
+│    685 │   │   │   raise RuntimeError('Event loop stopped before Future      │
+│        completed.')                                                          │
+│    686 │   │                                                                 │
+│ ❱  687 │   │   return future.result()                                        │
+│    688 │                                                                     │
+│    689 │   def stop(self):                                                   │
+│    690 │   │   """Stop running the event loop.                               │
+│                                                                              │
+│ /home/user/techmost-scout/backend/app/cli_export.py:97 in _export            │
+│                                                                              │
+│    94 │   out_path = out_dir / export_filename(request_id, extension)        │
+│    95 │                                                                      │
+│    96 │   if pdf:                                                            │
+│ ❱  97 │   │   result_path = await export_pdf(view, out_path)                 │
+│    98 │   else:                                                              │
+│    99 │   │   result_path = export_docx(view, out_path)                      │
+│   100                                                                        │
+│                                                                              │
+│ /home/user/techmost-scout/backend/app/export/pdf.py:121 in export_pdf        │
+│                                                                              │
+│   118 │   from playwright.async_api import async_playwright                  │
+│   119 │                                                                      │
+│   120 │   async with async_playwright() as playwright:                       │
+│ ❱ 121 │   │   browser = await playwright.chromium.launch()                   │
+│   122 │   │   try:                                                           │
+│   123 │   │   │   browser_page = await browser.new_page()                    │
+│   124 │   │   │   await browser_page.set_content(html)                       │
+│                                                                              │
+│ /home/user/techmost-scout/.venv/lib/python3.12/site-packages/playwright/asyn │
+│ c_api/_generated.py:16731 in launch                                          │
+│                                                                              │
+│   16728 │   │   """                                                          │
+│   16729 │   │                                                                │
+│   16730 │   │   return mapping.from_impl(                                    │
+│ ❱ 16731 │   │   │   await self._impl_obj.launch(                             │
+│   16732 │   │   │   │   executablePath=executable_path,                      │
+│   16733 │   │   │   │   channel=channel,                                     │
+│   16734 │   │   │   │   args=mapping.to_impl(args),                          │
+│                                                                              │
+│ /home/user/techmost-scout/.venv/lib/python3.12/site-packages/playwright/_imp │
+│ l/_browser_type.py:97 in launch                                              │
+│                                                                              │
+│    94 │   │   browser = cast(                                                │
+│    95 │   │   │   Browser,                                                   │
+│    96 │   │   │   from_channel(                                              │
+│ ❱  97 │   │   │   │   await self._channel.send(                              │
+│    98 │   │   │   │   │   "launch", TimeoutSettings.launch_timeout, params   │
+│    99 │   │   │   │   )                                                      │
+│   100 │   │   │   ),                                                         │
+│                                                                              │
+│ /home/user/techmost-scout/.venv/lib/python3.12/site-packages/playwright/_imp │
+│ l/_connection.py:76 in send                                                  │
+│                                                                              │
+│    73 │   │   is_internal: bool = False,                                     │
+│    74 │   │   title: str = None,                                             │
+│    75 │   ) -> Any:                                                          │
+│ ❱  76 │   │   return await self._connection.wrap_api_call(                   │
+│    77 │   │   │   lambda: self._inner_send(method, timeout_calculator,       │
+│       params, False),                                                        │
+│    78 │   │   │   is_internal,                                               │
+│    79 │   │   │   title,                                                     │
+│                                                                              │
+│ /home/user/techmost-scout/.venv/lib/python3.12/site-packages/playwright/_imp │
+│ l/_connection.py:632 in wrap_api_call                                        │
+│                                                                              │
+│   629 │   │   try:                                                           │
+│   630 │   │   │   return await cb()                                          │
+│   631 │   │   except Exception as error:                                     │
+│ ❱ 632 │   │   │   raise rewrite_error(error, f"{parsed_st['apiName']}:       │
+│       {error}") from None                                                    │
+│   633 │   │   finally:                                                       │
+│   634 │   │   │   self._api_zone.set(None)                                   │
+│   635                                                                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Error: BrowserType.launch: Executable doesn't exist at 
+/opt/pw-browsers/chromium_headless_shell-1234/chrome-headless-shell-linux64/chro
+me-headless-shell
+╔════════════════════════════════════════════════════════════╗
+║ Looks like Playwright was just installed or updated.       ║
+║ Please run the following command to download new browsers: ║
+║                                                            ║
+║     playwright install                                     ║
+║                                                            ║
+║ <3 Playwright Team                                         ║
+╚════════════════════════════════════════════════════════════╝
+код возврата: 1
+=== scout export 8 --pdf --draft (после выравнивания версии браузера в среде) ===
+║                                                            ║
+║ <3 Playwright Team                                         ║
+╚════════════════════════════════════════════════════════════╝
+код: 1
+=== scout export 8 --docx --draft ===
+Отчёт выгружен: /home/user/techmost-scout/out/report-8-2026-08-27.docx
+код: 0
+44351 out/report-8-2026-08-27.docx

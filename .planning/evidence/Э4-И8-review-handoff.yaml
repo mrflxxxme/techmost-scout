@@ -1,0 +1,34 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: "Э4-И8"
+  cycle: 2
+  did:
+    - "Проверен HEAD d83227ae ветки e4/i8: дифф задачи (git diff d74d75d..d83227a --stat) ограничен tests/test_stage4_e2e.py и собственными файлами .planning/evidence/ — остальное в общем диффе пришло слиянием уже принятых задач Э4-И4-fix и Э4-И9"
+    - "Подтверждено: фикс 663c030/9079a25 убирает view.rework_keys и параметр rework макроса из report_print.html — бейдж «На доработку» физически не может попасть в печатный HTML/PDF"
+    - "Подтверждено: ассерты test_pdf_печать_... и test_docx_... перевёрнуты корректно (На доработку not in — при сохранении заголовка rework-карточки), test страница отчёта не тронут (пометка остаётся видна оператору)"
+    - "Дважды прогнаны pytest tests/test_stage4_e2e.py -v (6 passed) и pytest -q (1070 passed), без флаки; ruff check и ruff format --check — без замечаний"
+    - "Мутация цикла 1 повторена в противоположную сторону: точечный откат фикса (pdf.py + report_print.html, без правки теста) — test_pdf_печать_... падает на На доработку not in html, значит тест теперь ловит регресс в верную сторону; мутация отменена, рабочая копия чиста"
+    - "Блокирующая находка цикла 1 закрыта фактическим фиксом кода (не подгонкой теста), хендофф исполнителя честно описывает найденный дефект"
+  artifacts:
+    - .planning/evidence/Э4-И8-review.md (раздел «Цикл 2», закоммичен до ответа)
+    - .planning/evidence/Э4-И8-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_stage4_e2e.py -v: 6 passed (x2)"
+    - "pytest -q: 1070 passed (x2)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 194 files already formatted"
+    - "git diff d74d75d..d83227a --stat: только tests/test_stage4_e2e.py и .planning/evidence/Э4-И8-*"
+  escalate: none
+  read_first:
+    - ".planning/evidence/Э4-И8-review.md (раздел «Цикл 2»)"
+    - "tests/test_stage4_e2e.py (ассерты test_pdf_печать_..., test_docx_...)"
+    - "backend/app/export/pdf.py (фикс, коммит 663c030)"
+  notes: >-
+    Вердикт ПРИНЯТЬ. Второй цикл был последним — третьего не будет и не
+    требуется: блокирующая находка цикла 1 устранена по существу (фикс
+    backend/app/export/pdf.py и report_print.html в отдельной, уже принятой
+    задаче Э4-И4-fix), тест приведён в соответствие с задокументированным
+    контрактом РЕШ-198 и перепроверен мутацией в обе стороны. Задачу Э4-И8
+    можно считать закрытой.

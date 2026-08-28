@@ -1,0 +1,45 @@
+handoff:
+  from: implementer-3
+  to: reviewer
+  task: "Э4-И5"
+  did:
+    - "Реализован backend/app/export/docx.py: export_docx(view, out_path) -> Path через python-docx"
+    - "Данные берутся только из готового ExportView (build_export_view) — своего разбора report_json или повторного фильтра reject модуль не ведёт"
+    - "Состав документа без обложки (РЕШ-202): заголовок, статусная строка (подпись эксперта или пометка черновика), задача, рекомендация, сравнение вариантов таблицей, карточки обеих секций (стадия только при непустом evidence, developer_line, применимость, сверка требований, риски, господдержка, следующий шаг, «Чем подтверждено» — URL текстом, неподтверждённые утверждения), раздел ограничений"
+    - "Подпись эксперта — signature_line(reviewer_name, validated_at) тем же порядком решения, что и web/routes/report.py; пометка ЧЕРНОВИК — дословная существующая фраза, новых фраз не вводилось"
+    - "Шрифт документа — Segoe UI (стиль Normal), без внешних подключений"
+    - "tests/test_export_docx.py — 9 тестов на подменах: имя файла и открытие обратно, черновик/подпись, инвариант №1 (пусто/непусто evidence), таблица сравнения, конкурсная секция и developer_line без хвоста «— не найдено», ограничения/риски/господдержка, создание недостающего каталога"
+  artifacts:
+    - backend/app/export/docx.py
+    - tests/test_export_docx.py
+    - .planning/evidence/Э4-И5-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_export_docx.py -v: 9 passed"
+    - "pytest -q: 1012 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 182 files already formatted"
+    - "rg -n \"httpx|LLMRouter|playwright\" backend/app/export/docx.py: совпадений нет"
+    - "pytest tests/test_backend_layout.py -v: 3 passed (docx.py — 200 строк из 250)"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (раздел Э4-И5, «Имена файлов выгрузки»)"
+    - "docs/SPEC.md (§6, строки 647-666)"
+    - "backend/app/export/docx.py"
+    - "backend/app/export/view.py"
+    - "backend/app/export/markdown.py"
+    - "tests/test_export_docx.py"
+  notes: >-
+    Затенения имени модуля пакетом python-docx не случилось: проверено
+    прямым импортом `from docx import Document` внутри модуля с тем же
+    именем (Python 3 не делает неявный относительный импорт) — файл
+    export/docx.py оставлен по имени из плана без отклонений. python-docx
+    не был установлен в venv до задачи — поставлен командой
+    `uv pip install --python /home/user/techmost-scout/.venv/bin/python
+    python-docx`; в pyproject.toml зависимость уже объявлена в группе
+    export, файл не менялся. Новых клиентских фраз не вводилось — все
+    подписи разделов и полей взяты дословно из export/markdown.py и
+    web/templates/_card.html (совпадение с уже одобренными текстами).
+    Дата в имени файла (report-<id>-<дата>.docx) — забота вызывающей
+    стороны (Э4-И6, cli_export.py); export_docx пишет туда, куда передан
+    out_path, как и требует контракт функции из плана.

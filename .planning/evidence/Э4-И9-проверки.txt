@@ -1,0 +1,33 @@
+Задача Э4-И9 · Документы этапа — фактические проверки
+Ветка: e4/i9, база 6f9516e62a027a383920f0aaa220aefa7a8bbf52, коммит 891c915
+
+$ rg -n "исходные пропорции" docs/SPEC.md
+682:события прогресса берутся из `PipelineLog`, исходные пропорции стадий
+
+$ rg -n "с сохранением исходных задержек" docs/SPEC.md
+(пусто — совпадений нет, код возврата rg: 1)
+
+$ rg -n "scout export" README.md docs/deps-manual.md
+README.md:81:| `scout export <id> --pdf\|--docx` | Выгрузка отчёта в PDF (CLI и кнопка «Полный текст (PDF)» на странице отчёта) или DOCX (только CLI); по `drafted`-запросу без `--draft` — отказ, с флагом — файл с пометкой «ЧЕРНОВИК» |
+docs/deps-manual.md:256:  без него работает. Без него `scout export <id> --pdf` не соберёт файл, а
+docs/deps-manual.md:257:  `scout export <id> --docx` отработает как обычно — playwright ей не нужен.
+
+$ /home/user/techmost-scout/.venv/bin/python -m pytest tests/test_team_docs.py -q
+...................................                                      [100%]
+35 passed in 0.11s
+
+$ /home/user/techmost-scout/.venv/bin/python -m pytest -q
+(хвост вывода)
+1063 passed, 1 warning in 63.19s (0:01:03)
+
+$ /home/user/techmost-scout/.venv/bin/ruff check .
+All checks passed!
+
+$ /home/user/techmost-scout/.venv/bin/ruff format --check .
+193 files already formatted
+
+$ git diff --stat 6f9516e62a027a383920f0aaa220aefa7a8bbf52..HEAD
+ README.md           | 12 ++++++++++++
+ docs/SPEC.md        | 12 +++++++++++-
+ docs/deps-manual.md | 18 ++++++++++++++++++
+ 3 files changed, 41 insertions(+), 1 deletion(-)

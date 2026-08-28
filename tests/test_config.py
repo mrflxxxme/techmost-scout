@@ -161,3 +161,21 @@ def test_second_pass_relevance_max_умолчание_шесть():
     settings = Settings(_env_file=None)
 
     assert settings.second_pass_relevance_max == 6
+
+
+def test_reviewer_name_пусто_без_переменной_иначе_её_значение(monkeypatch: pytest.MonkeyPatch):
+    """РЕШ-197: без `REVIEWER_NAME` поле пустое, с переменной окружения — её значение.
+
+    Пустая строка — не отказ формы вердикта здесь (это делает `verdicts.py`),
+    а просто умолчание настройки: форма без предзаполнения просит имя вручную.
+    """
+    monkeypatch.delenv("REVIEWER_NAME", raising=False)
+    assert Settings(_env_file=None).reviewer_name == ""
+
+    monkeypatch.setenv("REVIEWER_NAME", "Иван Иванов")
+    assert Settings(_env_file=None).reviewer_name == "Иван Иванов"
+
+
+def test_demo_duration_seconds_умолчание_150():
+    """РЕШ-201: без переменной окружения демо воспроизводится за 150 секунд."""
+    assert Settings(_env_file=None).demo_duration_seconds == 150.0

@@ -1,0 +1,19 @@
+Предпусковая сверка схемы Э4 (РЕШ-196 п. 2), 27.08.2026
+=== scout doctor (строки схемы) ===
+Проверяю схему базы…
+=== PRAGMA ===
+verdicts : id, card_id, reviewer_name, decision, rating, comment, created_at
+requests : id, created_at, raw_text, status, cost_rub, demo_flag, error, report_json
+
+=== Волна правок аудита Э4: новая таблица summary_overrides (Э4-П2, РЕШ-206) ===
+Резервная копия базы сделана до операции (scratchpad, вне репозитория).
+Таблица заведена штатным create_all при запуске доктора (грабля Э2-А обойдена:
+новая таблица, а не колонка в существующей).
+
+$ scout doctor (с env -u устаревших переменных)
+Проверяю схему базы…
+Схема базы совпадает с моделями.        ← строка вердикта, которой не хватало (П-5 аудита)
+
+PRAGMA table_info(summary_overrides): id, request_id, recommendation, caveats, updated_at
+Таблицы базы: briefs, candidates, pipeline_logs, requests, search_plans,
+showcase_items, solution_cards, summary_overrides, verdicts

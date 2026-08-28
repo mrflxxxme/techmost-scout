@@ -1,0 +1,187 @@
+/* Печатный стиль отчёта (SPEC Э4-2, РЕШ-196 п. 7).
+
+Отдельный файл от `theme.css` намеренно: `report_print.html` не наследует
+`base.html`, а `page.set_content` (Chromium через playwright) не разрешает
+относительные ссылки на `/static` — значит подключить общий `theme.css`
+через `<link>` нельзя, только вставить готовый текст в `<style>`
+(`app/export/pdf.py:render_print_html`). Палитра повторяет дизайн-систему
+питч-дека (SPEC, раздел «Дизайн»): значения продублированы намеренно, это
+не рассинхронизация, а следствие независимости печатного документа от
+экранных стилей. Ни одной внешней шрифтовой ссылки — печать идёт офлайн, на
+машине без доступа в сеть.
+*/
+
+:root {
+  --ink: #10163a;
+  --navy: #1e2761;
+  --text: #1b2140;
+  --muted: #6b7699;
+  --gold: #c9a24b;
+  --ice: #cddcf9;
+  --shell: #f2f5fc;
+  --core: #ffffff;
+  --hair: #e3eaf8;
+  --hair-inner: #edf2fb;
+  --danger: #a3413f;
+  --danger-bg: #fdf1f1;
+  --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+@page {
+  size: A4;
+  margin: 18mm 16mm;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--core);
+  font-size: 11pt;
+  line-height: 1.5;
+}
+
+h1, h2, h3 { color: var(--navy); font-weight: 600; margin: 0 0 10px; }
+h2 { font-size: 16pt; margin-top: 22px; }
+h3 { font-size: 13pt; }
+p { margin: 0 0 8px; }
+a { color: var(--navy); }
+ul { margin: 0 0 8px; padding-left: 20px; }
+
+/* ── Обложка в стиле питч-дека — чернильный фон, золотой акцент ─────────── */
+.print-cover {
+  background: var(--ink);
+  color: var(--ice);
+  padding: 60px 40px;
+  border-radius: 14px;
+  page-break-after: always;
+}
+
+.print-cover-kicker {
+  font-size: 10pt;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 0 0 16px;
+}
+
+.print-cover-title {
+  color: #fff;
+  font-size: 26pt;
+  line-height: 1.2;
+  margin: 0 0 24px;
+}
+
+.print-cover-meta { color: var(--ice); font-size: 12pt; margin: 0 0 6px; }
+
+.print-cover-draft {
+  display: inline-block;
+  margin-top: 28px;
+  padding: 8px 16px;
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  color: var(--gold);
+  font-size: 10pt;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Пометка черновика на каждой странице — `position: fixed` в печати Chromium
+   повторяется на всех страницах документа, поэтому второй копии в разметке
+   заводить не нужно (РЕШ-199). */
+.print-draft-mark {
+  position: fixed;
+  top: 8mm;
+  right: 16mm;
+  padding: 4px 12px;
+  background: var(--ink);
+  color: var(--ice);
+  border-radius: 999px;
+  font-size: 8pt;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  z-index: 10;
+}
+
+.print-section { margin-bottom: 18px; }
+
+/* ── Карточка решения с двойной окантовкой — приём дизайн-системы ───────── */
+.print-card {
+  background: var(--shell);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 5px;
+  margin-bottom: 16px;
+  page-break-inside: avoid;
+}
+
+.print-card-core {
+  background: var(--core);
+  border: 1px solid var(--hair-inner);
+  border-radius: 9px;
+  padding: 16px 18px;
+}
+
+.print-muted { color: var(--muted); font-size: 9.5pt; }
+.print-maturity { margin-bottom: 6px; }
+
+.print-badge {
+  display: inline-block;
+  font-size: 9pt;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--shell);
+  color: var(--navy);
+  border: 1px solid var(--hair);
+  margin-bottom: 8px;
+}
+
+.print-badge-low { background: var(--danger-bg); color: var(--danger); border-color: #f4d4d4; }
+
+.print-badge-gold {
+  display: inline-block;
+  font-size: 9pt;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(201, 162, 75, 0.12);
+  color: #8a6c25;
+  border: 1px solid rgba(201, 162, 75, 0.3);
+}
+
+.print-notice-danger {
+  border-left: 3px solid var(--danger);
+  background: var(--danger-bg);
+  color: var(--danger);
+  padding: 10px 14px;
+  border-radius: 0 8px 8px 0;
+  font-size: 10pt;
+}
+
+.print-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+.print-table th {
+  text-align: left;
+  font-weight: 600;
+  color: #fff;
+  background: var(--navy);
+  padding: 8px 10px;
+}
+.print-table td { padding: 8px 10px; border-bottom: 1px solid var(--hair); vertical-align: top; }
+
+.print-footer {
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hair);
+  font-size: 9pt;
+  color: var(--muted);
+}
+
+.print-mt-sm { margin-top: 6px; }
+.print-mb-sm { margin-bottom: 6px; }

@@ -1,0 +1,146 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: "Э4-П12"
+  did:
+    - "Часть 1 (три мутации П-18): формулировки аудита сняты на коде ДО
+       Э4-П11, расчёт с тех пор переписан — по каждой мутации сначала найдено
+       нынешнее место, затем мутация поставлена заново на текущем коде,
+       прогнана, зафиксировано падение нового теста, код возвращён
+       (`git diff -- backend/` пуст после каждой). Все три мутации сегодня
+       по-прежнему переживают набор — ни одна не оказалась уже закрытой
+       рефакторингом Э4-П11, поэтому выдуманных тестов нет, только реальные."
+    - "Мутация 1 (счёт карточек основной секции включает конкурсные): раньше
+       жила как `sum(1 for is_contest, _position in card_ids if not
+       is_contest)` в `export/view.py::_comparison_table_hidden` (код на
+       d3bf88b/dd59629). После Э4-П11 функция считает по-другому —
+       `visible_position_count(edited_report.cards, …)`, список карточек уже
+       заведомо основной секции. Ближайший равносильный сегодняшний вариант
+       той же мутации — передать в `visible_position_count` объединённый
+       список `edited_report.cards + edited_report.contest_cards` вместо
+       одного `edited_report.cards` — я поставил именно это (тест
+       `tests/test_summary_field_gate.py::
+       test_comparison_table_not_hidden_с_конкурсной_секцией_без_отклонений`,
+       три карточки основной секции без отклонений + конкурсная карточка +
+       4 строки сравнения на 3 карточки): охрана «ничего не отклонено —
+       скрывать нечего» ломается тем же способом, что описывал аудит,
+       `comparison_table_hidden` неверно становится `True`. Мутация покраснела
+       (AssertionError: assert True is False), код возвращён."
+    - "Мутация 2 (`len(rows) != cards` → `len(rows) > cards`) — цель та же,
+       `export/view.py::_comparison_table_hidden`, строка не переписана Э4-П11
+       вовсе (`return len(original_rows) != original_main_cards`). Случай
+       «строк меньше, чем карточек» действительно не был закреплён ни одним
+       тестом ни в одном файле. Новый тест
+       `test_comparison_table_hidden_когда_строк_меньше_чем_карточек`
+       (3 карточки, 2 строки сравнения, первая карточка отклонена) — мутация
+       покраснела (assert False is True), код возвращён."
+    - "Мутация 3 (`_add_comparison_table` теряет `add_heading(\"Сравнение
+       вариантов\")` у спрятанной таблицы) — место не изменилось Э4-П11
+       (`export/docx.py`, тот же файл и та же функция). Новый тест
+       `tests/test_export_docx_field_gate.py::
+       test_comparison_table_hidden_печатает_заголовок_раздела` проверяет
+       текст заголовка в полном тексте документа (существующий
+       `test_comparison_table_hidden_печатает_честную_строку` проверял только
+       текст строки, не заголовок). Мутация покраснела (AssertionError:
+       'Сравнение вариантов' not in text), код возвращён."
+    - "Часть 2 (расширение границы, по инструкции задачи): `web/routes/
+       review.py::_hidden_reason` больше не пересчитывает признак видимости
+       своей копией условия — решение «видна ли карточка» берётся у
+       `app.verdicts.visible_report` (тот же публичный вызов, каким
+       `export/view.py::build_export_view` строит `ExportView.client_report`,
+       РЕШ-213). Карточка проверяется как единственная в одноразовом
+       отчёте-заглушке `_PROBE_REPORT` (минимальный валидный `Report` с
+       пустым брифом/сводкой — эти поля `visible_report` не трогает).
+       `verdicts.py` не менялся ни строкой (не мой файл)."
+    - "Общий признак `verdicts.visible_report`/`_kept_positions` сегодня
+       отдаёт только ФАКТ (видна/не видна), а не ПРИЧИНУ (reject или пустой
+       evidence) — в задаче об этом сказано прямо, чтобы не переписывать
+       verdicts.py. Поэтому `_hidden_reason` оставляет отдельный (тривиальный,
+       не решающий) выбор ТЕКСТА подсказки: если карточка скрыта, проверяет
+       `verdict.decision == REJECT` для формулировки «отклонена экспертом»,
+       иначе — «нет ни одного подтверждения». Прецедент такого разделения
+       (различать причину бухгалтерски, не второй проверкой решения) уже есть
+       в кодовой базе — `export/view.py::_reindex_after_filter` делает то же
+       самое для пометки rework, отдельно от решения о видимости."
+    - "Новый тест tests/test_web_review_visibility_source.py (отдельный файл:
+       tests/test_web_review.py уже на пределе 498/500 строк) монкипатчит
+       `app.verdicts._kept_positions` на версию без ветки `require_evidence`
+       (мутация ОБЩЕГО признака) и живым маршрутом `GET /requests/{id}/
+       review` показывает, что подсказка «нет ни одного подтверждения»
+       пропадает с экрана. На коде ДО правки (третья копия условия) этот
+       тест падает — проверил вручную перед фиксом, зафиксировано ниже."
+  artifacts:
+    - tests/test_summary_field_gate.py
+    - tests/test_export_docx_field_gate.py
+    - backend/app/web/routes/review.py
+    - tests/test_web_review_visibility_source.py
+  self_audit: pass
+  checks:
+    - "pytest -q → 1202 passed, 1 warning (starlette/httpx deprecation, не моё)"
+    - "ruff check . → All checks passed!"
+    - "ruff format --check . → 169 files already formatted"
+    - "pytest tests/test_backend_layout.py tests/test_tests_layout.py tests/test_prompts.py tests/test_team_docs.py -q → 92 passed"
+    - "pytest tests/test_summary_field_gate.py tests/test_export_docx_field_gate.py tests/test_web_review.py tests/test_web_review_visibility_source.py -q → 33 passed"
+    - "Мутация 1 (edited_report.cards → edited_report.cards + contest_cards в
+       export/view.py::_comparison_table_hidden), поставлена в рабочем файле,
+       прогнана — pytest -q tests/test_summary_field_gate.py -k
+       конкурсной_секцией_без_отклонений → 1 failed (assert True is False);
+       git checkout -- backend/app/export/view.py → git diff -- backend/ пуст."
+    - "Мутация 2 (len(original_rows) != original_main_cards → len(original_rows)
+       > original_main_cards в той же функции), поставлена, прогнана —
+       pytest -q tests/test_summary_field_gate.py -k
+       когда_строк_меньше_чем_карточек → 1 failed (assert False is True);
+       возврат, git diff -- backend/ пуст."
+    - "Мутация 3 (убран document.add_heading(\"Сравнение вариантов\", level=1)
+       в export/docx.py::_add_comparison_table, ветка table_hidden),
+       поставлена, прогнана — pytest -q tests/test_export_docx_field_gate.py
+       -k заголовок_раздела → 1 failed (AssertionError: 'Сравнение вариантов'
+       not in text); возврат, git diff -- backend/ пуст."
+    - "git diff -- backend/ (финально, после всех трёх мутаций и после
+       возврата) → пусто, только backend/app/web/routes/review.py отличается
+       от базы 1db2c0e (часть 2)."
+    - "tests/test_web_review_visibility_source.py на коде ДО фикса review.py
+       (черновой прогон перед правкой): 1 failed — подсказка «нет ни одного
+       подтверждения» не пропадала после монкипатча verdicts._kept_positions,
+       что и требовалось показать (третья копия условия жила независимо).
+       После фикса — тот же тест зелёный."
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (задача Э4-П12)"
+    - ".planning/evidence/audit-Э4-4.md (правка П-18)"
+    - ".planning/evidence/Э4-П11-review.md (совет 1 — третья копия признака видимости)"
+    - ".planning/DECISIONS.md (РЕШ-213, РЕШ-204, РЕШ-205)"
+    - "backend/app/verdicts.py (visible_report — единственная точка признака, не мой файл)"
+    - "backend/app/web/routes/review.py (_hidden_reason, _PROBE_REPORT)"
+    - "tests/test_web_review_visibility_source.py (монкипатч-тест на зависимость от verdicts)"
+  notes: |
+    Расширение границы (часть 2) сделано по прямому указанию постановки
+    задачи, а не по своей инициативе — исходный список файлов "ТВОИ ФАЙЛЫ"
+    в задаче уже включал backend/app/web/routes/review.py и
+    tests/test_web_review.py именно под эту правку.
+
+    Общий признак verdicts.visible_report/_kept_positions сегодня отдаёт
+    только факт "видна/не видна", а не причину. Предлагаю на будущее (не
+    делал сам — verdicts.py не мой файл): если понадобится третье место,
+    которому нужна причина (не только review.py), стоит завести в verdicts.py
+    публичную функцию вида `hidden_reason(card, card_id, effective) ->
+    Literal["reject", "no_evidence"] | None`, которая содержательно решает и
+    факт, и причину одним проходом (сегодня `_kept_positions` уже вычисляет
+    оба условия последовательно внутри себя — reject проверяется раньше
+    evidence, — просто не возвращает, ЧТО именно сработало). Тогда review.py
+    перестал бы отдельно смотреть на VerdictDecision.REJECT, и текст причины
+    тоже был бы одним проходом с фактом видимости, а не двумя независимыми
+    (пусть и оба явно читающими verdict/evidence, а не выдуманными).
+    Сегодняшнее решение (probe-report + отдельный выбор текста) закрывает
+    ровно то, что просит критерий задачи: мутация ОБЩЕГО признака обязана
+    красить подсказку экрана, и монкипатч-тест это подтверждает.
+
+    tests/test_web_review.py уже на пределе 498/500 строк — новый тест
+    заведён отдельным файлом tests/test_web_review_visibility_source.py
+    (дублирует фикстуры по образцу, уже принятому в проекте между
+    tests/test_summary_overrides.py и tests/test_summary_field_gate.py).
+    Файл новый, не превышает 500 строк (181), записи в
+    tests/test_tests_layout.py не требуется.
+
+    Живых вызовов моделей и платных источников не делал — всё на временных
+    SQLite и TestClient. Боевую data/scout.db не открывал.

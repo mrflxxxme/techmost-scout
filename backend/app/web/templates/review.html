@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Ревью эксперта — запрос №{{ row.id }} — ТехМост Скаут{% endblock %}
+
+{% macro visibility_line(label, card, client_num, hidden_reason) %}
+{% if hidden_reason %}
+<li>{{ label }} «{{ card.title }}» — клиенту не уедет: {{ hidden_reason }}.</li>
+{% else %}
+<li>{{ label }} «{{ card.title }}» — уедет клиенту как вариант №{{ client_num }}.</li>
+{% endif %}
+{% endmacro %}
+
+{% macro verdict_card(num, card, card_id) %}
+<div class="bezel appear mb-lg">
+  <div class="core">
+    <h3>{{ num }}. {{ card.title }}</h3>
+    <p>{{ card.essence }}</p>
+    <p><strong>Разработчик:</strong> {{ card|developer_line }}</p>
+    <p><strong>Применимость к задаче:</strong> {{ card.applicability }}</p>
+
+    {% if card_id %}
+    <div id="verdict-{{ card_id }}">
+      <form class="verdict-form brief-form mt-md" hx-post="/cards/{{ card_id }}/verdict" hx-target="#verdict-{{ card_id }}" hx-swap="innerHTML">
+        <div class="brief-field">
+          <label for="decision-{{ card_id }}">Решение</label>
+          <select id="decision-{{ card_id }}" name="decision" required>
+            <option value="approve">Одобрить</option>
+            <option value="rework">На доработку</option>
+            <option value="reject">Отклонить</option>
+          </select>
+        </div>
+
+        <div class="brief-field">
+          <label for="rating-{{ card_id }}">Оценка (1–5)</label>
+          <select id="rating-{{ card_id }}" name="rating" required>
+            {% for value in range(1, 6) %}
+            <option value="{{ value }}">{{ value }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="brief-field">
+          <label for="comment-{{ card_id }}">Комментарий</label>
+          <textarea id="comment-{{ card_id }}" name="comment"></textarea>
+        </div>
+
+        <div class="brief-field">
+          <label for="reviewer-{{ card_id }}">Имя проверяющего</label>
+          <input id="reviewer-{{ card_id }}" type="text" name="reviewer_name" value="{{ reviewer_default }}">
+        </div>
+
+        <div class="edit-actions">
+          <button class="btn" type="submit">Записать вердикт</button>
+        </div>
+      </form>
+    </div>
+    {% else %}
+    <div class="notice danger">Карточка не найдена в базе — вердикт поставить нельзя.</div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{% block content %}
+{% if report is none %}
+<p class="kicker">Ревью эксперта</p>
+<h1>Проверка решений — запрос №{{ row.id }}</h1>
+<div class="notice danger">Отчёт по этому запросу ещё не готов — прогон не завершился или закончился отказом.</div>
+{% else %}
+
+<p class="kicker">Ревью эксперта</p>
+<h1>Проверка решений — запрос №{{ row.id }}</h1>
+<p class="muted">Отрасль: {{ report.brief.industry }} · проверено {{ reviewed }} из {{ total }}</p>
+
+<h2 class="mt-xl">Сводка</h2>
+<div class="bezel appear mb-lg">
+  <div class="core">
+    <p><strong>Текущая рекомендация:</strong> {{ report.summary.recommendation }}</p>
+    {% if report.summary.caveats %}
+    <p class="mb-sm"><strong>Оговорки:</strong></p>
+    <ul>{% for caveat in report.summary.caveats %}<li>{{ caveat }}</li>{% endfor %}</ul>
+    {% endif %}
+
+    <div class="notice mb-md">
+      <p><strong>Что уедет клиенту сейчас</strong> (рекомендация и оговорки выше адресуются по этим номерам):</p>
+      <ul>
+        {% for num, card, card_id, client_num, hidden_reason in cards_with_ids %}
+        {{ visibility_line("Вариант " ~ num, card, client_num, hidden_reason) }}
+        {% endfor %}
+        {% for num, card, card_id, client_num, hidden_reason in contest_with_ids %}
+        {{ visibility_line(contest_heading ~ ", вариант " ~ num, card, client_num, hidden_reason) }}
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div id="summary-override">
+      <form class="verdict-form brief-form mt-md" hx-post="/requests/{{ row.id }}/summary" hx-target="#summary-override" hx-swap="innerHTML">
+        <div class="brief-field">
+          <label for="summary-recommendation">Рекомендация (правка эксперта)</label>
+          <textarea id="summary-recommendation" name="recommendation">{{ report.summary.recommendation }}</textarea>
+        </div>
+
+        <div class="brief-field">
+          <label for="summary-caveats">Оговорки (по одной на строку)</label>
+          <textarea id="summary-caveats" name="caveats">{{ report.summary.caveats|join("\n") }}</textarea>
+        </div>
+
+        <div class="edit-actions">
+          <button class="btn" type="submit">Сохранить сводку</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<h2 class="mt-xl">Варианты решений</h2>
+{% if not cards_with_ids %}
+<p class="muted">Карточек к проверке нет.</p>
+{% endif %}
+{% for num, card, card_id, client_num, hidden_reason in cards_with_ids %}
+{{ verdict_card(num, card, card_id) }}
+{% endfor %}
+
+{% if contest_with_ids %}
+<h2 class="mt-xl">{{ contest_heading }}</h2>
+{% for num, card, card_id, client_num, hidden_reason in contest_with_ids %}
+{{ verdict_card(num, card, card_id) }}
+{% endfor %}
+{% endif %}
+
+{% endif %}
+{% endblock %}

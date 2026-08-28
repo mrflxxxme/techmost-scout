@@ -1,0 +1,43 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: "Э4-gate-fixes (РЕШ-204, РЕШ-205)"
+  did:
+    - "РЕШ-204: render_print_html (backend/app/export/pdf.py) и export_docx (backend/app/export/docx.py) пропускают карточки с пустым evidence — карточка не печатается вовсе, ни в основной, ни в конкурсной секции; порядок остальных карточек сохранён"
+    - "report_print.html: циклы вывода карточек переведены на новые переменные print_cards/print_contest_cards (только карточки с evidence); заголовок конкурсной секции скрывается, если после фильтра там пусто"
+    - "Операторская страница отчёта (report.html/_card.html) и build_export_view/visible_report не тронуты — там карточка без evidence по-прежнему остаётся с красной плашкой"
+    - "РЕШ-205: backend/app/web/routes/review.py — show_review накладывает report_overrides.apply_overrides на отчёт перед показом; фильтр reject не применяется; ключи (is_contest, position) остаются исходными позициями БД, наложение их не сдвигает"
+    - "Переписаны под новый контракт тесты «пустой evidence не печатает стадию/TRL» в tests/test_export_pdf.py и tests/test_export_docx.py (теперь карточка отсутствует целиком); добавлены тесты на сохранение порядка соседних карточек и на скрытие пустой конкурсной секции"
+    - "Добавлен тест tests/test_web_review.py::test_правка_title_видна_на_экране_ревью — правка title через editor_overrides видна на экране ревью, id карточки в форме вердикта не меняется"
+  artifacts:
+    - backend/app/export/pdf.py
+    - backend/app/export/docx.py
+    - backend/app/web/routes/review.py
+    - backend/app/web/templates/report_print.html
+    - tests/test_export_pdf.py
+    - tests/test_export_docx.py
+    - tests/test_web_review.py
+    - .planning/evidence/Э4-gate-fixes-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_export_pdf.py tests/test_export_docx.py tests/test_web_review.py -v: 31 passed"
+    - "pytest -q: 1075 passed (база 1070 + 5 новых: +2 pdf, +2 docx, +1 review — по одному тесту в каждом файле переписан под новый контракт без прироста числа)"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 194 files already formatted"
+    - "Мутация 1 (снят фильтр пустого evidence в docx.py): tests/test_export_docx.py::test_карточка_без_evidence_не_попадает_в_docx и test_карточка_без_evidence_пропускается_а_порядок_остальных_сохраняется падают — откачено"
+    - "Мутация 2 (снято наложение apply_overrides в review.py): tests/test_web_review.py::test_правка_title_видна_на_экране_ревью падает — откачено"
+  escalate: none
+  read_first:
+    - ".planning/DECISIONS.md (РЕШ-204, РЕШ-205)"
+    - "backend/app/export/pdf.py"
+    - "backend/app/export/docx.py"
+    - "backend/app/web/routes/review.py"
+    - "backend/app/web/templates/report_print.html"
+  notes: >
+    Ветка e4/gate-fixes создана от коммита 0ef2757 (РЕШ-203–205, только
+    DECISIONS.md — реализации там ещё не было). Живых вызовов моделей и
+    Chromium не делалось — страница PDF подменяется в тестах, как и раньше
+    (РЕШ-196 п. 12). Секции _add_card/render_card внутри содержат ветку
+    `if card.evidence` — теперь она всегда истинна, поскольку вызывается
+    только для отфильтрованных карточек; код не убран как избыточный, чтобы
+    не расширять границы задачи и не трогать больше строк, чем нужно.

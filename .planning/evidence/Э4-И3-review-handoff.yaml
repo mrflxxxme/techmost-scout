@@ -1,0 +1,33 @@
+handoff:
+  from: "reviewer"
+  to: "verifier"
+  task: "Э4-И3"
+  did:
+    - "Прочитан diff bf95465f..bf98f00 целиком (routes/review.py, routes/__init__.py, review.html, theme.css, tests/test_web_review.py, tests/test_web_auth.py); список файлов сверен с «Файлы» задачи Э4-И3 в PLAN.md — совпадает, выхода за границы нет"
+    - "Прогнаны pytest tests/test_web_review.py -v (7 passed), pytest tests/test_web_templates.py tests/test_web_auth.py -v (11 passed), pytest -q (1011 passed), ruff check . и ruff format --check . (0 замечаний)"
+    - "Проверены все десять инвариантов способами из INVARIANTS.md; ключевой №2 — по коду и тесту test_статус_validated_считает_обе_секции, оценена гонка конкурентных POST (вывод: не материальна на SQLite-транзакциях проекта)"
+    - "Две прицельные мутации (снятие проверки пустого имени; сужение проверки полноты до одной секции) — обе убиты соответствующими тестами test_web_review.py, полный набор не понадобился"
+    - "Найден стык между задачами Э4-И2 (editor_overrides/build_export_view) и Э4-И3 (экран ревью читает сырой report_json без наложения правок) — не блокирует приёмку этой задачи (сделана строго по контрактам плана), вынесен как совет с рекомендацией эскалации владельцу/аудиту волны"
+    - "3 дополнительных совета: два непокрытых тестами защитных перехода (404/несуществующий request_id, 400/неизвестное decision), review.py на 1 строку выше ориентира плана (200), title-строка не выделена отдельно в списке фраз на визу"
+  artifacts:
+    - ".planning/evidence/Э4-И3-review.md (закоммичен)"
+    - ".planning/evidence/Э4-И3-review-handoff.yaml (закоммичен)"
+  self_audit: "pass"
+  checks:
+    - "pytest tests/test_web_review.py -v: 7 passed"
+    - "pytest tests/test_web_templates.py tests/test_web_auth.py -v: 11 passed"
+    - "pytest -q: 1011 passed, 0 failed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 182 files already formatted"
+    - "rg -n 'min-height: 44px' backend/app/web/static/theme.css: совпадение есть (строка 401)"
+    - "rg -n 'grid two|grid three' backend/app/web/templates/review.html: совпадений нет"
+    - "rg -n 'httpx' backend/app/web/routes/review.py: совпадений нет"
+    - "grep -rE 'sk-|gigachat|Api-Key' backend/ tests/: совпадений нет"
+    - "мутация 1 (пустое имя пропускается): test_пустое_имя_отклоняется падает (200 == 400) — убита"
+    - "мутация 2 (проверка полноты только основной секции): test_статус_validated_считает_обе_секции падает ('validated' == 'drafted') — убита"
+  escalate: "стык Э4-И2/Э4-И3: экран ревью не накладывает editor_overrides — владельцу или аудиту волны 1 нужно явное решение, зафиксированное в DECISIONS.md (см. совет №1 отчёта); задачу это не блокирует"
+  read_first:
+    - ".planning/evidence/Э4-И3-review.md"
+    - ".planning/PLAN.md (раздел «Э4-И3», блок «Контракты» → «Вердикты»)"
+    - "backend/app/web/routes/review.py"
+  notes: "Цикл 1. Вердикт ПРИНЯТЬ, блокирующих находок нет. Второй цикл не требуется."

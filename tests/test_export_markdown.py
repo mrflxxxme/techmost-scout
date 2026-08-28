@@ -8,7 +8,7 @@ from datetime import datetime
 
 import pytest
 
-from app.export.markdown import CONSTRAINTS_UNRESOLVED_NOTICE, render_markdown
+from app.export.markdown import CONSTRAINTS_UNRESOLVED_NOTICE, PAID_LIMIT_NOTICE, limitations_lines, render_markdown
 from app.schemas import (
     Evidence,
     MaturityStage,
@@ -438,3 +438,56 @@ def test_requirement_checks_heading_present_in_each_of_three_cards(brief):
     text = render_markdown(report)
 
     assert text.count("**Сверка с требованиями задачи:**") == 3
+
+
+def test_footer_has_no_cost_but_keeps_request_number_and_date(brief):
+    """РЕШ-207: стоимость машинной обработки уходит из клиентского markdown,
+    номер запроса и дата остаются."""
+    report = _make_report([_make_card()], brief=brief, cost_rub=11.3711)
+
+    text = render_markdown(report)
+
+    assert "стоимость" not in text
+    assert "₽" not in text
+    assert "Запрос №1 · 12.08.2026 10:00" in text
+
+
+def test_comparison_table_headers_are_russian(brief):
+    """РЕШ-207: латинские ключи строк сравнения печатаются русскими заголовками."""
+    report = _make_report(
+        [_make_card()],
+        brief=brief,
+        summary=ReportSummary(
+            recommendation="Начать с варианта №1.",
+            comparison_rows=[
+                {"option": "Молибден", "maturity": "pilot", "gives": "испытан", "needs_from_client": "образец"}
+            ],
+        ),
+    )
+
+    text = render_markdown(report)
+
+    assert "| Вариант | Стадия зрелости | Что подтверждено | Что нужно от вас |" in text
+    assert "option" not in text
+    assert "needs_from_client" not in text
+
+
+def test_comparison_table_unknown_key_printed_as_is(brief):
+    """Неизвестный ключ (запасная сводка уже отдаёт русские заголовки) печатается как есть."""
+    report = _make_report(
+        [_make_card()],
+        brief=brief,
+        summary=ReportSummary(recommendation="Начать с варианта №1.", comparison_rows=[{"Вариант": "Молибден"}]),
+    )
+
+    text = render_markdown(report)
+
+    assert "| Вариант |" in text
+
+
+def test_limitations_lines_false_keeps_machine_notice_drops_prose(brief):
+    """РЕШ-210: без прозы модели PAID_LIMIT_NOTICE (машинная пометка) остаётся."""
+    report = _make_report(
+        [_make_card()], brief=brief, summary=ReportSummary(recommendation="x", caveats=[PAID_LIMIT_NOTICE, "проза"])
+    )
+    assert limitations_lines(report, include_caveats=False) == [f"- {PAID_LIMIT_NOTICE}"]

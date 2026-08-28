@@ -37,6 +37,7 @@ import typer
 from rich.console import Console
 
 from app.cli_doctor import SECRET_CHECKS, _doctor, _schema_drift
+from app.cli_export import _export
 from app.cli_run import (
     INTAKE_FALLBACK_CAVEAT,
     REFINE_FALLBACK_CAVEAT,
@@ -62,11 +63,13 @@ __all__ = [
     "UNSPECIFIED_REQUIREMENT",
     "LLMRouter",
     "_doctor",
+    "_export",
     "_run",
     "_schema_drift",
     "app",
     "console",
     "doctor",
+    "export",
     "run",
     "serve",
     "showcase",
@@ -119,6 +122,21 @@ def run(
     """Прогнать запрос через пайплайн и сохранить отчёт в markdown."""
     _setup_logging(verbose)
     asyncio.run(_run(task, industry, maturity, out, interactive, plan_id, history_request_id))
+
+
+# ── export ──────────────────────────────────────────────────────────────────
+@app.command()
+def export(
+    request_id: int = typer.Argument(..., help="Номер запроса (requests.id)"),
+    pdf: bool = typer.Option(False, "--pdf", help="Выгрузить в PDF"),
+    docx: bool = typer.Option(False, "--docx", help="Выгрузить в DOCX"),
+    draft: bool = typer.Option(
+        False, "--draft", help="Разрешить выгрузку черновика — без валидации эксперта (РЕШ-199)"
+    ),
+    out: Path = typer.Option(None, "--out", "-o", help="Каталог для файла выгрузки (по умолчанию out/)"),
+) -> None:
+    """Выгрузить отчёт запроса в PDF или DOCX — ровно один формат за раз."""
+    asyncio.run(_export(request_id, pdf=pdf, docx=docx, draft=draft, out=out))
 
 
 # ── serve ───────────────────────────────────────────────────────────────────

@@ -19,7 +19,12 @@ from app.schemas import SearchQuery, SourceType
 from app.search import build_adapters
 from app.search import rospatent as rospatent_module
 from app.search.base import SearchError
-from app.search.rospatent import SEARCH_PLATFORM_URL, RospatentAdapter, _shorten_query
+from app.search.rospatent import (
+    SEARCH_PLATFORM_URL,
+    RospatentAdapter,
+    _normalize_document_number,
+    _shorten_query,
+)
 
 APPLICANT = 'АКЦИОНЕРНОЕ ОБЩЕСТВО "ГАЗПРОМНЕФТЬ-ОМСКИЙ НПЗ"'
 
@@ -147,6 +152,92 @@ async def test_успешный_ответ_без_записей_это_пуст
     respx.post(SEARCH_PLATFORM_URL).mock(return_value=httpx.Response(200, json=_payload(total=0)))
     async with httpx.AsyncClient() as client:
         assert await adapter_factory(client).search(_query(), limit=5) == []
+
+
+# ── Нормализация номера в ссылке на патент (РЕШ-209, повтор аудита Э4) ──────
+#
+# РЕШ-208 (общее снятие нулей у всех офисов) поменяло одну 404-ссылку на
+# другую: по первоисточнику проверено (БЛОК-3, `audit-Э4-повтор.md`) — верный
+# формат числовой части у Google Patents для EA — ШЕСТЬ знаков с нулями
+# (`EA026963B1` — HTTP 200, заголовок совпал с названием карточки;
+# `EA26963B1` и исходный `EA0000026963B1` — оба 404). Правило по офису: `EA`
+# добивает нулями до шести знаков, `RU` снимает их целиком, остальные не
+# трогаются. Критерий 4 требует не повторять ошибку «ожидаемая строка адреса
+# вместо факта» — ниже настоящие номера из `data/scout.db` (только чтение).
+# Распределение: RU — 195 (нулей нет ни у одной), EA — 22 (10 с нулями «про
+# запас»), SU — 10, BY — 9, WO — 3, US — 2.
+
+#: EA из базы: значащих цифр 5, 5, 4 и уже готовые 6 (последний проверяет,
+#: что нормализация нормализованного номера ничего не портит).
+EA_РЕАЛЬНЫЕ_ИЗ_БАЗЫ = [
+    ("EA0000026963B1", "EA026963B1"),
+    ("EA0000033347B1", "EA033347B1"),
+    ("EA0000008409B1", "EA008409B1"),
+    ("EA000223B1", "EA000223B1"),
+]
+
+#: Настоящие номера прочих офисов из базы — ни один не подлежит нормализации.
+ДРУГИЕ_ОФИСЫ_ИЗ_БАЗЫ = ["BY0000022510C1", "WO2018038642A1", "US3647714A", "SU869757A1"]
+
+#: RU из базы приходят без ведущих нулей. `RU0002812345C1` — пример из
+#: постановки (РЕШ-209) на случай, если платформа всё же пришлёт нули.
+RU_РЕАЛЬНЫЙ_ИЗ_БАЗЫ = "RU2612531C2"
+
+
+@pytest.mark.parametrize(("raw", "normalized"), EA_РЕАЛЬНЫЕ_ИЗ_БАЗЫ)
+def test_ea_числовая_часть_добивается_нулями_до_шести_знаков(raw, normalized):
+    assert _normalize_document_number(raw) == normalized
+
+
+def test_ea_значащие_цифры_длиннее_шести_не_обрезаются():
+    """Критерий 3 для EA: добивка — не обрезка (такой разрядности в базе
+    сегодня нет, тест защищает от будущей выдумки формата)."""
+    assert _normalize_document_number("EA1234567B1") == "EA1234567B1"
+
+
+@pytest.mark.parametrize(
+    ("raw", "normalized"),
+    [("RU0002812345C1", "RU2812345C1"), (RU_РЕАЛЬНЫЙ_ИЗ_БАЗЫ, RU_РЕАЛЬНЫЙ_ИЗ_БАЗЫ)],
+)
+def test_ru_ведущие_нули_снимаются_у_числовой_части(raw, normalized):
+    assert _normalize_document_number(raw) == normalized
+
+
+@pytest.mark.parametrize("raw", ДРУГИЕ_ОФИСЫ_ИЗ_БАЗЫ)
+def test_прочие_офисы_реальные_номера_из_базы_не_меняются(raw):
+    """Критерий 3: WO, US, SU не нормализуются — формат Google Patents для
+    них не проверен, выдумывать нельзя (РЕШ-209). `BY` тоже входит в выборку:
+    сама функция для него по-прежнему номер не трогает (её результат для `BY`
+    в сборке ссылки не используется — см. `test_rospatent_by.py`, РЕШ-217)."""
+    assert _normalize_document_number(raw) == raw
+
+
+@pytest.mark.parametrize("raw", ["", "не-номер", "2020130881"])
+def test_нераспознанный_формат_номера_отдаётся_как_есть(raw):
+    """Молча ломать ссылку нельзя, но и выдумывать номер тоже — номер без
+    опознанной структуры «страна+цифры+вид» уходит без изменений."""
+    assert _normalize_document_number(raw) == raw
+
+
+@respx.mock
+async def test_ссылка_на_документ_строится_по_нормализованному_номеру(adapter_factory):
+    """Сквозной случай: ответ платформы должен давать ссылку по правилу
+    офиса, а не общим снятием нулей. Случай `BY` (реестр Белгоспатента, а не
+    Google Patents) закреплён отдельно в `test_rospatent_by.py` — РЕШ-217."""
+    hit = _hit(
+        common={
+            "publishing_office": "EA",
+            "document_number": "0000026963",
+            "kind": "B1",
+            "publication_date": "2015.03.31",
+        }
+    )
+    respx.post(SEARCH_PLATFORM_URL).mock(return_value=httpx.Response(200, json=_payload(hit)))
+    async with httpx.AsyncClient() as client:
+        found = await adapter_factory(client).search(_query(), limit=3)
+
+    assert len(found) == 1
+    assert str(found[0].url) == "https://patents.google.com/patent/EA026963B1"
 
 
 # ── Запрос ──────────────────────────────────────────────────────────────────
