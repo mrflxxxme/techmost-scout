@@ -51,6 +51,10 @@ def _make_view(report: Report, *, total_cards: int | None = None, **overrides) -
     fields = {
         "request_id": report.request_id,
         "report": report,
+        # По умолчанию клиентский вид совпадает с операторским — эти тесты не
+        # проверяют фильтр по `evidence` (он в `tests/test_verdicts.py` и в
+        # БЛОК-6-тесте ниже), у карточек `_make_card()` подтверждение уже есть.
+        "client_report": overrides.pop("client_report", report),
         "card_ids": {},
         "is_draft": True,
         "reviewer_name": "",
@@ -74,11 +78,17 @@ def _full_text(path: Path) -> str:
 
 
 def test_правка_только_оговорок_печатает_оговорки_не_рекомендацию(tmp_path: Path, brief):
-    """Критерий 2: эксперт правил только оговорки — рекомендация не печатается."""
+    """Критерий 2: эксперт правил только оговорки — рекомендация не печатается.
+    Таблица сравнения напечатана (строка на карточку) — заглушка вместо
+    рекомендации вправе на неё ссылаться (РЕШ-214, факт «таблица напечатана»)."""
     report = _make_report(
         [_make_card()],
         brief,
-        summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["Оговорка эксперта: проверил лично."]),
+        summary=ReportSummary(
+            recommendation="Первым берём вариант 1.",
+            caveats=["Оговорка эксперта: проверил лично."],
+            comparison_rows=[{"option": "Вариант 1"}],
+        ),
     )
     view = _make_view(report, total_cards=2, caveats_edited=True)
     out_path = tmp_path / "a.docx"
@@ -171,3 +181,49 @@ def test_comparison_table_not_hidden_и_строк_нет_секция_не_пе
     text = _full_text(out_path)
     assert "Сравнение вариантов" not in text
     assert COMPARISON_TABLE_HIDDEN_NOTICE not in text
+
+
+def test_реш214_сводка_без_строк_при_скрытой_карточке_не_ссылается_на_таблицу(tmp_path: Path, brief):
+    """РЕШ-214, случай аудита 1: строк сравнения не было с самого начала,
+    карточка скрыта (`total_cards` больше печатаемых), `comparison_table_
+    hidden=False` (так его и вычисляет `_comparison_table_hidden`, когда
+    исходных строк не было). Заглушка обязана смотреть на факт «таблица
+    напечатана», а не на этот флаг."""
+    report = _make_report(
+        [_make_card()], brief, summary=ReportSummary(recommendation="Первым берём вариант 1.", comparison_rows=[])
+    )
+    view = _make_view(report, total_cards=2, comparison_table_hidden=False)
+    out_path = tmp_path / "g.docx"
+
+    export_docx(view, out_path)
+
+    text = _full_text(out_path)
+    assert SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE in text
+    assert SUMMARY_NOT_PRINTABLE_NOTICE not in text
+    assert "Ориентируйтесь на таблицу сравнения" not in text
+
+
+def test_реш214_все_карточки_основной_секции_отклонены_конкурсная_не_ссылается_на_таблицу(tmp_path: Path, brief):
+    """РЕШ-214, случай аудита 2: все карточки основной секции скрыты
+    (`client_report.cards` пуст), конкурсная секция осталась — строки
+    сравнения отфильтрованы до пустого списка, но `comparison_table_hidden`
+    остаётся `False` (число исходных строк совпало с числом карточек до
+    фильтра — ветка «несовпадение» не сработала). Таблицы в документе нет,
+    заглушка не вправе на неё ссылаться."""
+    contest_card = _make_card(title="Конкурсная карточка")
+    client_report = _make_report([], brief, contest_cards=[contest_card], summary=ReportSummary(recommendation="x"))
+    report = _make_report(
+        [_make_card(title="Отклонённая 1"), _make_card(title="Отклонённая 2")],
+        brief,
+        contest_cards=[contest_card],
+        summary=ReportSummary(recommendation="Первым берём вариант 1."),
+    )
+    view = _make_view(report, client_report=client_report, total_cards=4, comparison_table_hidden=False)
+    out_path = tmp_path / "h.docx"
+
+    export_docx(view, out_path)
+
+    text = _full_text(out_path)
+    assert SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE in text
+    assert SUMMARY_NOT_PRINTABLE_NOTICE not in text
+    assert "Ориентируйтесь на таблицу сравнения" not in text

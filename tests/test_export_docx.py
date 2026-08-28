@@ -326,7 +326,7 @@ def test_рекомендация_не_печатается_когда_карт�
     text = _full_text(out_path)
     assert "Первым берём вариант 1." not in text
     assert "В карточке 3 риск не подтверждён." not in text
-    assert SUMMARY_NOT_PRINTABLE_NOTICE in text
+    assert SUMMARY_NOT_PRINTABLE_NOTICE not in text
 
 
 def test_рекомендация_не_печатается_когда_карточка_скрыта_пустым_evidence(tmp_path: Path, brief):
@@ -350,7 +350,7 @@ def test_рекомендация_не_печатается_когда_карт�
     text = _full_text(out_path)
     assert "Первым берём вариант 1." not in text
     assert "В карточке 3 риск не подтверждён." not in text
-    assert SUMMARY_NOT_PRINTABLE_NOTICE in text
+    assert SUMMARY_NOT_PRINTABLE_NOTICE not in text
 
 
 def test_строка_недоступных_источников_остаётся_при_скрытой_сводке(tmp_path: Path, brief):

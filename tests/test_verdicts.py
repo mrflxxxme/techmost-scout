@@ -11,9 +11,15 @@ from datetime import datetime, timedelta
 
 from app.export.markdown import REVIEWED_FOOTER
 from app.models import Verdict as VerdictRow
-from app.schemas import Report, ReportSummary, SolutionCard
+from app.schemas import Evidence, Report, ReportSummary, SolutionCard
 from app.schemas import Verdict as VerdictDecision
-from app.verdicts import all_cards_reviewed, effective_verdicts, signature_line, visible_report
+from app.verdicts import (
+    all_cards_reviewed,
+    effective_verdicts,
+    signature_line,
+    visible_position_count,
+    visible_report,
+)
 
 _NOW = datetime(2026, 8, 27, 12, 0, 0)
 
@@ -278,3 +284,83 @@ def test_signature_line_использует_общий_формат():
     line = signature_line("Иван Иванов", datetime(2026, 8, 27))
 
     assert line == REVIEWED_FOOTER.format(name="Иван Иванов", date="27.08.2026")
+
+
+def test_visible_report_require_evidence_по_умолчанию_выключен(brief):
+    """РЕШ-213, критерий 3: без флага (режим операторской страницы отчёта,
+    РЕШ-204/205) бессылочная карточка остаётся видимой — поведение
+    `visible_report` для `report.py` этой задачей не меняется."""
+    bare = _make_card(title="Без подтверждений", evidence=[])
+    report = _make_report([bare], brief=brief)
+
+    result = visible_report(report, {(False, 0): 1}, {})
+
+    assert [c.title for c in result.cards] == ["Без подтверждений"]
+
+
+def test_visible_report_require_evidence_убирает_карточку_и_её_строку_блок6(brief):
+    """БЛОК-6 финального аудита: `require_evidence=True` убирает карточку без
+    подтверждений из клиентского вида — и её строку сравнения тем же проходом,
+    без второго фильтра. Мутация «фильтровать строки только по reject» (не
+    учитывать `require_evidence` в `_visible_summary`) эту проверку красит."""
+    kept = _make_card(
+        title="Испытанный вариант",
+        evidence=[Evidence(claim="Испытан на действующей установке", url="https://example.org/proof")],
+    )
+    bare = _make_card(title="Присадка молибдена", evidence=[])
+    rows = [
+        {"option": "Испытанный вариант", "gives": "Испытан на действующей установке"},
+        {"option": "Присадка молибдена", "gives": "Испытан на действующей установке"},
+    ]
+    report = _make_report([kept, bare], brief=brief, summary=ReportSummary(comparison_rows=rows, recommendation="R"))
+    card_ids = {(False, 0): 1, (False, 1): 2}
+
+    result = visible_report(report, card_ids, {}, require_evidence=True)
+
+    assert [c.title for c in result.cards] == ["Испытанный вариант"]
+    assert result.summary.comparison_rows == [
+        {"option": "Испытанный вариант", "gives": "Испытан на действующей установке"}
+    ]
+
+
+def test_visible_report_require_evidence_и_reject_вместе(brief):
+    """Три карточки: первая отклонена, вторая без подтверждений, третья видна
+    целиком — оба условия признака (РЕШ-213) действуют одним проходом."""
+    rejected = _make_card(title="Отклонённая", evidence=[Evidence(claim="c", url="https://example.org/r")])
+    bare = _make_card(title="Без подтверждений", evidence=[])
+    kept = _make_card(title="Оставленная", evidence=[Evidence(claim="c", url="https://example.org/k")])
+    report = _make_report([rejected, bare, kept], brief=brief)
+    card_ids = {(False, 0): 1, (False, 1): 2, (False, 2): 3}
+    effective = {1: _row(1, VerdictDecision.REJECT, id=1)}
+
+    result = visible_report(report, card_ids, effective, require_evidence=True)
+
+    assert [c.title for c in result.cards] == ["Оставленная"]
+
+
+def test_visible_report_require_evidence_убирает_из_contest_cards(brief):
+    """Секция конкурсных решений фильтруется тем же признаком (обе секции —
+    один проход `_kept_positions`, второго фильтра для конкурсной нет)."""
+    main = _make_card(title="Основная", evidence=[Evidence(claim="c", url="https://example.org/m")])
+    bare_contest = _make_card(title="Конкурсная без подтверждений", evidence=[])
+    report = _make_report([main], contest_cards=[bare_contest], brief=brief)
+    card_ids = {(False, 0): 1, (True, 0): 2}
+
+    result = visible_report(report, card_ids, {}, require_evidence=True)
+
+    assert result.contest_cards == []
+
+
+def test_visible_position_count_считает_reject_и_evidence_вместе(brief):
+    """`visible_position_count` (опора `export.view._comparison_table_hidden`)
+    считает то же самое, что и `visible_report` — второго расчёта нет."""
+    rejected = _make_card(title="Отклонённая", evidence=[Evidence(claim="c", url="https://example.org/r")])
+    bare = _make_card(title="Без подтверждений", evidence=[])
+    kept = _make_card(title="Оставленная", evidence=[Evidence(claim="c", url="https://example.org/k")])
+    cards = [rejected, bare, kept]
+    card_ids = {(False, 0): 1, (False, 1): 2, (False, 2): 3}
+    effective = {1: _row(1, VerdictDecision.REJECT, id=1)}
+
+    count = visible_position_count(cards, card_ids, effective, is_contest=False, require_evidence=True)
+
+    assert count == 1
