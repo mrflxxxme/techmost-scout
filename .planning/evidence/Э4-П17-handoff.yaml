@@ -1,0 +1,53 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: Э4-П17
+  did:
+    - "prompts/verifier.md: правило 13 теперь явно запрещает латинские имена полей и значения
+       перечисления в confidence_note (confidence, maturity_stage, low, medium, high); уровни
+       называются по-русски (низкая/средняя/высокая), поля — словами (уверенность, стадия
+       зрелости)"
+    - "Правило 13 снабжено дословным примером неверной строки из клиентского отчёта №8
+       («confidence остаётся low ввиду исходной низкой оценки») и её исправленным видом"
+    - "Метка версии файла поднята 2.2 → 2.3 (уточнение формулировки, состав ответа не менялся)"
+    - "prompts/CHANGELOG.md: добавлена запись версии 2.3 с датой, причиной (аудит отчёта №8) и
+       ссылкой на РЕШ-218"
+    - "tests/test_prompts.py: новый тест
+       test_verifier_запрещает_латиницу_в_confidence_note — закрепляет текст правила 13
+       (дословную строку аудита, три уровня по-русски, запрет на имена confidence/maturity_stage
+       латиницей). Проверен мутацией: правило временно убрано из промпта — тест покраснел,
+       правило возвращено — git diff пуст"
+    - "Проверены соседние поля того же промпта, которые печатаются клиенту: VerifyResult.notes —
+       не печатается клиенту вовсе (cards.py::verify_card читает у ответа только confidence,
+       confidence_note и unsourced_claims, значение notes отбрасывается кодом), правка не нужна;
+       тексты сверки требований (RequirementCheck.note) пишет другой промпт (card_author.md),
+       не verifier.md — вне списка моих файлов, не трогал"
+  artifacts:
+    - prompts/verifier.md
+    - prompts/CHANGELOG.md
+    - tests/test_prompts.py
+  self_audit: pass
+  checks:
+    - "pytest -q: 1211 passed"
+    - "pytest tests/test_prompts.py -q: 52 passed"
+    - "pytest tests/test_team_docs.py -q: 35 passed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 205 files already formatted"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «Правки по ответам владельца перед слиянием», задача Э4-П17)
+    - .planning/DECISIONS.md (РЕШ-218)
+    - prompts/verifier.md (правило 13)
+    - prompts/CHANGELOG.md (запись 2.3)
+    - tests/test_prompts.py (test_verifier_запрещает_латиницу_в_confidence_note)
+  notes: |
+    За границами задачи замечено, но не тронуто: правило 7 того же промпта строит фиксированную
+    запись unsourced_claims «стадия зрелости не подтверждена: <заявленная стадия>» и пример
+    показывает «...: pilot» — латинское значение enum MaturityStage. unsourced_claims печатается
+    клиенту (backend/app/export/markdown.py, docx.py, шаблоны _card.html/report_print.html), то
+    есть это та же категория дефекта, что и найденная аудитом, но задача явно называла для
+    проверки только поля notes и «тексты сверки требований» — ни одно из них этой дырой не
+    оказалось. Код, который матчит запись (cards.py::_MATURITY_UNCONFIRMED_MARKER), сверяет
+    только префикс строки, а не значение после двоеточия, поэтому замена примера на русское
+    название стадии кода не сломает — но это правка сверх границ этой задачи, решать владельцу
+    или отдельной задаче.
