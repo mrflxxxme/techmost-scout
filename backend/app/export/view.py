@@ -296,11 +296,10 @@ def _reindex_after_filter(
     решения `hidden_reason`.
 
     Карточка в вызов `hidden_reason` не передаётся (П-25 пятой проверки
-    аудита): при `require_evidence=False` (значение по умолчанию, единственное
-    здесь) функция саму карточку не читает вовсе — короткое замыкание `if
-    require_evidence and not card.evidence` останавливается на первом
-    операнде раньше, чем дошло бы до `card.evidence` (см. докстроку
-    `verdicts.hidden_reason`). Раньше сюда индексировали
+    аудита): при `require_evidence=False` — значение по умолчанию и
+    единственное здесь — карточка не нужна, и сигнатура это допускает явно
+    (`card: SolutionCard | None`; с `require_evidence=True` та же функция
+    падает `ValueError`, если карточку не дали). Раньше сюда индексировали
     `edited_report.cards[key[1]]`/`edited_report.contest_cards[key[1]]` ради
     аргумента, который так и не читался, — при рассинхроне («строк
     `solution_cards` в базе больше, чем карточек в `report_json`») это падало
