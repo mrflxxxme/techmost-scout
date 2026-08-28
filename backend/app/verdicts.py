@@ -20,6 +20,14 @@
 тем же проходом. Второго расчёта видимости (свой фильтр по `evidence` в
 `pdf.py`/`docx.py`, как было до РЕШ-213; синтетический отчёт-зонд в
 `review.py`, как было до РЕШ-215) в проекте больше нет.
+
+Карточка в `hidden_reason` — `SolutionCard | None` (пятая проверка аудита
+Э4-П15, задача П-25): она нужна только под `require_evidence=True` (проверить
+`evidence`), поэтому вызывающий без флага (`export/view.py::
+_reindex_after_filter`) вправе передать `None`, не подделывая карточку и не
+опираясь на порядок проверок внутри функции. `require_evidence=True` без
+карточки — ошибка вызывающего, функция называет её `ValueError`, а не падает
+`AttributeError`-ом или отвечает неверно.
 """
 
 from __future__ import annotations
@@ -108,7 +116,7 @@ def visible_report(
 
 
 def hidden_reason(
-    card: SolutionCard,
+    card: SolutionCard | None,
     verdict: VerdictRow | None,
     *,
     require_evidence: bool = False,
@@ -124,15 +132,34 @@ def hidden_reason(
     отклонённой, а не «без подтверждений».
 
     `require_evidence=False` (по умолчанию) — режим операторской страницы
-    отчёта (РЕШ-204/205): скрывает только reject. `require_evidence=True` —
-    режим клиентского вида (РЕШ-213): скрывает ещё и карточку без единого
-    подтверждения. Возвращаемое значение — признак, а не текст: русские фразы
-    для экрана (РЕШ-205) собираются в `web/routes/review.py`.
+    отчёта (РЕШ-204/205): скрывает только reject, `card.evidence` в решение
+    не входит вовсе. `require_evidence=True` — режим клиентского вида
+    (РЕШ-213): скрывает ещё и карточку без единого подтверждения. Возвращаемое
+    значение — признак, а не текст: русские фразы для экрана (РЕШ-205)
+    собираются в `web/routes/review.py`.
+
+    `card: SolutionCard | None` — контракт явный, а не опора на побочный
+    эффект короткого замыкания (пятая проверка аудита Э4-П15, задача П-25):
+    карточка нужна только для проверки `evidence`, то есть только когда
+    `require_evidence=True`. Вызывающий, которому карточка неизвестна или не
+    нужна — `export/view.py::_reindex_after_filter` всегда зовёт эту функцию
+    с `require_evidence=False`, решение о пустом `evidence` его не касается —
+    вправе передать `None`. Если `require_evidence=True`, а `card` всё же
+    `None`, это ошибка на стороне вызывающего (запросил решение про
+    подтверждения, не дав карточку), и функция падает `ValueError` с русским
+    текстом сразу на входе, а не отвечает неверно и не роняется случайным
+    `AttributeError` на `card.evidence` двумя строками ниже.
     """
     if verdict is not None and verdict.decision == VerdictDecision.REJECT:
         return "rejected"
-    if require_evidence and not card.evidence:
-        return "no_evidence"
+    if require_evidence:
+        if card is None:
+            raise ValueError(
+                "hidden_reason: require_evidence=True требует переданную карточку, "
+                "а получен None — без неё решение о пустом evidence принять нечем"
+            )
+        if not card.evidence:
+            return "no_evidence"
     return None
 
 

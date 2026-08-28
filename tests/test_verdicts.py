@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pytest
+
 from app.export.markdown import REVIEWED_FOOTER
 from app.models import Verdict as VerdictRow
 from app.schemas import Evidence, Report, ReportSummary, SolutionCard
@@ -397,3 +399,25 @@ def test_hidden_reason_no_evidence_без_reject(brief):
     reason = hidden_reason(bare, None, require_evidence=True)
 
     assert reason == "no_evidence"
+
+
+def test_hidden_reason_card_none_допустим_без_require_evidence():
+    """Ревью цикл 2 задачи Э4-П15: `card: SolutionCard | None` — явный
+    контракт, а не опора на короткое замыкание `require_evidence and not
+    card.evidence`. Без `require_evidence` (или с `require_evidence=False`)
+    карточка вообще не проверяется — `None` проходит без ошибки, ровно так,
+    как её зовёт `export/view.py::_reindex_after_filter`."""
+    verdict = _row(1, VerdictDecision.REJECT, id=1)
+
+    assert hidden_reason(None, verdict) == "rejected"
+    assert hidden_reason(None, None) is None
+    assert hidden_reason(None, verdict, require_evidence=False) == "rejected"
+
+
+def test_hidden_reason_require_evidence_без_карточки_падает_явно():
+    """Ревью цикл 2 задачи Э4-П15 (блокирующее замечание): `require_evidence=
+    True` без карточки — ошибка вызывающего, а не повод угадывать или упасть
+    случайным `AttributeError` на `card.evidence`. Функция называет её
+    `ValueError` с русским текстом на входе."""
+    with pytest.raises(ValueError, match="require_evidence=True"):
+        hidden_reason(None, None, require_evidence=True)
