@@ -135,6 +135,22 @@ def test_comparison_table_hidden_печатает_честную_строку(tm
     assert COMPARISON_TABLE_HIDDEN_NOTICE in text
 
 
+def test_comparison_table_hidden_печатает_заголовок_раздела(tmp_path: Path, brief):
+    """П-18 аудита, мутация 3 (`_add_comparison_table`): у спрятанной таблицы
+    честная строка `COMPARISON_TABLE_HIDDEN_NOTICE` печатается под тем же
+    заголовком раздела «Сравнение вариантов», что и у обычной таблицы —
+    сегодня заголовок в этом случае проверяется только текстом строки, без
+    самого заголовка."""
+    report = _make_report([_make_card()], brief, summary=ReportSummary(recommendation="x", comparison_rows=[]))
+    view = _make_view(report, total_cards=2, comparison_table_hidden=True)
+    out_path = tmp_path / "i.docx"
+
+    export_docx(view, out_path)
+
+    text = _full_text(out_path)
+    assert "Сравнение вариантов" in text
+
+
 def test_comparison_table_hidden_заглушка_не_ссылается_на_таблицу(tmp_path: Path, brief):
     """П-14 финального аудита: заглушка вместо рекомендации не отсылает
     клиента к разделу, которого в документе нет."""
