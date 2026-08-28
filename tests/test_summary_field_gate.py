@@ -247,6 +247,59 @@ def test_comparison_table_not_hidden_без_отклонений(db_session_fact
     assert len(view.report.summary.comparison_rows) == 4
 
 
+def test_comparison_table_not_hidden_с_конкурсной_секцией_без_отклонений(db_session_factory, brief):
+    """П-18 аудита (мутация 1, адаптирована под код после Э4-П11): раньше
+    `export.view._comparison_table_hidden` считал видимые позиции основной
+    секции суммой `sum(... if not is_contest)` по уже пересчитанному
+    `card_ids` — при непустой конкурсной секции мутация «считать все ключи»
+    ломала охрану «ни одна карточка не отклонена — скрывать нечего». После
+    П11 счёт идёт через `verdicts.visible_position_count(edited_report.cards,
+    …)` — список карточек уже заведомо ограничен основной секцией, но эта
+    охрана прежде не проверялась ни на одном сценарии с непустой конкурсной
+    секцией. Три карточки основной секции без единого отклонения, конкурсная
+    карточка с подтверждением рядом, четыре строки сравнения (несовпадение,
+    как у запасной сводки) — таблица не должна помечаться спрятанной."""
+    report = _make_report(
+        brief=brief,
+        cards=[_make_card(title=f"Карточка {n}") for n in range(1, 4)],
+        contest_cards=[_make_card(title="Конкурсная карточка")],
+        summary=ReportSummary(
+            recommendation="Рекомендация.",
+            comparison_rows=[{"option": f"В{n}"} for n in range(1, 5)],
+        ),
+    )
+    request_id, _card_ids = asyncio.run(_seed_request(db_session_factory, report=report))
+
+    view = asyncio.run(_build_view(db_session_factory, request_id))
+
+    assert view.comparison_table_hidden is False
+    assert len(view.report.summary.comparison_rows) == 4
+
+
+def test_comparison_table_hidden_когда_строк_меньше_чем_карточек(db_session_factory, brief):
+    """П-18 аудита, мутация 2 (`export.view._comparison_table_hidden`:
+    `len(rows) != cards` подменяется на `len(rows) > cards`) — случай «строк
+    меньше, чем карточек» сегодня не закреплён ни одним тестом. Три карточки
+    основной секции, две строки сравнения (запасная сводка короче обычного),
+    первая карточка отклонена — сопоставить строку с конкретной карточкой
+    нечем, таблица обязана быть помечена спрятанной, а не показана как есть."""
+    report = _make_report(
+        brief=brief,
+        cards=[_make_card(title=f"Карточка {n}") for n in range(1, 4)],
+        summary=ReportSummary(
+            recommendation="Рекомендация.",
+            comparison_rows=[{"option": f"В{n}"} for n in range(1, 3)],
+        ),
+    )
+    request_id, card_ids = asyncio.run(_seed_request(db_session_factory, report=report))
+    asyncio.run(_add_verdict(db_session_factory, card_ids[(False, 0)], VerdictDecision.REJECT))
+
+    view = asyncio.run(_build_view(db_session_factory, request_id))
+
+    assert view.comparison_table_hidden is True
+    assert view.report.summary.comparison_rows == []
+
+
 def test_comparison_table_not_hidden_когда_строк_нет_с_самого_начала(db_session_factory, brief):
     """Пустая сводка модели (без единой строки, например `fallback_summary`)
     не поднимает `comparison_table_hidden`, даже если карточка отклонена —
