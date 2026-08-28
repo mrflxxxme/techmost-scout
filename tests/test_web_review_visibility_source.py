@@ -1,14 +1,16 @@
-"""Подсказка эксперту на экране ревью берёт признак видимости из `verdicts`
-(Э4-П12, расширение границы задачи; совет 1 ревью Э4-П11).
+"""Подсказка эксперту на экране ревью берёт причину скрытия из `verdicts`
+(Э4-П13, РЕШ-215).
 
-`web/routes/review.py::_hidden_reason` до этой задачи была третьей независимой
-копией условия «карточка скрыта из клиентского вида» (та же копия, что
-`verdicts._kept_positions`, только переписанная своими словами) — совпадала с
-общим признаком только по факту, не по устройству. Единственный тест, который
-действительно закрывает этот риск, — показать, что мутация общего признака в
-`verdicts` меняет подсказку на экране, а не подтвердить текст подсказки на
-неизменном коде (это уже делает `tests/test_web_review.py::
-test_summary_и_экран_ревью_честны_с_экспертом`).
+`web/routes/review.py::_hidden_reason` зовёт публичную `app.verdicts.
+hidden_reason` напрямую — единственный источник причины скрытия карточки в
+проекте. Единственный тест, который действительно закрывает риск «подсказка
+считает сама, а не спрашивает `verdicts`», — показать, что мутация общего
+условия видимости в `verdicts` меняет подсказку на экране, а не подтвердить
+текст подсказки на неизменном коде (это уже делает `tests/test_web_review.py::
+test_summary_и_экран_ревью_честны_с_экспертом`). Мутация подменяет
+**публичную** `verdicts.hidden_reason` (а не приватную `_kept_positions`,
+как было в предыдущей версии этого теста, ревью Э4-П12, совет 2) — страж не
+краснеет от безобидного переименования внутреннего устройства модуля.
 
 Файл отдельный, а не расширение `tests/test_web_review.py` — тот уже на
 пределе 500 строк (страж `tests/test_tests_layout.py`). Фикстуры дублируют
@@ -31,7 +33,6 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-import app.verdicts as verdicts_module
 from app import main
 from app.config import get_settings
 from app.models import Base, RequestStatus
@@ -39,6 +40,7 @@ from app.models import Request as RequestRow
 from app.models import SolutionCard as SolutionCardRow
 from app.schemas import Evidence, Report, ReportSummary, SolutionCard
 from app.schemas import Verdict as VerdictDecision
+from app.web.routes import review as review_module
 
 _AUTH = ("scout", "parol123")
 
@@ -137,31 +139,32 @@ async def _seed(session_factory, *, report: Report) -> int:
     return request_id
 
 
-def _reject_only_kept_positions(cards, card_ids, effective, *, is_contest, require_evidence=False):
-    """Заглушка `verdicts._kept_positions` без ветки `require_evidence`.
+def _reject_only_hidden_reason(card, verdict, *, require_evidence=False):
+    """Заглушка публичной `verdicts.hidden_reason` без ветки `require_evidence`.
 
-    Мутация общего признака видимости: карточка без единого подтверждения
-    больше не считается скрытой — остаётся только фильтр по `reject`. Это
-    ровно правка признака в `verdicts`, а не в `review.py`; если подсказка
-    экрана ревью действительно берёт решение оттуда, она обязана измениться.
+    Мутация общего условия видимости: карточка без единого подтверждения
+    больше не считается скрытой — остаётся только признак `reject`. Патчится
+    имя, под которым `review.py` вызывает функцию (`from app.verdicts import
+    hidden_reason`, PEP 8 стандартная точка подмены импортированного имени —
+    патчить нужно там, где имя используется, а не там, где оно определено).
+    Так же ведёт себя правка самого тела `hidden_reason` в `verdicts.py`:
+    и `_kept_positions` (клиентский экспорт), и `_hidden_reason` (этот экран)
+    вызывают ровно один объект функции — эта подмена и прямая правка условия
+    в `verdicts.py` дают на этом экране одинаковый результат (проверено
+    прогоном отдельной мутации, см. handoff задачи).
     """
-    kept = []
-    for position, _card in enumerate(cards):
-        card_id = card_ids.get((is_contest, position))
-        verdict = effective.get(card_id) if card_id is not None else None
-        if verdict is not None and verdict.decision == VerdictDecision.REJECT:
-            continue
-        kept.append(position)
-    return kept
+    if verdict is not None and verdict.decision == VerdictDecision.REJECT:
+        return "rejected"
+    return None
 
 
 def test_подсказка_экрана_ревью_меняется_вместе_с_общим_признаком_verdicts(
     client, db_session_factory, brief, monkeypatch
 ):
-    """Расширение границы Э4-П12: `_hidden_reason` не считает признак видимости
-    сама, а берёт решение у `verdicts` (`visible_report`, тот же проход, что
-    и клиентский экспорт). Мутация общего признака — здесь: `_kept_positions`
-    без ветки `require_evidence` — обязана убрать подсказку «нет ни одного
+    """Э4-П13 (РЕШ-215): `_hidden_reason` не считает причину скрытия сама, а
+    берёт её у публичной `verdicts.hidden_reason` — единственного источника
+    причины в проекте. Мутация общего условия — здесь: `hidden_reason` без
+    ветки `require_evidence` — обязана убрать подсказку «нет ни одного
     подтверждения» с экрана ревью. Если подсказка не изменится, `_hidden_
     reason` — снова своя копия условия, а не общий признак."""
     bare = _make_card(title="Присадка молибдена", evidence=[])
@@ -173,7 +176,7 @@ def test_подсказка_экрана_ревью_меняется_вмест�
 
     assert "клиенту не уедет: нет ни одного подтверждения" in before.text
 
-    monkeypatch.setattr(verdicts_module, "_kept_positions", _reject_only_kept_positions)
+    monkeypatch.setattr(review_module, "hidden_reason", _reject_only_hidden_reason)
 
     with client:
         after = client.get(f"/requests/{request_id}/review", auth=_AUTH)
