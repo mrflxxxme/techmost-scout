@@ -4,12 +4,18 @@
 DOCX (Э4-И5) и команды `scout export` (Э4-И6): читает `requests.report_json`,
 накладывает правки оператора (`report_overrides.apply_overrides`), затем
 правку эксперта поверх рекомендации и оговорок сводки
-(`summary_overrides.apply_summary_override`, РЕШ-206) и только потом
-фильтрует reject-карточки (`verdicts.visible_report`, РЕШ-198). Порядок
-операций важен: правки накладываются ДО фильтра — иначе правленый текст ещё
-не отклонённой карточки не дошёл бы до клиентского вида. Свой разбор
-`report_json` или повторный вызов `apply_overrides`/`visible_report` в другом
-месте — второй путь правды, которого этот этап не заводит.
+(`summary_overrides.apply_summary_override`, РЕШ-206) и только потом зовёт
+`verdicts.visible_report` дважды одной и той же функцией (РЕШ-213): без флага
+— для `ExportView.report`, который видит операторская страница отчёта (reject
+убран, бессылочная карточка остаётся с красной плашкой, РЕШ-204/205); с
+`require_evidence=True` — для `ExportView.client_report`, который видят
+`export/pdf.py` и `export/docx.py` (reject и пустой `evidence` убраны одним
+проходом, строки таблицы сравнения — тем же проходом, что и карточки). Второго
+расчёта видимости для клиента в проекте не остаётся. Порядок операций важен:
+правки накладываются ДО фильтра — иначе правленый текст ещё не отклонённой
+карточки не дошёл бы до клиентского вида. Свой разбор `report_json` или
+повторный вызов `apply_overrides`/`visible_report` в другом месте — второй
+путь правды, которого этот этап не заводит.
 """
 
 from __future__ import annotations
@@ -32,7 +38,7 @@ from app.report_overrides import OverrideMap, apply_overrides
 from app.schemas import Report
 from app.schemas import Verdict as VerdictDecision
 from app.summary_overrides import SummaryOverrideData, apply_summary_override
-from app.verdicts import CardKey, effective_verdicts, visible_report
+from app.verdicts import CardKey, effective_verdicts, visible_position_count, visible_report
 
 
 @dataclass
@@ -45,6 +51,10 @@ class ExportView:
     #: пересчитаны под порядок `report.cards`/`report.contest_cards` **после**
     #: фильтра reject, поэтому `enumerate(view.report.cards)` совпадает с этим
     #: ключом без дополнительной сверки на стороне шаблона или экспортёра.
+    #: Ключ считается по `report` (только reject) — для клиентских выгрузок
+    #: (`client_report`) отдельного словаря id не заводится: ни `pdf.py`, ни
+    #: `docx.py` номерами карточек из БД не пользуются, они нумеруют печатаемые
+    #: карточки заново с единицы.
     card_ids: dict[CardKey, int]
     is_draft: bool
     #: Имя эксперта из действующего вердикта (не `settings.reviewer_name` —
@@ -52,6 +62,22 @@ class ExportView:
     #: строка, пока вердиктов нет вовсе.
     reviewer_name: str
     validated_at: datetime | None
+    #: Отчёт для клиентских выгрузок (РЕШ-213): тот же `verdicts.visible_report`,
+    #: что собрал `report`, но с `require_evidence=True` — карточка без единого
+    #: подтверждения убрана из `cards`/`contest_cards`, а её строка убрана из
+    #: `summary.comparison_rows` тем же проходом. `export/pdf.py` и
+    #: `export/docx.py` строят печать из этого поля, а не из `report`, и своего
+    #: фильтра по `evidence` не ведут — БЛОК-6 финального аудита нашёл живой
+    #: маршрут, где `report` печатал карточку без подтверждений в таблице
+    #: сравнения, потому что решение «убрать карточку» и решение «убрать
+    #: строку» считались двумя разными фильтрами в разных местах. По умолчанию
+    #: `None` — `__post_init__` собирает `client_report` из `report` тем же
+    #: `verdicts.visible_report(…, require_evidence=True)` (без `card_ids`/
+    #: `effective` — `report` уже прошёл фильтр reject, повторно его убирать
+    #: нечем и незачем): безопасный запасной путь для конструкторов, которые
+    #: строят `ExportView` напрямую и про `client_report` не знают.
+    #: `build_export_view` передаёт настоящий, уже посчитанный отчёт явно.
+    client_report: Report | None = None
     #: Ключи (тем же соглашением, что и `card_ids`, — уже после фильтра)
     #: карточек с действующим вердиктом rework. Пометка «на доработку» видна
     #: только оператору на странице отчёта (РЕШ-198) — в выгрузки не попадает.
@@ -77,15 +103,30 @@ class ExportView:
     #: оговорок решает только этот флаг: правка рекомендации не делает
     #: печатной непровленную прозу оговорок, и наоборот.
     caveats_edited: bool = False
-    #: `verdicts.visible_report` спрятал таблицу сравнения целиком (РЕШ-212):
-    #: исходные строки сводки были, но после фильтра reject их число не
+    #: `verdicts.visible_report` спрятал таблицу сравнения целиком (РЕШ-212,
+    #: РЕШ-213): исходные строки сводки были, но после фильтра (reject или
+    #: пустой `evidence` — тот же признак, что у `client_report`) их число не
     #: совпало с числом карточек — сопоставить строку с конкретной карточкой
     #: нечем (см. `verdicts._visible_summary`). Пустая сводка модели без
     #: единой строки с самого начала этот флаг не поднимает: там скрывать
-    #: нечего, а не «нечем сопоставить». Флаг решает, какой текст заглушки
-    #: печатать вместо рекомендации и печатать ли на месте таблицы честную
-    #: строку — второй раз логику `_visible_summary` в экспортёрах не считают.
+    #: нечего, а не «нечем сопоставить». Флаг решает, печатать ли на месте
+    #: таблицы честную строку вместо тишины — выбор ТЕКСТА заглушки вместо
+    #: рекомендации от него больше не зависит (РЕШ-214): экспортёры смотрят на
+    #: факт «таблица напечатана» (`bool(client_report.summary.comparison_rows)`),
+    #: а не на причину её отсутствия — этот флаг называет только одну из
+    #: возможных причин и сам по себе фактом не является.
     comparison_table_hidden: bool = False
+
+    def __post_init__(self) -> None:
+        """`client_report` без явного значения — `report`, довычищенный от пустого `evidence`.
+
+        Пустые `card_ids`/`effective` означают «reject уже применён снаружи,
+        второй раз его считать нечем» — `visible_report` при пустых словарях
+        не находит ни одного вердикта и просто применяет вторую часть
+        признака (РЕШ-213), см. докстроку поля выше.
+        """
+        if self.client_report is None:
+            self.client_report = visible_report(self.report, {}, {}, require_evidence=True)
 
 
 @asynccontextmanager
@@ -95,7 +136,7 @@ async def _session_scope(session: AsyncSession) -> AsyncIterator[AsyncSession]:
 
 
 async def build_export_view(session: AsyncSession, request_id: int) -> ExportView:
-    """Собрать `ExportView` запроса: report_json → правки → фильтр reject.
+    """Собрать `ExportView` запроса: report_json → правки → фильтр видимости.
 
     `ReportNotFoundError` (нет строки запроса, нет `report_json` или он не
     читается схемой) пробрасывается наружу как есть — вызывающий (страница
@@ -144,14 +185,16 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
     effective = effective_verdicts(verdict_rows)
 
     visible = visible_report(edited_report, original_ids, effective)
+    client_visible = visible_report(edited_report, original_ids, effective, require_evidence=True)
     card_ids, rework_keys = _reindex_after_filter(original_ids, effective)
-    comparison_table_hidden = _comparison_table_hidden(edited_report, card_ids)
+    comparison_table_hidden = _comparison_table_hidden(edited_report, original_ids, effective)
 
     latest = max(effective.values(), key=lambda row: (row.created_at, row.id), default=None)
 
     return ExportView(
         request_id=request_id,
         report=visible,
+        client_report=client_visible,
         card_ids=card_ids,
         is_draft=request_row.status not in (RequestStatus.VALIDATED, RequestStatus.EXPORTED),
         reviewer_name=latest.reviewer_name if latest is not None else "",
@@ -164,20 +207,27 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
     )
 
 
-def _comparison_table_hidden(edited_report: Report, card_ids: dict[CardKey, int]) -> bool:
-    """True, когда `verdicts.visible_report` спрятал таблицу сравнения целиком (РЕШ-212).
+def _comparison_table_hidden(
+    edited_report: Report,
+    original_ids: dict[CardKey, int],
+    effective: dict[int, VerdictRow],
+) -> bool:
+    """True, когда клиентский `verdicts.visible_report` спрятал таблицу сравнения целиком (РЕШ-212, РЕШ-213).
 
     Повторяет то же условие, каким `verdicts._visible_summary` решает «не
-    печатать таблицу вовсе» — но без второго похода в приватную функцию
-    `verdicts`: те же числа уже посчитаны здесь. `edited_report` — отчёт ДО
-    фильтра reject (тот же вход, что видела `visible_report`), `card_ids` —
-    уже пересчитанные под порядок видимых карточек ключи (после фильтра).
+    печатать таблицу вовсе», уже с `require_evidence=True` (тот же признак
+    видимости, что у `ExportView.client_report`, — иначе карточка, скрытая
+    только из-за пустого `evidence`, не учлась бы здесь, и решение «спрятана
+    ли таблица» разошлось бы с решением «что реально попало в печать»,
+    БЛОК-6). `edited_report` — отчёт ДО фильтра (тот же вход, что видела
+    `visible_report`), `original_ids`/`effective` — исходные id карточек и
+    действующие вердикты, тем же контрактом, что и у `visible_report`.
 
     Условие «спрятана» — три штуки разом: 1) исходные строки были
     (`comparison_rows` непуст — пустая сводка `fallback_summary` или отчёт без
     сравнения не получает пометки, там скрывать нечего с самого начала); 2)
-    хотя бы одна карточка основной секции реально отклонена (иначе таблица
-    и не трогалась); 3) число исходных строк не совпало с числом карточек до
+    хотя бы одна карточка основной секции реально скрыта (иначе таблица и не
+    трогалась); 3) число исходных строк не совпало с числом карточек до
     фильтра — только это несовпадение и не даёт построчно сопоставить строку
     с карточкой (`_visible_summary` в противном случае просто отфильтровывает
     строки по тем же позициям, что и карточки, ничего не пряча).
@@ -186,9 +236,11 @@ def _comparison_table_hidden(edited_report: Report, card_ids: dict[CardKey, int]
     if not original_rows:
         return False
     original_main_cards = len(edited_report.cards)
-    visible_main_cards = sum(1 for is_contest, _position in card_ids if not is_contest)
+    visible_main_cards = visible_position_count(
+        edited_report.cards, original_ids, effective, is_contest=False, require_evidence=True
+    )
     if visible_main_cards == original_main_cards:
-        return False  # ни одна карточка не отклонена — скрывать нечего
+        return False  # ни одна карточка не скрыта — скрывать нечего
     return len(original_rows) != original_main_cards
 
 

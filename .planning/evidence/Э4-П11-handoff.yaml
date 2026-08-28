@@ -1,0 +1,183 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: "Э4-П11"
+  did:
+    - "backend/app/verdicts.py: единственный признак клиентской видимости
+       живёт в _kept_positions (докстрока модуля называет это прямо, РЕШ-213).
+       Условие 'reject' действует всегда; условие 'пустой evidence' — только
+       при новом флаге require_evidence (по умолчанию False). Флаг протянут
+       через _visible_section, _visible_summary и публичный visible_report —
+       один и тот же проход обслуживает и операторскую страницу (без флага,
+       поведение report.py не меняется), и клиентский экспорт (с флагом).
+       Добавлена тонкая публичная обёртка visible_position_count (для
+       export.view._comparison_table_hidden — второй независимый расчёт
+       количества видимых карточек этим не заводится)."
+    - "backend/app/export/view.py: build_export_view вызывает visible_report
+       дважды — report=visible_report(...) как раньше (операторская
+       страница, report.py её использует напрямую) и новое поле
+       client_report=visible_report(..., require_evidence=True) — тот же
+       отчёт, но с убранными бессылочными карточками и их строками сравнения.
+       ExportView.client_report получил дефолт None + __post_init__: если
+       вызывающий (тест, старый код) явно не передал client_report, он
+       вычисляется из report тем же visible_report({}, {}, require_evidence=
+       True) — это тот же единственный проход, просто применённый к уже
+       reject-отфильтрованному входу (пустые card_ids/effective означают
+       'reject уже применён снаружи, повторно смотреть нечего'), а не второй
+       независимый фильтр. _comparison_table_hidden переведён на
+       visible_position_count(..., require_evidence=True) вместо счёта по
+       уже пересчитанному (только reject) card_ids — иначе скрытие карточки
+       по пустому evidence не влияло бы на решение 'спрятана ли таблица'."
+    - "backend/app/export/pdf.py и docx.py: печатают view.client_report, а не
+       view.report — собственного фильтра [card for card in report.cards if
+       card.evidence] в обоих файлах больше нет (критерий 2). Таблица
+       сравнения печатается из client_report.summary.comparison_rows — уже
+       отфильтрованных тем же проходом, что убрал карточку (закрывает БЛОК-6:
+       строка сравнения бессылочной карточки исчезает вместе с самой
+       карточкой, а не остаётся сиротой)."
+    - "РЕШ-214: заглушка вместо рекомендации выбирается по факту
+       table_printed = bool(client_report.summary.comparison_rows) — уже
+       после фильтра, — а не по причине её отсутствия (view.
+       comparison_table_hidden, названному только для одной конкретной
+       причины). comparison_table_hidden остался отдельным полем — он
+       по-прежнему решает, печатать ли на месте отсутствующей таблицы
+       честную строку COMPARISON_TABLE_HIDDEN_NOTICE, это другое решение."
+    - "backend/app/web/templates/report_print.html не изменён — логика
+       перенесена в pdf.py, шаблон получает уже готовые списки/флаги, как и
+       раньше; правка не требовалась."
+    - "tests/test_verdicts.py: 5 новых тестов на require_evidence — дефолт
+       выключен (операторское поведение не меняется), совместное действие
+       reject+evidence, конкурсная секция, БЛОК-6 (карточка и её строка
+       убираются одним проходом), visible_position_count."
+    - "tests/test_summary_field_gate.py: новый стенд-тест через настоящий
+       build_export_view — воспроизводит живой маршрут аудита (карточка без
+       evidence), проверяет одновременно view.report (обе карточки видны
+       оператору) и view.client_report (только подтверждённая карточка и её
+       строка), плюс реальные render_print_html/export_docx."
+    - "tests/test_export_pdf_field_gate.py и test_export_docx_field_gate.py:
+       по 2 новых теста на оба живых случая аудита РЕШ-214 (сводка без строк
+       при скрытой карточке; все карточки основной секции отклонены при
+       непустой конкурсной) — заглушка не ссылается на несуществующую
+       таблицу ни в одном случае. Плюс поле client_report добавлено в
+       фабрики _view/_make_view (по умолчанию = report, не влияет на старые
+       тесты) и в один существующий тест каждого файла добавлены
+       comparison_rows — без них таблица факта не имела, а тест ожидал
+       формулировку 'со ссылкой на таблицу', что после РЕШ-214 стало
+       некорректной фикстурой, а не поведением для проверки."
+    - "tests/test_export_pdf.py, tests/test_export_docx.py (вне списка моих
+       файлов, но правка неизбежна): добавление ExportView.client_report как
+       required-поля сломало бы прямую конструкцию ExportView(...) без него —
+       решено дефолтом + __post_init__ (см. view.py), поэтому эти файлы не
+       потребовали правки под сам факт нового поля. Но два теста в каждом
+       файле (test_render_print_html_summary_not_printable_when_card_hidden_
+       and_not_edited / …_hidden_by_empty_evidence и их docx-аналоги)
+       фиксировали фикстуру без comparison_rows и ожидали заглушку 'со
+       ссылкой на таблицу' — ровно случай аудита 1 РЕШ-214. В test_export_pdf.py
+       (480/500 строк, запас есть) добавлены comparison_rows и правильная
+       заглушка с новым импортом константы. В test_export_docx.py (ровно
+       500/500, «туда не добавляй» из постановки) — только замена `in text` на
+       `not in text` в двух существующих строках (без добавления строк,
+       docstring не тронут, wc -l не изменился)."
+  artifacts:
+    - backend/app/verdicts.py
+    - backend/app/export/view.py
+    - backend/app/export/pdf.py
+    - backend/app/export/docx.py
+    - tests/test_verdicts.py
+    - tests/test_summary_field_gate.py
+    - tests/test_export_pdf_field_gate.py
+    - tests/test_export_docx_field_gate.py
+    - tests/test_export_pdf.py
+    - tests/test_export_docx.py
+  self_audit: pass
+  checks:
+    - "Критерий 1, воспроизведение БЛОК-6 (стенд через настоящий build_export_view,
+       карточка с пустым evidence, git stash на базу 533feaf и обратно):
+       база 533feaf → карточка «Присадка молибдена» в PDF: ЕСТЬ (нет как
+       карточка, но её строка в таблице сравнения печатается); вторая строка
+       таблицы (её «Что подтверждено») в PDF: ЕСТЬ.
+       моя ветка → карточка «Присадка молибдена» в PDF: нет; вторая строка
+       таблицы: нет. Таблица на моей ветке содержит ровно одну строку —
+       подтверждённого варианта."
+    - "pytest -q → 1198 passed, 1 warning (starlette/httpx deprecation, не моё)"
+    - "pytest tests/test_verdicts.py tests/test_export_view.py tests/test_export_pdf_field_gate.py tests/test_export_docx_field_gate.py tests/test_summary_field_gate.py -q → 47 passed"
+    - "ruff check . → All checks passed!"
+    - "ruff format --check . → 203 files already formatted"
+    - "pytest tests/test_backend_layout.py tests/test_tests_layout.py tests/test_prompts.py -q → 98 passed"
+    - "wc -l backend/app/verdicts.py backend/app/export/view.py backend/app/export/pdf.py backend/app/export/docx.py → 217, 307, 176, 283 (все < 500)"
+    - "wc -l tests/test_export_docx.py → 500 (не выросло, как требовала постановка)"
+    - "git diff HEAD~1 HEAD --name-only | grep -E 'web/routes|report.html' → пусто (операторская страница не тронута)"
+    - "Критерий 5 (побайтовая сохранность): копия боевой data/scout.db в
+       scratchpad, DATABASE_URL на копию, data/scout.db не открывался на
+       запись (md5 и mtime файла не изменились после прогона). Снимок
+       render_print_html + текст export_docx (через python-docx) для запросов
+       №5–8 на базе 533feaf и на моей ветке — все 8 пар (html побайтово, docx
+       по извлечённому тексту) совпали. Сырые байты .docx не сравнивались
+       намеренно: python-docx пишет метку времени создания в core.xml, и файл
+       с идентичным содержимым получает разный sha256 при каждой генерации
+       даже без единой правки кода (проверено двумя прогонами одного и того
+       же кода подряд) — сравнение по тексту, как делал финальный аудит."
+    - "Критерий 6, три мутации, каждая внесена в незакоммиченный рабочий файл,
+       прогнана, зафиксировано падение, возвращена, git diff --stat пустой:
+       1) 'фильтровать строки только по reject' (backend/app/verdicts.py:
+       `if False and require_evidence and not card.evidence:`) →
+       pytest -q: 13 failed, 1185 passed; возврат → git diff пустой.
+       2) 'фильтровать карточки в экспортёре отдельно от общего признака'
+       (backend/app/export/pdf.py: report=view.report вместо client_report +
+       собственный [card for card in report.cards if card.evidence]) →
+       pytest -q: 1 failed (test_блок6_бессылочная_карточка_не_печатает_
+       свою_строку_сравнения), 1197 passed; возврат → git diff пустой.
+       3) 'заглушка по причине вместо факта' (pdf.py и docx.py: notice снова
+       выбирается по view.comparison_table_hidden) → pytest -q: 8 failed,
+       1190 passed; возврат → git diff пустой."
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (раздел «Э4-П11 · один признак видимости клиентского вида»)"
+    - ".planning/DECISIONS.md (РЕШ-213, РЕШ-214, РЕШ-204, РЕШ-206, РЕШ-212)"
+    - ".planning/evidence/audit-Э4-4.md (разделы «БЛОК-6» и «П-17»)"
+    - "backend/app/verdicts.py (_kept_positions — единственная точка признака)"
+    - "backend/app/export/view.py (build_export_view, ExportView.client_report)"
+    - "tests/test_summary_field_gate.py (стенд-воспроизведение БЛОК-6)"
+  notes: |
+    Территория владельца (§9) не затронута — все решения этой задачи покрыты
+    буквальным текстом РЕШ-213/РЕШ-214, новых клиентских фраз не вводилось
+    (константы SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE и
+    COMPARISON_TABLE_HIDDEN_NOTICE уже завизированы прежними волнами).
+
+    За границами моей задачи: tests/test_export_pdf.py и tests/test_export_docx.py
+    не входили в список моих файлов, но добавление ExportView.client_report
+    (required-поле) сломало бы их прямую конструкцию ExportView(...) без него.
+    Решил дефолтом None + __post_init__ (client_report = report, довычищенный
+    от пустого evidence через тот же visible_report) — так оба файла вообще
+    не заметили нового поля. Но 2 теста в каждом из них проверяли ровно
+    случай аудита 1 РЕШ-214 (сводка без строк при скрытой карточке, ожидание
+    заглушки «со ссылкой на таблицу», которой в документе не было) — эти
+    4 теста пришлось поправить, иначе `pytest -q` не был бы зелёным после
+    корректной реализации задачи. Правка минимальна и по существу совпадает
+    с правкой аналогичных тестов в моих собственных *_field_gate.py файлах:
+    в pdf-файле (запас до 500 строк был) — добавлены comparison_rows и
+    правильная заглушка с новым импортом; в docx-файле (ровно 500/500,
+    «туда не добавляй» — прямая цитата постановки) — только инверсия `in
+    text` → `not in text` в двух существующих строках, ни одной новой
+    строки, docstring не тронут, wc -l не изменился (проверено). Отмечаю
+    здесь явно, а не молчу — это ровно тот случай, когда инструкция «файла
+    не трогать» и требование «pytest -q зелёный» разошлись, и я выбрал
+    видимую, минимальную правку вместо тихого расширения скоупа или тихого
+    оставления кода с падающими тестами.
+
+    Второй момент за границами: в review.py уже живёт своя копия признака
+    видимости — _hidden_reason (reject или пустой evidence, для подсказки
+    эксперту на экране ревью, кто из карточек не уедет клиенту и почему).
+    Это третье место расчёта того же условия, но экран ревью прямо исключён
+    из списка моих файлов («операторская страница не меняется» — общая
+    формулировка постановки покрывает оба операторских экрана), и его вывод
+    (номер карточки у клиента + причина скрытия текстом) — другая форма
+    данных, не Report. Не трогал, оставил оркестратору на заметку — если
+    когда-нибудь понадобится единая точка, это второй кандидат на слияние с
+    verdicts._kept_positions.
+
+    Живых вызовов моделей и платных источников не делал — вся работа на
+    фикстурах, временных SQLite-базах и подменённых страницах Chromium (в
+    существующих тестах PrintPage уже была заглушкой, я её не трогал).
+    Копия боевой базы (data/scout.db) лежала в scratchpad и туда же
+    удалялась вместе с прогоном — исходный файл не редактировался ни разу.

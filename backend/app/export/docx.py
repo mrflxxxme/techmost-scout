@@ -61,22 +61,29 @@ def export_docx(view: ExportView, out_path: Path) -> Path:
     document.add_heading("Подбор научно-технических решений", level=0)
     document.add_paragraph(_status_line(view))
 
-    report = view.report
-
-    # Карточки без единого подтверждения в выгрузку не попадают вовсе
-    # (РЕШ-204) — той же логикой, что печатный PDF-шаблон: клиент не должен
-    # видеть карточку без evidence даже в урезанном виде. Считаем их до
-    # раздела «Рекомендация»: пополевой гейт РЕШ-211
-    # (`recommendation_printable`/`caveats_printable`) сравнивает число
-    # реально печатаемых карточек с числом карточек до фильтра.
-    printable_cards = [card for card in report.cards if card.evidence]
-    printable_contest_cards = [card for card in report.contest_cards if card.evidence]
+    # Источник — `view.client_report`, а не `view.report` (РЕШ-213): признак
+    # видимости для клиента (reject или пустой `evidence`, РЕШ-204) считает
+    # один раз `verdicts.visible_report`, эта функция своего фильтра по
+    # `evidence` не ведёт — иначе строка таблицы сравнения могла бы остаться
+    # напечатанной для карточки, которой в документе уже нет (БЛОК-6
+    # финального аудита). Считаем до раздела «Рекомендация»: пополевой гейт
+    # РЕШ-211 (`recommendation_printable`/`caveats_printable`) сравнивает
+    # число реально печатаемых карточек с числом карточек до фильтра.
+    report = view.client_report
+    printable_cards = report.cards
+    printable_contest_cards = report.contest_cards
     printed_total = len(printable_cards) + len(printable_contest_cards)
     printable_recommendation = recommendation_printable(view, printed_total)
     printable_caveats = caveats_printable(view, printed_total)
+    # РЕШ-214: заглушка вместо рекомендации выбирается по факту «таблица
+    # напечатана» (`bool(comparison_rows)` уже после фильтра), а не по причине
+    # её отсутствия — `view.comparison_table_hidden` называет только одну
+    # конкретную причину и остаётся отдельным решением («печатать ли на месте
+    # таблицы честную строку», см. `_add_comparison_table`).
+    table_printed = bool(report.summary.comparison_rows)
 
     _add_task_section(document, report)
-    _add_recommendation_section(document, report, printable_recommendation, view.comparison_table_hidden)
+    _add_recommendation_section(document, report, printable_recommendation, table_printed)
     _add_comparison_table(document, report, view.comparison_table_hidden)
 
     document.add_heading("Варианты решений", level=1)
@@ -142,23 +149,29 @@ def _add_task_section(document: DocumentObject, report: Report) -> None:
         document.add_paragraph(f"Требуемая готовность: {MATURITY_RU[brief.target_maturity]}")
 
 
-def _add_recommendation_section(document: DocumentObject, report: Report, printable: bool, table_hidden: bool) -> None:
+def _add_recommendation_section(document: DocumentObject, report: Report, printable: bool, table_printed: bool) -> None:
     """Раздел «Рекомендация» — заглушка вместо текста модели (РЕШ-206, РЕШ-211),
     пока хоть одна карточка скрыта из клиентского вида и эксперт рекомендацию
     не правил.
 
-    `table_hidden` (РЕШ-212, `ExportView.comparison_table_hidden`) выбирает
-    формулировку заглушки: обычная ссылается на таблицу сравнения как на
-    ориентир, а если саму таблицу `_add_comparison_table` не напечатала,
-    отсылать клиента к разделу, которого в документе нет, нельзя.
+    `table_printed` (РЕШ-212, РЕШ-214) — факт «таблица сравнения напечатана в
+    этом же документе» (`bool(report.summary.comparison_rows)` уже после
+    фильтра `verdicts.visible_report`), а не причина её отсутствия: обычная
+    заглушка ссылается на таблицу сравнения как на ориентир и годится только
+    когда таблица реально есть — иначе отсылать клиента к разделу, которого в
+    документе нет, нельзя. Раньше здесь смотрели на `ExportView.
+    comparison_table_hidden` — один конкретный повод спрятать таблицу, а не на
+    сам факт; аудит нашёл два случая мимо него (сводка без строк сравнения при
+    скрытой карточке и отчёт, где отклонены все карточки основной секции) —
+    таблицы не было, а заглушка всё равно на неё ссылалась.
     """
     document.add_heading("Рекомендация", level=1)
     if printable:
         document.add_paragraph(report.summary.recommendation)
-    elif table_hidden:
-        document.add_paragraph(SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE)
-    else:
+    elif table_printed:
         document.add_paragraph(SUMMARY_NOT_PRINTABLE_NOTICE)
+    else:
+        document.add_paragraph(SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE)
 
 
 def _add_comparison_table(document: DocumentObject, report: Report, table_hidden: bool) -> None:
@@ -167,13 +180,14 @@ def _add_comparison_table(document: DocumentObject, report: Report, table_hidden
     Печатается всегда, вне зависимости от гейта рекомендации: строки уже
     отфильтрованы вместе с карточками (Э4-П1), домысливать в них нечего.
 
-    `table_hidden` (РЕШ-212) — таблицу спрятал `verdicts.visible_report`,
-    потому что построчное соответствие строк карточкам не сошлось (исходные
-    строки были, но после фильтра reject их число не совпало с числом
-    карточек). Раздел в этом случае не исчезает молча — на месте таблицы
-    печатается честная строка `COMPARISON_TABLE_HIDDEN_NOTICE`. Пустая сводка
-    модели без единой строки с самого начала (`table_hidden=False`) раздел
-    по-прежнему не печатает вовсе — там скрывать нечего.
+    `table_hidden` (РЕШ-212, РЕШ-213) — таблицу спрятал `verdicts.
+    visible_report`, потому что построчное соответствие строк карточкам не
+    сошлось (исходные строки были, но после фильтра — reject или пустой
+    `evidence`, тот же признак, что у `ExportView.client_report` — их число не
+    совпало с числом карточек). Раздел в этом случае не исчезает молча — на
+    месте таблицы печатается честная строка `COMPARISON_TABLE_HIDDEN_NOTICE`.
+    Пустая сводка модели без единой строки с самого начала (`table_hidden=
+    False`) раздел по-прежнему не печатает вовсе — там скрывать нечего.
     """
     rows = report.summary.comparison_rows
     if not rows:

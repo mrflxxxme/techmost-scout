@@ -15,8 +15,10 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+from docx import Document
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.export.docx import export_docx
 from app.export.markdown import SUMMARY_NOT_PRINTABLE_NOTICE
 from app.export.pdf import render_print_html
 from app.export.view import ExportView, build_export_view, caveats_printable, recommendation_printable
@@ -25,7 +27,7 @@ from app.models import Request as RequestRow
 from app.models import SolutionCard as SolutionCardRow
 from app.models import SummaryOverride as SummaryOverrideRow
 from app.models import Verdict as VerdictRow
-from app.schemas import Report, ReportSummary, SolutionCard
+from app.schemas import Evidence, Report, ReportSummary, SolutionCard
 from app.schemas import Verdict as VerdictDecision
 
 
@@ -35,6 +37,10 @@ def _make_card(**overrides) -> SolutionCard:
         "essence": "Продление срока службы катализатора за счёт присадки.",
         "applicability": "Закрывает задачу продления межрегенерационного цикла.",
         "next_step": "Запросить образец у разработчика.",
+        # Подтверждение по умолчанию есть у всех карточек этого файла — здесь
+        # проверяется фильтр по reject/несовпадению строк (РЕШ-212), а не по
+        # `evidence` (тот отдельно закрыт БЛОК-6-тестом ниже и tests/test_verdicts.py).
+        "evidence": [Evidence(claim="Испытан на действующей установке", url="https://example.org/a")],
     }
     fields.update(overrides)
     return SolutionCard(**fields)
@@ -140,6 +146,7 @@ def test_правка_только_оговорок_печатает_незав�
         summary=ReportSummary(
             recommendation="Первым берём вариант 1 — «Первый».",
             caveats=["Оговорка модели про карточку 2."],
+            comparison_rows=[{"option": "Первый"}, {"option": "Второй"}],
         ),
     )
     request_id, card_ids = asyncio.run(_seed_request(db_session_factory, report=report))
@@ -255,3 +262,52 @@ def test_comparison_table_not_hidden_когда_строк_нет_с_самог�
     view = asyncio.run(_build_view(db_session_factory, request_id))
 
     assert view.comparison_table_hidden is False
+
+
+def test_блок6_бессылочная_карточка_не_печатает_свою_строку_сравнения(db_session_factory, brief, tmp_path):
+    """БЛОК-6 финального аудита, воспроизведение на живом маршруте: оператор
+    снял единственное подтверждение карточки (`POST /cards/{id}/edit
+    evidence_removed=…`, здесь — карточка изначально без `evidence`, тот же
+    итог). Признак видимости — один (РЕШ-213): карточка без строки сравнения
+    убрана из PDF и DOCX одним и тем же проходом `verdicts.visible_report`, а
+    операторская страница отчёта (`view.report`, РЕШ-204/205) её по-прежнему
+    показывает — экран для эксперта этой задачей не меняется (критерий 3)."""
+    kept = _make_card(title="Испытанный вариант")
+    bare = _make_card(title="Присадка молибдена", evidence=[])
+    report = _make_report(
+        brief=brief,
+        cards=[kept, bare],
+        summary=ReportSummary(
+            recommendation="Начать с варианта 1.",
+            comparison_rows=[
+                {"option": "Испытанный вариант", "gives": "Испытан на действующей установке"},
+                {"option": "Присадка молибдена", "gives": "Испытан на действующей установке"},
+            ],
+        ),
+    )
+    request_id, _card_ids = asyncio.run(_seed_request(db_session_factory, report=report))
+
+    view = asyncio.run(_build_view(db_session_factory, request_id))
+
+    # Критерий 3: операторская страница отчёта видит обе карточки, включая
+    # бессылочную, — `view.report` эта задача не трогает.
+    assert [c.title for c in view.report.cards] == ["Испытанный вариант", "Присадка молибдена"]
+
+    # Критерий 1/2: клиентский вид видит только подтверждённую карточку и её
+    # строку — без бессылочной и без второй строки таблицы.
+    assert [c.title for c in view.client_report.cards] == ["Испытанный вариант"]
+    assert view.client_report.summary.comparison_rows == [
+        {"option": "Испытанный вариант", "gives": "Испытан на действующей установке"}
+    ]
+
+    html = render_print_html(view)
+    assert "Присадка молибдена" not in html
+    assert html.count("<td>Испытан на действующей установке</td>") == 1
+
+    out_path = tmp_path / "report.docx"
+    export_docx(view, out_path)
+    document = Document(str(out_path))
+    text = "\n".join(p.text for p in document.paragraphs)
+    assert "Присадка молибдена" not in text
+    # Заголовок + ровно одна строка сравнения (без строки бессылочной карточки).
+    assert len(document.tables[0].rows) == 2

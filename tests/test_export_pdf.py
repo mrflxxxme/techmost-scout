@@ -13,7 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from app.export.markdown import PAID_LIMIT_NOTICE, SUMMARY_FALLBACK_NOTICE, SUMMARY_NOT_PRINTABLE_NOTICE
+from app.export.markdown import (
+    PAID_LIMIT_NOTICE,
+    SUMMARY_FALLBACK_NOTICE,
+    SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE,
+    SUMMARY_NOT_PRINTABLE_NOTICE,
+)
 from app.export.pdf import export_pdf, render_print_html
 from app.export.view import ExportView
 from app.pipeline.intake_flow import INTAKE_FALLBACK_CAVEAT, REFINE_FALLBACK_CAVEAT
@@ -255,7 +260,9 @@ def test_render_print_html_comparison_table_headers_are_russian():
 
 def test_render_print_html_summary_not_printable_when_card_hidden_and_not_edited():
     """РЕШ-206: карточка скрыта (total_cards больше печатаемых), правки нет —
-    рекомендация и оговорки модели не печатаются, заглушка есть."""
+    рекомендация и оговорки модели не печатаются, заглушка есть. Строк
+    сравнения нет вовсе (запасная сводка) — заглушка не ссылается на таблицу,
+    которой в документе нет (РЕШ-214, факт «таблица напечатана»)."""
     report = _report(
         [_card()],
         summary=ReportSummary(recommendation="Первым берём вариант 1.", caveats=["В карточке 3 риск не подтверждён."]),
@@ -266,7 +273,8 @@ def test_render_print_html_summary_not_printable_when_card_hidden_and_not_edited
 
     assert "Первым берём вариант 1." not in html
     assert "В карточке 3 риск не подтверждён." not in html
-    assert SUMMARY_NOT_PRINTABLE_NOTICE in html
+    assert SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE in html
+    assert SUMMARY_NOT_PRINTABLE_NOTICE not in html
 
 
 def test_render_print_html_summary_not_printable_when_hidden_by_empty_evidence():
@@ -275,7 +283,9 @@ def test_render_print_html_summary_not_printable_when_hidden_by_empty_evidence()
     экспортёром из-за пустого evidence (РЕШ-204) — рекомендация и оговорки всё
     равно не печатаются. Мутация «считать printed_cards по нефильтрованным
     report.cards/contest_cards» сделала бы printed_cards == total_cards и
-    напечатала бы текст модели — эта проверка её убивает."""
+    напечатала бы текст модели — эта проверка её убивает. Строк сравнения нет
+    вовсе — заглушка не ссылается на таблицу, которой в документе нет
+    (РЕШ-214, факт «таблица напечатана», а не причина отсутствия карточки)."""
     bare = _card(title="Карточка без подтверждений", evidence=[], trl_estimate=None)
     report = _report(
         [_card(), bare],
@@ -287,7 +297,8 @@ def test_render_print_html_summary_not_printable_when_hidden_by_empty_evidence()
 
     assert "Первым берём вариант 1." not in html
     assert "В карточке 3 риск не подтверждён." not in html
-    assert SUMMARY_NOT_PRINTABLE_NOTICE in html
+    assert SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE in html
+    assert SUMMARY_NOT_PRINTABLE_NOTICE not in html
 
 
 def test_render_print_html_sources_unavailable_line_survives_hidden_summary():
