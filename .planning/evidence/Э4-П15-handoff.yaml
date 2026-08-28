@@ -1,0 +1,139 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: "Э4-П15"
+  did:
+    - "П-23 (тест): мутация «`export/view.py::_comparison_table_hidden`
+       считает признак с `require_evidence=False`» переживала весь набор
+       1204 тестов — все прежние сценарии несовпадения строк прятали таблицу
+       через `REJECT`, а под `require_evidence=False` `hidden_reason`
+       реагирует на `REJECT` так же, как и под `True`, мутация была
+       неотличима. Новый тест `test_comparison_table_hidden_карточка_скрыта_
+       только_пустым_evidence` (tests/test_export_view_p15_audit5.py) прячет
+       карточку ТОЛЬКО пустым `evidence` (без единого `REJECT`), три карточки
+       основной секции, две строки сравнения (несовпадение) — на настоящем
+       коде `comparison_table_hidden=True` и в PDF печатается
+       `COMPARISON_TABLE_HIDDEN_NOTICE`. Поставил мутацию
+       (require_evidence=True → False в этом одном месте) в рабочем файле,
+       прогнал — новый тест покраснел (assert False is True), остальные 11
+       тестов файла не задело; код возвращён (`git diff` пуст)."
+    - "П-24 (тест): мутация «поменять порядок причин в `verdicts.hidden_
+       reason`» (вернуть проверку `no_evidence` раньше `rejected`) переживала
+       набор — ни один тест не ставил карточку одновременно отклонённой и
+       без подтверждений. Новый тест `test_hidden_reason_reject_важнее_
+       пустого_evidence` (tests/test_verdicts.py) — карточка с пустым
+       `evidence` и вердиктом `REJECT`, `require_evidence=True`, ожидание
+       `\"rejected\"`. `verdicts.py` не трогал ни строкой (не мой файл):
+       поставил мутацию (поменял местами два `if` в `hidden_reason`),
+       прогнал — новый тест покраснел (`'no_evidence' == 'rejected'`
+       AssertionError), остальные 23 теста файла прошли; код возвращён
+       (`git checkout -- backend/app/verdicts.py`, `git diff` пуст). Второй
+       тест `test_hidden_reason_no_evidence_без_reject` закрывает обратную
+       сторону (различать обе строки и должен порядок проверок)."
+    - "П-25 (код): `export/view.py::_reindex_after_filter` индексировала
+       `edited_report.cards[key[1]]` только затем, чтобы передать значение,
+       которое `hidden_reason` при `require_evidence=False` (единственный
+       вызов здесь) не читает вовсе — короткое замыкание `if require_evidence
+       and not card.evidence` не доходит до `card.evidence`, когда
+       `require_evidence` ложен. При рассинхроне «строк `solution_cards` в
+       базе больше, чем карточек в `report_json`» индексация падала
+       `IndexError` (500 на операторской странице отчёта и на выгрузке).
+       Убрал параметр `edited_report` (в теле он использовался только ради
+       этой индексации) и вызываю `hidden_reason(None, verdict)` — карточка
+       этому вызову не нужна. Поведение в нормальном случае не изменилось:
+       два существующих теста `test_reindex_after_filter_reject_rework_
+       evidence_и_конкурсная_секция` и `test_reindex_after_filter_зовёт_
+       verdicts_hidden_reason_а_не_свою_копию` (tests/test_summary_field_
+       gate.py) прошли без единой правки и дали идентичный результат на
+       версии ДО и ПОСЛЕ фикса — проверил обеими сборками (см. checks).
+       Новый регрессионный тест `test_reindex_after_filter_переживает_
+       рассинхрон_строк_с_report_json` сеет одну карточку в `report_json`, но
+       две строки `solution_cards` в базе — на коде до правки падает
+       `IndexError`, на коде после — отдаёт результат (карточка из
+       report_json на позиции 0, лишняя строка базы — на позиции 1 без
+       отображаемой пары, ровно тот же стиль результата, что отдавала версия
+       кода до четвёртой волны, которая эту секцию считала только по
+       `original_ids`/`effective`, вообще не заглядывая в список карточек)."
+    - "П-26 (докстрока): `web/routes/review.py::_annotate_client_view`
+       утверждала, что фильтр по пустому `evidence` «отрабатывает позже, уже
+       в pdf.py/docx.py» — неверно с четвёртой волны (РЕШ-213): экспортёры
+       своего фильтра по `evidence` не ведут вовсе, только печатают уже
+       отфильтрованный `ExportView.client_report`. Докстрока переписана:
+       `_hidden_reason` зовёт `verdicts.hidden_reason` с
+       `require_evidence=True`, тем же условием, каким `export.view.
+       build_export_view` строит `client_report`, а `_comparison_table_hidden`
+       решает судьбу таблицы сравнения — один признак, одно место, а не
+       «здесь один, там другой позже». Только докстрока, логика функции не
+       менялась ни строкой."
+    - "Новые тесты П-23/П-25 вынесены в отдельный файл
+       tests/test_export_view_p15_audit5.py (self-contained, свои фикстуры
+       по образцу test_summary_field_gate.py — дублирование дешевле
+       связывания, тем же доводом, что уже в докстроке её
+       db_session_factory): изначально писал их в test_summary_field_gate.py,
+       но файл вырос до 548 строк и упал `test_tests_layout.py::test_new_
+       test_files_stay_within_line_limit` (страж — не мой файл), поэтому
+       вернул test_summary_field_gate.py к исходному состоянию (git show
+       HEAD:… >) и перенёс тесты в новый файл (221 строка, лимит 500 не
+       задет, записи в исключения не требуется)."
+  artifacts:
+    - backend/app/export/view.py
+    - backend/app/web/routes/review.py
+    - tests/test_verdicts.py
+    - tests/test_export_view_p15_audit5.py
+  self_audit: pass
+  checks:
+    - "pytest -q → 1208 passed, 1 warning (starlette/httpx deprecation, не моё); было 1204 до задачи (+4 новых теста)"
+    - "ruff check . → All checks passed!"
+    - "ruff format --check . → 205 files already formatted"
+    - "pytest tests/test_export_view_p15_audit5.py tests/test_verdicts.py tests/test_summary_field_gate.py -v → 2 + 24 + 11 = 37 passed"
+    - "П-23, мутация в рабочем файле (require_evidence=True → False в
+       _comparison_table_hidden): pytest tests/test_export_view_p15_audit5.py -q
+       → 1 failed (assert False is True, test_comparison_table_hidden_
+       карточка_скрыта_только_пустым_evidence), 1 passed; возврат кода,
+       git diff -- backend/ пуст."
+    - "П-24, мутация в рабочем файле (порядок if в verdicts.hidden_reason):
+       pytest tests/test_verdicts.py -q → 1 failed
+       ('no_evidence' == 'rejected', test_hidden_reason_reject_важнее_пустого_
+       evidence), 23 passed; git checkout -- backend/app/verdicts.py,
+       git diff -- backend/app/verdicts.py пуст."
+    - "П-25, код ДО правки (git show HEAD:backend/app/export/view.py >
+       backend/app/export/view.py): pytest tests/test_export_view_p15_
+       audit5.py -q → 1 failed (IndexError: list index out of range,
+       test_reindex_after_filter_переживает_рассинхрон_строк_с_report_json),
+       1 passed; восстановлен рабочий файл."
+    - "П-25, критерий 5 (параллель): pytest tests/test_summary_field_gate.py
+       -q -k reindex на коде ДО правки (git show HEAD:… >) → 2 passed
+       (те же ассерты card_ids/rework_keys, что и на коде ПОСЛЕ) — нормальный
+       случай не изменился ни на йоту; файл восстановлен обратно."
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (задача Э4-П15)"
+    - ".planning/DECISIONS.md (РЕШ-213, РЕШ-212, РЕШ-215, РЕШ-205)"
+    - "backend/app/export/view.py (_comparison_table_hidden, _reindex_after_filter)"
+    - "backend/app/verdicts.py (hidden_reason — не мой файл, только читал)"
+    - "backend/app/web/routes/review.py (_annotate_client_view)"
+    - "tests/test_export_view_p15_audit5.py (новые тесты П-23, П-25)"
+    - "tests/test_verdicts.py (новые тесты П-24, конец файла)"
+  notes: |
+    Критерий 5 (клиентские выгрузки, операторская страница, экран ревью,
+    card_ids и rework_keys до и после правки совпадают): единственная
+    поведенческая правка задачи — export/view.py (П-25), и она равносильна
+    в нормальном случае по построению: `card` передавался в `hidden_reason`
+    только как первый позиционный аргумент, а при `require_evidence=False`
+    (единственное значение в этом вызове) функция до `card.evidence` не
+    доходит из-за короткого замыкания `and` — значит убрать индексацию
+    нельзя было изменить результат ни для одного входа, где индексация не
+    падала. Формальное доказательство — два прогона одних и тех же тестов
+    (test_reindex_after_filter_*) на коде до и после правки с идентичным
+    результатом, см. checks. П-23/П-24 — только тесты, П-26 — только
+    докстрока; поведенческого риска там нет вовсе.
+
+    verdicts.py не открывал на запись ни разу — весь разбор П-24 велся через
+    публичное поведение `hidden_reason`, мутация ставилась и снималась
+    временно только для проверки собственного теста.
+
+    Живых вызовов моделей и платных источников не делал — всё на временных
+    SQLite (tmp_path) и прямых вызовах build_export_view/render_print_html.
+    Боевую data/scout.db не открывал ни на чтение, ни на запись.
+
+    За границами задачи не замечено ничего, что стоило бы чинить отдельно.
