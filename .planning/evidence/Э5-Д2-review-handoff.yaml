@@ -1,0 +1,61 @@
+handoff:
+  from: reviewer
+  to: verifier-or-orchestrator
+  task: Э5-Д2
+  did:
+    - Прочитаны PLAN.md, INVARIANTS.md, CONVENTIONS.md §5/§7, audit-Э5-повтор.md
+      (раздел 3 L2, раздел 4 советы 1-4), diff и оба тестовых файла целиком
+    - Поставлены собственные мутации по каждому из четырёх долгов с откатом
+      после каждой (лимит журнала: снятие logging, согласованный 10m→20m,
+      рассогласованный только у одного сервиса; ports у caddy: удаление,
+      законная перестановка; изоляция подмен: возврат глобального
+      unittest.mock.patch внутри daemon-потока; ротация: снятие второго
+      шаблона *.part, ручная проверка что свежий *.part не удаляется;
+      pages=1 → pages=-1)
+    - Проверена изоляция подмен вручную — прогнан "зависший" сценарий и
+      следом в той же сессии независимый тест на time.sleep/sys.stderr —
+      реальные модули не тронуты
+    - Сверены списки имён тестов до/после разделения файла (31 → 38, только
+      добавления, ни одного пропавшего теста); пройден
+      tests/test_tests_layout.py
+    - Воспроизведены полный pytest, ruff check/format, docker compose config
+      (со временным пустым docker/.env, удалённым после проверки)
+    - Проверены границы (ровно 5 файлов diff, Dockerfile/Caddyfile не
+      тронуты) и инварианты №3, №7, №8, №9, №10 (№1,2,4,5,6 неприменимы —
+      diff не касается backend/app, промптов, адаптеров, LLM-роутера)
+  artifacts:
+    - .planning/evidence/Э5-Д2-review.md (закоммичен до ответа)
+    - .planning/evidence/Э5-Д2-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q: 1300 passed"
+    - "pytest tests/test_docker_compose.py tests/test_docker_compose_backup_runtime.py -v: 29 + 9 passed"
+    - "pytest tests/test_tests_layout.py -v: 3 passed"
+    - "pytest tests/test_team_docs.py -q: 35 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 212 files already formatted"
+    - "docker compose config (docker/, временный пустой .env): exit=0, конфигурация валидна, .env удалён, git status --porcelain docker/ пуст"
+    - "Мутация L2 (снять logging у backup): RED — 'у backup нет секции logging'"
+    - "Мутация L2 (10m→20m у всех трёх сервисов): GREEN — 1 passed"
+    - "Мутация L2 (10m→20m только у scout): RED — рассогласование поймано"
+    - "Мутация ports (удалить у caddy): RED — assert set() == {'443:443','80:80'}"
+    - "Мутация ports (переставить местами): GREEN — 2 passed"
+    - "Мутация изоляции (вернуть unittest.mock.patch внутри daemon-потока): RED — 'настоящий time.sleep оказался подменён во время зависания'; после отката дерево чистое"
+    - "Мутация .part (убрать второй glob-шаблон): RED — оба теста ротации .part упали"
+    - "Ручная проверка: свежий .part (mtime=сейчас) переживает проход сайдкара — защита есть по конструкции (общий cutoff)"
+    - "Мутация pages=1→pages=-1: RED — AST отвергает UnaryOp, не Constant"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md
+    - .planning/DECISIONS.md (РЕШ-237, точечным поиском)
+    - .planning/evidence/audit-Э5-повтор.md (раздел 3, раздел 4)
+    - docker/docker-compose.yml
+    - tests/test_docker_compose.py
+    - tests/test_docker_compose_backup_runtime.py
+    - .planning/evidence/Э5-Д2-мутации.txt
+  notes: |
+    Это цикл 1 из 2. Вердикт ПРИНЯТЬ — блокирующих находок нет, все четыре
+    долга закрыты и подтверждены независимыми мутациями с откатом. Два совета
+    не блокируют: явный тест на "свежий .part не удаляется" отсутствует (хотя
+    защита есть по конструкции кода), и обоснование самодостаточности теста
+    изоляции подмен зафиксировано в отчёте.
