@@ -147,3 +147,122 @@ TestClient(app) под APP_ENV=dev, без авторизации: /api/docs 200
 
 Все мутации откачены `git checkout --`, рабочее дерево чистое (`git status` —
 nothing to commit).
+
+---
+
+# Ревью Э5-И4 · цикл 2 (последний)
+
+Вердикт: **ПРИНЯТЬ**
+
+Коммит `3abaa13` поверх отчёта цикла 1 (`1226831`). Диф: `git diff 1226831 3abaa13`
+— тронуты только `backend/app/main.py`, `tests/test_web_api_schema.py` и
+`.planning/evidence/Э5-И4-*` (handoff, pytest.txt). Границы задачи не нарушены.
+
+## Закрытие блокирующей находки цикла 1
+
+Введена `build_app(app_env)` — единственная функция сборки приложения:
+`docs_url, openapi_url = schema_urls(app_env)` передаются в `FastAPI(...)`,
+`templates.env.globals["api_docs_url"] = docs_url` выставляется внутри неё же.
+Боевой объект теперь `app = build_app(settings.app_env)` — то есть тесты,
+вызывающие `main.build_app("prod")` / `main.build_app("dev")`, гоняют ровно
+тот код, которым собирается реальное приложение, а не отдельную копию мимо
+него.
+
+Обе мутации цикла 1 поставлены заново лично (каждая через `git checkout --`
+после прогона, в ветку не коммитились):
+
+1. **Внутри `build_app` захардкожен `openapi_url="/api/openapi.json"`** при
+   корректно разведённом `docs_url=docs_url`:
+   ```
+   pytest tests/test_web_api_schema.py -q -> 1 failed, 12 passed
+     FAILED test_prod_app_returns_404_on_schema_endpoints
+   pytest -q -> 1 failed, 1274 passed
+   ```
+   Красная. Откат — `pytest -q`: 1275 passed.
+
+2. **Удалена строка `templates.env.globals["api_docs_url"] = docs_url`**
+   внутри `build_app`:
+   ```
+   pytest tests/test_web_api_schema.py -q -> 1 failed, 12 passed
+     FAILED test_base_html_shows_api_link_when_schema_open
+   pytest -q -> 1 failed, 1274 passed
+   ```
+   Красная. Откат — `pytest -q`: 1275 passed.
+
+Обе находки цикла 1 закрыты фактически, не только текстом: тест теперь бьёт
+по `main.build_app`, которым же собирается боевой `main.app`.
+
+## Проверка второй точки правды
+
+`build_app(app_env: str)` принимает окружение параметром и нигде внутри себя
+не читает `settings` — единственное обращение к `settings.app_env` во всём
+файле находится в последней строке `app = build_app(settings.app_env)`, вне
+самой функции. Второго признака «мы в бою» не заведено. Зашитых адресов не
+осталось: `rg -n 'docs_url="/api/docs"' backend/app/main.py` и
+`rg -n 'href="/api/docs"' backend/app/web/templates/base.html` — оба пустые.
+`base.html` в этом цикле не тронут (диф это подтверждает) — прежняя правка
+цикла 1 (`{% if api_docs_url %}`) сохранилась.
+
+## Автофикстура `_restore_api_docs_url`
+
+`build_app` пишет в общий модульный `templates.env.globals` — тесты внутри
+файла делят это состояние. Проверено:
+
+- Обратный порядок узлов внутри `tests/test_web_api_schema.py` (все 13,
+  `tac` от списка `--collect-only`) — 13 passed, включая случаи, когда тест
+  на закрытую ссылку идёт после теста на открытую и наоборот.
+- Явный запуск в паре `test_base_html_shows_api_link_when_schema_open` →
+  `test_base_html_hides_api_link_when_schema_closed` и в паре
+  `test_dev_app_returns_200_on_schema_endpoints` →
+  `test_prod_app_returns_404_on_schema_endpoints` — 2 passed в обоих случаях.
+- Файл вместе с `tests/test_web_templates.py tests/test_web_auth.py
+  tests/test_web_flow_e2e.py`, схема-файл **первым** и **последним** в
+  команде — 25 passed в обоих порядках.
+- Все три прежних файла по отдельности, без файла схемы: `test_web_templates.py`
+  — 5 passed, `test_web_auth.py` — 6 passed, `test_web_flow_e2e.py` — 1 passed.
+  Совпадает с их независимым поведением, утечки состояния наружу нет.
+
+Порядок прогона на результат не влияет, состояние в другие файлы не течёт.
+
+## Рост `main.py` до 121 строки
+
+Машинного стража на число 110 нет (`grep -n "110" tests/test_backend_layout.py
+tests/test_pipeline_layout.py` — пусто); лимит ≤110 в плане был бюджетом
+первого цикла, а не стражем. Рост на 14 строк — прямое следствие вынесения
+сборки приложения в `build_app(app_env)`, что и было необходимо для закрытия
+находки цикла 1: без выделения отдельной вызываемой функции тест не может
+дотянуться до настоящего кода сборки, минуя который проходила прошлая дыра.
+Рост оправдан по существу, лишнего в функции не появилось (тот же набор
+действий, что был раньше на уровне модуля, просто обёрнут в `def`). Общий
+лимит 500 строк (`tests/test_backend_layout.py`) далёк.
+
+## Критерии приёмки (повторно, лично)
+
+```
+pytest tests/test_web_api_schema.py -v: 13 passed
+pytest tests/test_web_templates.py tests/test_web_auth.py tests/test_web_flow_e2e.py -v: 12 passed
+pytest -q: 1275 passed
+ruff check .: All checks passed!
+ruff format --check .: 210 files already formatted
+rg -n 'docs_url="/api/docs"' backend/app/main.py: пусто (exit 1)
+rg -n 'href="/api/docs"' backend/app/web/templates/base.html: пусто (exit 1)
+grep -rE "sk-|gigachat|Api-Key" backend/app/main.py tests/test_web_api_schema.py
+  .planning/evidence/Э5-И4-*.{yaml,txt}: пусто
+git diff 1226831 3abaa13 --name-only: backend/app/main.py, tests/test_web_api_schema.py,
+  .planning/evidence/Э5-И4-handoff.yaml, .planning/evidence/Э5-И4-pytest.txt — границы задачи
+  не нарушены
+```
+
+## Итог
+
+Класс находки цикла 1 (тест мимо реального кода сборки — «зелено по
+неверной причине») закрыт правильным способом: не заплаткой в тесте, а
+выделением единственной вызываемой точки сборки, которую тест и вызывает.
+Обе мутации, ранее проходившие незамеченными через 1271 тест, теперь красят
+ровно тот тест, который обязан их поймать. Побочных эффектов автофикстуры и
+регрессий в соседних файлах не найдено. Совет цикла 1 про докстроку
+регистрозависимости выполнен и закреплён тестом
+`test_schema_urls_comparison_is_case_sensitive`, а не оставлен текстом.
+
+Второй цикл ревью — последний по регламенту; блокирующих находок нет,
+третий цикл не требуется.
