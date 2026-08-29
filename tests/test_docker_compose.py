@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -23,6 +24,50 @@ def _load() -> dict:
 def _text() -> str:
     """Возвращает содержимое docker-compose.yml как текст."""
     return COMPOSE_PATH.read_text(encoding="utf-8")
+
+
+def _backup_script() -> str:
+    """Возвращает исходный текст Python-скрипта сервиса backup."""
+    command = _load()["services"]["backup"]["command"]
+    scripts = [part for part in command if isinstance(part, str) and "\n" in part]
+    assert len(scripts) == 1, "ожидается ровно один многострочный аргумент -c"
+    return scripts[0]
+
+
+def _script_constant(script: str, name: str) -> int:
+    """Возвращает точное целое значение присваивания ``name = <число>`` в скрипте.
+
+    Сравнение через int(), а не через подстроку: "14" входит и в "140", а
+    точное значение — нет.
+    """
+    match = re.search(rf"^\s*{re.escape(name)}\s*=\s*(\d+)\s*$", script, re.MULTILINE)
+    assert match, f"не найдено присваивание {name} = <число> в скрипте backup"
+    return int(match.group(1))
+
+
+def _try_node_containing(tree: ast.Module, marker: str) -> ast.Try:
+    """Находит блок try, в теле (не в except) которого встречается ``marker``.
+
+    Различает две независимые ветки отказа сайдкара — саму копию и ротацию —
+    по содержимому их тела, а не по порядку в тексте.
+    """
+    candidates = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Try):
+            body_source = "\n".join(ast.unparse(stmt) for stmt in node.body)
+            if marker in body_source:
+                candidates.append(node)
+    assert len(candidates) == 1, f"ожидался ровно один try с '{marker}' в теле, найдено {len(candidates)}"
+    return candidates[0]
+
+
+def _handlers_print_to_stderr(node: ast.Try) -> bool:
+    """Проверяет, что хотя бы один обработчик except печатает в stderr."""
+    for handler in node.handlers:
+        source = "\n".join(ast.unparse(stmt) for stmt in handler.body)
+        if "print(" in source and "sys.stderr" in source:
+            return True
+    return False
 
 
 def test_yaml_разбирается_без_ошибок():
@@ -97,26 +142,53 @@ def test_backup_использует_образ_приложения_без_вт
 
 
 def test_backup_ротация_копий_14_дней():
-    """Ротация — удаление копий старше 14 суток."""
-    backup = _load()["services"]["backup"]
-    command_text = "\n".join(str(part) for part in backup["command"])
-    assert "14" in command_text
-    assert re.search(r"RETENTION_DAYS\s*=\s*14", command_text) or "mtime +14" in command_text
+    """Ротация — удаление копий старше 14 суток, не 140 и не 1400.
+
+    Сравнение точным значением int(), а не подстрокой: "14" — подстрока
+    "140", и текстовый поиск не отличил бы предел в 10 раз слабее заявленного.
+    """
+    script = _backup_script()
+    assert _script_constant(script, "RETENTION_DAYS") == 14
 
 
 def test_backup_период_суточный():
-    """Цикл копирования — раз в сутки (86400 секунд)."""
-    backup = _load()["services"]["backup"]
-    command_text = "\n".join(str(part) for part in backup["command"])
-    assert "86400" in command_text
+    """Цикл копирования — раз в сутки, ровно 86400 секунд, не 186400.
+
+    Та же ловушка, что и с ротацией: "86400" — подстрока "186400", поэтому
+    значение сравнивается как целое число, а не через "in".
+    """
+    script = _backup_script()
+    assert _script_constant(script, "DAY") == 86400
 
 
-def test_backup_отказ_печатается_в_stderr_и_цикл_продолжается():
-    """Молча пропущенная копия хуже отсутствующей (принцип инварианта №5)."""
-    backup = _load()["services"]["backup"]
-    command_text = "\n".join(str(part) for part in backup["command"])
-    assert "file=sys.stderr" in command_text
-    assert "while True" in command_text
+def test_backup_цикл_бесконечный():
+    """Копия выполняется постоянно, а не один раз при старте контейнера."""
+    script = _backup_script()
+    assert "while True" in script
+
+
+def test_backup_отказ_копии_печатается_в_stderr():
+    """Молча пропущенная копия базы хуже отсутствующей (принцип инварианта №5).
+
+    Проверяется именно ветка try/except вокруг sqlite3-копии — независимо от
+    того, печатает ли что-то соседняя ветка ротации. Если бы печать отказа
+    осталась только в ротации, эта проверка должна упасть, а прежняя
+    (поиск подстроки "file=sys.stderr" где угодно в тексте) — нет.
+    """
+    tree = ast.parse(_backup_script())
+    backup_try = _try_node_containing(tree, "src.backup(dst)")
+    assert _handlers_print_to_stderr(backup_try), "отказ копии базы не печатается в stderr"
+
+
+def test_backup_отказ_ротации_печатается_в_stderr():
+    """Молча пропущенная ротация — тот же принцип, отдельная от копии проверка.
+
+    Изолирует ветку try/except вокруг удаления устаревших файлов: пропажа
+    печати именно здесь не должна маскироваться печатью в ветке копии.
+    """
+    tree = ast.parse(_backup_script())
+    rotation_try = _try_node_containing(tree, "os.remove(path)")
+    assert _handlers_print_to_stderr(rotation_try), "отказ ротации копий не печатается в stderr"
 
 
 def test_backup_работает_от_root_для_записи_в_чужой_том():
