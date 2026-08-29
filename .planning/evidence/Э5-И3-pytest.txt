@@ -1,0 +1,37 @@
+Задача: Э5-И3 · Caddy: глобальный блок, плейсхолдеры, заголовки безопасности
+
+$ pytest tests/test_caddyfile.py -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0
+collected 7 items
+
+tests/test_caddyfile.py::test_caddyfile_существует PASSED                [ 14%]
+tests/test_caddyfile.py::test_глобальный_блок_с_email PASSED             [ 28%]
+tests/test_caddyfile.py::test_все_три_плейсхолдера_на_месте PASSED       [ 42%]
+tests/test_caddyfile.py::test_reverse_proxy_и_basic_auth_настроены PASSED [ 57%]
+tests/test_caddyfile.py::test_пять_заголовков_безопасности PASSED        [ 71%]
+tests/test_caddyfile.py::test_нет_настоящего_bcrypt_хэша PASSED          [ 85%]
+tests/test_caddyfile.py::test_объём_файла_в_бюджете PASSED               [100%]
+
+============================== 7 passed in 0.10s ===============================
+
+$ rg -n "scout.example.ru|admin@example.ru" docker/Caddyfile
+8:    email admin@example.ru
+18:scout.example.ru {
+
+$ pytest -q
+........................................................................ [ 64%]
+........................................................................ [ 70%]
+........................................................................ [ 75%]
+........................................................................ [ 81%]
+........................................................................ [ 87%]
+........................................................................ [ 93%]
+........................................................................ [ 99%]
+.........                                                                [100%]
+1233 passed, 1 warning in 70.71s (0:01:10)
+
+$ ruff check .
+All checks passed!
+
+$ ruff format --check .
+207 files already formatted
