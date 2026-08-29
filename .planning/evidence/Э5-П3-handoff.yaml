@@ -54,3 +54,53 @@ handoff:
     За границами задачи замечено, но не правил: docs/deps-manual.md содержит
     два раздела с номером 10 (совет 3 аудита) — вне списка советов моей
     задачи (1, 2, 6), нумерацию справочника трогать запрещено постановкой.
+
+cycle_2:
+  from: implementer-C
+  to: reviewer
+  task: Э5-П3
+  reason: >-
+    Ревью цикла 1 приняло работу без блокирующих, но предсказанный ревьюером
+    сценарий сбылся сразу: после слияния параллельных задач волны в
+    wave5/fixes-integration docker/docker-compose.yml у сайдкара backup
+    появилась секция logging и directives depends_on/pull_policy — текст
+    §10 docs/deploy.md, верный на момент цикла 1, устарел в момент слияния.
+  did:
+    - "docs/deploy.md §10 «Журналы вообще»: утверждение «у scout и caddy
+      ротация, у backup секции logging нет» заменено на «у всех трёх
+      сервисов задана ротация JSON-логов» — сверено грепом по фактическому
+      docker/docker-compose.yml на ветке wave5/fixes-integration (три
+      совпадения logging:, а не два)."
+    - "docs/deploy.md §10: добавлен абзац про depends_on:
+      {scout: {condition: service_healthy}} у backup — сайдкар не стартует,
+      пока scout не healthy; docker compose ps в этом случае покажет backup
+      как не поднявшийся, а не как упавший с ошибкой, и docker compose logs
+      backup будет пуст. Явно сказано, что чинить нужно scout, а не сайдкар."
+    - "docs/deploy.md §10: добавлен абзац про pull_policy: never у backup —
+      сайдкар не полезет в реестр за образом; если образ не собран, откажется
+      стартовать сразу с понятной ошибкой вместо попытки скачивания. Названо
+      как ожидаемое поведение, не поломка."
+    - "Оба факта (secции logging, depends_on, pull_policy) сверены не по
+      памяти, а грепом по git show wave5/fixes-integration:docker/docker-compose.yml."
+  artifacts:
+    - docs/deploy.md
+  self_audit: pass
+  checks:
+    - "pytest -q: 1275 passed, 1 warning"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 211 files already formatted"
+    - "git show wave5/fixes-integration:docker/docker-compose.yml | grep -n
+      'logging:' → три совпадения (строки 30, 49, 88) — все три сервиса"
+    - "grep -n 'У всех трёх сервисов' docs/deploy.md → совпадение на новой
+      формулировке; старая формулировка «У scout и caddy... у backup...нет»
+      в файле отсутствует"
+  escalate: none
+  read_first:
+    - docs/deploy.md (§10, три новых/изменённых абзаца)
+    - docker/docker-compose.yml на wave5/fixes-integration (logging,
+      depends_on, pull_policy у backup)
+  notes: >-
+    Правил только docs/deploy.md, как указано в постановке цикла 2. Ветка
+    задачи (wave5/e5-p3-docs) саму wave5/fixes-integration не вливала —
+    текст описывает состояние после слияния по факту, сверенному git show,
+    без слияния файлов конфигурации в свою ветку.
