@@ -1,0 +1,21 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a5a09015408a1c0a9
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 10 items
+
+tests/test_docker_image.py::test_base_image_is_python_slim PASSED        [ 10%]
+tests/test_docker_image.py::test_install_uses_export_extra PASSED        [ 20%]
+tests/test_docker_image.py::test_playwright_installs_chromium_with_deps PASSED [ 30%]
+tests/test_docker_image.py::test_playwright_browsers_path_outside_root_home PASSED [ 40%]
+tests/test_docker_image.py::test_browsers_path_is_readable_by_non_root_user PASSED [ 50%]
+tests/test_docker_image.py::test_pythonpath_points_to_backend_tree PASSED [ 60%]
+tests/test_docker_image.py::test_user_directive_is_non_root_and_after_last_run PASSED [ 70%]
+tests/test_docker_image.py::test_healthcheck_present_and_checks_health_endpoint PASSED [ 80%]
+tests/test_docker_image.py::test_dockerignore_file_exists PASSED         [ 90%]
+tests/test_docker_image.py::test_dockerignore_excludes_secrets_and_dev_artifacts PASSED [100%]
+
+============================== 10 passed in 0.04s ==============================

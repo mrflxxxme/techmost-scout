@@ -1,11 +1,20 @@
-# Боевая связка: приложение + Caddy (HTTPS и вход по паролю).
-# Дособирается на этапе Э5-1; секреты приходят из .env рядом с этим файлом.
+# Боевая связка: приложение + Caddy (HTTPS и вход по паролю) + сайдкар копии базы.
+# Секреты приходят из .env рядом с этим файлом; в репозиторий он не идёт
+# (docker/.env создаётся владельцем на сервере из .env.example).
+#
+# env_file остаётся обязательным для scout: без .env приложение поднимется на
+# небезопасном умолчании пароля веб-интерфейса, и отсутствие секретов станет
+# тихим вместо громкого. Ослаблять требование к файлу окружения запрещено.
 
 services:
   scout:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+    # Явный тег даёт сервису backup общий с приложением образ (см. ниже) без
+    # второй сборки: docker compose build собирает только сервисы с ключом
+    # build, а backup просто ссылается на уже собранный тег по имени.
+    image: techmost-scout-app:local
     restart: unless-stopped
     env_file: .env
     volumes:
@@ -13,6 +22,11 @@ services:
       - scout-out:/srv/scout/out
     expose:
       - "8000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   caddy:
     image: caddy:2-alpine
@@ -23,10 +37,76 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
+      - caddy-config:/config
     depends_on:
-      - scout
+      scout:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Сайдкар копии базы (РЕШ-223, уточнено РЕШ-229). Изначальный план требовал
+  # базовый образ alpine с установкой пакета sqlite при каждом старте — цена
+  # этого варианта: сеть на старте и на каждом перезапуске, а копия базы
+  # обязана быть самым надёжным элементом связки, а не самым хрупким. Поэтому
+  # сайдкар поднимается из того же образа, что и приложение (общие слои, без
+  # второй сборки), и делает копию sqlite3.Connection.backup() из стандартной
+  # библиотеки Python — ни сети, ни установки пакетов.
+  backup:
+    image: techmost-scout-app:local
+    restart: unless-stopped
+    # Именованный том создаётся принадлежащим root, и процесс приложения
+    # (uid 10001, см. Dockerfile) писать в него не смог бы. Это не отменяет
+    # правило "приложение не от root" — оно про сервис scout, а не про сайдкар.
+    user: "0:0"
+    volumes:
+      # Только чтение: копия не должна иметь возможность повредить рабочую базу.
+      - scout-data:/data:ro
+      # Отдельный том — копия на том же томе, что и база, не переживает
+      # повреждение этого тома.
+      - scout-backups:/backups
+    command:
+      - python3
+      - "-c"
+      - |
+        import glob
+        import os
+        import sqlite3
+        import sys
+        import time
+        from datetime import datetime, timezone
+
+        DAY = 86400
+        RETENTION_DAYS = 14
+
+        while True:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            dest = f"/backups/scout-{stamp}.db"
+            try:
+                src = sqlite3.connect("file:/data/scout.db?mode=ro", uri=True)
+                dst = sqlite3.connect(dest)
+                with dst:
+                    src.backup(dst)
+                dst.close()
+                src.close()
+            except Exception as exc:  # отказ виден, цикл не прерывается
+                print(f"копия базы не выполнена: {exc}", file=sys.stderr)
+
+            cutoff = time.time() - RETENTION_DAYS * DAY
+            for path in glob.glob("/backups/scout-*.db"):
+                try:
+                    if os.path.getmtime(path) < cutoff:
+                        os.remove(path)
+                except OSError as exc:
+                    print(f"ротация копии не выполнена: {exc}", file=sys.stderr)
+
+            time.sleep(DAY)
 
 volumes:
   scout-data:
   scout-out:
   caddy-data:
+  caddy-config:
+  scout-backups:

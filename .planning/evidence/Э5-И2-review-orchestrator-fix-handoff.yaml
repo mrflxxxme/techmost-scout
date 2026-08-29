@@ -1,0 +1,62 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: Э5-И2
+  did:
+    - >-
+      Проверена правка оркестратора (РЕШ-232, коммит fca7602 поверх 0435ca6):
+      _script_constant() в tests/test_docker_compose.py переведён с regex на
+      разбор ast.Assign + ast.literal_eval. Diff — только эта функция и её
+      докстрока плюс файл evidence; docker-compose.yml, Dockerfile,
+      Caddyfile не тронуты (проверено git diff по каждому файлу).
+    - >-
+      Обе мутации ослабления (RETENTION_DAYS=140, DAY=186400) заново
+      поставлены на docker/docker-compose.yml с откатом после каждой — обе
+      корректно роняют соответствующие тесты.
+    - >-
+      Обе легитимные записи из цикла 2 (RETENTION_DAYS = 14 с хвостовым
+      комментарием; DAY = 86_400) поставлены заново — обе теперь проходят
+      весь набор без падений.
+    - >-
+      Стресс-тест трёх дополнительных сторон, которые не были рассмотрены
+      ранее: значение выражением (DAY = 60 * 60 * 24) — узел отбрасывается
+      фильтром ast.Constant, тест падает с честным "найдено 0" (не
+      регрессия того же класса — контракт задачи никогда не предполагал
+      вычисляемых выражений, а отказ громкий, не тихий пропуск); два
+      присваивания одного имени — падает с "найдено 2"; значение 14.0
+      (float) — падает с явным "присвоено не целое число". Все три —
+      либо честный отказ, либо не входящая в контракт форма записи; новой
+      хрупкости не найдено.
+    - >-
+      Перепроверена мутация цикла 1 (печать отказа копии убрана, ротация не
+      тронута) — по-прежнему различается двумя отдельными тестами.
+    - >-
+      pytest -q: 1245 passed; ruff check и ruff format --check — чисто;
+      docker compose config с временным .env — OK, .env не остаётся.
+  artifacts:
+    - .planning/evidence/Э5-И2-review.md (раздел «Проверка правки оркестратора», закоммичен до ответа)
+    - .planning/evidence/Э5-И2-review-orchestrator-fix-handoff.yaml
+  self_audit: pass
+  checks:
+    - "git diff 0435ca6 fca7602 -- docker/docker-compose.yml docker/Dockerfile docker/Caddyfile: пусто"
+    - "pytest -q: 1245 passed, 1 warning"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 207 files already formatted"
+    - "docker compose config (временный .env): OK; git status --porcelain docker/ пуст после"
+    - "мутация RETENTION_DAYS=140 -> test_backup_ротация_копий_14_дней FAILED (assert 140 == 14)"
+    - "мутация DAY=186400 -> test_backup_период_суточный FAILED (assert 186400 == 86400)"
+    - "легитимная 'RETENTION_DAYS = 14  # суток хранения' -> 19 passed"
+    - "легитимная 'DAY = 86_400' -> 19 passed"
+    - "стресс DAY = 60 * 60 * 24 -> FAILED, найдено 0 (осознанное ограничение, не регрессия)"
+    - "стресс двойное присваивание RETENTION_DAYS -> FAILED, найдено 2"
+    - "стресс RETENTION_DAYS = 14.0 -> FAILED, не целое число"
+    - "мутация цикла 1 (печать отказа копии убрана) -> test_backup_отказ_копии_печатается_в_stderr FAILED, ротация-тест не задет"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э5-И2-review.md (раздел «Проверка правки оркестратора»)
+    - tests/test_docker_compose.py (_script_constant)
+  notes: >-
+    Вердикт: ПРИНЯТЬ. Обе находки цикла 2 закрыты правильным способом
+    (структурный разбор вместо текстового), стресс-тест тремя
+    дополнительными сторонами новой хрупкости не нашёл. Задача Э5-И2
+    считается принятой.
