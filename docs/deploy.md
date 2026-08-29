@@ -287,9 +287,11 @@ docker compose cp /tmp/gov_support.yaml scout:/srv/scout/data/gov_support.yaml
 
 **Если связку поднимали раньше по инструкции без `name` в `docker-compose.yml`,
 перед `docker compose up -d` из этого раздела проверьте имена томов** —
-`docker volume ls | grep scout` и раздел 10, «Тома переименовались после
-обновления, база пропала». Иначе `up -d` тихо создаст новые пустые тома, и
-последствия будут выглядеть как исчезновение базы.
+`docker volume ls | grep -E "scout|caddy"` (фильтр `grep scout` без `caddy`
+пропускает старые тома Caddy — их имена подстроки `scout` не содержат) и
+раздел 10, «Тома переименовались после обновления, база пропала». Иначе
+`up -d` тихо создаст новые пустые тома, и последствия будут выглядеть как
+исчезновение базы.
 
 ## 9. Копии базы
 
@@ -418,30 +420,59 @@ docker compose logs -f backup
 база и все прогоны исчезли», хотя реальные данные лежат нетронутыми в старом
 томе.
 
-Проверить, не эта ли причина:
+Проверить, не эта ли причина. Фильтр по `scout` один не годится: старые тома
+Caddy (`docker_caddy-data`, `docker_caddy-config`) подстроки `scout` в имени
+не содержат и под него не попадут — а «дублирования нет» по итогам такой
+проверки будет ложным выводом, и старый том с сертификатами Let's Encrypt
+останется незамеченным:
 
 ```bash
-docker volume ls | grep scout
+docker volume ls | grep -E "scout|caddy"
+```
+
+Томов у связки всего пять, так что не менее надёжно — вывести список без
+фильтра вовсе и свериться глазами:
+
+```bash
+docker volume ls
 ```
 
 Если в списке одновременно есть `docker_scout-data` и
-`techmost-scout_scout-data` (или похожая пара для `scout-out`, `caddy-data`,
-`caddy-config`, `scout-backups`) — это она: старый том с данными существует
-рядом с новым пустым.
+`techmost-scout_scout-data` (или похожая пара для любого из оставшихся
+четырёх томов — `scout-out`, `caddy-data`, `caddy-config`, `scout-backups`) —
+это она: старый том с данными существует рядом с новым пустым.
 
 Перенести данные из старого тома в новый (на примере `scout-data`; тот же
-приём для остальных задвоившихся томов, с заменой имён томов и внутреннего
-пути на нужные):
+приём с заменой имён томов и внутреннего пути — для `scout-out`,
+`caddy-data`, `caddy-config`, `scout-backups`):
 
 ```bash
 docker compose stop scout
 docker run --rm \
-  -v docker_scout-data:/from \
+  -v docker_scout-data:/from:ro \
   -v techmost-scout_scout-data:/to \
   alpine sh -c "cp -a /from/. /to/"
-docker compose run --rm -u root scout chown -R scout:scout /srv/scout/data
 docker compose start scout
 ```
+
+Источник смонтирован `:ro` — это страховка от опечатки в направлении
+копирования, а не необходимость: `cp -a` источник и так не меняет.
+
+Шаг смены владельца нужен только для `scout-data` и `scout-out` — это тома
+сервиса `scout`, который работает не от root (uid 10001, см.
+`docker/Dockerfile`), и после переноса от root файлы окажутся ему
+недоступны на запись:
+
+```bash
+docker compose run --rm -u root scout chown -R scout:scout /srv/scout/data
+```
+
+(Для `scout-out` — то же самое с путём `/srv/scout/out` вместо
+`/srv/scout/data`.) Для `caddy-data` и `caddy-config` этот шаг не нужен и
+выполнять его не надо: `caddy:2-alpine` работает от root, пользователя
+`scout` в этом образе не существует, и команда просто откажет с ошибкой. Том
+`scout-backups` тоже без этого шага — он и так принадлежит root, сайдкар
+`backup` читает и пишет в него под `user: "0:0"` (`docker/docker-compose.yml`).
 
 Проверьте результат по разделу 7 (вход в веб-интерфейс, история прогонов на
 месте) и только после этого удаляйте старый том — до подтверждения, что
@@ -450,3 +481,8 @@ docker compose start scout
 ```bash
 docker volume rm docker_scout-data
 ```
+
+Эту процедуру никто не прогонял на реальном Docker (перенос данных между
+двумя именованными томами через одноразовый контейнер) — прежде чем
+применять на боевом сервере, стоит один раз проверить порядок команд на
+тестовом стенде.

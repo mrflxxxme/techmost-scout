@@ -6,20 +6,33 @@
 165:  caddy-config:
 166:  scout-backups:
 
-=== новый раздел в docs/deploy.md, §8 (предупреждение перед up -d) ===
+=== docs/deploy.md, §8: предупреждение перед up -d ===
 288:**Если связку поднимали раньше по инструкции без `name` в `docker-compose.yml`,
 
-=== новый раздел в docs/deploy.md, §10 (полная процедура переноса) ===
-402:**Тома переименовались после обновления, база «пропала».** В
+=== docs/deploy.md, §10: полная процедура переноса ===
+292:раздел 10, «Тома переименовались после обновления, база пропала». Иначе
+404:**Тома переименовались после обновления, база «пропала».** В
 
-=== имена томов, упомянутые в новом разделе (старые и новые) ===
-407:`docker_scout-data`, `docker_scout-out`, `docker_caddy-data`,
-408:`docker_caddy-config`, `docker_scout-backups`; теперь —
-409:`techmost-scout_scout-data`, `techmost-scout_scout-out`,
-410:`techmost-scout_caddy-data`, `techmost-scout_caddy-config`,
-411:`techmost-scout_scout-backups` (полный список — ключ `volumes` в
-427:Если в списке одновременно есть `docker_scout-data` и
-428:`techmost-scout_scout-data` (или похожая пара для `scout-out`, `caddy-data`,
-439:  -v docker_scout-data:/from \
-440:  -v techmost-scout_scout-data:/to \
-451:docker volume rm docker_scout-data
+=== цикл 2 (ревью, находка): обе диагностические команды теперь grep -E "scout|caddy" ===
+290:`docker volume ls | grep -E "scout|caddy"` (фильтр `grep scout` без `caddy`
+430:docker volume ls | grep -E "scout|caddy"
+
+=== проверка: новый фильтр ловит все пять старых и все пять новых имён томов ===
+$ printf '%s\n' docker_scout-data docker_scout-out docker_caddy-data docker_caddy-config docker_scout-backups techmost-scout_scout-data techmost-scout_scout-out techmost-scout_caddy-data techmost-scout_caddy-config techmost-scout_scout-backups | grep -E "scout|caddy"
+docker_scout-data
+docker_scout-out
+docker_caddy-data
+docker_caddy-config
+docker_scout-backups
+techmost-scout_scout-data
+techmost-scout_scout-out
+techmost-scout_caddy-data
+techmost-scout_caddy-config
+techmost-scout_scout-backups
+(10 из 10 совпало; прежний фильтр "grep scout" пропускал docker_caddy-data и
+docker_caddy-config — ровно находка ревью цикла 1)
+
+=== цикл 2 (советы): chown ограничен scout-data/scout-out, источник смонтирован :ro, честная пометка "не прогонялось живьём" ===
+452:  -v docker_scout-data:/from:ro \
+467:docker compose run --rm -u root scout chown -R scout:scout /srv/scout/data
+485:Эту процедуру никто не прогонял на реальном Docker (перенос данных между
