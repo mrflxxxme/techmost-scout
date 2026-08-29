@@ -27,7 +27,6 @@ RUN chmod -R a+rX /ms-playwright
 # пакет приложения; settings.prompts_dir/data_dir/out_dir вычисляются от
 # каталога app/config.py и благодаря этому совпадают с /srv/scout.
 ENV PYTHONPATH=/srv/scout/backend
-ENV DATABASE_URL=sqlite+aiosqlite:////srv/scout/data/scout.db
 
 # Непривилегированный пользователь: процесс приложения не должен работать
 # от root даже внутри контейнера. uid фиксирован, чтобы права на тома были

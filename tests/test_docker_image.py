@@ -49,6 +49,31 @@ def test_playwright_browsers_path_outside_root_home() -> None:
     assert not value.startswith("/root"), "каталог браузера не должен быть под /root"
 
 
+def test_browsers_path_is_readable_by_non_root_user() -> None:
+    """После `PLAYWRIGHT_BROWSERS_PATH` каталог браузера открывается на чтение всем.
+
+    Chromium ставится под root в момент сборки, а процесс приложения работает
+    от uid 10001 (`USER scout`). Без `chmod -R a+rX` на каталог браузера
+    непривилегированный процесс не сможет ни прочитать бинарник, ни зайти в
+    подкаталоги — печать PDF (`page.pdf` в export) упадёт на боевом сервере,
+    хотя весь остальной набор тестов останется зелёным: playwright там не
+    запускается. Пропажа этой строки — тихий дефект, поэтому она закреплена
+    отдельным тестом, а не полагается на соседние проверки.
+    """
+    lines = _lines()
+    browsers_path_indices = [i for i, line in enumerate(lines) if "PLAYWRIGHT_BROWSERS_PATH" in line]
+    assert browsers_path_indices, "должна быть переменная PLAYWRIGHT_BROWSERS_PATH"
+    browsers_path_value = lines[browsers_path_indices[0]].split("=", 1)[1].strip()
+
+    chmod_lines = [line for line in lines if line.strip().startswith("RUN ") and "chmod" in line and "+rX" in line]
+    assert chmod_lines, (
+        "должна быть команда chmod, открывающая каталог браузера на чтение и "
+        "выполнение для всех пользователей (a+rX), иначе процесс от scout не "
+        "прочитает бинарник Chromium, поставленный от root"
+    )
+    assert browsers_path_value in chmod_lines[0], "chmod должен применяться именно к каталогу PLAYWRIGHT_BROWSERS_PATH"
+
+
 def test_pythonpath_points_to_backend_tree() -> None:
     """`PYTHONPATH` указывает на дерево исходников внутри /srv/scout."""
     content = DOCKERFILE.read_text(encoding="utf-8")
