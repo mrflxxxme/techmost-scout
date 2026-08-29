@@ -1,0 +1,103 @@
+Протокол мутаций — Э5-П2 «Сайдкар копии базы: три отказа и лимит журнала»
+Формат каждого пункта: мутация → команда → факт (красный) → восстановление → факт (зелёный).
+Все мутации ставились в рабочей копии docker/docker-compose.yml, после каждой файл
+восстанавливался из точной копии командой cp; итоговый git diff после протокола
+содержит только целевые правки задачи (проверено `git status --porcelain docker/`).
+
+1) M8 аудита — образ caddy заменён на nginx (обязательный тест по требованию аудита)
+   Мутация: caddy.image: caddy:2-alpine → nginx:1.27-alpine
+   Команда: pytest tests/test_docker_compose.py -k test_caddy_образ_закреплён_версией -v
+   Факт (красный):
+     AssertionError: assert 'nginx:1.27-alpine' == 'caddy:2-alpine'
+     1 failed, 30 deselected
+   Восстановление: cp <исходник> docker/docker-compose.yml
+   Факт (зелёный): test_caddy_образ_закреплён_версией PASSED
+
+2) M12 аудита — mode=ro заменён на mode=rw в скрипте копии
+   Мутация: sqlite3.connect("file:/data/scout.db?mode=ro", ...) → mode=rw
+   Команда: pytest tests/test_docker_compose.py -k "test_backup_скрипт_читает_боевую_базу_только_на_чтение or test_backup_путь_к_боевой_базе_соответствует_точке_монтирования" -v
+   Факт (красный):
+     test_backup_скрипт_читает_боевую_базу_только_на_чтение: assert 'file:/data/scout.db?mode=rw' == 'file:/data/scout.db?mode=ro' — FAILED
+     test_backup_путь_к_боевой_базе_соответствует_точке_монтирования: PASSED (эта проверка не про mode, ожидаемо)
+     1 failed, 1 passed
+   Восстановление: cp <исходник> docker/docker-compose.yml
+   Факт (зелёный): оба теста PASSED
+
+3) M13 аудита — путь /data/scout.db заменён на /data/other.db
+   Мутация: во всём скрипте /data/scout.db → /data/other.db
+   Команда: pytest tests/test_docker_compose.py -k "test_backup_путь_к_боевой_базе_соответствует_точке_монтирования or test_backup_скрипт_читает_боевую_базу_только_на_чтение" -v
+   Факт (красный):
+     test_backup_скрипт_читает_боевую_базу_только_на_чтение: "ожидалось ровно одно подключение к файлу боевой базы", assert 0 == 1 — FAILED
+     test_backup_путь_к_боевой_базе_соответствует_точке_монтирования: assert '/data/scout.db' in <текст скрипта> — FAILED
+     2 failed
+   Восстановление: cp <исходник> docker/docker-compose.yml
+   Факт (зелёный): оба теста PASSED
+
+4) M14 аудита — блок logging снят у backup
+   Мутация: у backup удалена секция logging (driver/options)
+   Команда: pytest tests/test_docker_compose.py -k test_backup_журнал_ограничен_как_у_остальных_сервисов -v
+   Факт (красный):
+     AssertionError: у backup нет секции logging
+     1 failed
+   Восстановление: cp <исходник> docker/docker-compose.yml
+   Факт (зелёный): test_backup_журнал_ограничен_как_у_остальных_сервисов PASSED
+
+5) Своя правка 1 — depends_on у backup снят (первая копия появится только через сутки)
+   Мутация: у backup удалена секция depends_on
+   Команда: pytest tests/test_docker_compose.py -k test_backup_ждёт_живости_scout -v
+   Факт (красный):
+     AssertionError: у backup нет depends_on — правка 1 аудита не применена
+     1 failed
+   Восстановление: cp <исходник> docker/docker-compose.yml
+   Факт (зелёный): test_backup_ждёт_живости_scout PASSED
+
+6) Совет 4 аудита — pull_policy: never снят
+   Мутация: строка "pull_policy: never" удалена
+   Команда: pytest tests/test_docker_compose.py -k test_backup_не_тянет_образ_из_реестра -v
+   Факт (красный):
+     AssertionError: assert None == 'never'
+     1 failed
+   Восстановление: cp <исходник> docker/docker-compose.yml
+   Факт (зелёный): test_backup_не_тянет_образ_из_реестра PASSED
+
+7) Совет 5 аудита — name: techmost-scout снят
+   Мутация: строка "name: techmost-scout" удалена
+   Команда: pytest tests/test_docker_compose.py -k test_имя_проекта_зафиксировано -v
+   Факт (красный):
+     AssertionError: assert None == 'techmost-scout'
+     1 failed
+   Восстановление: cp <исходник> docker/docker-compose.yml
+   Факт (зелёный): test_имя_проекта_зафиксировано PASSED
+
+8) Своя правка 2 и 3 — полный откат скрипта копии к исходному виду аудита
+   (нет временного имени, нет rename, нет finally, нет предела ожидания блокировки)
+   Мутация: тело command сайдкара заменено на версию аудита:
+     src = sqlite3.connect("file:/data/scout.db?mode=ro", uri=True)
+     dst = sqlite3.connect(dest)
+     with dst:
+         src.backup(dst)
+     dst.close()
+     src.close()
+   (без tmp_dest/os.rename, без finally, без LOCK_WAIT_TIMEOUT_SECONDS/progress)
+   Команда: pytest tests/test_docker_compose.py -k "test_backup_успешный_проход_создаёт_годную_копию or test_backup_прерванный_проход_не_оставляет_файл_пустышку or test_backup_ожидание_снятия_блокировки_ограничено or test_backup_соединения_закрываются_в_finally or test_backup_предел_ожидания_блокировки_в_разумных_границах" -v
+   Факт (красный): 5 failed, 26 deselected
+     - test_backup_соединения_закрываются_в_finally: у try-блока копии нет секции finally
+     - test_backup_предел_ожидания_блокировки_в_разумных_границах: константа LOCK_WAIT_TIMEOUT_SECONDS не найдена (ast.walk не нашёл присваивания)
+     - test_backup_успешный_проход_создаёт_годную_копию: AssertionError на подмене константы (timeout_override) — скрипт-помощник теста не смог подставить предел, потому что его больше нет в скрипте
+     - test_backup_прерванный_проход_не_оставляет_файл_пустышку: та же причина
+     - test_backup_ожидание_снятия_блокировки_ограничено: та же причина
+   Восстановление: cp <исходник> docker/docker-compose.yml
+   Факт (зелёный): все пять тестов PASSED
+
+9) Отдельная проверка реального зависания на неисправленной версии (без подмены тестового
+   помощника, чтобы напрямую воспроизвести находку аудита «>100 секунд»)
+   Мутация: тело command сайдкара — версия аудита (см. п. 8), исполнена вручную вне pytest
+   в отдельном скрипте с настоящей удерживаемой BEGIN EXCLUSIVE транзакцией
+   Факт: поток остаётся alive после join(timeout=6) — подтверждено зависание без предела
+   (см. лог реализации; для итоговых тестов используется управляемый через
+   LOCK_WAIT_TIMEOUT_SECONDS сценарий на 2 с, чтобы не удлинять прогон тестов).
+
+Итог: все восемь целевых мутаций (1–7) и полный откат скрипта копии (8) дают минимум
+один красный тест из набора, специально написанного на соответствующую правку.
+После восстановления исходного docker-compose.yml — весь набор tests/test_docker_compose.py
+(31 тест) зелёный, полный набор pytest (1287 тестов) зелёный.
