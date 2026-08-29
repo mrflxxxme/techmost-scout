@@ -9,6 +9,14 @@ COPY backend ./backend
 COPY prompts ./prompts
 COPY data/gov_support.yaml ./data/gov_support.yaml
 
+# Переменная объявлена ДО установки playwright намеренно: инструкции RUN
+# выполняются по порядку, и playwright читает PLAYWRIGHT_BROWSERS_PATH именно
+# в момент установки. Ниже неё — браузер уедет в домашний кэш root
+# (/root/.cache/ms-playwright), каталог /ms-playwright не появится никогда,
+# и следующий chmod упадёт с кодом 1 — сборка образа оборвётся (найдено на
+# аудите этапа Э5, находка Б1).
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
 # Группа export ставит python-docx и playwright; следом playwright тянет сам
 # Chromium и системные библиотеки для него (--with-deps), иначе headless-
 # браузер падает на отсутствующих .so уже в контейнере. Список пакетов apt
@@ -20,7 +28,6 @@ RUN pip install --no-cache-dir ".[export]" \
 # Каталог с браузером — вне домашней папки пользователя root, поэтому после
 # смены владельца ниже он остаётся нечитаемым для непривилегированного
 # процесса, если явно не открыть права на чтение и выполнение.
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN chmod -R a+rX /ms-playwright
 
 # PYTHONPATH указывает и uvicorn, и консольной scout, откуда импортировать

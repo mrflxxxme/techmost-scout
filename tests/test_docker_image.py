@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -39,11 +40,33 @@ def test_playwright_installs_chromium_with_deps() -> None:
     assert "playwright install --with-deps chromium" in content
 
 
+def test_playwright_browsers_path_declared_before_install() -> None:
+    """`ENV PLAYWRIGHT_BROWSERS_PATH` стоит раньше `playwright install`.
+
+    Инструкции Dockerfile выполняются по порядку. Если переменная объявлена
+    ниже установки, playwright в момент установки её ещё не видит и кладёт
+    браузер в домашний кэш root (`/root/.cache/ms-playwright`) — каталог
+    `/ms-playwright` не появляется никогда, и следующий `RUN chmod -R a+rX
+    /ms-playwright` падает с кодом 1: сборка образа обрывается на первой же
+    команде владельца (находка аудита Б1). Тест сравнивает индексы строк, а
+    не просто наличие обеих директив — только так порядок закреплён.
+    """
+    lines = _lines()
+    env_indices = [i for i, line in enumerate(lines) if line.strip().startswith("ENV PLAYWRIGHT_BROWSERS_PATH")]
+    install_indices = [i for i, line in enumerate(lines) if "playwright install" in line]
+    assert env_indices, "должна быть директива ENV PLAYWRIGHT_BROWSERS_PATH"
+    assert install_indices, "должна быть команда playwright install"
+    assert env_indices[0] < install_indices[0], (
+        "ENV PLAYWRIGHT_BROWSERS_PATH должен стоять раньше playwright install, "
+        "иначе браузер уедет в домашний кэш root, а следующий chmod упадёт"
+    )
+
+
 def test_playwright_browsers_path_outside_root_home() -> None:
     """Каталог браузеров задан явно и не лежит в домашней папке root."""
     lines = _lines()
-    matches = [line for line in lines if "PLAYWRIGHT_BROWSERS_PATH" in line]
-    assert matches, "должна быть переменная PLAYWRIGHT_BROWSERS_PATH"
+    matches = [line for line in lines if line.strip().startswith("ENV PLAYWRIGHT_BROWSERS_PATH")]
+    assert matches, "должна быть директива ENV PLAYWRIGHT_BROWSERS_PATH"
     value = matches[0].split("=", 1)[1].strip()
     assert value, "у PLAYWRIGHT_BROWSERS_PATH должно быть значение"
     assert not value.startswith("/root"), "каталог браузера не должен быть под /root"
@@ -61,8 +84,10 @@ def test_browsers_path_is_readable_by_non_root_user() -> None:
     отдельным тестом, а не полагается на соседние проверки.
     """
     lines = _lines()
-    browsers_path_indices = [i for i, line in enumerate(lines) if "PLAYWRIGHT_BROWSERS_PATH" in line]
-    assert browsers_path_indices, "должна быть переменная PLAYWRIGHT_BROWSERS_PATH"
+    browsers_path_indices = [
+        i for i, line in enumerate(lines) if line.strip().startswith("ENV PLAYWRIGHT_BROWSERS_PATH")
+    ]
+    assert browsers_path_indices, "должна быть директива ENV PLAYWRIGHT_BROWSERS_PATH"
     browsers_path_value = lines[browsers_path_indices[0]].split("=", 1)[1].strip()
 
     chmod_lines = [line for line in lines if line.strip().startswith("RUN ") and "chmod" in line and "+rX" in line]
@@ -99,6 +124,54 @@ def test_user_directive_is_non_root_and_after_last_run() -> None:
     )
 
 
+def test_copy_sources_exist_in_build_context() -> None:
+    """Каждый источник `COPY` реально существует в дереве репозитория.
+
+    Опечатка в имени каталога-источника (`backend` → `backend_nope`, потеря
+    `COPY prompts`) ничем, кроме реальной сборки, не ловится — а демона
+    Docker в этой среде нет. Сверяем текстом Dockerfile с содержимым дерева.
+    """
+    lines = _lines()
+    copy_lines = [line.strip() for line in lines if line.strip().startswith("COPY ")]
+    assert copy_lines, "в Dockerfile должна быть хотя бы одна директива COPY"
+    for line in copy_lines:
+        parts = line.removeprefix("COPY ").split()
+        *sources, _dest = parts
+        assert sources, f"у директивы COPY должен быть хотя бы один источник: {line!r}"
+        for source in sources:
+            path = REPO_ROOT / source
+            assert path.exists(), f"источник COPY не найден в контексте сборки: {source!r}"
+
+
+def test_all_required_copy_sources_are_present() -> None:
+    """Обязательные источники `COPY` никуда не пропали.
+
+    `test_copy_sources_exist_in_build_context` ловит опечатку в имени
+    источника, но не ловит пропажу целой директивы `COPY` — удалённая строка
+    просто не попадёт в список для проверки. Без `COPY prompts` пайплайн
+    падает на первой же стадии, потому что промпты не читаются с диска.
+    """
+    content = DOCKERFILE.read_text(encoding="utf-8")
+    required_sources = ["backend", "prompts", "pyproject.toml", "data/gov_support.yaml"]
+    copy_lines = [line.strip() for line in content.splitlines() if line.strip().startswith("COPY ")]
+    copied_sources: set[str] = set()
+    for line in copy_lines:
+        *sources, _dest = line.removeprefix("COPY ").split()
+        copied_sources.update(sources)
+    for source in required_sources:
+        assert source in copied_sources, f"директива COPY {source!r} отсутствует в Dockerfile"
+
+
+def test_cmd_binds_to_all_interfaces() -> None:
+    """`uvicorn` слушает `0.0.0.0`, а не `127.0.0.1`.
+
+    На `127.0.0.1` процесс виден только самому себе внутри контейнера — Caddy
+    из соседнего контейнера до него не достучится, и на сайте будет 502.
+    """
+    content = DOCKERFILE.read_text(encoding="utf-8")
+    assert '"--host", "0.0.0.0"' in content, "CMD должен биндиться на 0.0.0.0, не на 127.0.0.1"
+
+
 def test_healthcheck_present_and_checks_health_endpoint() -> None:
     """Есть `HEALTHCHECK`, и его команда обращается к `/health`."""
     content = DOCKERFILE.read_text(encoding="utf-8")
@@ -118,9 +191,46 @@ def test_dockerignore_file_exists() -> None:
 def test_dockerignore_excludes_secrets_and_dev_artifacts() -> None:
     """Секреты, боевая база и служебные каталоги не попадают в контекст сборки."""
     lines = DOCKERIGNORE.read_text(encoding="utf-8").splitlines()
-    required_exact = [".env", ".git", ".planning", "tests", "out"]
+    required_exact = [".git", ".planning", "tests", "out"]
     for entry in required_exact:
         assert entry in lines, f"в .dockerignore должна быть строка {entry!r}"
 
     db_patterns = [line for line in lines if "db" in line and "*" in line]
-    assert db_patterns, "должен быть шаблон, закрывающий файлы боевой базы (data/*.db)"
+    assert db_patterns, "должен быть шаблон, закрывающий файлы боевой базы (data/*.db*)"
+
+
+def test_dockerignore_secret_patterns_are_recursive() -> None:
+    """Шаблоны секретов рекурсивные (`**/...`), а не только для корня репозитория.
+
+    `docs/deploy.md` §3 велит создавать `docker/.env` — не в корне. Шаблон
+    верхнего уровня `.env` его не поймает: файл попадёт в контекст сборки, а
+    `.dockerignore` пообещает больше, чем сделает. Нужны `**/.env`,
+    `**/.env.*`, `**/*.pem`, `**/*.key`.
+    """
+    lines = [line.strip() for line in DOCKERIGNORE.read_text(encoding="utf-8").splitlines()]
+    for pattern in ("**/.env", "**/.env.*", "**/*.pem", "**/*.key"):
+        assert pattern in lines, f"в .dockerignore должен быть рекурсивный шаблон {pattern!r}"
+
+    recursive_patterns = [line for line in lines if line.startswith("**/")]
+    nested_secrets = ["docker/.env", "docker/.env.prod", "certs/server.pem", "certs/id_rsa.key"]
+    for nested in nested_secrets:
+        basename = nested.rsplit("/", 1)[-1]
+        matched = any(fnmatch.fnmatch(basename, pattern.removeprefix("**/")) for pattern in recursive_patterns)
+        assert matched, f"рекурсивный шаблон .dockerignore не закрывает вложенный файл {nested!r}"
+
+
+def test_dockerignore_covers_backup_copies_of_database() -> None:
+    """Шаблон закрывает резервные копии базы (`scout.db.bak-*`), а не только саму базу.
+
+    План требовал `data/*.db*`, а в файле долго стоял `data/*.db` — тот не
+    совпадает с `scout.db.bak-2026-08-20`: три копии боевой базы с реальными
+    прогонами (12,1 МБ) уезжали в контекст сборки вместо ожидаемых 0,2 МБ.
+    """
+    lines = DOCKERIGNORE.read_text(encoding="utf-8").splitlines()
+    db_patterns = [line.strip() for line in lines if line.strip().startswith("data/") and "db" in line]
+    assert db_patterns, "должен быть шаблон, закрывающий файлы боевой базы"
+
+    sample_names = ["scout.db", "scout.db-journal", "scout.db-wal", "scout.db.bak-2026-08-20"]
+    for name in sample_names:
+        matched = any(fnmatch.fnmatch(f"data/{name}", pattern) for pattern in db_patterns)
+        assert matched, f"шаблон .dockerignore не закрывает {name!r}"
