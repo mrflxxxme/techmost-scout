@@ -1,0 +1,56 @@
+handoff:
+  from: implementer-C
+  to: reviewer
+  task: Э5-П3
+  did:
+    - "docs/deploy.md §3: убрано ложное обоснование APP_ENV=prod («любое другое
+      значение оставляет схему открытой»). По факту backend/app/main.py:40 схема
+      открыта только при app_env == \"dev\" или \"test\"; закрыта при пустой
+      строке, опечатке и любом другом значении. Опасен один случай — переменной
+      нет вовсе, тогда backend/app/config.py:29 подставляет умолчание \"dev\".
+      Шаг (APP_ENV=prod в docker/.env) не менялся, изменено только обоснование."
+    - "docs/deploy.md §10: убрано утверждение «все три сервиса пишут JSON-логи
+      с ротацией» — на фактическом docker/docker-compose.yml ротация задана
+      только у scout и caddy, у backup секции logging нет. Формулировка
+      переписана по факту файла на ветке задачи (не по будущему состоянию
+      после слияния с параллельной задачей)."
+    - "docs/deploy.md §10: добавлен разбор симптома незамененного плейсхолдера
+      хэша пароля в Caddyfile — вечный 401 по /health вместо ошибки старта,
+      легко принять за забытый пароль."
+    - "docs/acceptance.md: ссылка на ключ Yandex Search API исправлена
+      с deps-manual.md п. 8 на п. 6 (сверено по самому справочнику: п. 6 —
+      Yandex Search API, п. 8 — Semantic Scholar)."
+    - "docs/sources.md: зеркальная ошибка исправлена — Semantic Scholar
+      теперь отправлен в deps-manual.md п. 8, а не в п. 6."
+    - "Нумерация docs/deps-manual.md не менялась."
+  artifacts:
+    - docs/deploy.md
+    - docs/acceptance.md
+    - docs/sources.md
+    - .planning/evidence/Э5-П3-grep.txt
+  self_audit: pass
+  checks:
+    - "pytest -q: 1275 passed, 1 warning (не меньше 1275, требуемое условие)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 211 files already formatted"
+    - "грепы старых номеров пунктов (п. 8 у Yandex Search в acceptance.md,
+      ложное APP_ENV-обоснование, ложное «все три сервиса» про логи) —
+      без совпадений; см. Э5-П3-grep.txt"
+  escalate: none
+  read_first:
+    - .planning/evidence/audit-Э5.md (линза безопасности п.7, стоимость и
+      устойчивость п.2, советы 1, 2, 6)
+    - docs/deploy.md (§3, §10)
+    - docs/acceptance.md (предусловие 0)
+    - docs/sources.md (строка про Semantic Scholar)
+    - docs/deps-manual.md (только читал, п. 6 и п. 8, нумерация не менялась)
+    - backend/app/config.py (умолчание app_env = "dev")
+    - backend/app/main.py (schema_urls: открыто только при dev/test)
+    - docker/docker-compose.yml (logging только у scout и caddy на этой ветке)
+  notes: >-
+    Файлы docs/SPEC.md, docs/deps-manual.md, docker/*, backend/, tests/ не
+    трогал — вне границ задачи. Ветка создана от fa4b53f, как указано в
+    постановке; база подтверждена (fa4b53f — предок HEAD ветки задачи).
+    За границами задачи замечено, но не правил: docs/deps-manual.md содержит
+    два раздела с номером 10 (совет 3 аудита) — вне списка советов моей
+    задачи (1, 2, 6), нумерацию справочника трогать запрещено постановкой.
