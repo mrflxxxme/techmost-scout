@@ -1,0 +1,74 @@
+Задача Э5-И7: docs/deploy.md — вывод команд из критериев приёмки.
+
+Обновлено в цикле 2 после правки по находке ревью (клонирование приватного
+репозитория без аутентификации) — номера строк ниже соответствуют файлу
+после правки (разделы 1, 2, 8 расширены; раздел 7 переформулирован).
+
+=== Критерий 1: rg -n "docker compose up -d" docs/deploy.md ===
+180:docker compose up -d
+188:файле), и тег становится доступен раньше, чем `docker compose up -d` попытается
+256:docker compose up -d
+281:пересоздан из нового образа — `docker compose up -d` выше — поэтому файл в
+Результат: не меньше одного совпадения — есть.
+
+=== Критерий 2: rg -n "APP_ENV=prod" docs/deploy.md ===
+121:- **`APP_ENV=prod`** — закрывает `/api/docs` и `/api/openapi.json`
+Результат: не меньше одного совпадения — есть.
+
+=== Критерий 3a: rg -n "caddy hash-password" docs/deploy.md ===
+157:docker run --rm caddy:2-alpine caddy hash-password --plaintext '<ПАРОЛЬ>'
+
+=== Критерий 3b: rg -n "scout.example.ru|admin@example.ru|ХЭШ_ПАРОЛЯ_ЗАМЕНИТЬ_ПРИ_ДЕПЛОЕ" docs/deploy.md ===
+149:| `scout.example.ru` | боевой домен |
+150:| `admin@example.ru` | почта для уведомлений ACME (Let's Encrypt) |
+151:| `ХЭШ_ПАРОЛЯ_ЗАМЕНИТЬ_ПРИ_ДЕПЛОЕ` | вывод команды хеширования пароля ниже |
+172:  -e 's/ХЭШ_ПАРОЛЯ_ЗАМЕНИТЬ_ПРИ_ДЕПЛОЕ/<ХЭШ>/' \
+Результат: все три плейсхолдера названы, генерация хэша описана — есть.
+
+=== Критерий 4a: rg -n "scout.db" docs/deploy.md ===
+209:Если на сервер переносится готовая база `scout.db` (например, демо-данные,
+216:docker compose cp ./scout.db scout:/srv/scout/data/scout.db
+217:docker compose run --rm -u root scout chown scout:scout /srv/scout/data/scout.db
+288:копию `scout.db` через `sqlite3.Connection.backup()` стандартной библиотеки
+308:docker compose cp ./scout-restore.db scout:/srv/scout/data/scout.db
+309:docker compose run --rm -u root scout chown scout:scout /srv/scout/data/scout.db
+
+=== Критерий 4b: rg -n "chown" docs/deploy.md ===
+217:docker compose run --rm -u root scout chown scout:scout /srv/scout/data/scout.db
+309:docker compose run --rm -u root scout chown scout:scout /srv/scout/data/scout.db
+Результат: перенос базы описан вместе со сменой владельца файла — есть.
+
+=== Критерий 5: rg -n "gov_support.yaml" docs/deploy.md ===
+269:файлом `data/gov_support.yaml`) только при **первом создании** тома. Если
+270:новая версия принесла обновлённый `gov_support.yaml`, повторная сборка образа
+276:docker compose cp scout:/srv/scout/data/gov_support.yaml /tmp/gov_support.yaml
+277:docker compose cp /tmp/gov_support.yaml scout:/srv/scout/data/gov_support.yaml
+Результат: шаг обновления справочника на томе есть.
+
+=== Критерий 6a: rg -n "curl -sI https://" docs/deploy.md ===
+228:curl -sI https://<ДОМЕН>/health
+236:- `curl -sI https://<ДОМЕН>/health` возвращает код ответа Caddy — `401` без
+
+=== Критерий 6b: rg -n "docker compose ps" docs/deploy.md ===
+181:docker compose ps
+227:docker compose ps
+233:- в `docker compose ps` все сервисы (`scout`, `caddy`, `backup`) в состоянии
+247:Э5-1, `.planning/PLAN.md`): вывод `docker compose ps`, вывод `curl -sI
+365:`docker compose ps` и `docker compose logs scout` в этом случае.
+Результат: проверка деплоя описана теми же командами, что и по DLG-1 — есть.
+
+=== Критерий 7: rg -n "scout-backups" docs/deploy.md ===
+289:Python и кладёт её в отдельный том `scout-backups` (не тот же том, что у
+Результат: раздел про копии базы есть.
+
+=== Критерий 8: rg -n "194\.87|root@" docs/deploy.md ===
+(нет совпадений)
+Результат: адрес сервера в репозиторий не пишется — подтверждено. SSH-команды
+раздела 2 намеренно не используют подстроку "root@" даже с плейсхолдером
+(владелец подключается к серверу под своим пользователем, а не под root; для
+контейнеров используется `-u root` внутри docker compose, что не совпадает с
+регэкспом критерия).
+
+=== Критерий 9: rg -nE "sk-[A-Za-z0-9]{6,}|Api-Key [A-Za-z0-9]{6,}|AQVN[A-Za-z0-9]" docs/deploy.md ===
+(нет совпадений)
+Результат: ни одного значения ключа в документе — подтверждено.
