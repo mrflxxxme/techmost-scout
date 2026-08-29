@@ -37,12 +37,25 @@ def _backup_script() -> str:
 def _script_constant(script: str, name: str) -> int:
     """Возвращает точное целое значение присваивания ``name = <число>`` в скрипте.
 
-    Сравнение через int(), а не через подстроку: "14" входит и в "140", а
-    точное значение — нет.
+    Значение берётся разбором дерева, а не поиском по тексту, и это защита
+    сразу от двух бед. Подстрока слишком слаба: "14" входит и в "140", то есть
+    предел вдесятеро слабее заявленного прошёл бы незамеченным. Регулярное
+    выражение с якорями на всю строку слишком хрупко: оно роняет проверку на
+    законной записи того же числа — с хвостовым комментарием или разделителем
+    разрядов (``86_400``). Дерево не видит ни пробелов, ни комментариев, ни
+    формы литерала — только значение.
     """
-    match = re.search(rf"^\s*{re.escape(name)}\s*=\s*(\d+)\s*$", script, re.MULTILINE)
-    assert match, f"не найдено присваивание {name} = <число> в скрипте backup"
-    return int(match.group(1))
+    tree = ast.parse(script)
+    values = [
+        ast.literal_eval(node.value)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name) and target.id == name and isinstance(node.value, ast.Constant)
+    ]
+    assert len(values) == 1, f"ожидалось ровно одно присваивание {name} = <число>, найдено {len(values)}"
+    assert isinstance(values[0], int), f"{name} присвоено не целое число: {values[0]!r}"
+    return values[0]
 
 
 def _try_node_containing(tree: ast.Module, marker: str) -> ast.Try:
