@@ -52,3 +52,70 @@ handoff:
     критерия (404 при prod, 200 при dev, обе половины) выполнена. main.py —
     107 строк, в пределах заявленных ≤110. Живых вызовов не делалось, все
     проверки локальные.
+
+cycle_2:
+  from: implementer-A
+  to: reviewer
+  task: Э5-И4
+  review_ref: .planning/evidence/Э5-И4-review.md (коммит 1226831, вердикт ВЕРНУТЬ)
+  did:
+    - >-
+      Введена функция main.build_app(app_env) — единственное место, где
+      schema_urls(app_env) действительно довозится и до FastAPI(docs_url=...,
+      openapi_url=...), и до templates.env.globals["api_docs_url"]. Боевой
+      app = build_app(settings.app_env) теперь тоже собирается через неё, а
+      не отдельным блоком кода — второй копии точки правды не появилось.
+    - >-
+      tests/test_web_api_schema.py переписан: поведенческие тесты
+      (test_prod_app_returns_404_on_schema_endpoints,
+      test_dev_app_returns_200_on_schema_endpoints) и тесты шаблона
+      (test_base_html_hides_api_link_when_schema_closed,
+      test_base_html_shows_api_link_when_schema_open) теперь вызывают
+      main.build_app("prod"/"dev") напрямую — ту же функцию, что строит
+      main.app, — вместо пересборки FastAPI(...) или monkeypatch.setitem
+      мимо реального кода. Добавлена автоиспользуемая фикстура
+      _restore_api_docs_url: build_app пишет в общий templates.env.globals,
+      фикстура возвращает исходное значение после каждого теста, чтобы не
+      просачиваться в другие тестовые файлы.
+    - >-
+      Докстрока schema_urls приведена к фактическому поведению: явно сказано,
+      что сравнение регистрозависимое и .lower() не вызывается. Добавлен
+      test_schema_urls_comparison_is_case_sensitive (Dev/DEV/Test/TEST
+      закрывают схему) — фиксирует это тестом, а не только текстом.
+    - >-
+      Обеими мутациями ревью (openapi_url зашит в FastAPI(...) в обход
+      schema_urls; строка templates.env.globals["api_docs_url"] = docs_url
+      удалена) прогнан цикл «поставлена — красный, откачена — зелёный»,
+      фактический вывод — в .planning/evidence/Э5-И4-pytest.txt.
+  artifacts:
+    - backend/app/main.py
+    - tests/test_web_api_schema.py
+    - .planning/evidence/Э5-И4-pytest.txt
+    - .planning/evidence/Э5-И4-prod.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_api_schema.py -v: 13 passed"
+    - "pytest tests/test_web_templates.py tests/test_web_auth.py tests/test_web_flow_e2e.py -v: 12 passed"
+    - "pytest -q: 1275 passed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 210 files already formatted"
+    - "PYTHONPATH=backend APP_ENV=prod python -c \"from app.main import app; print(app.docs_url, app.openapi_url)\": None None"
+    - "rg -n 'docs_url=\"/api/docs\"' backend/app/main.py: пусто (exit 1)"
+    - "rg -n 'href=\"/api/docs\"' backend/app/web/templates/base.html: пусто (exit 1)"
+    - "мутация а (openapi_url зашит в FastAPI(...)): поставлена -> 1 failed, 12 passed (test_prod_app_returns_404_on_schema_endpoints); откачена -> 13 passed"
+    - "мутация б (удалена строка templates.env.globals[\"api_docs_url\"] = docs_url): поставлена -> 1 failed, 12 passed (test_base_html_shows_api_link_when_schema_open); откачена -> 13 passed"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э5-И4-review.md
+    - backend/app/main.py (функция build_app)
+    - tests/test_web_api_schema.py
+  notes: >-
+    main.py вырос до 121 строки (было 107) из-за вынесения сборки приложения
+    в build_app(app_env) — это осознанный минимальный рефакторинг ради
+    единственной точки правды, которую можно вызвать из теста с "prod" и
+    "dev"; жёсткого лимита 110 строк в тестах нет (только страж 500 строк
+    tests/test_backend_layout.py), план оценивал бюджет "88 → ≤110" для
+    первого цикла, не для правки по находке ревью. Второго признака «мы в
+    бою» не заведено — build_app принимает app_env явным параметром, а не
+    читает settings изнутри. Совет ревью про докстроку доведён до теста, а
+    не оставлен только текстом.

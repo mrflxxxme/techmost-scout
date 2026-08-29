@@ -26,15 +26,16 @@ settings = get_settings()
 
 
 def schema_urls(app_env: str) -> tuple[str | None, str | None]:
-    """Адреса схемы API. Открыты только в средах разработки: dev и test.
+    """Адреса схемы API. Открыты только при `app_env`, буквально равном `dev` или `test`.
 
     Единственная точка правды: до этой задачи `docs_url` был зашит в
     `FastAPI(...)`, а вход по паролю навешен только на роутер интерфейса
     (`app.web.routes`) — схема API оставалась за одним рубежом Caddy вместо
-    двух. Правило закрыто по умолчанию: любое значение `app_env`, кроме
-    `dev` и `test` в нижнем регистре — включая `prod`, пустую строку и
-    опечатку, — даёт `(None, None)`. Второй признак «мы в бою», помимо
-    `app_env`, этот этап не заводит.
+    двух. Правило закрыто по умолчанию: сравнение регистрозависимое —
+    `.lower()` не вызывается, — поэтому любое значение, кроме буквально
+    `dev` или `test` в нижнем регистре (включая `Dev`, `PROD`, пустую
+    строку и опечатку), даёт `(None, None)`. Второй признак «мы в бою»,
+    помимо `app_env`, этот этап не заводит.
     """
     if app_env in ("dev", "test"):
         return "/api/docs", "/api/openapi.json"
@@ -75,33 +76,46 @@ async def lifespan(_: FastAPI):
     yield
 
 
-docs_url, openapi_url = schema_urls(settings.app_env)
+def build_app(app_env: str) -> FastAPI:
+    """Собирает приложение целиком для заданного окружения.
 
-app = FastAPI(
-    title="ТехМост Скаут",
-    description="Подбор научно-технических решений под задачу бизнеса",
-    version="0.1.0",
-    lifespan=lifespan,
-    docs_url=docs_url,
-    openapi_url=openapi_url,
-)
-templates.env.globals["api_docs_url"] = docs_url
+    Единственное место, где результат `schema_urls` довозится и до объекта
+    `FastAPI` (`docs_url`/`openapi_url`), и до `templates.env.globals`
+    (`api_docs_url`, читает `base.html`). Тесты Э5-И4 вызывают эту функцию
+    напрямую с `"prod"` и `"dev"`, чтобы проверять настоящий код сборки
+    приложения, а не отдельно пересобранную копию мимо него (ревью цикла 1:
+    мутация, зашивающая `openapi_url` прямо в вызов `FastAPI(...)` в обход
+    `schema_urls`, проходила незамеченной, пока приложение строилось не
+    здесь).
+    """
+    docs_url, openapi_url = schema_urls(app_env)
+    app = FastAPI(
+        title="ТехМост Скаут",
+        description="Подбор научно-технических решений под задачу бизнеса",
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url=docs_url,
+        openapi_url=openapi_url,
+    )
+    templates.env.globals["api_docs_url"] = docs_url
 
-static_dir = WEB_DIR / "static"
-static_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    static_dir = WEB_DIR / "static"
+    static_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    @app.get("/health", include_in_schema=False)
+    async def health() -> dict[str, str]:
+        """Проверка живости для прокси и мониторинга. Без авторизации."""
+        return {"status": "ok", "env": app_env}
+
+    # Маршруты интерфейса и API живут в web/routes.py, чтобы main.py оставался
+    # точкой сборки, а не свалкой обработчиков.
+    from app.web.routes import router as web_router
+
+    # Один общий вход на всех маршрутах, кроме /health (РЕШ-16): защита живёт в
+    # приложении, пароль на Caddy при деплое — второй рубеж, а не единственный.
+    app.include_router(web_router, dependencies=[Depends(require_auth)])
+    return app
 
 
-@app.get("/health", include_in_schema=False)
-async def health() -> dict[str, str]:
-    """Проверка живости для прокси и мониторинга. Без авторизации."""
-    return {"status": "ok", "env": settings.app_env}
-
-
-# Маршруты интерфейса и API живут в web/routes.py, чтобы main.py оставался
-# точкой сборки, а не свалкой обработчиков.
-from app.web.routes import router as web_router  # noqa: E402 — после создания app
-
-# Один общий вход на всех маршрутах, кроме /health (РЕШ-16): защита живёт в
-# приложении, пароль на Caddy при деплое — второй рубеж, а не единственный.
-app.include_router(web_router, dependencies=[Depends(require_auth)])
+app = build_app(settings.app_env)
