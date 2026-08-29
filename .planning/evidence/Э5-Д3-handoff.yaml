@@ -1,0 +1,82 @@
+handoff:
+  from: implementer-C
+  to: reviewer
+  task: Э5-Д3
+  did:
+    - "Добавлено предупреждение в docs/deploy.md §8 «Обновление версии»: перед
+      docker compose up -d проверить имена томов, если связку поднимали по
+      прежней версии инструкции (без name в docker-compose.yml)."
+    - "Добавлен раздел в docs/deploy.md §10 «Разбор проблем» — «Тома
+      переименовались после обновления, база «пропала»»: объяснение причины
+      (name: techmost-scout меняет имя проекта compose, а с ним и префикс
+      имён томов с docker_* на techmost-scout_*), диагностика через
+      docker volume ls | grep scout, и рабочая команда переноса данных
+      между томами через одноразовый контейнер alpine с cp -a, plus chown
+      под uid приложения и осторожное удаление старого тома только после
+      проверки."
+    - "Точные имена томов (scout-data, scout-out, caddy-data, caddy-config,
+      scout-backups) и name: techmost-scout взяты из фактического
+      docker/docker-compose.yml на ветке — сверено грепом, см.
+      .planning/evidence/Э5-Д3-grep.txt."
+  artifacts:
+    - docs/deploy.md
+    - .planning/evidence/Э5-Д3-grep.txt
+  self_audit: pass
+  checks:
+    - "pytest -q: 1293 passed, 1 warning (StarletteDeprecationWarning httpx, не наш код)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 211 files already formatted"
+    - "grep фактических name/volumes в docker/docker-compose.yml и грепом
+      подтверждённые новые разделы в docs/deploy.md — см.
+      .planning/evidence/Э5-Д3-grep.txt"
+  escalate: none
+  read_first:
+    - .planning/evidence/audit-Э5-повтор.md (раздел 4, совет 5)
+    - docs/deploy.md (разделы 5, 8, 9, 10)
+    - docker/docker-compose.yml (ключ name и volumes)
+  notes: >
+    docker/*  не трогал — связка у параллельной задачи волны. Живого docker
+    compose up -d на два имени проекта не запускал (нет боевого сервера в
+    песочнице): команда переноса собрана по документированному поведению
+    docker run -v <том>:<путь> и cp -a, тем же приёмом, что уже используется
+    в проекте для переноса демо-базы (раздел 6) и восстановления из копии
+    (раздел 9), но напрямую эту команду переноса том-в-том никто не
+    прогонял живьём — стоит один раз проверить на тестовом сервере перед
+    первым боевым использованием.
+
+cycle_2:
+  review_commit: "444541f"
+  verdict_received: "ВЕРНУТЬ (1 блокирующая, 3 совета)"
+  fixed:
+    - "Блокирующая: docker volume ls | grep scout не находил старые тома
+      docker_caddy-data и docker_caddy-config (нет подстроки scout в имени),
+      хотя текст рядом обещал, что фильтр покажет 'похожую пару' и для
+      Caddy. Заменено на grep -E \"scout|caddy\" в обоих местах (§8 и §10) с
+      альтернативой без фильтра вовсе (томов пять, список короткий). Явно
+      написано, почему прежний фильтр был неверен."
+    - "Совет 1: шаг chown -R scout:scout ограничен только scout-data и
+      scout-out (тома сервиса scout, uid 10001); для caddy-data/caddy-config
+      явно написано, что шаг не нужен и упадёт (caddy:2-alpine — root, без
+      пользователя scout); для scout-backups — том и так root, сайдкар
+      backup под user: \"0:0\"."
+    - "Совет 2: том-источник в примере переноса смонтирован :ro
+      (-v docker_scout-data:/from:ro) — страховка от опечатки в направлении
+      копирования."
+    - "Совет 3: добавлена явная пометка в docs/deploy.md (не только в
+      handoff), что перенос том-в-том через одноразовый контейнер никто не
+      прогонял на реальном Docker и стоит проверить на тестовом стенде
+      перед боевым применением."
+  checks:
+    - "pytest -q: 1293 passed, 1 warning (та же сторонняя StarletteDeprecationWarning)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 211 files already formatted"
+    - "printf со всеми 10 именами томов (5 старых docker_*, 5 новых
+      techmost-scout_*) | grep -E \"scout|caddy\" → все 10 строк совпали
+      (прежний grep scout ловил только 3 из 5 старых); вывод в
+      .planning/evidence/Э5-Д3-grep.txt, раздел 'проверка: новый фильтр
+      ловит все пять старых и все пять новых имён томов'"
+  artifacts:
+    - docs/deploy.md
+    - .planning/evidence/Э5-Д3-grep.txt
+  self_audit: pass
+  escalate: none
