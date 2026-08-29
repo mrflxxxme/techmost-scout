@@ -69,3 +69,67 @@ handoff:
     команды сервиса (отдельного файла в границах задачи нет, скрипт
     неизбежно многострочный — копия, ротация, печать отказа). Живой запуск
     docker compose up или build не делался — демона нет.
+
+cycle_2:
+  from: implementer-B
+  to: reviewer
+  task: Э5-И2
+  reacted_to: .planning/evidence/Э5-И2-review.md (коммит 29dcc77, вердикт ВЕРНУТЬ)
+  did:
+    - >-
+      Блокирующая находка 1 (RETENTION_DAYS=140 и DAY=186400 проходят набор
+      незамеченными). test_backup_ротация_копий_14_дней и
+      test_backup_период_суточный переписаны на точное сравнение int() через
+      новый хелпер _script_constant() вместо поиска подстроки "14"/"86400" —
+      число 140 или 186400 больше не совпадает с искомым значением.
+    - >-
+      Блокирующая находка 2 (пропажа печати отказа копии маскируется соседней
+      веткой ротации). test_backup_отказ_печатается_в_stderr_и_цикл_продолжается
+      заменён двумя отдельными тестами:
+      test_backup_отказ_копии_печатается_в_stderr и
+      test_backup_отказ_ротации_печатается_в_stderr. Каждый разбирает
+      Python-скрипт через ast.parse, находит свой try (по маркеру
+      src.backup(dst) для копии и os.remove(path) для ротации через
+      _try_node_containing()) и проверяет печать в stderr только в его
+      обработчиках (_handlers_print_to_stderr()) — независимо от соседней
+      ветки.
+    - >-
+      Совет 2 ревью (test_backup_период_суточный той же болезнью) закрыт тем
+      же приёмом заодно, в рамках одной правки.
+    - >-
+      Все три мутации ревьюера воспроизведены вручную на
+      docker/docker-compose.yml (RETENTION_DAYS=140, DAY=186400, печать
+      отказа убрана только в ветке копии) — после правки тестов каждая
+      краснит набор; после отката к исходному файлу — снова 19 passed.
+      Дополнительно перепроверены все пять мутаций цикла 1 (:ro, том копий,
+      короткая форма depends_on, scout.ports, required: false) — по-прежнему
+      ловятся. Полный протокол — .planning/evidence/Э5-И2-mutations-cycle2.txt.
+    - >-
+      docker/docker-compose.yml не менялся: дефект был только в тестах,
+      diff подтверждён (git status --porcelain показывает единственный
+      изменённый файл tests/test_docker_compose.py).
+  artifacts:
+    - tests/test_docker_compose.py
+    - .planning/evidence/Э5-И2-mutations-cycle2.txt
+    - .planning/evidence/Э5-И2-pytest.txt (дополнен блоком «Цикл 2»)
+  self_audit: pass
+  checks:
+    - "pytest tests/test_docker_compose.py -v: 19 passed in 0.12s"
+    - "pytest -q: 1245 passed, 1 warning in 68.76s (база 1226 + 19 в файле связки)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 207 files already formatted"
+    - "мутация RETENTION_DAYS=140 → 1 failed (test_backup_ротация_копий_14_дней), откат → 19 passed"
+    - "мутация DAY=186400 → 1 failed (test_backup_период_суточный), откат → 19 passed"
+    - "мутация: печать отказа убрана в ветке копии → 1 failed (test_backup_отказ_копии_печатается_в_stderr), ветка ротации не задета, откат → 19 passed"
+    - "пять мутаций цикла 1 (:ro, том копий, depends_on, ports, required: false) перепроверены — все ловятся"
+    - "diff docker/docker-compose.yml после отката против резервной копии до мутаций: пусто (файл не изменён)"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э5-И2-review.md
+    - .planning/evidence/Э5-И2-mutations-cycle2.txt
+    - tests/test_docker_compose.py
+  notes: >-
+    docker-compose.yml не трогал — обе блокирующие находки ревью были в
+    tests/test_docker_compose.py, конфигурация связки признана ревьюером
+    верной уже в цикле 1. Цикл 2 из 2 по регламенту — если бы находки
+    повторились, это шло бы на разбор к владельцу; повторов нет.

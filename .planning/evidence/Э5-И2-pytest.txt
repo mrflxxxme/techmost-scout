@@ -51,3 +51,10 @@ tests/test_docker_compose.py::test_секретов_нет_в_файле PASSED 
 tests/test_docker_compose.py::test_env_file_не_ослаблен PASSED           [100%]
 
 ============================== 17 passed in 0.11s ==============================
+
+=== Цикл 2 (правки по ревью Э5-И2-review.md, коммит 29dcc77) ===
+$ pytest tests/test_docker_compose.py -v
+19 passed in 0.12s
+
+$ pytest -q
+1245 passed, 1 warning in 68.76s (0:01:08)
