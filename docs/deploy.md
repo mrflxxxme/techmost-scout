@@ -139,3 +139,154 @@ sudo swapon /swapfile
 
 (Чтобы своп переживал перезагрузку, добавьте строку `/swapfile none swap sw 0
 0` в `/etc/fstab` — это обычная практика, не специфика этого проекта.)
+
+## 6. Перенос демо-базы (РЕШ-222)
+
+Если на сервер переносится готовая база `scout.db` (например, демо-данные,
+подготовленные заранее), важен точный порядок — иначе файл достанется root
+внутри тома, а процесс приложения (uid 10001, не root, см.
+`docker/Dockerfile`) не сможет в него писать:
+
+```bash
+docker compose stop scout
+docker compose cp ./scout.db scout:/srv/scout/data/scout.db
+docker compose run --rm -u root scout chown scout:scout /srv/scout/data/scout.db
+docker compose start scout
+```
+
+Если демо-база не переносится, а приложение просто стартует с чистого листа —
+этот шаг не нужен: пустая база создаётся сама при первом запуске.
+
+## 7. Проверка деплоя
+
+```bash
+docker compose ps
+curl -sI https://<ДОМЕН>/health
+```
+
+Ожидаемое:
+
+- в `docker compose ps` все сервисы (`scout`, `caddy`, `backup`) в состоянии
+  `running`, у `scout` дополнительно `healthy` (проверка встроена в образ,
+  `docker/Dockerfile`, `HEALTHCHECK`, опрашивает `/health` каждые 30 секунд);
+- `curl -sI https://<ДОМЕН>/health` отвечает `HTTP/2 401` без basic-auth
+  Caddy или `200` при указании логина и пароля прокси — оба варианта
+  подтверждают, что HTTPS и сертификат Let's Encrypt работают. Если ответа нет
+  вовсе — проверьте A-запись домена и раздел 10.
+
+Дальше вручную: вход по паролю в веб-интерфейс (`WEB_AUTH_USER` /
+`WEB_AUTH_PASSWORD` из `.env`, а следом — вход Caddy, если он запрошен
+браузером отдельно) и открытие `/demo`.
+
+Это та же последовательность, которую владелец присылает по DLG-1 (ворота
+Э5-1, `.planning/PLAN.md`): вывод `docker compose ps`, вывод `curl -sI
+https://<ДОМЕН>/health` и подтверждение, что вход по паролю и `/demo`
+открываются.
+
+## 8. Обновление версии
+
+```bash
+git pull
+docker compose build
+docker compose up -d
+```
+
+**Отдельно про справочник господдержки.** Именованный том `scout-data`
+наполняется содержимым каталога `/srv/scout/data` из образа (в том числе
+файлом `data/gov_support.yaml`) только при **первом создании** тома. Если
+новая версия принесла обновлённый `gov_support.yaml`, повторная сборка образа
+на уже развёрнутом сервере файл на томе не тронет — том уже существует и
+своё содержимое не перезаписывает. Обновить справочник на уже поднятом
+сервере нужно вручную, скопировав файл из свежего образа поверх файла на томе:
+
+```bash
+docker compose cp scout:/srv/scout/data/gov_support.yaml /tmp/gov_support.yaml
+docker compose cp /tmp/gov_support.yaml scout:/srv/scout/data/gov_support.yaml
+```
+
+(Первая команда сработает только после того, как контейнер `scout` уже
+пересоздан из нового образа — `docker compose up -d` выше — поэтому файл в
+контейнере уже новый, а вторая строка кладёт его копию явно на том, поверх
+старого содержимого.)
+
+## 9. Копии базы
+
+Сайдкар `backup` (`docker/docker-compose.yml`) раз в сутки делает горячую
+копию `scout.db` через `sqlite3.Connection.backup()` стандартной библиотеки
+Python и кладёт её в отдельный том `scout-backups` (не тот же том, что у
+рабочей базы, — копия на одном томе с оригиналом не переживает повреждение
+этого тома). Старые копии старше 14 дней сайдкар удаляет сам. Наружу, за
+пределы сервера, копии не уезжают (РЕШ-223) — это осознанное ограничение MVP,
+не забытая настройка.
+
+Посмотреть список копий:
+
+```bash
+docker compose exec backup ls -l /backups
+```
+
+Восстановиться из копии (том с копиями смонтирован в `backup` на чтение и
+запись под `/backups`, а не в сам `scout`, поэтому файл переносится через
+хост):
+
+```bash
+docker compose stop scout
+docker compose cp backup:/backups/scout-<дата-и-время>.db ./scout-restore.db
+docker compose cp ./scout-restore.db scout:/srv/scout/data/scout.db
+docker compose run --rm -u root scout chown scout:scout /srv/scout/data/scout.db
+docker compose start scout
+rm ./scout-restore.db
+```
+
+Имя файла копии — точная дата и время в UTC, `scout-ГГГГММДД-ЧЧММСС.db` (см.
+команду сайдкара в `docker-compose.yml`); подставьте нужное значение из
+вывода `ls -l /backups` вместо `<дата-и-время>`.
+
+## 10. Разбор проблем
+
+Первый шаг при любой странности — встроенная диагностика внутри контейнера
+приложения:
+
+```bash
+docker compose exec scout scout doctor
+```
+
+Она печатает по каждому ключу и источнику, настроен он или нет и почему —
+без утечки значений секретов.
+
+**PDF не собирается.** Если печать карточки в PDF падает на отсутствии
+браузера (редкий случай — Chromium уже поставлен на этапе сборки образа, но
+мог не переехать при ручном вмешательстве в том), доустановите его внутри
+контейнера от root, чтобы права на файлы браузера остались корректными:
+
+```bash
+docker compose exec -u root scout python -m playwright install --with-deps chromium
+```
+
+**Копия базы не идёт или молчит.** Сайдкар `backup` поднимается из того же
+образа, что и приложение (общий тег `techmost-scout-app:local`), и делает
+копию средствами стандартной библиотеки Python
+(`sqlite3.Connection.backup()`) — сети на старте и при перезапуске ему не
+нужно, устанавливать нечего (РЕШ-229, отменяет более ранний план с базовым
+`alpine` и `apk add sqlite`). Если копия не создаётся, отказ виден в
+журнале — сайдкар печатает причину в stderr и продолжает цикл, а не гасит
+ошибку молча:
+
+```bash
+docker compose logs backup
+```
+
+**Журналы вообще.** Все три сервиса пишут JSON-логи с ротацией (10 МБ, 3
+файла на сервис, задано прямо в `docker-compose.yml`):
+
+```bash
+docker compose logs -f scout
+docker compose logs -f caddy
+docker compose logs -f backup
+```
+
+Если `caddy` не поднимается — почти всегда одно из двух: A-запись домена ещё
+не разошлась по DNS (Let's Encrypt не может подтвердить владение доменом) или
+`scout` не прошёл healthcheck (`caddy` ждёт `scout` в состоянии `healthy` по
+`depends_on`, раздел «Healthcheck» плана этапа) — проверьте
+`docker compose ps` и `docker compose logs scout` в этом случае.

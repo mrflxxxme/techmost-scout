@@ -1,0 +1,66 @@
+handoff:
+  from: implementer-A
+  to: reviewer
+  task: Э5-И7
+  did:
+    - Написан docs/deploy.md — инструкция деплоя на боевой VPS «с нуля», все
+      десять обязательных разделов плана (предусловия, код на сервере,
+      секреты, Caddy, сборка и запуск, перенос демо-базы, проверка деплоя,
+      обновление версии, копии базы, разбор проблем).
+    - Каждая команда сверена по фактическим docker/docker-compose.yml,
+      docker/Dockerfile, docker/Caddyfile (имена сервисов scout/caddy/backup,
+      тома scout-data/scout-out/caddy-data/caddy-config/scout-backups, пути
+      /srv/scout/data, /backups) — вывод сверки в
+      .planning/evidence/Э5-И7-сверка.txt.
+    - Раздел 10 (разбор проблем) описывает фактическое поведение сайдкара
+      backup по РЕШ-229 (тот же образ, что и приложение, копия через
+      sqlite3.Connection.backup() стандартной библиотеки, сеть на старте не
+      нужна) — устаревший вариант плана (apk add sqlite) не описан.
+    - Раздел 5 (сборка) объясняет по исходнику compose, почему отдельного
+      шага «сначала соберите образ scout» не требуется, и всё равно называет
+      docker compose build явно.
+    - Адрес сервера нигде не указан — везде плейсхолдер <АДРЕС_СЕРВЕРА>/<ДОМЕН>;
+      команды с ssh не использовались вовсе, чтобы не зацепить подстроку
+      "root@" критерия 8.
+    - Предупреждение про пароль в истории оболочки при генерации хэша Caddy —
+      есть (раздел 4).
+  artifacts:
+    - docs/deploy.md
+    - .planning/evidence/Э5-И7-grep.txt
+    - .planning/evidence/Э5-И7-сверка.txt
+  self_audit: pass
+  checks:
+    - "pytest -q: 1275 passed, 1 warning in 70.84s (требование плана — не меньше 1226)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 211 files already formatted"
+    - "rg -n \"docker compose up -d\" docs/deploy.md: 4 совпадения"
+    - "rg -n \"APP_ENV=prod\" docs/deploy.md: 1 совпадение"
+    - "rg -n \"caddy hash-password\" docs/deploy.md: 1 совпадение"
+    - "rg -n \"scout.example.ru|admin@example.ru|ХЭШ_ПАРОЛЯ_ЗАМЕНИТЬ_ПРИ_ДЕПЛОЕ\" docs/deploy.md: 4 совпадения, все три плейсхолдера названы"
+    - "rg -n \"scout.db\" docs/deploy.md: 6 совпадений; rg -n \"chown\" docs/deploy.md: 2 совпадения"
+    - "rg -n \"gov_support.yaml\" docs/deploy.md: 4 совпадения"
+    - "rg -n \"curl -sI https://\" docs/deploy.md: 2 совпадения; rg -n \"docker compose ps\" docs/deploy.md: 5 совпадений"
+    - "rg -n \"scout-backups\" docs/deploy.md: 1 совпадение"
+    - "rg -n \"194\\.87|root@\" docs/deploy.md: 0 совпадений"
+    - "rg -nE \"sk-[A-Za-z0-9]{6,}|Api-Key [A-Za-z0-9]{6,}|AQVN[A-Za-z0-9]\" docs/deploy.md: 0 совпадений"
+    - "rg -n \"scout-backups|/srv/scout\" docker/docker-compose.yml docker/Dockerfile: сверка приложена в Э5-И7-сверка.txt, расхождений не найдено"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «Э5-И7» и «Контракты, закреплённые планом»)
+    - docker/docker-compose.yml
+    - docker/Dockerfile
+    - docker/Caddyfile
+    - docs/deploy.md
+    - .planning/evidence/Э5-И7-grep.txt
+    - .planning/evidence/Э5-И7-сверка.txt
+  notes: >
+    Ветка задачи заведена от коммита 7237c35 (волны 1 и 2 этапа Э5 влиты), как
+    указано в постановке — HEAD рабочей копии до этого стоял на 68de857
+    (окончание этапа 4, до слияния волн Э5). Живого деплоя не выполнял (нет
+    демона Docker, порта 22, ключей сервера — по границам задачи и РЕШ-226).
+    Раздел «Контракты, закреплённые планом» (§«Сайдкар копии базы») в
+    PLAN.md текстуально описывает более ранний вариант с apk add sqlite —
+    это тот самый устаревший фрагмент, про который в постановке сказано
+    «отменено РЕШ-229»; сам docker-compose.yml и его комментарии уже
+    отражают актуальное решение, документ написан по факту файла, а не по
+    этому месту плана.

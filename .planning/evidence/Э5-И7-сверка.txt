@@ -1,0 +1,75 @@
+Задача Э5-И7, критерий 10: сверка имён сервисов, томов и путей docs/deploy.md
+с фактическими docker/docker-compose.yml и docker/Dockerfile.
+
+=== rg -n "scout-backups|/srv/scout" docker/docker-compose.yml docker/Dockerfile ===
+
+docker/docker-compose.yml:
+21:      - scout-data:/srv/scout/data
+22:      - scout-out:/srv/scout/out
+69:      - scout-backups:/backups
+112:  scout-backups:
+
+docker/Dockerfile:
+5:WORKDIR /srv/scout
+28:# каталога app/config.py и благодаря этому совпадают с /srv/scout.
+29:ENV PYTHONPATH=/srv/scout/backend
+36:    && mkdir -p /srv/scout/data /srv/scout/out \
+37:    && chown -R scout:scout /srv/scout
+39:# Ловушка: именованный том scout-data наследует содержимое /srv/scout/data
+44:VOLUME /srv/scout/data
+45:VOLUME /srv/scout/out
+
+=== Сверка по пунктам ===
+
+1. Имена сервисов. docker-compose.yml объявляет три сервиса: scout, caddy,
+   backup (rg -n "^  [a-z]+:" docker/docker-compose.yml → scout:, caddy:,
+   backup:). docs/deploy.md ссылается ровно на эти три имени во всех
+   командах (docker compose exec scout ..., docker compose logs caddy,
+   docker compose exec backup ls -l /backups) — совпадает.
+
+2. Имена томов. docker-compose.yml объявляет пять именованных томов:
+   scout-data, scout-out, caddy-data, caddy-config, scout-backups (блок
+   volumes: в конце файла, строки 107-112). docs/deploy.md прямо называет
+   scout-data (раздел 8, обсуждение первого создания тома), scout-backups
+   (раздел 9) — остальные тома (scout-out, caddy-data, caddy-config) в
+   документе по имени не упоминаются, так как ни одна из десяти обязательных
+   секций плана не требует операций с ними напрямую (нет переноса выгрузок
+   и нет ручных операций с состоянием Caddy) — расхождения нет, это не пропуск,
+   а отсутствие необходимости.
+
+3. Пути внутри контейнера scout. docs/deploy.md использует
+   /srv/scout/data/scout.db (перенос демо-базы, раздел 6; восстановление из
+   копии, раздел 9) и /srv/scout/data/gov_support.yaml (раздел 8) — оба пути
+   совпадают с WORKDIR /srv/scout и VOLUME /srv/scout/data из Dockerfile
+   (строки 5, 44) и с монтированием scout-data:/srv/scout/data в
+   docker-compose.yml (строка 21).
+
+4. Путь внутри контейнера backup. docs/deploy.md использует /backups
+   (docker compose exec backup ls -l /backups, раздел 9) — совпадает с
+   монтированием scout-backups:/backups в docker-compose.yml (строка 69).
+
+5. Тег образа. docs/deploy.md не называет тег explicitly (владельцу тег не
+   нужен — он оперирует именами сервисов через docker compose), но раздел 5
+   описывает фактический механизм: backup не имеет своего build и ссылается
+   на образ, собираемый сервисом scout — это дословно комментарий в
+   docker-compose.yml (строки 14-17: "Явный тег даёт сервису backup общий с
+   приложением образ... без второй сборки") и подтверждено содержимым файла
+   (image: techmost-scout-app:local — у обоих сервисов одно и то же значение,
+   build: есть только у scout).
+
+6. Пользователь процесса. docs/deploy.md во всех операциях смены владельца
+   файла в /srv/scout/data использует chown scout:scout — имя пользователя и
+   группы scout заведено в Dockerfile (строка 34: groupadd --gid 10001 scout,
+   useradd ... --gid scout ... scout) — совпадает.
+
+7. Поведение сайдкара backup (раздел 10 документа, пункт про копию базы).
+   docs/deploy.md описывает: сайдкар поднимается из того же образа, что и
+   приложение, копия делается sqlite3.Connection.backup() стандартной
+   библиотеки Python, сети на старте не требуется. Это дословно совпадает с
+   command сервиса backup в docker-compose.yml (строки 70-105: команда
+   python3 -c "...", внутри — sqlite3.connect(...) и src.backup(dst), без
+   apk add и без сетевых операций) и с комментарием (строки 50-56),
+   фиксирующим отмену более раннего варианта РЕШ-229.
+
+Вывод: расхождений между docs/deploy.md и фактическими
+docker/docker-compose.yml, docker/Dockerfile не найдено.
