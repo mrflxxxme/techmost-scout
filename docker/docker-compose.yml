@@ -6,6 +6,11 @@
 # небезопасном умолчании пароля веб-интерфейса, и отсутствие секретов станет
 # тихим вместо громкого. Ослаблять требование к файлу окружения запрещено.
 
+# Имя проекта фиксировано: без него compose берёт имя из каталога развёртывания
+# (обычно "docker"), и контейнеры выходят "docker-scout-1" вместо предсказуемых
+# "techmost-scout-scout-1" — путаница на сервере с несколькими проектами рядом.
+name: techmost-scout
+
 services:
   scout:
     build:
@@ -56,7 +61,20 @@ services:
   # библиотеки Python — ни сети, ни установки пакетов.
   backup:
     image: techmost-scout-app:local
+    # У сайдкара нет своего build: тег появляется только сборкой scout, и без
+    # этой директивы compose при первом запуске штатно пытается сначала
+    # стянуть "techmost-scout-app:local" из реестра — тега там нет и не будет.
+    pull_policy: never
     restart: unless-stopped
+    # На чистом развёртывании тома пустые и файла базы ещё нет: без ожидания
+    # сайдкар стартует одновременно с приложением, первая попытка копии
+    # проваливается на "unable to open database file", и цикл уходит в сутки
+    # ожидания следующей попытки. service_healthy у scout гарантирует, что
+    # init_db() уже отработал в lifespan (backend/app/main.py) — файл базы
+    # существует до первого прохода сайдкара.
+    depends_on:
+      scout:
+        condition: service_healthy
     # Именованный том создаётся принадлежащим root, и процесс приложения
     # (uid 10001, см. Dockerfile) писать в него не смог бы. Это не отменяет
     # правило "приложение не от root" — оно про сервис scout, а не про сайдкар.
@@ -67,6 +85,11 @@ services:
       # Отдельный том — копия на том же томе, что и база, не переживает
       # повреждение этого тома.
       - scout-backups:/backups
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     command:
       - python3
       - "-c"
@@ -80,19 +103,50 @@ services:
 
         DAY = 86400
         RETENTION_DAYS = 14
+        # Предел ожидания снятия блокировки источника. Без него удерживаемая
+        # эксклюзивная транзакция вешает проход навсегда: контейнер остаётся
+        # "running", в журнале пусто, копий нет — тихий пропуск отказа.
+        LOCK_WAIT_TIMEOUT_SECONDS = 30
 
         while True:
             stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
             dest = f"/backups/scout-{stamp}.db"
+            # Копия пишется во временное имя и переименовывается только после
+            # успеха: иначе обрыв на середине оставляет "scout-<дата>.db"
+            # нулевого размера — файл с именем годной копии, но пустой.
+            tmp_dest = f"{dest}.part"
+            src = None
+            dst = None
             try:
-                src = sqlite3.connect("file:/data/scout.db?mode=ro", uri=True)
-                dst = sqlite3.connect(dest)
+                start = time.monotonic()
+
+                def _abort_if_too_slow(status, remaining, total):
+                    elapsed = time.monotonic() - start
+                    if elapsed > LOCK_WAIT_TIMEOUT_SECONDS:
+                        raise TimeoutError(
+                            f"источник не снял блокировку за {LOCK_WAIT_TIMEOUT_SECONDS} с"
+                        )
+
+                # timeout=1 сокращает внутренний шаг ожидания блокировки у
+                # sqlite3 (умолчание 5 с) — иначе первая же проверка предела
+                # выше сработает с опозданием на целый внутренний интервал.
+                src = sqlite3.connect("file:/data/scout.db?mode=ro", uri=True, timeout=1)
+                dst = sqlite3.connect(tmp_dest, timeout=1)
                 with dst:
-                    src.backup(dst)
-                dst.close()
-                src.close()
+                    src.backup(dst, pages=1, progress=_abort_if_too_slow)
+                os.rename(tmp_dest, dest)
             except Exception as exc:  # отказ виден, цикл не прерывается
                 print(f"копия базы не выполнена: {exc}", file=sys.stderr)
+                if os.path.exists(tmp_dest):
+                    try:
+                        os.remove(tmp_dest)
+                    except OSError:
+                        pass
+            finally:
+                if dst is not None:
+                    dst.close()
+                if src is not None:
+                    src.close()
 
             cutoff = time.time() - RETENTION_DAYS * DAY
             for path in glob.glob("/backups/scout-*.db"):
