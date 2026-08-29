@@ -1,0 +1,129 @@
+name: docker
+services:
+  backup:
+    command:
+      - python3
+      - -c
+      - |
+        import glob
+        import os
+        import sqlite3
+        import sys
+        import time
+        from datetime import datetime, timezone
+
+        DAY = 86400
+        RETENTION_DAYS = 14
+
+        while True:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            dest = f"/backups/scout-{stamp}.db"
+            try:
+                src = sqlite3.connect("file:/data/scout.db?mode=ro", uri=True)
+                dst = sqlite3.connect(dest)
+                with dst:
+                    src.backup(dst)
+                dst.close()
+                src.close()
+            except Exception as exc:  # отказ виден, цикл не прерывается
+                print(f"копия базы не выполнена: {exc}", file=sys.stderr)
+
+            cutoff = time.time() - RETENTION_DAYS * DAY
+            for path in glob.glob("/backups/scout-*.db"):
+                try:
+                    if os.path.getmtime(path) < cutoff:
+                        os.remove(path)
+                except OSError as exc:
+                    print(f"ротация копии не выполнена: {exc}", file=sys.stderr)
+
+            time.sleep(DAY)
+    image: techmost-scout-app:local
+    networks:
+      default: null
+    restart: unless-stopped
+    user: "0:0"
+    volumes:
+      - type: volume
+        source: scout-data
+        target: /data
+        read_only: true
+        volume: {}
+      - type: volume
+        source: scout-backups
+        target: /backups
+        volume: {}
+  caddy:
+    depends_on:
+      scout:
+        condition: service_healthy
+        required: true
+    image: caddy:2-alpine
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 10m
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "80"
+        protocol: tcp
+      - mode: ingress
+        target: 443
+        published: "443"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /home/user/techmost-scout/.claude/worktrees/agent-abf96df8d25a4588b/docker/Caddyfile
+        target: /etc/caddy/Caddyfile
+        read_only: true
+        bind: {}
+      - type: volume
+        source: caddy-data
+        target: /data
+        volume: {}
+      - type: volume
+        source: caddy-config
+        target: /config
+        volume: {}
+  scout:
+    build:
+      context: /home/user/techmost-scout/.claude/worktrees/agent-abf96df8d25a4588b
+      dockerfile: docker/Dockerfile
+    expose:
+      - "8000"
+    image: techmost-scout-app:local
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 10m
+    networks:
+      default: null
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: scout-data
+        target: /srv/scout/data
+        volume: {}
+      - type: volume
+        source: scout-out
+        target: /srv/scout/out
+        volume: {}
+networks:
+  default:
+    name: docker_default
+volumes:
+  caddy-config:
+    name: docker_caddy-config
+  caddy-data:
+    name: docker_caddy-data
+  scout-backups:
+    name: docker_scout-backups
+  scout-data:
+    name: docker_scout-data
+  scout-out:
+    name: docker_scout-out

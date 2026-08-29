@@ -1,0 +1,53 @@
+........................................................................ [  5%]
+........................................................................ [ 11%]
+........................................................................ [ 17%]
+........................................................................ [ 23%]
+........................................................................ [ 28%]
+........................................................................ [ 34%]
+........................................................................ [ 40%]
+........................................................................ [ 46%]
+........................................................................ [ 52%]
+........................................................................ [ 57%]
+........................................................................ [ 63%]
+........................................................................ [ 69%]
+........................................................................ [ 75%]
+........................................................................ [ 81%]
+........................................................................ [ 86%]
+........................................................................ [ 92%]
+........................................................................ [ 98%]
+...................                                                      [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1243 passed, 1 warning in 70.09s (0:01:10)
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-abf96df8d25a4588b
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 17 items
+
+tests/test_docker_compose.py::test_yaml_разбирается_без_ошибок PASSED    [  5%]
+tests/test_docker_compose.py::test_состав_сервисов_ровно_три PASSED      [ 11%]
+tests/test_docker_compose.py::test_scout_имеет_env_file_и_не_публикует_порт PASSED [ 17%]
+tests/test_docker_compose.py::test_scout_тома_смонтированы_по_путям_из_контракта PASSED [ 23%]
+tests/test_docker_compose.py::test_caddy_ждёт_scout_живым PASSED         [ 29%]
+tests/test_docker_compose.py::test_backup_том_базы_только_на_чтение PASSED [ 35%]
+tests/test_docker_compose.py::test_backup_том_копий_отдельный_от_тома_базы PASSED [ 41%]
+tests/test_docker_compose.py::test_backup_не_ставит_пакеты_и_не_alpine PASSED [ 47%]
+tests/test_docker_compose.py::test_backup_использует_образ_приложения_без_второй_сборки PASSED [ 52%]
+tests/test_docker_compose.py::test_backup_ротация_копий_14_дней PASSED   [ 58%]
+tests/test_docker_compose.py::test_backup_период_суточный PASSED         [ 64%]
+tests/test_docker_compose.py::test_backup_отказ_печатается_в_stderr_и_цикл_продолжается PASSED [ 70%]
+tests/test_docker_compose.py::test_backup_работает_от_root_для_записи_в_чужой_том PASSED [ 76%]
+tests/test_docker_compose.py::test_все_сервисы_перезапускаются_сами PASSED [ 82%]
+tests/test_docker_compose.py::test_объявлены_все_пять_томов PASSED       [ 88%]
+tests/test_docker_compose.py::test_секретов_нет_в_файле PASSED           [ 94%]
+tests/test_docker_compose.py::test_env_file_не_ослаблен PASSED           [100%]
+
+============================== 17 passed in 0.11s ==============================

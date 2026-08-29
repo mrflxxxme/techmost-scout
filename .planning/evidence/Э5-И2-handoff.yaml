@@ -1,0 +1,71 @@
+handoff:
+  from: implementer-B
+  to: reviewer
+  task: Э5-И2
+  did:
+    - >-
+      Добавлен сервис backup в docker/docker-compose.yml по РЕШ-229 (не по
+      отменённому контракту «Сайдкар копии базы» из плана) — поднимается из
+      того же образа, что и приложение (общий тег techmost-scout-app:local,
+      build только у scout), делает горячую копию средствами
+      sqlite3.Connection.backup() из стандартной библиотеки Python — без
+      сети, без установки пакетов, без второй сборки образа.
+    - >-
+      Том базы у backup смонтирован только на чтение (scout-data:/data:ro),
+      том копий отдельный (scout-backups:/backups); backup работает от
+      пользователя root (user: "0:0"), так как именованный том создаётся
+      root, а процесс приложения (uid 10001) писать бы в него не смог.
+    - >-
+      Ротация — удаление копий старше 14 суток, период — раз в сутки
+      (86400 секунд), restart: unless-stopped; отказ копии или ротации
+      печатается в stderr и цикл продолжается (принцип инварианта №5).
+    - >-
+      У caddy depends_on переведён в длинную форму с condition:
+      service_healthy; добавлен том caddy-config (Caddy 2 хранит
+      автосохранённую конфигурацию в /config).
+    - >-
+      Журналы scout и caddy ограничены (json-file, max-size 10m, max-file 3).
+    - >-
+      Комментариями по-русски объяснено, почему env_file остаётся
+      обязательным, почему том копий отдельный от тома базы и почему выбран
+      общий образ приложения вместо alpine с установкой пакета при старте.
+    - >-
+      Написан tests/test_docker_compose.py (17 тестов) — состав сервисов,
+      отсутствие ports у scout, пути томов, ожидание живости caddy,
+      свойства сайдкара backup (только для чтения, отдельный том, не alpine,
+      общий образ без второй сборки, ротация 14 дней, суточный период,
+      печать отказа в stderr, работа от root), restart у всех трёх
+      сервисов, полный список именованных томов, отсутствие секретов и
+      запрета на ослабление env_file в файле.
+  artifacts:
+    - docker/docker-compose.yml
+    - tests/test_docker_compose.py
+    - .planning/evidence/Э5-И2-pytest.txt
+    - .planning/evidence/Э5-И2-compose-config.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_docker_compose.py -v: 17 passed"
+    - "pytest -q: 1243 passed, 1 warning in 70.09s (база 1226 + 17 новых)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 207 files already formatted"
+    - "rg -n \"required: false\" docker/docker-compose.yml: совпадений нет"
+    - "docker compose config с пустым временным .env: печатает OK"
+    - "git status --porcelain docker/ после проверки: только M docker-compose.yml, .env не остался"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «Э5-И2» и «Контракты, закреплённые планом»)
+    - docker/docker-compose.yml
+    - tests/test_docker_compose.py
+    - .planning/DECISIONS.md (РЕШ-229, точечным поиском)
+  notes: >-
+    Рабочая копия сессии была создана от устаревшей базы (коммит этапа Э4) —
+    до первой строки кода переключился на новую ветку wave5/e5-i2-compose от
+    корректной базы (коммит с решениями РЕШ-229/230) инструментом
+    git switch -c, без потери чужой работы: исходная ветка сессии не
+    содержала незакоммиченных изменений и не тронута. Файл
+    docker-compose.yml вырос до 112 строк вместо ориентировочных ≤80 из
+    плана — расхождение объясняется тем, что контракт «Сайдкар копии базы»
+    отменён РЕШ-229 и заменён вариантом с инлайновым Python-скриптом внутри
+    команды сервиса (отдельного файла в границах задачи нет, скрипт
+    неизбежно многострочный — копия, ротация, печать отказа). Живой запуск
+    docker compose up или build не делался — демона нет.
