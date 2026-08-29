@@ -1,0 +1,94 @@
+Мутационная проверка правок цикла 2 (по находкам Э5-И2-review.md, коммит 29dcc77)
+
+Все мутации ставились правкой docker/docker-compose.yml, прогонялись
+pytest tests/test_docker_compose.py -q, затем файл откатывался копией из
+резервной копии перед мутациями. После отката docker-compose.yml — байт в
+байт идентичен исходному (проверено diff'ом).
+
+=== Мутация 1 из ревью: RETENTION_DAYS = 140 (было 14) ===
+До правки теста: весь набор оставался зелёным (1243 passed) — находка ревью.
+После правки теста (сравнение точным int() в test_backup_ротация_копий_14_дней):
+
+    FAILED tests/test_docker_compose.py::test_backup_ротация_копий_14_дней
+    assert 140 == 14
+    1 failed, 18 passed in 0.14s
+
+Откат RETENTION_DAYS обратно на 14 → pytest tests/test_docker_compose.py -q
+→ 19 passed.
+
+=== Мутация 2 из ревью: DAY = 186400 (было 86400) ===
+До правки теста: проходил (подстрока "86400" внутри "186400") — та же
+находка, названа советом ревью и закрыта заодно.
+После правки (test_backup_период_суточный сравнивает точный int()):
+
+    FAILED tests/test_docker_compose.py::test_backup_период_суточный
+    assert 186400 == 86400
+    1 failed, 18 passed in 0.14s
+
+Откат DAY обратно на 86400 → pytest tests/test_docker_compose.py -q
+→ 19 passed.
+
+=== Мутация 3 из ревью: печать отказа копии убрана (ветка ротации не тронута) ===
+Правка: `except Exception as exc: print(..., file=sys.stderr)` в ветке
+sqlite3-копии заменена на `except Exception: pass`; ветка ротации
+(`except OSError as exc: print(...)`) оставлена как есть.
+
+До правки теста: весь набор оставался зелёным (1243 passed) — находка ревью,
+единственная подстрока "file=sys.stderr" в тексте команды обеспечивалась
+соседней веткой ротации.
+После правки (два отдельных теста, каждый разбирает свой try/except через
+ast.parse и проверяет печать в stderr изолированно):
+
+    FAILED tests/test_docker_compose.py::test_backup_отказ_копии_печатается_в_stderr
+    AssertionError: отказ копии базы не печатается в stderr
+    1 failed, 18 passed in 0.14s
+
+Важно: test_backup_отказ_ротации_печатается_в_stderr в этом прогоне остался
+зелёным — ветка ротации не мутировалась, и новый тест верно её не путает с
+веткой копии. Это и есть требуемое разделение (находка 2 ревью).
+
+Откат ветки копии обратно на print(..., file=sys.stderr) →
+pytest tests/test_docker_compose.py -q → 19 passed.
+
+=== Контрольная проверка: пять мутаций цикла 1 по-прежнему ловятся ===
+
+A. Убрать :ro у тома базы backup (scout-data:/data:ro → scout-data:/data):
+   FAILED test_backup_том_базы_только_на_чтение — 1 failed, 18 passed.
+
+B. Подменить том копий на scout-data (scout-backups:/backups →
+   scout-data:/backups):
+   FAILED test_backup_том_копий_отдельный_от_тома_базы — 1 failed, 18 passed.
+
+C. Короткая форма depends_on у caddy (- scout вместо
+   scout: {condition: service_healthy}):
+   FAILED test_caddy_ждёт_scout_живым (TypeError на распаковке списка) —
+   1 failed, 18 passed.
+
+D. Добавить scout.ports:
+   FAILED test_scout_имеет_env_file_и_не_публикует_порт — 1 failed, 18 passed.
+
+E. Ослабить env_file до required: false:
+   FAILED test_scout_имеет_env_file_и_не_публикует_порт
+   FAILED test_env_file_не_ослаблен
+   2 failed, 17 passed.
+
+Во всех пяти случаях откат к резервной копии восстанавливал
+19 passed in tests/test_docker_compose.py.
+
+=== Итоговое состояние после всех откатов ===
+
+$ diff docker/docker-compose.yml <резервная копия перед мутациями>
+(вывод пуст — файлы идентичны)
+
+$ git status --porcelain
+ M tests/test_docker_compose.py
+(docker-compose.yml в diff отсутствует — не менялся)
+
+$ pytest -q
+1245 passed, 1 warning in 68.76s (0:01:08)
+
+$ ruff check .
+All checks passed!
+
+$ ruff format --check .
+207 files already formatted
