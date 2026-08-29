@@ -1,0 +1,54 @@
+handoff:
+  from: implementer-A
+  to: reviewer
+  task: Э5-И4
+  did:
+    - >-
+      Введена единственная точка правды schema_urls(app_env) в
+      backend/app/main.py: закрыто по умолчанию, открыто только для
+      "dev" и "test" в нижнем регистре, любое другое значение (в т.ч.
+      "prod", "PROD", пустая строка) даёт (None, None).
+    - >-
+      Результат schema_urls передан и в FastAPI(docs_url=..., openapi_url=...),
+      и в templates.env.globals["api_docs_url"]; зашитые строки
+      "/api/docs" убраны из main.py.
+    - >-
+      backend/app/web/templates/base.html печатает пункт «API» только при
+      непустом api_docs_url и берёт адрес из него, а не из зашитой строки.
+    - >-
+      Новый tests/test_web_api_schema.py (9 тестов): unit на schema_urls
+      (dev/test открыто; prod/PROD/"" закрыто), поведенческий тест на
+      реальном FastAPI-приложении (404 при prod, 200 при dev — обе половины),
+      тест шаблона на закрытую и открытую ссылку через TestClient без
+      перезагрузки модулей.
+  artifacts:
+    - backend/app/main.py
+    - backend/app/web/templates/base.html
+    - tests/test_web_api_schema.py
+    - .planning/evidence/Э5-И4-pytest.txt
+    - .planning/evidence/Э5-И4-prod.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_api_schema.py -v: 9 passed"
+    - "pytest tests/test_web_templates.py tests/test_web_auth.py tests/test_web_flow_e2e.py -v: 12 passed"
+    - "pytest -q: 1271 passed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 210 files already formatted"
+    - "PYTHONPATH=backend APP_ENV=prod python -c \"from app.main import app; print(app.docs_url, app.openapi_url)\": None None"
+    - "rg -n 'docs_url=\"/api/docs\"' backend/app/main.py: пусто (exit 1)"
+    - "rg -n 'href=\"/api/docs\"' backend/app/web/templates/base.html: пусто (exit 1)"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел Э5-И4, ~478-545, и «Контракты», ~243-259)
+    - backend/app/main.py
+    - backend/app/web/templates/base.html
+    - tests/test_web_api_schema.py
+  notes: >-
+    Формулировка критерия 2 в плане писала FastAPI(*schema_urls("prod")) —
+    буквально это некорректно: позиционный порядок аргументов FastAPI.__init__
+    начинается с (debug, routes, title, ...), и docs_url/openapi_url там не на
+    первых двух местах. В тесте использована семантически верная сборка
+    FastAPI(docs_url=..., openapi_url=...) из результата schema_urls — цель
+    критерия (404 при prod, 200 при dev, обе половины) выполнена. main.py —
+    107 строк, в пределах заявленных ≤110. Живых вызовов не делалось, все
+    проверки локальные.

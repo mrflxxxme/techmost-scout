@@ -24,6 +24,23 @@ from app.export.markdown import TEMPLATE_FILTERS
 log = logging.getLogger(__name__)
 settings = get_settings()
 
+
+def schema_urls(app_env: str) -> tuple[str | None, str | None]:
+    """Адреса схемы API. Открыты только в средах разработки: dev и test.
+
+    Единственная точка правды: до этой задачи `docs_url` был зашит в
+    `FastAPI(...)`, а вход по паролю навешен только на роутер интерфейса
+    (`app.web.routes`) — схема API оставалась за одним рубежом Caddy вместо
+    двух. Правило закрыто по умолчанию: любое значение `app_env`, кроме
+    `dev` и `test` в нижнем регистре — включая `prod`, пустую строку и
+    опечатку, — даёт `(None, None)`. Второй признак «мы в бою», помимо
+    `app_env`, этот этап не заводит.
+    """
+    if app_env in ("dev", "test"):
+        return "/api/docs", "/api/openapi.json"
+    return None, None
+
+
 WEB_DIR = Path(__file__).parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 templates.env.filters.update(TEMPLATE_FILTERS)  # общий фильтр developer_line (Э4-И1)
@@ -58,14 +75,17 @@ async def lifespan(_: FastAPI):
     yield
 
 
+docs_url, openapi_url = schema_urls(settings.app_env)
+
 app = FastAPI(
     title="ТехМост Скаут",
     description="Подбор научно-технических решений под задачу бизнеса",
     version="0.1.0",
     lifespan=lifespan,
-    docs_url="/api/docs",
-    openapi_url="/api/openapi.json",
+    docs_url=docs_url,
+    openapi_url=openapi_url,
 )
+templates.env.globals["api_docs_url"] = docs_url
 
 static_dir = WEB_DIR / "static"
 static_dir.mkdir(parents=True, exist_ok=True)
