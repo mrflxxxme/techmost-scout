@@ -1,0 +1,11 @@
+=== rg -n "^COPY \.( |$)|^COPY \.env|^COPY tests|^COPY \.planning" docker/Dockerfile ===
+(совпадений нет, код возврата 1)
+
+=== rg -n "certs|GIGACHAT|НУЦ" docker/Dockerfile ===
+(совпадений нет, код возврата 1)
+
+=== ruff check . ===
+All checks passed!
+
+=== ruff format --check . ===
+207 files already formatted

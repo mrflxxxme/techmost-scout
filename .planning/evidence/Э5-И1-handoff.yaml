@@ -1,0 +1,52 @@
+handoff:
+  from: implementer-A
+  to: reviewer
+  task: Э5-И1
+  did:
+    - "Переписан docker/Dockerfile (17 → 55 строк): установка группы
+      зависимостей .[export] и следом python -m playwright install
+      --with-deps chromium, чистка /var/lib/apt/lists/* в том же слое"
+    - ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright и chmod -R a+rX /ms-playwright,
+      чтобы браузер, поставленный root, читался непривилегированным процессом
+    - Заведён пользователь scout (uid 10001), создан /srv/scout/data и
+      /srv/scout/out, владелец /srv/scout — scout; USER scout стоит последней
+      директивой, после всех RUN
+    - ENV PYTHONPATH=/srv/scout/backend — settings.prompts_dir/data_dir/out_dir
+      вычисляются от каталога app/config.py и совпадают с /srv/scout
+    - HEALTHCHECK по контракту плана (curl-заменитель на urllib, /health,
+      interval 30s/timeout 5s/start-period 40s/retries 3)
+    - "Комментарий в Dockerfile про ловушку scout-data: том наследует
+      содержимое образа (включая gov_support.yaml) только при первом
+      создании, шаг обновления справочника — в docs/deploy.md (Э5-И5)"
+    - Новый .dockerignore в корне репозитория — .git, .planning, .claude,
+      docs, tests, out, data/*.db*, .env, .env.*, *.pem, *.key и другие
+    - Новый tests/test_docker_image.py (9 тестов) — построчный разбор
+      Dockerfile и .dockerignore без сборки образа и без сети
+  artifacts:
+    - docker/Dockerfile
+    - .dockerignore
+    - tests/test_docker_image.py
+    - .planning/evidence/Э5-И1-pytest.txt
+    - .planning/evidence/Э5-И1-pytest-docker.txt
+    - .planning/evidence/Э5-И1-grep.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_docker_image.py -v: 9 passed"
+    - "pytest -q: 1235 passed, 1 warning in ~70s (базовое 1226 + 9 новых)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 207 files already formatted"
+    - "rg -n \"^COPY \\.( |$)|^COPY \\.env|^COPY tests|^COPY \\.planning\" docker/Dockerfile: совпадений нет (код возврата 1)"
+    - "rg -n \"certs|GIGACHAT|НУЦ\" docker/Dockerfile: совпадений нет (код возврата 1)"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «Э5-И1», раздел «Контракты, закреплённые планом»)
+    - docker/Dockerfile
+    - .dockerignore
+    - tests/test_docker_image.py
+  notes: >-
+    Рабочая копия при старте оказалась позади верхушки волны (68de857 против
+    f7f3d4f, HEAD был предком без собственных коммитов) — подтянута
+    fast-forward перед первой правкой, РЕШ-158 соблюдён. Образ не собирался и
+    не запускался — демона Docker в среде нет, все критерии закрыты чтением
+    файлов и pytest. docker-compose.yml и Caddyfile не трогались (задачи
+    Э5-И2/И3), backend/app/config.py не трогался.
