@@ -1,0 +1,34 @@
+handoff:
+  from: implementer-C
+  to: reviewer
+  task: Э5-И3
+  did:
+    - "Добавлен глобальный блок { email admin@example.ru } в начале docker/Caddyfile — без него Let's Encrypt выпускает сертификат без контакта"
+    - "Плейсхолдер хэша пароля приведён к виду ХЭШ_ПАРОЛЯ_ЗАМЕНИТЬ_ПРИ_ДЕПЛОЕ вместо строки, похожей на настоящий bcrypt-хэш"
+    - "Заголовки безопасности дополнены до пяти: HSTS, X-Content-Type-Options, X-Frame-Options, добавлены Referrer-Policy и X-Robots-Tag"
+    - "Комментариями по-русски зафиксированы: два рубежа пароля намеренно (РЕШ-16), команда генерации хэша, три плейсхолдера деплоя"
+    - "Файл вырос с 21 до 35 строк — в бюджете ≤45"
+    - "Новый tests/test_caddyfile.py — 7 тестов на структуру файла (без вызова caddy validate, сеть не используется)"
+  artifacts:
+    - docker/Caddyfile
+    - tests/test_caddyfile.py
+    - .planning/evidence/Э5-И3-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_caddyfile.py -v: 7 passed in 0.10s"
+    - "rg -n \"scout.example.ru|admin@example.ru\" docker/Caddyfile: 2 совпадения (строки 8 и 18)"
+    - "pytest -q: 1233 passed, 1 warning in 70.71s (было 1226, добавлено 7)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 207 files already formatted"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «Э5-И3» и «Контракты, закреплённые планом»)
+    - docker/Caddyfile
+    - tests/test_caddyfile.py
+  notes: >-
+    Рабочая копия была создана до коммита f7f3d4f (решения по эскалациям Э5);
+    перед первой правкой база подтянута fast-forward до f7f3d4f — иначе
+    ссылка на раздел плана «Контракты» указывала бы на устаревший текст.
+    caddy validate не запускался согласно границам задачи: без боевого хэша
+    он не пройдёт, а подставлять боевой хэш в репозиторий запрещено.
+    Dockerfile и docker-compose.yml не трогались.
