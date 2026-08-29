@@ -68,3 +68,50 @@ All checks passed!
 
 $ /home/user/techmost-scout/.venv/bin/ruff format --check .
 211 files already formatted
+
+=== Цикл 2 (после ревью): журналы сайдкара и depends_on/pull_policy по факту слитой ветки ===
+
+Раздел 4 выше фиксировал состояние на момент цикла 1 (docker-compose.yml
+ветки задачи, где у backup ещё не было logging/depends_on/pull_policy).
+После слияния параллельных задач волны в wave5/fixes-integration сайдкару
+добавили эти секции — текст docs/deploy.md §10 обновлён по факту слитого
+файла, а не по памяти о цикле 1.
+
+$ git show wave5/fixes-integration:docker/docker-compose.yml | grep -n "logging:"
+30:    logging:
+49:    logging:
+88:    logging:
+
+Три совпадения — logging задан всем трём сервисам (scout, caddy, backup).
+
+$ git show wave5/fixes-integration:docker/docker-compose.yml | grep -n "depends_on\|pull_policy\|service_healthy"
+46:    depends_on:
+48:        condition: service_healthy
+67:    pull_policy: never
+72:    # ожидания следующей попытки. service_healthy у scout гарантирует, что
+75:    depends_on:
+77:        condition: service_healthy
+
+(строки 46/48 — depends_on у caddy; строки 67, 75/77 — pull_policy и
+depends_on у backup, оба на service_healthy у scout — факты подтверждены
+содержимым файла, не выдуманы)
+
+$ grep -n "У всех трёх сервисов" docs/deploy.md
+381:**Журналы вообще.** У всех трёх сервисов (`scout`, `caddy`, `backup`) в
+
+$ grep -n "секции \`logging\` нет" docs/deploy.md
+(нет совпадений — устаревшая формулировка цикла 1 из docs/deploy.md убрана)
+
+$ grep -n "depends_on\|pull_policy\|service_healthy" docs/deploy.md
+365:`depends_on: {scout: {condition: service_healthy}}` — он ждёт, пока `scout`
+374:Отдельно у `backup` стоит `pull_policy: never` — сайдкар никогда не полезет
+393:`depends_on`, раздел «Healthcheck» плана этапа) — проверьте
+
+$ /home/user/techmost-scout/.venv/bin/python -m pytest -q (после цикла 2)
+1275 passed, 1 warning in 69.59s (0:01:09)
+
+$ /home/user/techmost-scout/.venv/bin/ruff check . (после цикла 2)
+All checks passed!
+
+$ /home/user/techmost-scout/.venv/bin/ruff format --check . (после цикла 2)
+211 files already formatted
