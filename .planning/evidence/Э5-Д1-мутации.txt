@@ -1,0 +1,70 @@
+Протокол мутаций — Э5-Д1 «Тесты образа: ложные срабатывания»
+Формат каждого пункта: мутация → команда → факт → восстановление.
+Все мутации ставились в рабочей копии docker/Dockerfile, после каждой файл
+восстанавливался из точной копии командой cp /tmp/Dockerfile.orig
+docker/Dockerfile; после протокола git diff показывает изменения только в
+tests/test_docker_image.py (docker/Dockerfile не тронут).
+
+Находка L3 — test_copy_sources_exist_in_build_context
+=======================================================
+
+1) Прямая мутация — убран сам источник COPY (не флаг)
+   Мутация: строка "COPY backend ./backend" заменена на
+            "COPY backend_nope ./backend"
+   Команда: pytest tests/test_docker_image.py::test_copy_sources_exist_in_build_context -v
+   Факт (красный):
+     AssertionError: источник COPY не найден в контексте сборки: 'backend_nope'
+     1 failed
+   Восстановление: cp /tmp/Dockerfile.orig docker/Dockerfile
+   Вывод: правка не потеряла способность ловить опечатку в имени источника.
+
+2) Обратная мутация — законная форма директивы с флагом
+   Мутация: строка "COPY backend ./backend" заменена на
+            "COPY --chown=root:root backend ./backend"
+   Команда: pytest tests/test_docker_image.py::test_copy_sources_exist_in_build_context -v
+   Факт (зелёный): test_copy_sources_exist_in_build_context PASSED
+   Восстановление: cp /tmp/Dockerfile.orig docker/Dockerfile
+   Вывод: до правки этот сценарий падал бы, потому что "--chown=root:root"
+   попадал в список источников и не находился в дереве репозитория. После
+   отбрасывания ведущих "--..." флагов законная запись не красит тест.
+
+Находка совета 6 — test_playwright_browsers_path_declared_before_install
+==========================================================================
+
+3) Прямая мутация — ENV переставлен после playwright install (форма Б1)
+   Мутация: строка "ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright" и
+   поясняющий комментарий удалены с исходного места (сразу после COPY) и
+   строка ENV (без комментария) вставлена после блока
+   "RUN pip install ... && python -m playwright install --with-deps chromium
+   && rm -rf /var/lib/apt/lists/*"
+   Команда: pytest tests/test_docker_image.py::test_playwright_browsers_path_declared_before_install -v
+   Факт (красный):
+     AssertionError: ENV PLAYWRIGHT_BROWSERS_PATH должен стоять раньше
+     playwright install, иначе браузер уедет в домашний кэш root, а
+     следующий chmod упадёт
+     assert 26 < 23
+     1 failed
+   Восстановление: cp /tmp/Dockerfile.orig docker/Dockerfile
+   Вывод: перестановка ENV на форму находки Б1 по-прежнему ловится — поиск
+   "playwright install" внутри блока RUN (с учётом переноса строк через
+   backslash) не потерял чувствительность к порядковому дефекту.
+
+4) Обратная мутация — комментарий со словами "playwright install" выше ENV
+   Мутация: перед строкой "ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright"
+   добавлена строка комментария:
+     "# Пояснение: здесь ещё нет playwright install, переменная объявлена
+     заранее."
+   Команда: pytest tests/test_docker_image.py::test_playwright_browsers_path_declared_before_install -v
+   Факт (зелёный): test_playwright_browsers_path_declared_before_install PASSED
+   Восстановление: cp /tmp/Dockerfile.orig docker/Dockerfile
+   Вывод: до правки первое вхождение подстроки "playwright install" нашлось
+   бы в этом комментарии (строка 23 файла), что раньше индекса ENV — тест
+   красился бы на пустом месте. После ограничения поиска строками внутри
+   блока RUN комментарий выше ENV не влияет на результат.
+
+Итог: обе целевые мутации (1, 3) дают красный тест на дефект, который тест
+обязан ловить; обе обратные мутации (2, 4) с законными записями остаются
+зелёными. docker/Dockerfile восстановлен побайтово (git diff --stat не
+показывает изменений в docker/Dockerfile). Полный набор
+tests/test_docker_image.py — 16 passed; полный набор pytest — 1293 passed;
+ruff check и ruff format --check — чисто.

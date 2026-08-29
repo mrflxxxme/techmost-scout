@@ -50,10 +50,26 @@ def test_playwright_browsers_path_declared_before_install() -> None:
     /ms-playwright` падает с кодом 1: сборка образа обрывается на первой же
     команде владельца (находка аудита Б1). Тест сравнивает индексы строк, а
     не просто наличие обеих директив — только так порядок закреплён.
+
+    Подстроку `playwright install` ищем только внутри блока команды `RUN`
+    (с учётом переноса строк через обратную косую черту в конце строки),
+    а не в любой строке файла:
+    комментарий с этими же словами, поясняющий находку Б1 и стоящий выше
+    `ENV`, не является исполняемой командой и не должен красить тест на
+    пустом месте (пост-аудит Э5, обратная хрупкость, совет 6).
     """
     lines = _lines()
     env_indices = [i for i, line in enumerate(lines) if line.strip().startswith("ENV PLAYWRIGHT_BROWSERS_PATH")]
-    install_indices = [i for i, line in enumerate(lines) if "playwright install" in line]
+    install_indices: list[int] = []
+    in_run_block = False
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("RUN"):
+            in_run_block = True
+        if in_run_block and "playwright install" in line:
+            install_indices.append(i)
+        if not stripped.endswith("\\"):
+            in_run_block = False
     assert env_indices, "должна быть директива ENV PLAYWRIGHT_BROWSERS_PATH"
     assert install_indices, "должна быть команда playwright install"
     assert env_indices[0] < install_indices[0], (
@@ -130,13 +146,19 @@ def test_copy_sources_exist_in_build_context() -> None:
     Опечатка в имени каталога-источника (`backend` → `backend_nope`, потеря
     `COPY prompts`) ничем, кроме реальной сборки, не ловится — а демона
     Docker в этой среде нет. Сверяем текстом Dockerfile с содержимым дерева.
+
+    Ведущие флаги вида `--chown=root:root` отбрасываются перед проверкой:
+    `COPY --chown=root:root backend ./backend` — законная форма директивы,
+    а не опечатка в имени источника; без отбрасывания флаг сам попадал бы
+    в список источников и не находился в дереве (пост-аудит Э5, находка L3).
     """
     lines = _lines()
     copy_lines = [line.strip() for line in lines if line.strip().startswith("COPY ")]
     assert copy_lines, "в Dockerfile должна быть хотя бы одна директива COPY"
     for line in copy_lines:
         parts = line.removeprefix("COPY ").split()
-        *sources, _dest = parts
+        *raw_sources, _dest = parts
+        sources = [source for source in raw_sources if not source.startswith("--")]
         assert sources, f"у директивы COPY должен быть хотя бы один источник: {line!r}"
         for source in sources:
             path = REPO_ROOT / source
