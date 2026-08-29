@@ -1,0 +1,45 @@
+handoff:
+  from: implementer-C
+  to: reviewer
+  task: Э5-Д3
+  did:
+    - "Добавлено предупреждение в docs/deploy.md §8 «Обновление версии»: перед
+      docker compose up -d проверить имена томов, если связку поднимали по
+      прежней версии инструкции (без name в docker-compose.yml)."
+    - "Добавлен раздел в docs/deploy.md §10 «Разбор проблем» — «Тома
+      переименовались после обновления, база «пропала»»: объяснение причины
+      (name: techmost-scout меняет имя проекта compose, а с ним и префикс
+      имён томов с docker_* на techmost-scout_*), диагностика через
+      docker volume ls | grep scout, и рабочая команда переноса данных
+      между томами через одноразовый контейнер alpine с cp -a, plus chown
+      под uid приложения и осторожное удаление старого тома только после
+      проверки."
+    - "Точные имена томов (scout-data, scout-out, caddy-data, caddy-config,
+      scout-backups) и name: techmost-scout взяты из фактического
+      docker/docker-compose.yml на ветке — сверено грепом, см.
+      .planning/evidence/Э5-Д3-grep.txt."
+  artifacts:
+    - docs/deploy.md
+    - .planning/evidence/Э5-Д3-grep.txt
+  self_audit: pass
+  checks:
+    - "pytest -q: 1293 passed, 1 warning (StarletteDeprecationWarning httpx, не наш код)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 211 files already formatted"
+    - "grep фактических name/volumes в docker/docker-compose.yml и грепом
+      подтверждённые новые разделы в docs/deploy.md — см.
+      .planning/evidence/Э5-Д3-grep.txt"
+  escalate: none
+  read_first:
+    - .planning/evidence/audit-Э5-повтор.md (раздел 4, совет 5)
+    - docs/deploy.md (разделы 5, 8, 9, 10)
+    - docker/docker-compose.yml (ключ name и volumes)
+  notes: >
+    docker/*  не трогал — связка у параллельной задачи волны. Живого docker
+    compose up -d на два имени проекта не запускал (нет боевого сервера в
+    песочнице): команда переноса собрана по документированному поведению
+    docker run -v <том>:<путь> и cp -a, тем же приёмом, что уже используется
+    в проекте для переноса демо-базы (раздел 6) и восстановления из копии
+    (раздел 9), но напрямую эту команду переноса том-в-том никто не
+    прогонял живьём — стоит один раз проверить на тестовом сервере перед
+    первым боевым использованием.

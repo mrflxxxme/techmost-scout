@@ -285,6 +285,12 @@ docker compose cp /tmp/gov_support.yaml scout:/srv/scout/data/gov_support.yaml
 контейнере уже новый, а вторая строка кладёт его копию явно на том, поверх
 старого содержимого.)
 
+**Если связку поднимали раньше по инструкции без `name` в `docker-compose.yml`,
+перед `docker compose up -d` из этого раздела проверьте имена томов** —
+`docker volume ls | grep scout` и раздел 10, «Тома переименовались после
+обновления, база пропала». Иначе `up -d` тихо создаст новые пустые тома, и
+последствия будут выглядеть как исчезновение базы.
+
 ## 9. Копии базы
 
 Сайдкар `backup` (`docker/docker-compose.yml`) раз в сутки делает горячую
@@ -392,3 +398,55 @@ docker compose logs -f backup
 `scout` не прошёл healthcheck (`caddy` ждёт `scout` в состоянии `healthy` по
 `depends_on`, раздел «Healthcheck» плана этапа) — проверьте
 `docker compose ps` и `docker compose logs scout` в этом случае.
+
+**Тома переименовались после обновления, база «пропала».** В
+`docker-compose.yml` задана директива `name: techmost-scout` — она фиксирует
+имя проекта, чтобы контейнеры не зависели от имени каталога развёртывания
+(без неё compose берёт имя из каталога, обычно `docker`). Следствие: меняются
+и имена именованных томов. Раньше (без `name` в файле) они назывались
+`docker_scout-data`, `docker_scout-out`, `docker_caddy-data`,
+`docker_caddy-config`, `docker_scout-backups`; теперь —
+`techmost-scout_scout-data`, `techmost-scout_scout-out`,
+`techmost-scout_caddy-data`, `techmost-scout_caddy-config`,
+`techmost-scout_scout-backups` (полный список — ключ `volumes` в
+`docker/docker-compose.yml`).
+
+Если связку успели поднять по прежней версии инструкции, а затем обновили код
+и выполнили `docker compose up -d` из раздела 8 — compose не найдёт тома со
+старыми именами и молча создаст новые, пустые. Приложение стартует, база
+инициализируется с нуля, и со стороны это выглядит как «после обновления вся
+база и все прогоны исчезли», хотя реальные данные лежат нетронутыми в старом
+томе.
+
+Проверить, не эта ли причина:
+
+```bash
+docker volume ls | grep scout
+```
+
+Если в списке одновременно есть `docker_scout-data` и
+`techmost-scout_scout-data` (или похожая пара для `scout-out`, `caddy-data`,
+`caddy-config`, `scout-backups`) — это она: старый том с данными существует
+рядом с новым пустым.
+
+Перенести данные из старого тома в новый (на примере `scout-data`; тот же
+приём для остальных задвоившихся томов, с заменой имён томов и внутреннего
+пути на нужные):
+
+```bash
+docker compose stop scout
+docker run --rm \
+  -v docker_scout-data:/from \
+  -v techmost-scout_scout-data:/to \
+  alpine sh -c "cp -a /from/. /to/"
+docker compose run --rm -u root scout chown -R scout:scout /srv/scout/data
+docker compose start scout
+```
+
+Проверьте результат по разделу 7 (вход в веб-интерфейс, история прогонов на
+месте) и только после этого удаляйте старый том — до подтверждения, что
+данные видны в приложении, его лучше не трогать:
+
+```bash
+docker volume rm docker_scout-data
+```
