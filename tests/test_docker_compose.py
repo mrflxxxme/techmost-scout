@@ -1,23 +1,17 @@
 """Проверки связки docker-compose.yml: тома, ожидание живости, копия базы.
 
-Часть тестов разбирает файл через ``yaml.safe_load`` (инвариант №10) или
-``ast`` — структурный анализ скрипта сайдкара без магических подстрок. Часть
-исполняет тело скрипта сайдкара как обычный Python-код на временных файлах —
-так же, как аудитор Э5 воспроизводил отказы («прогонов тела скрипта»).
-Демона Docker и сети нет (инвариант №7): исполнение локальное, in-process.
+Тесты разбирают файл через ``yaml.safe_load`` (инвариант №10) или ``ast`` —
+структурный анализ скрипта сайдкара без магических подстрок. Сквозной
+прогон тела скрипта сайдкара как исполняемого Python-кода — в отдельном
+файле ``tests/test_docker_compose_backup_runtime.py`` (файл был бы больше
+500 строк): там же живут исполняющие его помощники.
 """
 
 from __future__ import annotations
 
 import ast
-import contextlib
-import io
 import re
-import sqlite3
-import threading
-import time
 from pathlib import Path
-from unittest.mock import patch
 
 import yaml
 
@@ -101,62 +95,6 @@ def _find_calls(tree: ast.AST, attr_name: str) -> list[ast.Call]:
     ]
 
 
-class _StopAfterFirstIterationError(Exception):
-    """Сигнал для выхода из ``while True`` тела сайдкара после одного прохода."""
-
-
-def _run_backup_body(
-    data_dir: Path,
-    backups_dir: Path,
-    timeout_override: int | None = None,
-) -> tuple[threading.Thread, io.StringIO]:
-    """Запускает тело скрипта сайдкара один раз в отдельном daemon-потоке.
-
-    Пути ``/data`` и ``/backups`` подменяются на временные каталоги теста;
-    ``time.sleep`` в конце цикла подменяется исключением — иначе ``while
-    True`` дождался бы настоящих суток. Поток — daemon, чтобы зависший
-    сайдкар (ровно тот отказ, который здесь и проверяется) не подвесил
-    тест: вызывающий код сам решает, сколько ждать через ``join(timeout=)``.
-    """
-    script = _backup_script()
-    script = script.replace("/data/scout.db", str(data_dir / "scout.db"))
-    script = script.replace("/backups", str(backups_dir))
-    if timeout_override is not None:
-        script, count = re.subn(
-            r"LOCK_WAIT_TIMEOUT_SECONDS = -?\d+",
-            f"LOCK_WAIT_TIMEOUT_SECONDS = {timeout_override}",
-            script,
-        )
-        assert count == 1, "константа предела ожидания не найдена для подмены в тесте"
-
-    stderr_buffer = io.StringIO()
-
-    def _target() -> None:
-        with (
-            patch("time.sleep", side_effect=_StopAfterFirstIterationError),
-            patch("sys.stderr", stderr_buffer),
-            contextlib.suppress(_StopAfterFirstIterationError),
-        ):
-            # Тело сайдкара исполняется как код теста (без Docker и сети) —
-            # тем же способом аудит Э5 воспроизвёл все три отказа. exec() —
-            # не бизнес-логика продукта, а инструмент теста над извлечённым
-            # текстом скрипта из docker-compose.yml.
-            exec(compile(script, "<backup-script>", "exec"), {"__name__": "__backup_script_test__"})  # noqa: S102
-
-    thread = threading.Thread(target=_target, daemon=True)
-    thread.start()
-    return thread, stderr_buffer
-
-
-def _make_source_database(path: Path) -> None:
-    """Создаёт крошечную боевую базу для теста — одна таблица, одна строка."""
-    conn = sqlite3.connect(path)
-    conn.execute("CREATE TABLE t (x)")
-    conn.execute("INSERT INTO t VALUES (1)")
-    conn.commit()
-    conn.close()
-
-
 def test_yaml_разбирается_без_ошибок():
     """Инвариант №10: значения с двоеточием не ломают разбор YAML."""
     data = _load()
@@ -200,6 +138,15 @@ def test_caddy_образ_закреплён_версией():
     """
     caddy = _load()["services"]["caddy"]
     assert caddy["image"] == "caddy:2-alpine"
+
+
+def test_caddy_публикует_порты_80_и_443():
+    """Совет 1 повторного аудита (M16): единственная мутация, пережившая
+    оба прохода аудита, — удаление ``ports`` у caddy. Связка при этом
+    остаётся без входа из интернета, а набор был зелёным.
+    """
+    caddy = _load()["services"]["caddy"]
+    assert set(caddy.get("ports", [])) == {"80:80", "443:443"}
 
 
 def test_backup_том_базы_только_на_чтение():
@@ -360,13 +307,18 @@ def test_backup_журнал_ограничен_как_у_остальных_с�
     """M14 аудита / правка 4: у scout и caddy logging с ротацией есть, у
     backup — умолчание демона без ротации, хотя docs/deploy.md обещает
     ротацию для всех трёх сервисов.
+
+    L2 повторного аудита: прежняя версия сравнивала с литералом ``"10m"`` —
+    согласованное повышение лимита у всех трёх сервисов сразу роняло набор,
+    хотя связка оставалась согласованной. Сверка идёт с фактическим
+    значением у scout (и у caddy), а не с числом, зашитым в тест.
     """
-    backup = _load()["services"]["backup"]
-    logging_cfg = backup.get("logging")
-    assert logging_cfg is not None, "у backup нет секции logging"
-    assert logging_cfg["driver"] == "json-file"
-    assert logging_cfg["options"]["max-size"] == "10m"
-    assert logging_cfg["options"]["max-file"] == "3"
+    services = _load()["services"]
+    scout_logging = services["scout"]["logging"]
+    caddy_logging = services["caddy"]["logging"]
+    backup_logging = services["backup"].get("logging")
+    assert backup_logging is not None, "у backup нет секции logging"
+    assert backup_logging == scout_logging == caddy_logging
 
 
 def test_backup_скрипт_читает_боевую_базу_только_на_чтение():
@@ -421,79 +373,3 @@ def test_backup_предел_ожидания_блокировки_в_разум
     """
     timeout = _script_constant(_backup_script(), "LOCK_WAIT_TIMEOUT_SECONDS")
     assert 5 <= timeout <= 120, f"предел ожидания {timeout} с вне разумных границ"
-
-
-def test_backup_успешный_проход_создаёт_годную_копию(tmp_path):
-    """Сквозной прогон тела скрипта (без Docker и сети): при доступной базе
-    и снятой блокировке копия должна появиться под итоговым именем и быть
-    непустой.
-    """
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    backups_dir = tmp_path / "backups"
-    backups_dir.mkdir()
-    _make_source_database(data_dir / "scout.db")
-
-    thread, stderr_buffer = _run_backup_body(data_dir, backups_dir, timeout_override=10)
-    thread.join(timeout=10)
-
-    assert not thread.is_alive(), "проход не завершился за разумное время"
-    assert stderr_buffer.getvalue() == "", f"неожиданный отказ: {stderr_buffer.getvalue()}"
-    copies = list(backups_dir.glob("scout-*.db"))
-    assert len(copies) == 1, "ожидалась ровно одна готовая копия"
-    assert copies[0].stat().st_size > 0, "копия создана пустой"
-    assert not list(backups_dir.glob("*.part")), "временный файл не удалён после успеха"
-
-
-def test_backup_прерванный_проход_не_оставляет_файл_пустышку(tmp_path):
-    """Сквозной прогон правки 2: принудительный обрыв копирования (через тот
-    же предел ожидания, выставленный в отрицательное значение — копия
-    прерывается на первом же шаге) не должен оставлять в каталоге копий ни
-    временного файла, ни файла-пустышки с именем годной копии.
-    """
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    backups_dir = tmp_path / "backups"
-    backups_dir.mkdir()
-    _make_source_database(data_dir / "scout.db")
-
-    thread, stderr_buffer = _run_backup_body(data_dir, backups_dir, timeout_override=-1)
-    thread.join(timeout=10)
-
-    assert not thread.is_alive(), "проход не завершился за разумное время"
-    assert "копия базы не выполнена" in stderr_buffer.getvalue()
-    assert list(backups_dir.iterdir()) == [], "после отказа в каталоге копий не должно остаться файлов"
-
-
-def test_backup_ожидание_снятия_блокировки_ограничено(tmp_path):
-    """Сквозной прогон правки 3 при настоящей удерживаемой эксклюзивной
-    транзакции: аудит воспроизвёл зависание больше чем на сто секунд до
-    принудительного обрыва. Здесь предел явно занижен (2 с), и проход
-    обязан завершиться за разумное время, а не повиснуть.
-    """
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    backups_dir = tmp_path / "backups"
-    backups_dir.mkdir()
-    db_path = data_dir / "scout.db"
-    _make_source_database(db_path)
-
-    writer = sqlite3.connect(db_path, timeout=0)
-    writer.execute("BEGIN EXCLUSIVE")
-    writer.execute("INSERT INTO t VALUES (2)")
-    try:
-        start = time.monotonic()
-        thread, stderr_buffer = _run_backup_body(data_dir, backups_dir, timeout_override=2)
-        thread.join(timeout=15)
-        elapsed = time.monotonic() - start
-
-        assert not thread.is_alive(), (
-            "проход не завершился за 15 с при удерживаемой блокировке — "
-            "предел ожидания не работает, повторяется отказ аудита (>100 с)"
-        )
-        assert elapsed < 15, f"проход занял {elapsed:.1f} с — предел ожидания не ограничивает время"
-        assert "копия базы не выполнена" in stderr_buffer.getvalue()
-        assert list(backups_dir.iterdir()) == [], "при отказе из-за блокировки не должно остаться файлов"
-    finally:
-        writer.rollback()
-        writer.close()

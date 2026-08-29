@@ -149,7 +149,12 @@ services:
                     src.close()
 
             cutoff = time.time() - RETENTION_DAYS * DAY
-            for path in glob.glob("/backups/scout-*.db"):
+            # Второй шаблон — огрызки "*.db.part": при жёстком убийстве
+            # контейнера между записью временного файла и его переименованием
+            # (см. os.rename выше) огрызок не попадает под первый шаблон и
+            # без этой строки остался бы в томе навсегда.
+            candidates = glob.glob("/backups/scout-*.db") + glob.glob("/backups/scout-*.db.part")
+            for path in candidates:
                 try:
                     if os.path.getmtime(path) < cutoff:
                         os.remove(path)
