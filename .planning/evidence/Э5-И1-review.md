@@ -124,3 +124,67 @@ a+rX /ms-playwright` — весь набор `tests/test_docker_image.py` ост
    вне утверждённых критериев приёмки плана, но раз план сам объясняет, зачем
    эта строка нужна («иначе браузер... не читается»), тест на неё выглядел бы
    уместным дополнением при следующей правке образа.
+
+---
+
+# Ревью Э5-И1 · цикл 2
+Вердикт: ПРИНЯТЬ (блокирующих 0)
+
+Проверка двух точечных правок поверх принятого цикла 1 (`dd4e413`), новые
+коммиты `1bdcb01` (код и тест) и `5f26cee` (доказательства). Границы —
+`git diff dd4e413 5f26cee` — тронуты ровно `docker/Dockerfile` (−1 строка) и
+`tests/test_docker_image.py` (+25 строк), плюс evidence-файлы; `.dockerignore`,
+`docker-compose.yml`, `Caddyfile`, `backend/app/config.py` не задеты (diff по
+ним пуст).
+
+## 1. Новый тест `test_browsers_path_is_readable_by_non_root_user`
+Не поверил заявленной мутации — поставил сам.
+
+- Убрал `RUN chmod -R a+rX /ms-playwright` из `docker/Dockerfile`, прогнал
+  точечный набор: `1 failed, 9 passed` — падает именно
+  `test_browsers_path_is_readable_by_non_root_user`, остальные девять зелёные.
+  Вернул строку (`git checkout -- docker/Dockerfile`): `10 passed`.
+- Проверил, что тест привязан к значению `PLAYWRIGHT_BROWSERS_PATH`, а не к
+  строке `/ms-playwright`, вписанной руками: временно переставил
+  `PLAYWRIGHT_BROWSERS_PATH` на `/opt/pw-browsers`, не тронув `chmod`
+  (имитация рассинхронизации, если каталог переедет, а строку chmod забудут
+  обновить) — тест упал именно на несовпадении
+  (`assert '/opt/pw-browsers' in 'RUN chmod -R a+rX /ms-playwright'`). Затем
+  переставил оба значения консистентно (`PLAYWRIGHT_BROWSERS_PATH` и `chmod`
+  на `/opt/pw-browsers`) — весь набор зелёный (`10 passed`). Значит тест ловит
+  именно рассинхронизацию значения и команды, а не факт наличия слова `chmod`
+  в файле. После проверки Dockerfile возвращён в исходное состояние
+  (`git checkout --`), рабочая копия чистая (`git status --short` пуст).
+
+## 2. Убрана `ENV DATABASE_URL=sqlite+aiosqlite:////srv/scout/data/scout.db`
+Пересчитано вручную: `Path('/srv/scout/backend/app/config.py').resolve()
+.parents[2]` → `/srv/scout`, дефолт `Settings.database_url` при этом
+`REPO_ROOT` даёт `sqlite+aiosqlite:////srv/scout/data/scout.db` — тот же
+адрес, что удалённая строка задавала явно. Проверено грепом, что ни один тест
+и ни один код в репозитории не рассчитывает на `DATABASE_URL`, заданный
+именно в образе: единственные упоминания `DATABASE_URL` в `tests/` —
+`monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")` в
+`tests/conftest.py`, `tests/test_run_visibility.py`,
+`tests/test_secret_leak_guard.py` — они сами переопределяют переменную
+значением `:memory:` и от Dockerfile не зависят. `docker-compose.yml` в этой
+ветке ещё не существует (создаётся параллельной задачей Э5-И2, в этот диф не
+входит) — сослаться там не на что.
+
+## Проверено (воспроизведено самостоятельно)
+- `pytest tests/test_docker_image.py -v`: 10 passed.
+- Мутация (убран `chmod`): `1 failed, 9 passed`, падает ожидаемый тест;
+  возврат строки — `10 passed`.
+- Мутация desync (переставлен только `PLAYWRIGHT_BROWSERS_PATH`, `chmod`
+  не тронут): `1 failed, 9 passed`, падает тот же тест на несовпадении
+  значений.
+- Мутация согласованного переноса (переставлены оба): `10 passed`.
+- `pytest -q`: 1236 passed, 1 warning in ~70s — совпадает с заявленным.
+- `ruff check .`: All checks passed!
+- `ruff format --check .`: 207 files already formatted.
+- `git diff dd4e413 5f26cee -- docker-compose.yml Caddyfile backend/app/config.py .dockerignore`: пусто.
+- `grep -n "DATABASE_URL" docker/Dockerfile tests/*.py backend/app/config.py`: только
+  переопределения на `:memory:` в тестах, к образу не относятся.
+
+## Итог по задаче
+Оба пункта цикла 2 закрыты по существу, не только по форме. Блокирующих
+находок нет. Третий цикл не понадобился.
