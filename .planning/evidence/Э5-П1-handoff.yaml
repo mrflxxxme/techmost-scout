@@ -1,0 +1,67 @@
+handoff:
+  from: implementer-A
+  to: reviewer
+  task: Э5-П1
+  did:
+    - "Блокирующая находка Б1 устранена: ENV PLAYWRIGHT_BROWSERS_PATH поднят выше
+       RUN pip install/playwright install в docker/Dockerfile — раньше стоял
+       после RUN chmod, переменная не действовала на установке, /ms-playwright
+       не создавался, chmod падал с кодом 1, сборка обрывалась."
+    - "Шаблоны секретов в .dockerignore сделаны рекурсивными: .env, .env.*,
+       *.pem, *.key заменены на **/.env, **/.env.*, **/*.pem, **/*.key — иначе
+       docker/.env (docs/deploy.md §3 велит создавать его вне корня) уезжал в
+       контекст сборки."
+    - "Шаблон боевой базы data/*.db заменён на data/*.db* — старый не
+       покрывал резервные копии scout.db.bak-* (12,1 МБ вместо 0,2 МБ);
+       заодно поглотил отдельные строки data/*.db-journal и data/*.db-wal,
+       ставшие избыточными."
+    - "Добавлен тест порядка ENV/playwright install (сравнение индексов строк,
+       обязательный по аудиту) — доказан мутацией M7 (форма находки Б1)."
+    - "Дополнительно закрыты три необязательные, но названные аудитом мутации:
+       M1 (COPY backend → несуществующий каталог) через проверку существования
+       всех источников COPY в дереве репозитория; M2 (пропажа COPY prompts)
+       через отдельную проверку обязательного набора источников COPY — первая
+       проверка её не ловит, поэтому нужна вторая; M6 (--host 0.0.0.0 →
+       127.0.0.1) через прямую проверку строки CMD."
+    - "Тесты на .dockerignore: рекурсивность секретных шаблонов и покрытие
+       резервных копий базы — обе доказаны мутацией (откат к старому виду
+       красный, исправленный вариант зелёный)."
+  artifacts:
+    - docker/Dockerfile
+    - .dockerignore
+    - tests/test_docker_image.py
+    - .planning/evidence/Э5-П1-pytest.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_docker_image.py -v: 16 passed"
+    - "pytest -q (полный набор): 1281 passed, 1 warning (предупреждение не наше — httpx/httpx2 в testclient.py фреймворка)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 211 files already formatted"
+    - "Мутации доказаны протоколом в Э5-П1-pytest.txt: M7 (обязательная),
+       M1, M2, M6 (Dockerfile) и две мутации .dockerignore (data/*.db*,
+       рекурсивные секретные шаблоны) — каждая красная на порче, зелёная
+       на откате"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел Э5-И1 — только границы, не менял)
+    - .planning/evidence/audit-Э5.md (раздел «Блокирующее», пункты 2 и 3 линзы безопасности)
+    - docker/Dockerfile
+    - .dockerignore
+    - tests/test_docker_image.py
+    - .planning/evidence/Э5-П1-pytest.txt
+  notes: |
+    Мутацию M8 (caddy:2-alpine → nginx:1.27-alpine из docker-compose.yml)
+    не закрывал — файл вне границ задачи (docker-compose.yml принадлежит
+    параллельной задаче волны). Аудит считает её второй обязательной наряду
+    с M7 — стоит закрыть в задаче, которая владеет docker-compose.yml.
+
+    Рабочая копия была создана от устаревшей базы (последний коммит на исходной
+    ветке — 68de857, ветка Э4, без трёх волн Э5 и без отчёта аудита). Переключился
+    на новую ветку wave5/e5-p1-image от указанного в постановке fa4b53f — на ней
+    Dockerfile и .dockerignore уже в состоянии, описанном аудитом (24 строки
+    Dockerfile с ENV после chmod, .dockerignore с нерекурсивными секретами и
+    data/*.db без покрытия бэкапов). Совпадение подтверждено построчным
+    сравнением перед первой правкой.
+
+    Демона Docker нет, живая сборка не проверялась — только текстовый разбор
+    файлов тестами, как и предписано в .planning/PLAN.md.

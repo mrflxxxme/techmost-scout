@@ -1,0 +1,154 @@
+Задача Э5-П1 «Образ: порядок ENV, контекст сборки» — фактический вывод проверок.
+Все команды выполнены проектным бинарём из корня рабочей копии
+(/home/user/techmost-scout/.venv/bin/...).
+
+=====================================================================
+1. Целевой набор тестов после правки (зелёный)
+=====================================================================
+
+$ /home/user/techmost-scout/.venv/bin/python -m pytest tests/test_docker_image.py -v
+
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a64637b79a9136ea8
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 16 items
+
+tests/test_docker_image.py::test_base_image_is_python_slim PASSED        [  6%]
+tests/test_docker_image.py::test_install_uses_export_extra PASSED        [ 12%]
+tests/test_docker_image.py::test_playwright_installs_chromium_with_deps PASSED [ 18%]
+tests/test_docker_image.py::test_playwright_browsers_path_declared_before_install PASSED [ 25%]
+tests/test_docker_image.py::test_playwright_browsers_path_outside_root_home PASSED [ 31%]
+tests/test_docker_image.py::test_browsers_path_is_readable_by_non_root_user PASSED [ 37%]
+tests/test_docker_image.py::test_pythonpath_points_to_backend_tree PASSED [ 43%]
+tests/test_docker_image.py::test_user_directive_is_non_root_and_after_last_run PASSED [ 50%]
+tests/test_docker_image.py::test_copy_sources_exist_in_build_context PASSED [ 56%]
+tests/test_docker_image.py::test_all_required_copy_sources_are_present PASSED [ 62%]
+tests/test_docker_image.py::test_cmd_binds_to_all_interfaces PASSED      [ 68%]
+tests/test_docker_image.py::test_healthcheck_present_and_checks_health_endpoint PASSED [ 75%]
+tests/test_docker_image.py::test_dockerignore_file_exists PASSED         [ 81%]
+tests/test_docker_image.py::test_dockerignore_excludes_secrets_and_dev_artifacts PASSED [ 87%]
+tests/test_docker_image.py::test_dockerignore_secret_patterns_are_recursive PASSED [ 93%]
+tests/test_docker_image.py::test_dockerignore_covers_backup_copies_of_database PASSED [100%]
+
+============================== 16 passed in 0.04s ==============================
+
+=====================================================================
+2. Протокол мутаций — каждая доказана: красный на порче, зелёный на откате
+=====================================================================
+
+--- Мутация M7 (обязательная, форма блокирующей находки Б1) ---
+Убран блок ENV PLAYWRIGHT_BROWSERS_PATH из верхней позиции, вставлен ПОСЛЕ
+`RUN chmod -R a+rX /ms-playwright` (воспроизведена именно та форма бага,
+которую нашёл аудит).
+
+$ /home/user/techmost-scout/.venv/bin/python -m pytest tests/test_docker_image.py -v
+...
+FAILED tests/test_docker_image.py::test_playwright_browsers_path_declared_before_install
+AssertionError: ENV PLAYWRIGHT_BROWSERS_PATH должен стоять раньше playwright install,
+иначе браузер уедет в домашний кэш root, а следующий chmod упадёт
+assert 22 < 16
+========================= 1 failed, 14 passed in 0.07s =========================
+
+Откат к исходной (исправленной) версии → тест зелёный:
+============================== 15 passed in 0.04s ==============================
+(15, а не 16 — на момент этой мутации ещё не был добавлен тест
+test_all_required_copy_sources_are_present, он появился позже в той же сессии;
+финальный набор — 16 тестов, см. раздел 1)
+
+--- Мутация M1: `COPY backend ./backend` → `COPY backend_nope ./backend` ---
+$ /home/user/techmost-scout/.venv/bin/python -m pytest tests/test_docker_image.py::test_copy_sources_exist_in_build_context -v
+FAILED tests/test_docker_image.py::test_copy_sources_exist_in_build_context
+AssertionError: источник COPY не найден в контексте сборки: 'backend_nope'
+assert False
+ +  where False = exists()
+ +    where exists = PosixPath('.../backend_nope').exists
+============================== 1 failed in 0.05s ===============================
+
+Откат → идентично оригиналу (diff пуст), полный набор зелёный (16 passed).
+
+--- Мутация M2: удалена строка `COPY prompts ./prompts` ---
+Первый прогон (только test_copy_sources_exist_in_build_context) прошёл бы
+зелёным по ошибке — тест сверяет источники, а не их полноту. Поэтому
+дополнительно введён test_all_required_copy_sources_are_present, который
+проверяет обязательный набор источников COPY.
+
+$ /home/user/techmost-scout/.venv/bin/python -m pytest tests/test_docker_image.py::test_all_required_copy_sources_are_present -v
+FAILED tests/test_docker_image.py::test_all_required_copy_sources_are_present
+AssertionError: директива COPY 'prompts' отсутствует в Dockerfile
+assert 'prompts' in {'README.md', 'backend', 'data/gov_support.yaml', 'pyproject.toml'}
+============================== 1 failed in 0.05s ===============================
+
+Откат → идентично оригиналу (diff пуст), полный набор зелёный (16 passed).
+
+--- Мутация M6: `"--host", "0.0.0.0"` → `"--host", "127.0.0.1"` ---
+$ /home/user/techmost-scout/.venv/bin/python -m pytest tests/test_docker_image.py::test_cmd_binds_to_all_interfaces -v
+FAILED tests/test_docker_image.py::test_cmd_binds_to_all_interfaces
+AssertionError: CMD должен биндиться на 0.0.0.0, не на 127.0.0.1
+assert '"--host", "0.0.0.0"' in <содержимое Dockerfile>
+============================== 1 failed in 0.05s ===============================
+
+Откат → идентично оригиналу (diff пуст), полный набор зелёный (16 passed).
+
+--- Мутация: `.dockerignore` `data/*.db*` → `data/*.db` (возврат к находке аудита) ---
+$ /home/user/techmost-scout/.venv/bin/python -m pytest tests/test_docker_image.py::test_dockerignore_covers_backup_copies_of_database -v
+FAILED tests/test_docker_image.py::test_dockerignore_covers_backup_copies_of_database
+AssertionError: шаблон .dockerignore не закрывает 'scout.db-journal'
+assert False
+============================== 1 failed in 0.05s ===============================
+
+(Первой не прошла даже проверка на `scout.db-journal`, до `scout.db.bak-*`
+дело не дошло — старый шаблон `data/*.db` слабее по всем расширениям, не
+только по бэкапам.)
+
+Откат → идентично оригиналу (diff пуст), полный набор зелёный (16 passed).
+
+--- Мутация: `.dockerignore` `**/.env`, `**/.env.*`, `**/*.pem`, `**/*.key` → нерекурсивные `.env`, `.env.*`, `*.pem`, `*.key` ---
+$ /home/user/techmost-scout/.venv/bin/python -m pytest tests/test_docker_image.py::test_dockerignore_secret_patterns_are_recursive -v
+FAILED tests/test_docker_image.py::test_dockerignore_secret_patterns_are_recursive
+AssertionError: в .dockerignore должен быть рекурсивный шаблон '**/.env'
+assert '**/.env' in [... нет строки '**/.env' ...]
+============================== 1 failed in 0.05s ===============================
+
+Откат → идентично оригиналу (diff пуст), полный набор зелёный (16 passed).
+
+=====================================================================
+3. Полный набор тестов проекта
+=====================================================================
+
+$ /home/user/techmost-scout/.venv/bin/python -m pytest -q
+........................................................................ [  5%]
+........................................................................ [ 11%]
+........................................................................ [ 16%]
+........................................................................ [ 22%]
+........................................................................ [ 28%]
+........................................................................ [ 33%]
+........................................................................ [ 39%]
+........................................................................ [ 44%]
+........................................................................ [ 50%]
+........................................................................ [ 56%]
+........................................................................ [ 61%]
+........................................................................ [ 67%]
+........................................................................ [ 73%]
+........................................................................ [ 78%]
+........................................................................ [ 84%]
+........................................................................ [ 89%]
+........................................................................ [ 95%]
+.........................................................                [100%]
+1281 passed, 1 warning in 71.29s (0:01:11)
+
+(Предупреждение — не наше: StarletteDeprecationWarning про httpx/httpx2
+в testclient.py фреймворка, к задаче не относится.)
+
+=====================================================================
+4. Линтеры
+=====================================================================
+
+$ /home/user/techmost-scout/.venv/bin/ruff check .
+All checks passed!
+
+$ /home/user/techmost-scout/.venv/bin/ruff format --check .
+211 files already formatted
