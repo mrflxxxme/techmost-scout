@@ -50,3 +50,46 @@ handoff:
     не запускался — демона Docker в среде нет, все критерии закрыты чтением
     файлов и pytest. docker-compose.yml и Caddyfile не трогались (задачи
     Э5-И2/И3), backend/app/config.py не трогался.
+
+cycle_2:
+  from: implementer-A
+  to: reviewer
+  task: Э5-И1
+  reason: >-
+    Ревью цикла 1 — ПРИНЯТЬ, блокирующих замечаний нет. Координатор перевёл
+    один совет ревьюера в обязательную правку и один — в правку по желанию.
+  did:
+    - "Добавлен tests/test_docker_image.py::test_browsers_path_is_readable_by_non_root_user
+      — проверяет, что в Dockerfile есть RUN chmod -R a+rX на каталог из
+      PLAYWRIGHT_BROWSERS_PATH. Ревьюер убрал строку chmod локально и весь
+      набор остался зелёным (9 passed) — тест закрывает именно этот пробел"
+    - "Мутационная проверка теста сделана вручную: строка chmod убрана из
+      Dockerfile → pytest tests/test_docker_image.py -v даёт 1 failed, 9
+      passed (падает ровно новый тест); строка возвращена → 10 passed"
+    - "Убрана строка ENV DATABASE_URL=sqlite+aiosqlite:////srv/scout/data/scout.db
+      из docker/Dockerfile — сознательного намерения защититься от смены
+      способа вычисления REPO_ROOT не было, значение дублировало дефолт
+      Settings.database_url при REPO_ROOT=/srv/scout (даёт PYTHONPATH).
+      Второй пункт правки был «по желанию» — выбран вариант «убрать», а не
+      «оставить с комментарием», так как намерения не было"
+  artifacts:
+    - docker/Dockerfile
+    - tests/test_docker_image.py
+    - .planning/evidence/Э5-И1-pytest-cycle2.txt
+    - .planning/evidence/Э5-И1-pytest-docker-cycle2.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_docker_image.py -v (со строкой chmod): 10 passed"
+    - "pytest tests/test_docker_image.py -v (строка chmod временно удалена, мутация): 1 failed, 9 passed"
+    - "pytest tests/test_docker_image.py -v (строка chmod возвращена): 10 passed"
+    - "pytest -q: 1236 passed, 1 warning in 70.12s (0:01:10)"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 207 files already formatted"
+  escalate: none
+  read_first:
+    - docker/Dockerfile
+    - tests/test_docker_image.py
+  notes: >-
+    Правки внесены в ту же ветку wave5/e5-i1-image, границы прежние —
+    трогались только docker/Dockerfile и tests/test_docker_image.py.
+    docker-compose.yml, Caddyfile и backend/app/config.py не затронуты.
