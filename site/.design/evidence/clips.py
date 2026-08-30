@@ -79,6 +79,15 @@ for name, f in json.load(open(os.path.join(HERE, 'clips.json'))):
         best.setdefault(name, None)
         continue
     fg = ink
+    # На градиентной поверхности самого частого цвета нет: её оттенки размазаны
+    # по сотне корзин, и плоский белый текст обходит любую из них поштучно.
+    # Кто из двух подложка, решает не частота одного значения, а доля пикселей
+    # рядом с ним по светлоте.
+    def share(c):
+        lc = lum(c)
+        return sum(1 for q in px if abs(lum(q) - lc) < .02)
+    if share(fg) > share(bg):
+        bg, fg = fg, bg
     cr = ratio(fg, bg)
     prev = best.get(name)
     # из трёх полос берётся худшая по контрасту: замер должен ловить провал,

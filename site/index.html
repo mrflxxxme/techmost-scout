@@ -78,20 +78,16 @@
           <a href="https://rospatent.gov.ru/ru/news/rospatent-06122024" target="_blank" rel="noopener">декабрь 2024</a></cite>
       </article>
     </div>
-  </div>
-</section>
-
-<!-- ── Цитата ────────────────────────────────────────────────────── -->
-<section class="sec quote">
-  <div class="wrap">
-    <blockquote class="rise" data-rise="wipe">
-      <span class="mark" aria-hidden="true">«</span>
-      <div>
-        <p>Чтобы наука и бизнес нашли друг друга, нужен технологический брокер</p>
-        <footer>Юрий Зубов, руководитель Роспатента ·
-          <a href="https://rospatent.gov.ru/ru/news/rospatent-06122024" target="_blank" rel="noopener">Роспатент, декабрь 2024</a></footer>
-      </div>
-    </blockquote>
+    <div class="quote">
+      <blockquote class="rise" data-rise="wipe">
+        <span class="mark" aria-hidden="true">«</span>
+        <div>
+          <p>Чтобы наука и бизнес нашли друг друга, нужен технологический брокер</p>
+          <footer>Юрий Зубов, руководитель Роспатента ·
+            <a href="https://rospatent.gov.ru/ru/news/rospatent-06122024" target="_blank" rel="noopener">Роспатент, декабрь 2024</a></footer>
+        </div>
+      </blockquote>
+    </div>
   </div>
 </section>
 
@@ -127,34 +123,48 @@
       <div class="wrap">
         <p class="kicker">Один цикл</p>
         <h2>От задачи завода до внедрения</h2>
-        <p class="intro">Четыре шага и три стороны. Шаг раскрывается и показывает,
-          кто что делает.</p>
       </div>
-      <div class="steps" id="steps">
-        <button type="button" class="on" data-step="0" aria-expanded="false" aria-controls="d0">
-          <span class="n">01</span>
-          <h3>Назовите задачу</h3>
-          <dl class="detail" id="d0"><div><dt>Вы</dt><dd>называете задачу и её цену в деньгах</dd></div><div><dt>Ситалл</dt><dd>переводит её в техническое задание</dd></div><div><dt>Наука</dt><dd>на этом шаге не участвует</dd></div></dl>
-          <span class="hint"><s></s>Кто что делает</span>
-        </button>
-        <button type="button" data-step="1" aria-expanded="false" aria-controls="d1">
-          <span class="n">02</span>
-          <h3>Получите варианты</h3>
-          <dl class="detail" id="d1"><div><dt>Вы</dt><dd>выбираете из короткого списка</dd></div><div><dt>Ситалл</dt><dd>ищет решения и проверяет их с учёными</dd></div><div><dt>Наука</dt><dd>даёт решения и экспертизу</dd></div></dl>
-          <span class="hint"><s></s>Кто что делает</span>
-        </button>
-        <button type="button" data-step="2" aria-expanded="false" aria-controls="d2">
-          <span class="n">03</span>
-          <h3>Подпишите сделку</h3>
-          <dl class="detail" id="d2"><div><dt>Вы</dt><dd>подписываете договор</dd></div><div><dt>Ситалл</dt><dd>собирает сделку и заявку на софинансирование</dd></div><div><dt>Наука</dt><dd>исполняет НИОКР</dd></div></dl>
-          <span class="hint"><s></s>Кто что делает</span>
-        </button>
-        <button type="button" data-step="3" aria-expanded="false" aria-controls="d3">
-          <span class="n">04</span>
-          <h3>Примите технологию</h3>
-          <dl class="detail" id="d3"><div><dt>Вы</dt><dd>получаете работающую технологию</dd></div><div><dt>Ситалл</dt><dd>ведёт до пуска и отвечает за срок</dd></div><div><dt>Наука</dt><dd>дорабатывает под производство</dd></div></dl>
-          <span class="hint"><s></s>Кто что делает</span>
-        </button>
+      <div class="cyc wrap">
+      <ol class="rail" id="steps" role="tablist" aria-label="Шаги цикла">
+        <li><button role="tab" type="button" id="s0" aria-controls="d0" aria-selected="true">
+          <span class="n">01</span><span class="t">Назовите задачу</span><span class="w">3–4 недели</span></button></li>
+        <li><button role="tab" type="button" id="s1" aria-controls="d1" aria-selected="false">
+          <span class="n">02</span><span class="t">Получите варианты</span><span class="w">6–8 недель</span></button></li>
+        <li><button role="tab" type="button" id="s2" aria-controls="d2" aria-selected="false">
+          <span class="n">03</span><span class="t">Подпишите сделку</span><span class="w">2–4 месяца</span></button></li>
+        <li><button role="tab" type="button" id="s3" aria-controls="d3" aria-selected="false">
+          <span class="n">04</span><span class="t">Примите технологию</span><span class="w">6–18 месяцев</span></button></li>
+      </ol>
+      <div class="panes" id="panes">
+      <article class="pane" role="tabpanel" id="d0" aria-labelledby="s0">
+        <p class="kicker">Шаг 01 · Диагностика · 3–4 недели</p>
+        <h3>Назовите задачу</h3>
+        <p class="what">Разбираемся, где предприятие теряет деньги и какие задачи можно закрыть внешней разработкой.</p>
+        <dl><div><dt>Вы</dt><dd>называете задачу и её цену в деньгах</dd></div><div><dt>Ситалл</dt><dd>переводит её в техническое задание</dd></div><div><dt>Наука</dt><dd>на этом шаге не участвует</dd></div></dl>
+        <p class="out"><span class="meas">На выходе</span>техническое задание, с которым можно идти к учёным, и оценка задачи в деньгах</p>
+      </article>
+      <article class="pane" role="tabpanel" id="d1" aria-labelledby="s1">
+        <p class="kicker">Шаг 02 · Поиск и проверка · 6–8 недель</p>
+        <h3>Получите варианты</h3>
+        <p class="what">Приносим короткий список решений из сети институтов. Каждое проверено учёными: зрелость, команда, применимость.</p>
+        <dl><div><dt>Вы</dt><dd>выбираете из короткого списка</dd></div><div><dt>Ситалл</dt><dd>ищет решения и проверяет их с учёными</dd></div><div><dt>Наука</dt><dd>даёт решения и экспертизу</dd></div></dl>
+        <p class="out"><span class="meas">На выходе</span>пять–семь карточек решений разной зрелости, каждая со ссылками на первоисточники</p>
+      </article>
+      <article class="pane" role="tabpanel" id="d2" aria-labelledby="s2">
+        <p class="kicker">Шаг 03 · Сделка и господдержка · 2–4 месяца</p>
+        <h3>Подпишите сделку</h3>
+        <p class="what">Собираем договор и софинансирование: субсидию по 218-му постановлению, двойной налоговый вычет, гранты на доращивание.</p>
+        <dl><div><dt>Вы</dt><dd>подписываете договор</dd></div><div><dt>Ситалл</dt><dd>собирает сделку и заявку на софинансирование</dd></div><div><dt>Наука</dt><dd>исполняет НИОКР</dd></div></dl>
+        <p class="out"><span class="meas">На выходе</span>договор с исполнителем и поданная заявка на господдержку</p>
+      </article>
+      <article class="pane" role="tabpanel" id="d3" aria-labelledby="s3">
+        <p class="kicker">Шаг 04 · Внедрение · 6–18 месяцев</p>
+        <h3>Примите технологию</h3>
+        <p class="what">Ведём проект до результата как генеральный подрядчик — руками партнёров: инжиниринговых центров и самих институтов. У вас остаётся один подрядчик.</p>
+        <dl><div><dt>Вы</dt><dd>получаете работающую технологию</dd></div><div><dt>Ситалл</dt><dd>ведёт до пуска и отвечает за срок</dd></div><div><dt>Наука</dt><dd>дорабатывает под производство</dd></div></dl>
+        <p class="out"><span class="meas">На выходе</span>технология, работающая в цехе, и один ответственный за срок</p>
+      </article>
+      </div>
       </div>
     </div>
   </div>
@@ -352,12 +362,24 @@
 <!-- ══ ОСТРОВ 3: контакт ══════════════════════════════════════════ -->
 <section class="island contact" id="contact">
   <div class="field" aria-hidden="true"></div>
-  <div class="wrap">
-    <p class="kicker">Первый подбор — за наш счёт</p>
-    <a class="big rise" data-rise="up" href="mailto:uklonskiy.k@ya.ru?subject=Задача%20предприятия">uklonskiy.k@ya.ru</a>
-    <p class="after">Напишите одной строкой, какую задачу нужно закрыть. За первый год
-      в регионе берём десять задач предприятий, пять доводим до подбора с научной
-      проверкой, одну — до пуска.</p>
+  <div class="wrap contact-grid">
+    <div>
+      <p class="kicker">Первый подбор — за наш счёт</p>
+      <a class="big rise" data-rise="up" href="mailto:uklonskiy.k@ya.ru?subject=Задача%20предприятия">uklonskiy.k@ya.ru</a>
+      <p class="after">Напишите одной строкой, какую задачу нужно закрыть. За первый год
+        в регионе берём десять задач предприятий, пять доводим до подбора с научной
+        проверкой, одну — до пуска.</p>
+    </div>
+    <aside class="ask rise" data-rise="up">
+      <p class="kicker">Что написать в письме</p>
+      <ol>
+        <li><b>Задача</b><span>что именно не получается на производстве — одной фразой</span></li>
+        <li><b>Цена вопроса</b><span>во что она обходится за год: брак, простой, штраф, отвал</span></li>
+        <li><b>Ограничения</b><span>что менять нельзя: площадку, сырьё, состав оборудования</span></li>
+      </ol>
+      <p class="next"><span class="meas">Что дальше</span>Диагностика — три-четыре недели.
+        Если задача не закрывается внешней разработкой, скажем об этом сразу.</p>
+    </aside>
   </div>
 </section>
 
@@ -379,17 +401,16 @@
 
 <script type="module">
   import { startHero } from './assets/js/hero.js';
-  import { riseOnEnter, pointerLight, scrubCycle, expandSteps, stickyHeader } from './assets/js/motion.js';
+  import { riseOnEnter, pointerLight, scrubCycle, initCycle, stickyHeader } from './assets/js/motion.js';
   import { initFork, initSheet } from './assets/js/fork.js';
-
-  const steps = [...document.querySelectorAll('#steps button')];
 
   stickyHeader(document.getElementById('hdr'), '.island');
   startHero(document.getElementById('spark'));
   riseOnEnter([...document.querySelectorAll('.rise')]);
   pointerLight([...document.querySelectorAll('.tile, .card, .pill, .chip')]);
-  const follow = expandSteps(steps);
-  scrubCycle(document.getElementById('track'), steps, follow);
+  const rail = document.getElementById('steps');
+  const show = initCycle(rail, document.getElementById('panes'));
+  scrubCycle(document.getElementById('track'), rail.querySelectorAll('[role="tab"]').length, show);
   initFork(document.getElementById('fork'));
   initSheet(document.getElementById('burger'), document.getElementById('sheet'),
             document.getElementById('sheetClose'));

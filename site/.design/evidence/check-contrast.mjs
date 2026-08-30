@@ -10,11 +10,7 @@ const b = await chromium.launch({ headless: true, executablePath: '/opt/pw-brows
 const p = await (await b.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
 await p.goto('http://127.0.0.1:8765/index.html', { waitUntil: 'load' });
 await p.waitForTimeout(1800);
-// шаг цикла раскрывается, иначе его строки не попадут в кадр
-await p.evaluate(() => document.querySelector('#steps button').scrollIntoView({ block: 'center', behavior: 'instant' }));
-await p.waitForTimeout(500);
-await p.click('#steps button');
-await p.waitForTimeout(700);
+// панель шага показывается сама: лента переключает, а не раскрывает
 
 const spots = [
   ['обложка · лид', '.cover .lead'],
@@ -25,7 +21,13 @@ const spots = [
   ['плитка чернильная · текст', '.tile.chip p'],
   ['цитата · подпись', '.quote footer'],
   ['лента позиции', '.ribbon li p'],
-  ['шаг цикла · подпись', '#steps button.on .detail dt'],
+  ['цикл · лента, активный', '.rail [aria-selected="true"] .t'],
+  ['цикл · лента, срок', '.rail [aria-selected="true"] .w'],
+  ['цикл · лента, неактивный', '.rail [aria-selected="false"] .t'],
+  ['цикл · панель, суть', '.pane:not([hidden]) .what'],
+  ['цикл · панель, подпись', '.pane:not([hidden]) dt'],
+  ['цикл · панель, роль', '.pane:not([hidden]) dd'],
+  ['цикл · панель, на выходе', '.pane:not([hidden]) .out'],
   ['инструмент · текст', '.tools li p'],
   ['инструмент · источник', '.tools li .src'],
   ['счёт сделки · строка', '.deal dl dd'],
@@ -38,16 +40,21 @@ const spots = [
   ['команда · текст', '.team li p'],
   ['вопросы · ответ', '.qa li p'],
   ['контакт · текст', '.contact .after'],
+  ['контакт · что прислать', '.ask span'],
+  ['контакт · что дальше', '.ask .next'],
   ['подвал', '.foot span'],
 ];
 
 const names = [];
 let i = 0;
 for (const [name, sel] of spots) {
-  const el = await p.$(sel);
-  if (!el) { console.log('нет узла: ' + sel); continue; }
+  if (!(await p.$(sel))) { console.log('нет узла: ' + sel); continue; }
   await p.evaluate((s) => document.querySelector(s).scrollIntoView({ block: 'center', behavior: 'instant' }), sel);
   await p.waitForTimeout(600);
+  // узел перезапрашивается после прокрутки: скраб цикла успевает сменить
+  // видимую панель, и прежняя ссылка указывает на спрятанный узел с нулевой рамкой
+  const el = await p.$(sel);
+  if (!el) { console.log('нет узла после прокрутки: ' + sel); continue; }
   const bb = await el.boundingBox();
   if (!bb || bb.width < 6 || bb.height < 6) { console.log('нулевая рамка: ' + sel); continue; }
   // рамку обязательно подрезать по экрану: узел под шапкой или у самого низа

@@ -2,7 +2,7 @@
    1. вход сцены      — riseOnEnter, разный жест для разных типов блоков
    2. отклик на курсор — pointerLight, свет идёт за курсором по материалу
    3. скраб по скроллу — scrubCycle, положение внутри трека выбирает шаг
-   4. смена состояния  — expandSteps и вкладки развилки (fork.js)
+   4. смена состояния  — initCycle и вкладки развилки (fork.js)
 
    Кривая и набор длительностей общие на весь сайт: цельность читается как дорогое. */
 
@@ -35,17 +35,12 @@ export function pointerLight(nodes) {
 }
 
 /** 3. Скраб по скроллу: один шаг цикла на экран. */
-export function scrubCycle(track, steps, onChange) {
-  if (!track || !steps.length) return;
-  const mark = (i) => {
-    steps.forEach((s, k) => s.classList.toggle('on', k === i));
-    onChange?.(i);
-  };
-  if (calm() || getComputedStyle(track).height === 'auto') {
-    steps.forEach((s) => s.classList.add('on'));
-    return;
-  }
-  mark(0);
+export function scrubCycle(track, count, show) {
+  if (!track || !count) return;
+  if (calm() || getComputedStyle(track).height === 'auto') return;
+  let at = -1;
+  const put = (i) => { if (i !== at) { at = i; show(i); } };
+  put(0);
   let ticking = false;
   addEventListener('scroll', () => {
     if (ticking) return;
@@ -56,45 +51,44 @@ export function scrubCycle(track, steps, onChange) {
       const span = r.height - innerHeight;
       if (span <= 0) return;
       const p = Math.min(1, Math.max(0, -r.top / span));
-      mark(Math.min(steps.length - 1, Math.floor(p * steps.length)));
+      put(Math.min(count - 1, Math.floor(p * count)));
     });
   }, { passive: true });
 }
 
-/** 4. Смена состояния: шаг цикла разворачивает, кто что делает. */
-export function expandSteps(steps) {
-  const setOpen = (btn, open) => {
-    const panel = btn.querySelector('.detail');
-    if (!panel) return;
-    btn.setAttribute('aria-expanded', String(open));
-    panel.style.height = open ? `${panel.scrollHeight}px` : '0px';
+/** 4. Смена состояния: лента шагов выбирает панель.
+    Панели именно переключаются, а не раскрываются: при скрабе раскрытие
+    двигало бы соседние строки на каждом кадре, и лента дрожала бы. */
+export function initCycle(rail, panes) {
+  const tabs = rail ? [...rail.querySelectorAll('[role="tab"]')] : [];
+  const cards = panes ? [...panes.children] : [];
+  if (tabs.length !== cards.length || !tabs.length) return () => {};
+  // на узком экране кульминация не закрепляется: закреплённый кадр там выше
+  // экрана и срезал бы собственную нижнюю строку. Лента прячется, панели
+  // идут подряд — у каждой свой номер, шаг и срок в подзаголовке
+  const wide = matchMedia('(min-width:901px)');
+  let at = 0;
+  const show = (i) => {
+    at = i;
+    if (!wide.matches) { cards.forEach((c) => { c.hidden = false; }); return; }
+    tabs.forEach((t, k) => t.setAttribute('aria-selected', String(k === i)));
+    cards.forEach((c, k) => { c.hidden = k !== i; });
   };
-  for (const btn of steps) {
-    setOpen(btn, false);
-    btn.addEventListener('click', () => {
-      const open = btn.getAttribute('aria-expanded') !== 'true';
-      steps.forEach((b) => {
-        setOpen(b, b === btn && open);
-        // раскрытый шаг становится активным: иначе владелец открывает один,
-        // а подсвечен другой, и это читается как рассинхрон
-        b.classList.toggle('on', open ? b === btn : b.classList.contains('on'));
-      });
-      if (open) steps.forEach((b) => b.classList.toggle('on', b === btn));
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => show(i));
+    // стрелки внутри ленты — обычное поведение вкладок
+    t.addEventListener('keydown', (e) => {
+      const d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+      if (!d) return;
+      e.preventDefault();
+      const n = (i + d + tabs.length) % tabs.length;
+      show(n); tabs[n].focus();
     });
-  }
-  addEventListener('resize', () => {
-    for (const btn of steps) {
-      if (btn.getAttribute('aria-expanded') === 'true') setOpen(btn, true);
-    }
-  }, { passive: true });
-  // на узком экране раскрытый шаг ведёт скролл сам: там кульминация держит
-  // экран, и список из четырёх заголовков без содержимого читать нечего
-  const narrow = () => innerWidth <= 900;
-  return (i) => {
-    // скролл ведёт шаг: раскрытый следует за активным, если владелец уже раскрывал
-    const anyOpen = steps.some((b) => b.getAttribute('aria-expanded') === 'true');
-    if (anyOpen || narrow()) steps.forEach((b, k) => setOpen(b, k === i));
-  };
+    t.setAttribute('tabindex', i ? '-1' : '0');
+  });
+  wide.addEventListener('change', () => show(at));
+  show(0);
+  return show;
 }
 
 /** 5. Состояние шапки: капсула набирает плотность, когда под ней пошло содержимое. */

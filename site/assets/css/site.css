@@ -106,8 +106,13 @@ body.sheet-on .hdr{opacity:0;pointer-events:none;transition:opacity var(--fast) 
    Три на страницу: обложка, цикл, контакт. Остров лежит на светлом
    с полями и радиусом — плита, а не полоса поперёк экрана. */
 .island{position:relative;isolation:isolate;background:var(--ink-bg);color:var(--on-ink-2);
-  border-radius:var(--r-lg);margin-inline:var(--gut);overflow:hidden;
-  box-shadow:0 1px 0 rgba(205,220,249,.1) inset,0 40px 80px -50px rgba(16,22,58,.7)}
+  border-radius:var(--r-lg);margin-inline:var(--gut);overflow:hidden;overflow:clip;
+  box-shadow:0 1px 0 rgba(205,220,249,.1) inset,0 40px 80px -50px rgba(16,22,58,.7);
+  /* clip, а не только hidden: hidden делает остров контейнером прокрутки,
+     и position:sticky внутри него перестаёт работать — кульминация цикла
+     уезжала вверх, оставляя две трети чернильного блока пустыми. clip режет
+     так же, контейнером прокрутки не становится; hidden оставлен запасным
+     для браузеров, которые clip не знают */}
 .island h1,.island h2,.island h3,.island h4{color:var(--on-ink)}
 .island .kicker{color:var(--on-ink-3)}
 .island .kicker::before{background:var(--acc)}
@@ -148,6 +153,9 @@ body.sheet-on .hdr{opacity:0;pointer-events:none;transition:opacity var(--fast) 
 
 /* ══ СВЕТЛЫЕ СЕКЦИИ ══ */
 .sec{padding-block:var(--sec);scroll-margin-top:var(--hdr)}
+/* два поля подряд складываются в двойное: между светлыми соседями верхнее
+   ужимается, полное поле остаётся только на стыке с чернильным островом */
+.sec + .sec{padding-top:calc(var(--sec) * .55)}
 .island{scroll-margin-top:var(--hdr)}
 .sec h2{max-width:15ch}
 
@@ -165,7 +173,7 @@ body.sheet-on .hdr{opacity:0;pointer-events:none;transition:opacity var(--fast) 
   box-shadow:0 0 0 1px var(--l-line),0 0 0 5px var(--l-bg),0 0 0 6px var(--l-hair)}
 
 /* ── 2. разрыв: плитки разного веса, одна чернильная ── */
-.tiles{display:grid;gap:var(--col);grid-template-columns:1fr;margin:clamp(34px,4vw,58px) 0 0;padding:0}
+.tiles{display:grid;gap:var(--col);grid-template-columns:1fr;margin:clamp(24px,2.6vw,36px) 0 0;padding:0}
 @media(min-width:760px){.tiles{grid-template-columns:repeat(2,1fr)}}
 @media(min-width:1080px){.tiles{grid-template-columns:repeat(4,1fr)}
   .tiles .t-wide{grid-column:span 2}}
@@ -187,7 +195,12 @@ body.sheet-on .hdr{opacity:0;pointer-events:none;transition:opacity var(--fast) 
 .tile.chip p{color:var(--on-ink-3)}
 .tile.chip:hover{box-shadow:0 1px 0 rgba(205,220,249,.15) inset,0 34px 64px -34px rgba(16,22,58,.65)}
 
-/* ── 3. цитата: светлая, знак чернильный ── */
+/* ── 3. цитата: светлая, знак чернильный ──
+   Стоит внутри «Разрыва», а не отдельной секцией: одна строка на 459 px
+   собственной высоты — это и была половина жалобы на пустоту, а источник
+   у цитаты тот же, что у плитки «200+». */
+.quote{margin-top:clamp(24px,2.6vw,36px);padding-top:clamp(22px,2.4vw,32px);
+  border-top:1px solid var(--l-line)}
 .quote blockquote{margin:0;display:grid;gap:clamp(20px,2.4vw,32px);
   grid-template-columns:1fr;align-items:start}
 @media(min-width:900px){.quote blockquote{grid-template-columns:auto minmax(0,1fr)}}
@@ -202,7 +215,7 @@ body.sheet-on .hdr{opacity:0;pointer-events:none;transition:opacity var(--fast) 
 .quote blockquote footer a:hover{color:var(--ink-navy);border-color:var(--ink-navy)}
 
 /* ── 4. позиция: лента на одной обойме ── */
-.ribbon{display:grid;grid-template-columns:1fr;gap:0;margin:clamp(32px,4vw,54px) 0 0;padding:0;
+.ribbon{display:grid;grid-template-columns:1fr;gap:0;margin:clamp(22px,2.4vw,34px) 0 0;padding:0;
   overflow:hidden;border-radius:var(--r-lg);background:var(--l-plate);
   box-shadow:0 0 0 1px var(--l-line)}
 @media(min-width:1000px){.ribbon{grid-template-columns:1.35fr 1fr 1fr 1.2fr}}
@@ -217,48 +230,61 @@ body.sheet-on .hdr{opacity:0;pointer-events:none;transition:opacity var(--fast) 
 .ribbon h3{font-size:19px}
 .ribbon p{font-size:14px;line-height:1.55;color:var(--l-text)}
 
-/* ── 5. цикл: чернильный остров, кульминация ── */
+/* ── 5. цикл: чернильный остров, кульминация ──
+   Было: четыре свёрнутых карточки в ряд и 411 px пустоты под ними на каждом
+   закреплённом кадре — самая большая дыра страницы, и держалась она дольше всех.
+   Стало: слева лента из четырёх шагов со сроками, справа развёрнутый активный шаг.
+   Панели переключаются, а не раскрываются: при скрабе раскрытие двигало бы
+   соседние строки на каждом кадре. */
 .cycle .stage{position:sticky;top:var(--hdr);min-height:calc(100svh - var(--hdr));
   display:flex;flex-direction:column;justify-content:center;overflow:hidden;
-  padding-block:clamp(36px,4.6vw,72px)}
-.cycle .track{height:340vh}
-.cycle h2{max-width:16ch;margin-top:14px}
-.cycle .intro{color:var(--on-ink-3);max-width:54ch;margin-top:14px;font-size:var(--t-lead)}
-.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--col);
-  padding:0 var(--gut);margin-top:clamp(28px,3.4vw,48px)}
-.steps button{font:inherit;text-align:left;color:inherit;border:0;cursor:pointer;width:100%;
-  border-radius:var(--r-lg);padding:24px 24px 26px;position:relative;
-  display:grid;gap:0;opacity:.55;overflow:hidden;
-  background:linear-gradient(155deg,rgba(205,220,249,.11),rgba(205,220,249,.04) 62%,rgba(205,220,249,.08));
-  box-shadow:0 0 0 1px var(--ink-line),0 1px 0 rgba(205,220,249,.13) inset;
-  transition:opacity var(--base) var(--ease),box-shadow var(--base) var(--ease)}
-.steps button:hover{opacity:.8}
-.steps button.on{opacity:1;
-  box-shadow:0 0 0 1px var(--acc),0 1px 0 rgba(255,255,255,.18) inset,
-             0 34px 60px -36px rgba(0,0,0,.9)}
-.steps button.on::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:var(--acc)}
-.steps .n{font-family:var(--mono);font-size:10px;color:var(--acc);letter-spacing:.1em}
-.steps h3{margin:12px 0 0;font-size:19px;color:var(--on-ink)}
-.steps .hint{margin-top:14px;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
-  text-transform:uppercase;color:var(--on-ink-3);display:flex;align-items:center;gap:8px}
-.steps .hint s{display:block;width:9px;height:9px;text-decoration:none;position:relative}
-.steps .hint s::before,.steps .hint s::after{content:"";position:absolute;background:var(--acc);
-  transition:transform var(--base) var(--ease)}
-.steps .hint s::before{left:0;right:0;top:4px;height:1px}
-.steps .hint s::after{top:0;bottom:0;left:4px;width:1px}
-.steps button[aria-expanded="true"] .hint s::after{transform:scaleY(0)}
-.detail{margin:0;display:grid;gap:12px;overflow:hidden;height:0;opacity:0;
-  transition:height var(--base) var(--ease),opacity var(--base) var(--ease),margin var(--base) var(--ease)}
-.steps button[aria-expanded="true"] .detail{opacity:1;margin-top:18px}
-.detail div{display:grid;grid-template-columns:78px minmax(0,1fr);gap:12px;align-items:baseline}
-.detail dt{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;
+  padding-block:clamp(30px,3.6vw,54px)}
+.cycle .track{height:260vh}
+.cycle h2{max-width:16ch;margin-top:12px}
+.cyc{display:grid;grid-template-columns:1fr;gap:clamp(18px,2.2vw,32px);
+  margin-top:clamp(22px,2.6vw,38px);align-items:start}
+@media(min-width:1000px){.cyc{grid-template-columns:minmax(0,.86fr) minmax(0,1.14fr)}}
+
+.rail{margin:0;padding:0;list-style:none;display:grid;gap:8px;counter-reset:none}
+.rail li{list-style:none}
+.rail button{font:inherit;text-align:left;color:inherit;border:0;cursor:pointer;width:100%;
+  border-radius:var(--r-md);padding:15px 18px;position:relative;overflow:hidden;
+  display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 14px;align-items:center;
+  opacity:.6;background:transparent;
+  box-shadow:0 0 0 1px var(--ink-line);
+  transition:opacity var(--base) var(--ease),box-shadow var(--base) var(--ease),
+             background var(--base) var(--ease)}
+.rail button:hover{opacity:.85}
+.rail button[aria-selected="true"]{opacity:1;
+  background:linear-gradient(155deg,rgba(205,220,249,.13),rgba(205,220,249,.04));
+  box-shadow:0 0 0 1px var(--acc),0 1px 0 rgba(255,255,255,.16) inset}
+.rail button[aria-selected="true"]::before{content:"";position:absolute;left:0;top:0;bottom:0;
+  width:3px;background:var(--acc)}
+.rail .n{font-family:var(--mono);font-size:11px;color:var(--acc);letter-spacing:.1em;grid-row:span 2}
+.rail .t{font-weight:500;font-size:17px;color:var(--on-ink)}
+.rail .w{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--on-ink-3)}
+
+.pane{border-radius:var(--r-lg);padding:clamp(22px,2.4vw,32px);
+  background:linear-gradient(155deg,rgba(205,220,249,.12),rgba(205,220,249,.04) 62%,rgba(205,220,249,.09));
+  box-shadow:0 0 0 1px var(--ink-line),0 1px 0 rgba(205,220,249,.14) inset}
+.pane h3{margin:10px 0 0;font-size:var(--t-title);color:var(--on-ink);letter-spacing:-.02em}
+.pane .what{margin-top:12px;font-size:var(--t-lead);line-height:1.5;color:var(--on-ink-2);max-width:44ch}
+.pane dl{margin:clamp(16px,1.8vw,24px) 0 0;display:grid;gap:10px;
+  padding-top:clamp(16px,1.8vw,24px);border-top:1px solid var(--ink-line)}
+.pane dl div{display:grid;grid-template-columns:80px minmax(0,1fr);gap:12px;align-items:baseline}
+.pane dt{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;
   color:var(--on-ink-3);margin:0}
-.detail dd{margin:0;font-size:13.5px;color:var(--on-ink-2)}
+.pane dd{margin:0;font-size:14px;line-height:1.5;color:var(--on-ink-2)}
+.pane .out{margin-top:clamp(16px,1.8vw,24px);padding-top:clamp(14px,1.6vw,20px);
+  border-top:1px solid var(--ink-line);font-size:14px;line-height:1.5;color:var(--on-ink)}
+.pane .out .meas{display:block;margin-bottom:4px;color:var(--acc)}
+/* без скрипта видны все четыре панели: прячет их только он */
+.panes{display:grid;gap:12px}
 
 /* ── 6. ценность: четыре светлые обоймы и чернильный счёт справа ──
    Композиция взята со слайда «Ценность для клиента» один в один. */
 .value-grid{display:grid;gap:clamp(16px,2vw,28px);grid-template-columns:1fr;
-  margin-top:clamp(30px,3.6vw,50px);align-items:start}
+  margin-top:clamp(22px,2.4vw,34px);align-items:start}
 @media(min-width:1040px){.value-grid{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}}
 .tools{display:grid;gap:14px;margin:0;padding:0}
 .tools li{list-style:none;padding:20px 24px;display:grid;gap:6px}
@@ -330,11 +356,11 @@ body.sheet-on .hdr{opacity:0;pointer-events:none;transition:opacity var(--fast) 
 .fork li:first-child .num{font-size:clamp(44px,5.4vw,84px)}
 .fork .num{font-size:clamp(32px,3.4vw,50px);line-height:1.02}
 .fork p{font-size:14px;color:var(--l-text);max-width:24ch}
-.fork-cta{margin-top:clamp(30px,3.6vw,48px);display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+.fork-cta{margin-top:clamp(22px,2.4vw,34px);display:flex;gap:24px;align-items:center;flex-wrap:wrap}
 
 /* ── 9. команда ── */
 .team{display:grid;grid-template-columns:1fr;overflow:hidden;border-radius:var(--r-lg);
-  background:var(--l-plate);box-shadow:0 0 0 1px var(--l-line);margin-top:clamp(26px,3vw,42px)}
+  background:var(--l-plate);box-shadow:0 0 0 1px var(--l-line);margin-top:clamp(20px,2.2vw,30px)}
 @media(min-width:960px){.team{grid-template-columns:1.5fr 1fr 1fr}}
 .team ul{margin:0;padding:0;display:contents}
 .team li{padding:30px 28px;list-style:none;border-top:1px solid var(--l-hair)}
@@ -349,7 +375,7 @@ body.sheet-on .hdr{opacity:0;pointer-events:none;transition:opacity var(--fast) 
   color:var(--ink-navy);margin-bottom:16px}
 .team p{font-size:13.5px;color:var(--l-text)}
 .team li:first-child p{font-size:14.5px;max-width:44ch}
-.qa{margin-top:clamp(48px,5.6vw,84px);display:grid;gap:clamp(24px,2.8vw,40px);grid-template-columns:1fr}
+.qa{margin-top:clamp(30px,3.2vw,46px);display:grid;gap:clamp(24px,2.8vw,40px);grid-template-columns:1fr}
 @media(min-width:900px){.qa{grid-template-columns:repeat(3,1fr)}}
 .qa ul{margin:0;padding:0;display:contents}
 .qa li{list-style:none}
@@ -357,7 +383,24 @@ body.sheet-on .hdr{opacity:0;pointer-events:none;transition:opacity var(--fast) 
 .qa p{font-size:13.5px;color:var(--l-text);max-width:38ch}
 
 /* ── 10. контакт: третий чернильный остров ── */
-.contact{padding:clamp(56px,7vw,110px) 0;margin-bottom:clamp(28px,3.4vw,52px)}
+.contact{padding:clamp(46px,5.4vw,86px) 0;margin-bottom:clamp(24px,2.8vw,42px)}
+.contact-grid{display:grid;grid-template-columns:1fr;gap:clamp(26px,3.4vw,56px);align-items:end}
+@media(min-width:1000px){.contact-grid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}}
+/* правая колонка отвечает на единственный вопрос, который остаётся у читателя
+   перед письмом: что, собственно, писать */
+.ask{border-radius:var(--r-lg);padding:clamp(20px,2.2vw,30px);
+  background:linear-gradient(155deg,rgba(205,220,249,.12),rgba(205,220,249,.04) 62%,rgba(205,220,249,.09));
+  box-shadow:0 0 0 1px var(--ink-line),0 1px 0 rgba(205,220,249,.14) inset}
+.ask ol{margin:16px 0 0;padding:0;list-style:none;display:grid;gap:12px;counter-reset:ask}
+.ask li{counter-increment:ask;display:grid;grid-template-columns:22px minmax(0,1fr);
+  gap:2px 10px;align-items:baseline}
+.ask li::before{content:counter(ask,decimal-leading-zero);grid-row:span 2;
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--acc)}
+.ask b{font-weight:500;font-size:15px;color:var(--on-ink)}
+.ask span{font-size:13.5px;line-height:1.5;color:var(--on-ink-2)}
+.ask .next{margin-top:clamp(16px,1.8vw,22px);padding-top:clamp(14px,1.6vw,18px);
+  border-top:1px solid var(--ink-line);font-size:13.5px;line-height:1.5;color:var(--on-ink-2)}
+.ask .next .meas{display:block;margin-bottom:4px;color:var(--acc)}
 .contact .big{display:inline-block;margin-top:clamp(18px,2.2vw,30px);font-weight:700;
   font-size:clamp(28px,5.4vw,76px);letter-spacing:-.045em;line-height:1.02;color:var(--acc);
   word-break:break-word}
@@ -415,27 +458,34 @@ body.sheet-on .hdr{opacity:0;pointer-events:none;transition:opacity var(--fast) 
 @media(max-width:900px){
   .island{margin-inline:14px;border-radius:var(--r-md)}
   .cover{margin-inline:0;border-radius:0 0 var(--r-md) var(--r-md)}
-  .cycle .track{height:280vh}
-  .cycle .stage{top:var(--hdr);min-height:calc(100svh - var(--hdr))}
-  .cycle .intro{font-size:14px;max-width:44ch}
-  .steps{grid-template-columns:1fr;gap:8px;margin-top:clamp(18px,4vw,30px);padding-inline:20px}
-  .steps button{padding:14px 20px 16px;column-gap:12px;border-radius:var(--r-md);
-    grid-template-columns:auto minmax(0,1fr);align-items:baseline}
-  .steps .n{grid-row:1}
-  .steps h3{grid-row:1;margin:0;font-size:17px}
-  .steps .detail{grid-column:1/-1}
-  .steps .hint{display:none}
+  .cycle .track{height:auto}
+  .cycle .stage{position:static;min-height:0;padding-block:clamp(34px,7vw,52px)}
+  .rail{display:none}
+  .panes{gap:12px}
+  .cyc{margin-top:16px;gap:12px}
+  .rail{gap:6px}
+  .rail button{padding:11px 14px;grid-template-columns:auto minmax(0,1fr) auto;align-items:baseline}
+  .rail .n{grid-row:1}
+  .rail .t{font-size:15px}
+  .rail .w{font-size:9.5px;text-align:right}
+  .pane{padding:18px}
+  .pane h3{font-size:20px}
+  .pane .what{font-size:15px}
+  .pane dl div{grid-template-columns:64px minmax(0,1fr);gap:10px}
 }
 @media(max-width:560px){
   .hdr .pill{padding:10px 15px;font-size:13px}
   .hdr .nav span{display:none}
-  .card dl div,.detail div{grid-template-columns:1fr;gap:4px}
+  .card dl div{grid-template-columns:1fr;gap:4px}
+  .pane dl div{grid-template-columns:1fr;gap:3px}
   .deal dl div{flex-direction:column;gap:2px;align-items:flex-start}
 }
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
   .rise,.rise.armed,.rise.armed[data-rise="wipe"]>*{opacity:1;transform:none;filter:none;clip-path:none}
-  .steps button{opacity:1}
+  .rail button{opacity:1}
+  /* без скраба держать экран три прокрутки нечем: трек отпускает кульминацию */
+  .cycle .track{height:auto}
   .sheet a{opacity:1;transform:none}
 }

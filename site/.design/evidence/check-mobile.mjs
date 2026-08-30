@@ -20,14 +20,15 @@ for (let k = 0; k < 4; k++) {
   const st = await p.evaluate(() => {
     const stage = document.querySelector('.cycle .stage');
     const r = stage.getBoundingClientRect();
-    const btns = [...document.querySelectorAll('#steps button')];
-    const open = btns.findIndex(x => x.getAttribute('aria-expanded') === 'true');
-    const on = btns.findIndex(x => x.classList.contains('on'));
-    const last = btns[btns.length - 1].getBoundingClientRect();
+    // на узком экране лента спрятана, а панели идут подряд: смотрим их
+    const panes = [...document.querySelectorAll('.pane')];
+    const open = panes.filter(x => !x.hidden).length;
+    const on = -1;
+    const last = panes[panes.length - 1].getBoundingClientRect();
     const tools = document.querySelector('.tools').getBoundingClientRect();
     return { top: Math.round(r.top), h: Math.round(r.height), open, on,
              sticky: getComputedStyle(stage).position,
-             bottomOfSteps: Math.round(last.bottom), toolsBottom: Math.round(tools.bottom),
+             bottomOfPanes: Math.round(last.bottom), toolsBottom: Math.round(tools.bottom),
              vh: innerHeight, overflow: document.documentElement.scrollWidth > innerWidth };
   });
   shots.push(st);

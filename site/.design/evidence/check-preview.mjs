@@ -13,7 +13,8 @@ await p.waitForTimeout(2000);
 console.log(await p.evaluate(() => {
   const c = document.getElementById('spark').getBoundingClientRect();
   return JSON.stringify({ canvas: [Math.round(c.width), Math.round(c.height)],
-    steps: document.querySelectorAll('#steps button').length,
+    steps: document.querySelectorAll('#steps [role="tab"]').length,
+    panes: document.querySelectorAll('.pane').length,
     cardLinks: document.querySelectorAll('#card a').length,
     islands: document.querySelectorAll('.island').length, fields: document.querySelectorAll('.island .field').length,
     fonts: document.fonts.status, h: document.documentElement.scrollHeight });
@@ -24,9 +25,10 @@ for (const f of [0.1, 0.4, 0.65, 0.9]) {
   await p.evaluate(([top, h, fr]) => scrollTo({ top: top + fr * (h - innerHeight), behavior: 'instant' }), [tr.top, tr.h, f]);
   await p.waitForTimeout(350);
   const st = await p.evaluate(() => ({
-    on: [...document.querySelectorAll('#steps button')].findIndex((x) => x.classList.contains('on')),
+    on: [...document.querySelectorAll('#steps [role="tab"]')].findIndex((x) => x.getAttribute('aria-selected') === 'true'),
+    shown: document.querySelectorAll('.pane:not([hidden])').length,
     dark: document.querySelector('.hdr').classList.contains('on-dark') }));
-  process.stdout.write(`скраб ${f} → шаг ${st.on}, шапка ${st.dark ? 'тёмная' : 'светлая'}   `);
+  process.stdout.write(`скраб ${f} → шаг ${st.on}, панелей ${st.shown}, шапка ${st.dark ? 'тёмная' : 'светлая'}   `);
 }
 console.log();
 await p.evaluate(() => scrollTo(0, 0)); await p.waitForTimeout(1400);
