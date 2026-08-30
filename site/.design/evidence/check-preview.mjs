@@ -15,7 +15,7 @@ console.log(await p.evaluate(() => {
   return JSON.stringify({ canvas: [Math.round(c.width), Math.round(c.height)],
     steps: document.querySelectorAll('#steps button').length,
     cardLinks: document.querySelectorAll('#card a').length,
-    wash: !!document.querySelector('.wash'), field: !!document.querySelector('.scout .field'),
+    field: !!document.querySelector('.top .field'), dark: !!document.querySelector('.top'),
     fonts: document.fonts.status, h: document.documentElement.scrollHeight });
 }));
 const tr = await p.evaluate(() => { const t = document.getElementById('track');

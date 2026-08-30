@@ -109,9 +109,10 @@ export function stickyHeader(node, darkSelector) {
       stuck = nextStuck;
       node.classList.toggle('stuck', nextStuck);
     }
-    // под шапкой смотрим не всю секцию, а полосу у её нижней кромки:
-    // именно она видна сквозь стекло
-    const y = node.getBoundingClientRect().bottom - 4;
+    // Смотрим полосу чуть ниже кромки шапки. Запас в 12 пикселей обязателен:
+    // прилипшая шапка занимает место в потоке, и на самом верху страницы
+    // под ней формально ничего нет — тёмная обложка начинается сразу за ней.
+    const y = node.getBoundingClientRect().bottom + 12;
     const nextDark = darks.some((d) => {
       const r = d.getBoundingClientRect();
       return r.top <= y && r.bottom >= y;
