@@ -15,11 +15,14 @@ const go = async (sel, file, wait = 1400, block = 'center') => {
   await p.waitForTimeout(wait);
   await p.screenshot({ path: OUT + file, type: 'jpeg', quality: 76 });
 };
-await go('.gap', 'g-gap.jpg');
-await go('.stance', 'g-stance.jpg');
+await go('#gap', 'g-gap.jpg');
+await go('.quote', 'g-quote.jpg');
+await go('#cycle', 'g-cycle.jpg', 1800, 'start');
+await go('#value', 'g-value.jpg');
 await go('#scout', 'g-scout.jpg');
 await go('#you', 'g-fork.jpg');
 await go('#team', 'g-team.jpg');
+await go('#contact', 'g-contact.jpg');
 
 // лист разделов
 await p.evaluate(() => scrollTo(0, 600)); await p.waitForTimeout(600);

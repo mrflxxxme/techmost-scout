@@ -3,7 +3,7 @@
    пять подборов с научной проверкой, две заявки на софинансирование, одно
    внедрение. Доли створов заданы этими числами, а не подобраны на глаз.
 
-   На тёмной базе поток идёт светом: изумруд достаётся только тому, что дошло
+   На чернильной базе поток идёт светом: лайм достаётся только тому, что дошло
    до последнего створа. Воронка лежит в правой половине — ровно под стеклянной
    плитой доказательства, и это её работа: стеклу есть что рассеивать. */
 
@@ -17,7 +17,7 @@ export function startHero(canvas) {
   const KEEP = [5 / 10, 2 / 5, 1 / 2, 1];
   const COUNT = 62;
 
-  const BASE = '#061115';
+  const BASE = '#10163A';
   const dpr = Math.min(devicePixelRatio || 1, 2);
   let W = 0, H = 0, live = false;
   const parts = [];
@@ -55,7 +55,7 @@ export function startHero(canvas) {
 
     // створы: пунктир, как разметка на чертеже
     g.save();
-    g.strokeStyle = 'rgba(255,255,255,.10)'; g.lineWidth = 1; g.setLineDash([2, 6]);
+    g.strokeStyle = 'rgba(205,220,249,.12)'; g.lineWidth = 1; g.setLineDash([2, 6]);
     for (const gx of GATES) {
       g.beginPath(); g.moveTo(gx * W, H * 0.06); g.lineTo(gx * W, H * 0.94); g.stroke();
     }
@@ -65,7 +65,7 @@ export function startHero(canvas) {
       const x = p.x * W, y = p.y * H;
       if (p.fade) {
         const f = 1 - p.fade / 26;
-        g.fillStyle = `rgba(160,172,167,${f * 0.24})`;
+        g.fillStyle = `rgba(150,165,200,${f * 0.24})`;
         g.beginPath(); g.arc(x, y, 1 + (1 - f) * 3, 0, 6.283); g.fill();
         continue;
       }
@@ -73,25 +73,25 @@ export function startHero(canvas) {
       const t = Math.max(0, Math.min(1, (p.x - 0.30) / 0.70)), len = 16 + t * 40;
       const trail = g.createLinearGradient(x - len, y, x, y);
       if (passed) {
-        trail.addColorStop(0, 'rgba(21,185,129,0)');
-        trail.addColorStop(1, 'rgba(21,185,129,.95)');
+        trail.addColorStop(0, 'rgba(214,242,75,0)');
+        trail.addColorStop(1, 'rgba(214,242,75,.95)');
       } else {
-        trail.addColorStop(0, 'rgba(215,222,219,0)');
-        trail.addColorStop(1, `rgba(215,222,219,${0.08 + t * 0.26})`);
+        trail.addColorStop(0, 'rgba(205,220,249,0)');
+        trail.addColorStop(1, `rgba(205,220,249,${0.08 + t * 0.26})`);
       }
       g.strokeStyle = trail; g.lineWidth = passed ? 1.6 : 0.9 + t * 0.5;
       g.beginPath(); g.moveTo(x - len, y); g.lineTo(x, y); g.stroke();
-      g.fillStyle = passed ? 'rgba(21,185,129,1)' : `rgba(215,222,219,${0.14 + t * 0.3})`;
+      g.fillStyle = passed ? 'rgba(214,242,75,1)' : `rgba(205,220,249,${0.14 + t * 0.3})`;
       g.beginPath(); g.arc(x, y, passed ? 2 : 1 + t * 0.7, 0, 6.283); g.fill();
     }
 
     // набор стоит на чистом: мягкое затемнение слева, не заливка поперёк экрана
     const sx = W * 0.22, sy = H * 0.5;
     const clear = g.createRadialGradient(sx, sy, 0, sx, sy, Math.max(W, H) * 0.8);
-    clear.addColorStop(0, 'rgba(6,17,21,1)');
-    clear.addColorStop(0.4, 'rgba(6,17,21,.94)');
-    clear.addColorStop(0.72, 'rgba(6,17,21,.4)');
-    clear.addColorStop(1, 'rgba(6,17,21,0)');
+    clear.addColorStop(0, 'rgba(16,22,58,1)');
+    clear.addColorStop(0.4, 'rgba(16,22,58,.94)');
+    clear.addColorStop(0.72, 'rgba(16,22,58,.4)');
+    clear.addColorStop(1, 'rgba(16,22,58,0)');
     g.fillStyle = clear; g.fillRect(0, 0, W, H);
 
     if (live && !reduce) { step(); requestAnimationFrame(draw); }

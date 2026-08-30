@@ -100,6 +100,12 @@ export function expandSteps(steps) {
 /** 5. Состояние шапки: капсула набирает плотность, когда под ней пошло содержимое. */
 export function stickyHeader(node, darkSelector) {
   if (!node) return;
+  // высота шапки уезжает в переменную: от неё зависят пиннинг кульминации
+  // и отступ якорей, а подбирать её числом в CSS — гарантированный рассинхрон
+  const measure = () => document.documentElement.style
+    .setProperty('--hdr', Math.round(node.getBoundingClientRect().height) + 'px');
+  measure();
+  addEventListener('resize', measure, { passive: true });
   const darks = darkSelector ? [...document.querySelectorAll(darkSelector)] : [];
   let stuck = null;
   let dark = null;

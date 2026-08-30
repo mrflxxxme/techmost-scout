@@ -17,21 +17,30 @@ await p.click('#steps button');
 await p.waitForTimeout(700);
 
 const spots = [
+  ['обложка · лид', '.cover .lead'],
+  ['обложка · доказательство', '.proof p'],
+  ['обложка · источник', '.proof .src'],
+  ['плитка светлая · текст', '.tile:not(.chip) p'],
+  ['плитка светлая · источник', '.tile:not(.chip) .src'],
+  ['плитка чернильная · текст', '.tile.chip p'],
+  ['цитата · подпись', '.quote footer'],
+  ['лента позиции', '.ribbon li p'],
+  ['шаг цикла · подпись', '#steps button.on .detail dt'],
+  ['инструмент · текст', '.tools li p'],
+  ['инструмент · источник', '.tools li .src'],
+  ['счёт сделки · строка', '.deal dl dd'],
+  ['счёт сделки · оговорка', '.deal .note'],
   ['карточка · значение', '#card dl dd'],
   ['карточка · подпись', '#card .meas'],
-  ['карточка · оговорка', '#card .note'],
   ['карточка · источник', '#card .evid a'],
-  ['карточка · задача', '#card .task'],
-  ['ячейка позиции', '.stance li p'],
-  ['ячейка команды', '.team li p'],
-  ['спутник разрыва', '.minor p'],
-  ['шапка · пункт', '.hdr .sections span'],
-  ['шаг цикла · строка', '#steps button.on .detail dd'],
-  ['шаг цикла · подпись', '#steps button.on .detail dt'],
-  ['вкладка развилки', '.tabs button[aria-selected="false"]'],
-  ['инструмент цикла', '.tools div'],
+  ['развилка · подпись', '.fork li p'],
+  ['вкладка неактивная', '.tabs button[aria-selected="false"]'],
+  ['команда · текст', '.team li p'],
+  ['вопросы · ответ', '.qa li p'],
+  ['контакт · текст', '.contact .after'],
   ['подвал', '.foot span'],
 ];
+
 const names = [];
 let i = 0;
 for (const [name, sel] of spots) {
