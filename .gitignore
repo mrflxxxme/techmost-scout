@@ -45,3 +45,6 @@ desktop.ini
 # Node (генераторы деков на pptxgenjs ставятся локально)
 node_modules/
 package-lock.json
+
+# ссылка на глобальный playwright для скриптов доказательств
+site/.design/evidence/node_modules
