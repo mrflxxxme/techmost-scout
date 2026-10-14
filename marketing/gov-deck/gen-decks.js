@@ -4,8 +4,10 @@
 // 20 pt; служебные строки — источники, футер, кикеры — 12–13 pt).
 // Тексты слайдов — в deck-texts.md соответствующего региона: правьте там,
 // затем переносите сюда и пересобирайте.
-// Запуск: node gen-decks.js  → ../regions/hmao/sitall-deck-urz.pptx и
-// ../regions/sverdlovsk/sitall-deck-minprirody.pptx
+// Запуск: node gen-decks.js  → ../regions/hmao/sitall-deck-urz.pptx,
+// ../regions/sverdlovsk/sitall-deck-minprirody.pptx,
+// ../regions/vladimir/sitall-deck-minselhoz.pptx и
+// ../regions/moscow-oblast/sitall-deck-mpk.pptx
 
 const pptxgen = require("pptxgenjs");
 const path = require("path");
@@ -152,7 +154,7 @@ function cover(pres, d, total) {
   s.addShape("ellipse", { x: 9.2, y: -1.8, w: 5.8, h: 5.8, fill: { type: "none" }, line: { color: LINE, width: 1.25 } });
   s.addShape("ellipse", { x: 11.0, y: 0.9, w: 3.6, h: 3.6, fill: { type: "none" }, line: { color: GOLD, width: 1.5 } });
   s.addShape("ellipse", { x: 9.9, y: 4.2, w: 4.8, h: 4.8, fill: { type: "none" }, line: { color: LINE, width: 1.25 } });
-  s.addText("АВГУСТ 2026 · КОНФИДЕНЦИАЛЬНО", {
+  s.addText(`${d.month || "АВГУСТ 2026"} · КОНФИДЕНЦИАЛЬНО`, {
     x: MX, y: 0.4, w: 7, h: 0.3, fontFace: F_SB, fontSize: 13, color: GOLD,
     charSpacing: 3, margin: 0, isTextBox: true,
   });
@@ -169,12 +171,13 @@ function cover(pres, d, total) {
     x: MX, y: 3.98, w: 9.5, h: 0.42, fontFace: F, fontSize: 18, color: INKD,
     margin: 0, isTextBox: true,
   });
+  const addrW = d.addrW || 7.6;
   s.addShape("roundRect", {
-    x: MX, y: 4.75, w: 7.6, h: d.addrH || 0.66, rectRadius: 0.09,
+    x: MX, y: 4.75, w: addrW, h: d.addrH || 0.66, rectRadius: 0.09,
     fill: { color: ICEBG }, line: { color: LINE, width: 1 },
   });
   s.addText(d.addressee, {
-    x: MX + 0.3, y: 4.75, w: 7.1, h: d.addrH || 0.66, fontFace: F_SB, fontSize: 18,
+    x: MX + 0.3, y: 4.75, w: addrW - 0.5, h: d.addrH || 0.66, fontFace: F_SB, fontSize: 18,
     color: NAVY, margin: 0, valign: "middle", lineSpacingMultiple: 1.05, isTextBox: true,
   });
   s.addText("Кирилл Уклонский · uklonskiy.k@ya.ru", {
@@ -756,6 +759,236 @@ const MPRSO_AGENDA = {
   thesis: "За каждым показателем — задача, у которой уже есть научное решение",
 };
 
-Promise.all([buildUrz(), buildMprso()]).then((files) => {
+// ================== Дек 3: Минсельхоз Владимирской области
+
+// Слайд «повестка министерства» и слайд «наука рядом»: карточки заполняются
+// из разведки regions/vladimir/research-minselhoz-*.md — правьте вместе с ней.
+const MSHVO_AGENDA = {
+  kicker: "Задачи, которые упираются в технологии",
+  title: "Показатели министерства — это технологические задачи",
+  cards: [
+    { big: "9 722 кг", bigSize: 40, caption: "надой на корову в год: на 14% выше среднего по стране", src: ["АиФ Владимир", "https://vlad.aif.ru/society/proizvodstvo-moloka-vo-vladimirskoy-oblasti-vyroslo-na-53-za-10-let"] },
+    { big: "83,5 млн $", bigSize: 38, caption: "экспорт продукции АПК за полугодие, почти +30% к прошлому году", src: ["Про Город 33", "https://progorod33.ru/news/132440"] },
+    { big: "1 млрд ₽", bigSize: 40, caption: "субсидий аграриям за полугодие; ещё 2 млрд ₽ кредитов под 7,5%", src: ["Про Город 33", "https://progorod33.ru/news/132440"] },
+    { big: "~7 тыс. га", bigSize: 38, caption: "обработано от борщевика с 2019 года; на 2026-й — ещё 21 млн ₽", src: ["Про Город 33", "https://progorod33.ru/news/129237"] },
+  ],
+  thesis: "За каждым показателем — задача, у которой уже есть научное решение",
+};
+
+const MSHVO_SCIENCE = {
+  kicker: "Наука рядом",
+  title: "Три федеральных научных центра АПК — в самой области",
+  cards: [
+    { big: "ВНИИЗЖ", bigSize: 30, caption: "Федеральный центр охраны здоровья животных, Владимир: 1 200 сотрудников. Разработчик «Хорриота»", src: ["ВетИС", "https://help.vetrf.ru/wiki/Компонент_Хорриот"] },
+    { big: "ФИЦВиМ", bigSize: 30, caption: "Центр вирусологии и микробиологии, Вольгинский: особо опасные инфекции животных", src: ["ficvim.ru", "https://ficvim.ru/about/"] },
+    { big: "ФАНЦ", bigSize: 30, caption: "Верхневолжский аграрный центр, Суздальский район: семена зерновых и картофеля", src: ["vnish.org", "https://vnish.org/o-nas/"] },
+  ],
+  thesis: "Науку в область везти не нужно. Нужен тот, кто переведёт её\nна язык хозяйства и доведёт до фермы",
+};
+
+function buildMshvo() {
+  const pres = new pptxgen();
+  pres.layout = "LAYOUT_WIDE";
+  pres.author = "Ситалл";
+  pres.title = "Ситалл — для Минсельхоза Владимирской области";
+  const total = 12;
+
+  cover(pres, {
+    addressee: "Аликебедову Роману Камалутдиновичу\nМинистерство сельского хозяйства Владимирской области",
+    addrH: 0.92, addrW: 8.7, month: "СЕНТЯБРЬ 2026",
+  }, total);
+
+  statGrid(pres, {
+    kicker: "Задача государства",
+    title: "Деньги на технологии в АПК есть. Внедрять их некому",
+    cards: [
+      { big: "19,8 млрд ₽", bigSize: 38, caption: "нацпроект «Технологическое обеспечение продовольственной безопасности» на 2026 год", src: ["Интерфакс", "https://www.interfax.ru/russia/1067412"] },
+      { big: "66,7%", caption: "целевой уровень технологической независимости в продовольственной безопасности к 2030 году", src: ["Интерфакс", "https://www.interfax.ru/russia/1067412"] },
+      { big: "2% ВВП", caption: "цель по затратам на науку к 2030 году", src: ["ИСИЭЗ НИУ ВШЭ", "https://issek.hse.ru/news/849710120.html"] },
+      { big: "2,6 млн", caption: "дефицит кадров в экономике. Ставка на производительность", src: ["РБК", "https://www.rbc.ru/economics/24/12/2024/676a7e719a79473dc5db384f"] },
+    ],
+  }, 2, total);
+
+  statRow3(pres, {
+    kicker: "Разрыв",
+    title: "Наука не доходит до производства",
+    cards: [
+      { big: "80%+", caption: "патентов не доходят до применения", src: ["Wharton", "https://knowledge.wharton.upenn.edu/article/patents-avoid-failure/"] },
+      { big: "70%", caption: "пилотных проектов не выходят в масштаб", src: ["McKinsey", "https://www.mckinsey.com/capabilities/operations/our-insights/capturing-the-true-value-of-industry-four-point-zero"] },
+      { big: "60", caption: "компаний в стране берут льготу на НИОКР", src: ["Решетников, ПМЭФ", "https://tass.ru/ekonomika/24246605"] },
+    ],
+    quote: [
+      "Чтобы наука и бизнес нашли друг друга,\nнужен технологический брокер»",
+      "Юрий Зубов, руководитель Роспатента",
+      "https://rospatent.gov.ru/ru/news/na-pmef-2023-obsudili-tehnologicheskoe-predprinimatelstvo-15062023",
+    ],
+  }, 3, total);
+
+  statGrid(pres, MSHVO_AGENDA, 4, total);
+  statRow3(pres, MSHVO_SCIENCE, 5, total);
+
+  numGrid(pres, WHO, 6, total);
+  cycle(pres, CYCLE, 7, total);
+  instrument(pres, scout(true), 8, total);
+
+  dirGrid(pres, {
+    kicker: "Направления поиска",
+    title: "Что мы можем найти под задачи АПК области",
+    cards: [
+      ["Корма", "Рационы, консерванты, отечественный белок"],
+      ["Генетика стада", "Геномная оценка, эмбриотрансфер, племенное ядро"],
+      ["Здоровье животных", "Диагностика, вакцины, биобезопасность фермы"],
+      ["Переработка молока", "Глубокая переработка, сроки хранения, качество"],
+      ["Семена и картофель", "Отечественные сорта, элитное семеноводство"],
+      ["Земля и борщевик", "Мониторинг с воздуха, биометоды, ввод в оборот"],
+    ],
+    note: "Направления — примеры по открытым источникам. Точный список даёт диагностика задачи.",
+  }, 9, total);
+
+  valueCols(pres, {
+    kicker: "Ценность",
+    title: "Что получает каждая сторона",
+    cols: [
+      { head: "Министерству", items: [
+        "Технологические решения под показатели: молоко, переработка, экспорт, земля",
+        "Частные деньги хозяйств идут в проверенные технологии",
+        "Расходов областного бюджета нет",
+        "Открытый отчёт по АПК региона",
+      ]},
+      { head: "Хозяйствам и переработчикам", items: [
+        "Решение без своего R&D",
+        "На 100 млн ₽ проекта — только 15–30 млн ₽ своих",
+        "Один управляющий подрядчик на весь проект",
+        "Ответ за 3–4 недели, а не за два года",
+      ]},
+      { head: "Науке области", items: [
+        "Оплаченные заказы от хозяйств",
+        "Перевод на язык бизнеса — за нами",
+        "Участие бесплатно",
+      ]},
+    ],
+  }, 10, total);
+
+  team(pres, TEAM, 11, total);
+
+  proposal(pres, {
+    kicker: "Предложение",
+    title: "Соглашение с Минсельхозом Владимирской области",
+    leftHead: "Что делаем за первый год, за свой счёт",
+    leftRows: [
+      ["Обработанные задачи хозяйств и переработчиков", "10"],
+      ["Подборов с проверкой", "5"],
+      ["Заявок на софинансирование", "2"],
+      ["Внедрённый проект", "1"],
+      ["Открытый отчёт по АПК региона", "1"],
+    ],
+    leftNote: "Расходов областного бюджета нет",
+    asks: [
+      "Соглашение о сотрудничестве",
+      "Представление 5–7 хозяйствам и переработчикам",
+      "Участие в площадках региона как партнёра",
+    ],
+    nextStep: null,
+  }, 12, total);
+
+  return pres.writeFile({
+    fileName: path.join(__dirname, "..", "regions", "vladimir", "sitall-deck-minselhoz.pptx"),
+  });
+}
+
+// ============= Дек 4: ЗАО «Московская пивоваренная компания» (Мытищи)
+
+// Цифры слайдов «контекст» и «вызовы отрасли» — из разведки
+// regions/moscow-oblast/research-mpk-*.md, правьте вместе с ней.
+
+function buildMpk() {
+  const pres = new pptxgen();
+  pres.layout = "LAYOUT_WIDE";
+  pres.author = "Ситалл";
+  pres.title = "Ситалл — для Московской пивоваренной компании";
+  const total = 10;
+
+  cover(pres, {
+    addressee: "Для ЗАО «Московская пивоваренная компания»",
+    month: "СЕНТЯБРЬ 2026",
+  }, total);
+
+  statGrid(pres, {
+    kicker: "Контекст",
+    title: "Рынок пива сжимается — компания растёт",
+    cards: [
+      { big: "39,3 млн дал", bigSize: 38, caption: "выпуск компании в 2025 году, +11,6% к прошлому — пятое место в стране", src: ["Коммерсантъ", "https://www.kommersant.ru/doc/8401216"] },
+      { big: "40,1 млрд ₽", bigSize: 40, caption: "выручка 2025 года, +9,5%; чистая прибыль выросла вдвое", src: ["Аудит-ит", "https://www.audit-it.ru/contragent/1075029007855_zao-mpk"] },
+      { big: "−15,7%", caption: "розничные продажи пива в стране за 2025 год", src: ["Ведомости", "https://www.vedomosti.ru/business/articles/2026/07/10/1212619-proizvodstvo-piva-v-rossii-previsilo-potreblenie"] },
+      { big: "33 ₽/л", caption: "акциз на пиво в 2026 году — третье повышение подряд", src: ["Ведомости", "https://www.vedomosti.ru/business/articles/2026/07/10/1212619-proizvodstvo-piva-v-rossii-previsilo-potreblenie"] },
+    ],
+  }, 2, total);
+
+  statRow3(pres, {
+    kicker: "Вызовы отрасли",
+    title: "Три узких места, которые не закрыть внутри завода",
+    cards: [
+      { big: "2–5%", caption: "Хмель. Столько потребности страна закрывает своим сырьём; около 7 000 т в год приходит по импорту", src: ["Грейнрус", "https://grainrus.com/novosti-kompanii/articles/mozhet-li-rossiya-obespechivat-sebya-pivovarennym-syrem/"] },
+      { big: "+40%", caption: "Солод. Настолько подорожал импортный солод; отечественный — на 15%", src: ["Грейнрус", "https://grainrus.com/novosti-kompanii/articles/mozhet-li-rossiya-obespechivat-sebya-pivovarennym-syrem/"] },
+      { big: "10–12%", caption: "Безалкогольное. Рост категории в год при доле 2,4% выпуска — самая быстрая ниша рынка", src: ["Коммерсантъ", "https://www.kommersant.ru/doc/8418080"] },
+    ],
+    thesis: "За каждым узким местом — российские научные заделы, которые пока не дошли до производства",
+  }, 3, total);
+
+  numGrid(pres, WHO, 4, total);
+  cycle(pres, CYCLE, 5, total);
+  instrument(pres, scout(false), 6, total);
+
+  dirGrid(pres, {
+    kicker: "Направления поиска",
+    title: "Что мы можем найти под задачи компании",
+    cards: [
+      ["Хмель", "Отечественные сорта, гранулы и экстракты"],
+      ["Дрожжи", "Свой банк штаммов, стабильность брожения"],
+      ["Безалкогольное", "Деалкоголизация и вкус без спирта"],
+      ["Солод", "Специальные солода под свои рецептуры"],
+      ["Глубокий передел", "Дробина и осадки: белок выше кормового"],
+      ["Качество", "Экспресс-микробиология, зрение на линии"],
+    ],
+    note: "Направления — примеры по открытым источникам. Точный список даёт диагностика задачи.",
+  }, 7, total);
+
+  numGrid(pres, {
+    kicker: "Что получает компания",
+    title: "Результат без собственного НИИ",
+    cards: [
+      { head: "Решение без своего R&D", sub: "Экспертизу дают привлечённые профильные учёные" },
+      { head: "Экономика с господдержкой", sub: "На 100 млн ₽ проекта — 15–30 млн ₽ своих: ПП-218 и двойной вычет" },
+      { head: "Один управляющий подрядчик", sub: "Вместо десяти переговоров с институтами" },
+      { head: "Ответ за 3–4 недели", sub: "«Подходящей технологии нет» — тоже результат" },
+    ],
+  }, 8, total);
+
+  team(pres, TEAM, 9, total);
+
+  proposal(pres, {
+    kicker: "Предложение",
+    title: "Пилот для Московской пивоваренной компании",
+    leftHead: "Этапы, каждый со своей точкой выхода",
+    leftRows: [
+      ["Диагностика задачи", "3–4 нед."],
+      ["Подбор и проверка: 5–7 решений", "6–8 нед."],
+      ["Дальше по выбору компании: сделка,\nгосподдержка, внедрение", "—"],
+    ],
+    leftNote: "Задачи компании не публикуются: NDA — до начала диагностики",
+    asks: [
+      "Одна технологическая задача компании",
+      "Два часа ваших технологов на диагностику",
+      "Рабочая встреча на площадке в Мытищах",
+    ],
+    nextStep: "Выбираем задачу пилота и согласуем соглашение о неразглашении. Условия — по итогам диагностики.",
+  }, 10, total);
+
+  return pres.writeFile({
+    fileName: path.join(__dirname, "..", "regions", "moscow-oblast", "sitall-deck-mpk.pptx"),
+  });
+}
+
+Promise.all([buildUrz(), buildMprso(), buildMshvo(), buildMpk()]).then((files) => {
   console.log("Собрано:", files.join(", "));
 });
