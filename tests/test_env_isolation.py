@@ -49,8 +49,17 @@ def test_db_engine_uses_in_memory_sqlite() -> None:
     (например `tests/test_web_auth.py`, импортирующий `app.main`) успел
     подтянуть `app.db` раньше и тем самым случайно подстраховал проверку под
     узким прогоном одного этого файла.
+
+    Сверяются разобранные поля адреса, а не его печатная форма. SQLAlchemy 2.1
+    процентом экранирует имя базы при печати (`str(url)` даёт
+    `sqlite+aiosqlite:///%3Amemory%3A`), и прежняя проверка подстроки
+    `":memory:" in str(engine.url)` покраснела на обновлении зависимости, хотя
+    движок остался тем же. Поле `url.database` от формы печати не зависит.
     """
-    assert ":memory:" in str(engine.url), "движок базы тестов должен быть sqlite в памяти"
+    assert engine.url.database == ":memory:", "движок базы тестов должен быть sqlite в памяти"
+    assert engine.url.drivername == "sqlite+aiosqlite", (
+        "движок базы тестов должен быть sqlite+aiosqlite, а не другой драйвер"
+    )
 
 
 def test_settings_fields_trace_to_default_or_test_env() -> None:

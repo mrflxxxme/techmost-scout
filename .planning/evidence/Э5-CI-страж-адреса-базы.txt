@@ -1,0 +1,28 @@
+Красный CI на PR #12: tests/test_env_isolation.py::test_db_engine_uses_in_memory_sqlite
+
+Причина — не дефект продукта, а страж, закрытый печатной формой вместо свойства.
+SQLAlchemy в окружении CI — 2.1.5 (в pyproject стоит sqlalchemy[asyncio]>=2.0,
+верхней границы нет). Начиная с 2.1 печать адреса процентом экранирует имя базы:
+
+  str(url)       = sqlite+aiosqlite:///%3Amemory%3A
+  url.database   = ':memory:'
+  url.drivername = 'sqlite+aiosqlite'
+
+То есть движок остался ровно тем же, изменилась только форма печати, а проверка
+искала подстроку ":memory:" в str(engine.url) и покраснела.
+
+Правка: страж сверяет разобранные поля адреса — url.database и url.drivername.
+От формы печати проверка больше не зависит; заодно теперь ловится и подмена
+драйвера, которой прежняя проверка не видела.
+
+Мутации (с откатом после каждой):
+
+  база в памяти (как есть)                       → 5 passed
+  DATABASE_URL = sqlite+aiosqlite:///./data/mutant.db → 1 failed (страж ловит файловую базу)
+  откат                                           → 5 passed
+
+Прогон после правки на свежем окружении (python 3.12, ruff 0.16.4, как в CI):
+
+  pytest -q              → 1300 passed, 1 warning
+  ruff check .           → All checks passed!
+  ruff format --check .  → 212 files already formatted
