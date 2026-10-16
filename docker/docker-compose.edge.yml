@@ -1,0 +1,36 @@
+# Надстройка для общего сервера с edge-прокси (Э-37 экосистемы).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.edge.yml up -d
+#
+# На сервере 80/443 держит общий edge-caddy (/opt/edge-caddy), поэтому свой
+# caddy стека не поднимается: он уходит в профиль own-proxy и без
+# `--profile own-proxy` не стартует. Приложение входит во внешнюю сеть edge
+# под именем techmost-scout — по нему его находит блок edge-Caddyfile.
+# Опубликованных портов у стека нет. Лимиты не дают стеку отъесть память
+# у соседей: печать PDF через Chromium — самый прожорливый момент.
+
+services:
+  scout:
+    networks:
+      default: {}
+      edge:
+        aliases: [techmost-scout]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1536M
+
+  backup:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
+  caddy:
+    profiles: [own-proxy]
+
+networks:
+  edge:
+    external: true

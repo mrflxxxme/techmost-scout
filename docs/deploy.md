@@ -486,3 +486,27 @@ docker compose run --rm -u root scout chown -R scout:scout /srv/scout/data
 ```bash
 docker volume rm docker_scout-data
 ```
+
+## 11. Общий сервер с edge-прокси (Э-37 экосистемы)
+
+На общем сервере 80/443 держит отдельный edge-caddy (`/opt/edge-caddy`), и
+свой `caddy` стека поднимать нельзя. Стек запускается с надстройкой
+`docker-compose.edge.yml`: `caddy` уходит в профиль `own-proxy` и не
+стартует, `scout` входит во внешнюю сеть `edge` под именем
+`techmost-scout`, портов наружу нет, у `scout` и `backup` лимиты CPU и
+памяти.
+
+```bash
+DC="docker compose -f docker-compose.yml -f docker-compose.edge.yml"
+$DC up -d
+$DC ps
+```
+
+Блок сайта (`basic_auth`, заголовки — как в `docker/Caddyfile`, но
+`reverse_proxy techmost-scout:8000`) дописывается в конец
+`/opt/edge-caddy/Caddyfile`. Порядок: копия файла, запись **на месте**
+(`cat >>`, не `mv`: файл смонтирован в контейнер по inode, и после подмены
+`reload` рапортует успех, ничего не меняя), `caddy validate`, затем только
+`caddy reload` — никогда `restart`: edge обслуживает чужие сайты. Факт
+применения смотреть по живому конфигу:
+`docker exec edge-caddy wget -qO- http://127.0.0.1:2019/config/`.
