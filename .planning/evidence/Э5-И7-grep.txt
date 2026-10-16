@@ -1,0 +1,49 @@
+=== Критерий 1: docker compose up -d ===
+4:docker compose up -d
+188:файле), и тег становится доступен раньше, чем `docker compose up -d` попытается
+256:docker compose up -d
+281:пересоздан из нового образа — `docker compose up -d` выше — поэтому файл в
+
+=== Критерий 2: APP_ENV=prod ===
+121:- **`APP_ENV=prod`** — закрывает `/api/docs` и `/api/openapi.json`
+
+=== Критерий 3: caddy hash-password и плейсхолдеры ===
+157:docker run --rm caddy:2-alpine caddy hash-password --plaintext '<ПАРОЛЬ>'
+
+Плейсхолдеры:
+149:| `scout.example.ru` | боевой домен |
+150:| `admin@example.ru` | почта для уведомлений ACME (Let's Encrypt) |
+151:| `ХЭШ_ПАРОЛЯ_ЗАМЕНИТЬ_ПРИ_ДЕПЛОЕ` | вывод команды хеширования пароля ниже |
+172:  -e 's/ХЭШ_ПАРОЛЯ_ЗАМЕНИТЬ_ПРИ_ДЕПЛОЕ/<ХЭШ>/' \
+
+=== Критерий 4: scout.db и chown ===
+209:Если на сервер переносится готовая база `scout.db` (например, демо-данные,
+216:docker compose cp ./scout.db scout:/srv/scout/data/scout.db
+217:docker compose run --rm -u root scout chown scout:scout /srv/scout/data/scout.db
+288:копию `scout.db` через `sqlite3.Connection.backup()` стандартной библиотеки
+308:docker compose cp ./scout-restore.db scout:/srv/scout/data/scout.db
+309:docker compose run --rm -u root scout chown scout:scout /srv/scout/data/scout.db
+
+=== Критерий 5: gov_support.yaml ===
+269:файлом `data/gov_support.yaml`) только при **первом создании** тома. Если
+270:новая версия принесла обновлённый `gov_support.yaml`, повторная сборка образа
+276:docker compose cp scout:/srv/scout/data/gov_support.yaml /tmp/gov_support.yaml
+277:docker compose cp /tmp/gov_support.yaml scout:/srv/scout/data/gov_support.yaml
+
+=== Критерий 6: curl и docker compose ps ===
+228:curl -sI https://<ДОМЕН>/health
+236:- `curl -sI https://<ДОМЕН>/health` возвращает код ответа Caddy — `401` без
+181:docker compose ps
+227:docker compose ps
+233:- в `docker compose ps` все сервисы (`scout`, `caddy`, `backup`) в состоянии
+247:Э5-1, `.planning/PLAN.md`): вывод `docker compose ps`, вывод `curl -sI
+365:`docker compose ps` и `docker compose logs scout` в этом случае.
+
+=== Критерий 7: scout-backups ===
+289:Python и кладёт её в отдельный том `scout-backups` (не тот же том, что у
+
+=== Критерий 8: no server address (194.87, root@) ===
+[Нет совпадений]
+
+=== Критерий 9: no secrets (sk-, Api-Key, AQVN) ===
+[Нет совпадений]

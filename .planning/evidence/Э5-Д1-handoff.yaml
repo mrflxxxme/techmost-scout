@@ -1,0 +1,59 @@
+handoff:
+  from: implementer-A
+  to: reviewer
+  task: Э5-Д1
+  did:
+    - "Находка L3 пост-аудита (test_copy_sources_exist_in_build_context):
+       разбор строки COPY теперь отбрасывает ведущие флаги вида --...
+       (--chown=root:root и т. п.) перед проверкой существования источника
+       в дереве репозитория. До правки законная форма
+       'COPY --chown=root:root backend ./backend' красила тест, потому что
+       сам флаг попадал в список источников и не находился на диске."
+    - "Находка совета 6 пост-аудита
+       (test_playwright_browsers_path_declared_before_install): поиск
+       подстроки 'playwright install' ограничен строками внутри блока
+       команды RUN — с учётом переноса через обратную косую черту в конце
+       строки (многострочный RUN 'pip install ... && python -m playwright
+       install ... && rm -rf ...'). До правки поиск шёл по любой строке
+       файла, и комментарий с этими же словами, написанный выше ENV,
+       красил бы тест на пустом месте."
+    - "По каждой из двух правок проверена пара мутаций: прямая (убран
+       источник COPY / ENV переставлен после playwright install — форма
+       находки Б1) даёт красный тест; обратная (законный --chown / законный
+       комментарий с этими словами выше ENV) остаётся зелёной. Протокол —
+       .planning/evidence/Э5-Д1-мутации.txt. docker/Dockerfile мутациями не
+       трогался постоянно: каждая ставилась во временную копию рабочей
+       копии и восстанавливалась cp сразу после прогона, git diff/status
+       после работы показывает изменения только в
+       tests/test_docker_image.py."
+    - "Заодно исправлен побочный SyntaxWarning (invalid escape sequence
+       '\\`'), который я сам внёс в докстрок при первой формулировке —
+       переписал фразу без обратной косой черты внутри обычной (не raw)
+       строки."
+  artifacts:
+    - tests/test_docker_image.py
+    - .planning/evidence/Э5-Д1-мутации.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_docker_image.py -v: 16 passed"
+    - "pytest -q (весь проект): 1293 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 211 files already formatted"
+    - "2 находки × 2 мутации (прямая/обратная) — все четыре дают ожидаемый
+       результат; протокол в .planning/evidence/Э5-Д1-мутации.txt"
+  escalate: none
+  read_first:
+    - .planning/evidence/audit-Э5-повтор.md (раздел 3, находка L3; раздел 4, совет 6)
+    - tests/test_docker_image.py (test_copy_sources_exist_in_build_context,
+      test_playwright_browsers_path_declared_before_install)
+    - .planning/evidence/Э5-Д1-мутации.txt
+  notes: |
+    docker/Dockerfile не менялся коммитом — только временно подменялся при
+    проверке мутаций и восстанавливался побайтово (cp из /tmp-копии,
+    которая делалась до первой мутации). Это подтверждено git diff --stat
+    после всех прогонов: изменён только tests/test_docker_image.py.
+
+    За границами задачи замечена находка L2 (тест журнала логов
+    docker-compose сравнивает с литералом '10m', а не с соседним сервисом)
+    — это отдельный файл (docker-compose.yml/tests/test_docker_compose.py)
+    и не входит в границы этой задачи; не правил.

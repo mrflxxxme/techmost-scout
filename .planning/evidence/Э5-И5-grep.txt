@@ -1,0 +1,74 @@
+Критерий 1: rg -n "НУЦ Минцифры" docs/SPEC.md — совпадений нет
+exit=1
+
+Критерий 2: rg -n "Фазы 0" docs/SPEC.md — совпадений нет
+exit=1
+
+Критерий 3: rg -n "п\. 8" docs/SPEC.md — совпадений нет
+exit=1
+
+Критерий 4: rg -n "РЕШ-22[0-7]" docs/SPEC.md — не меньше пяти совпадений
+710:  сразу после сборки, без ручной доустановки браузера на сервере (РЕШ-220).
+719:  (РЕШ-222).
+722:  приложение, без сети и установки пакетов) с ротацией 14 дней (РЕШ-223,
+726:  входа в схему нет (РЕШ-224, долг ворот Э3 закрыт).
+728:  клиента `ssh`/`scp`, порт 22 наружу закрыт (РЕШ-226). Команда сдаёт образ,
+747:   (РЕШ-227); готовы три обезличенные задачи (`deps-manual.md`, п. 12).
+766:   отдельной строкой (РЕШ-227).
+количество совпадений: 7
+
+Критерий 5: ls scripts/build_ca_bundle.py — файла нет
+ls: cannot access 'scripts/build_ca_bundle.py': No such file or directory
+exit=2
+rg -n "scripts/build_ca_bundle.py" docs/ scripts/ backend/ tests/ — совпадений нет
+exit=1
+
+Критерий 6: rg -n "появится в этапе Э5-1|в код и Docker-образ этого этапа не входит" docs/deps-manual.md — совпадений нет
+exit=1
+
+Критерий 7: pytest tests/test_scripts_layout.py -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a1bc1a4c41dff044a
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 2 items
+
+tests/test_scripts_layout.py::test_scripts_stay_within_line_limit PASSED [ 50%]
+tests/test_scripts_layout.py::test_scripts_directory_is_not_empty PASSED [100%]
+
+============================== 2 passed in 0.03s ===============================
+
+Критерий 8: pytest -q
+........................................................................ [ 91%]
+........................................................................ [ 96%]
+......................................                                   [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1262 passed, 1 warning in 70.10s (0:01:10)
+
+Критерий 9: ruff check . && ruff format --check . — прогон бинарём проекта (.venv/bin/ruff), из корня рабочей копии
+ruff 0.16.4
+All checks passed!
+208 files already formatted
+
+Девятая правка (РЕШ-230): rg -n '### Э4-[123]' docs/SPEC.md — отметки должны быть ✅
+630:### Э4-1 ✅ Ревью эксперта
+651:### Э4-2 ✅ Выгрузка в PDF и DOCX
+678:### Э4-3 ✅ Демо-режим
+
+Правка цикла 2 (блокирующая находка ревью): docs/deploy.md не существует нигде в репозитории
+(пусто — файла нет ни в одной ветке)
+Новая формулировка deps-manual.md п.10 (без утверждения о существовании):
+### 10. VPS и домен — есть, дадите к этапу Э5
+
+Хостинг у владельца имеется, реквизиты передаются по мере надобности. Любой
+российский провайдер, 2 ГБ памяти достаточно. Дальше по `docs/deploy.md`;
+деплой на сервер выполняет владелец (РЕШ-226).
+

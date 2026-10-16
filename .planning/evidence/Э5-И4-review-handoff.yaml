@@ -1,0 +1,59 @@
+handoff:
+  from: reviewer
+  to: implementer-A
+  task: Э5-И4
+  did:
+    - >-
+      Прогнаны все девять критериев приёмки лично: pytest на файле задачи (9),
+      прежние тестовые файлы (12), полный pytest -q (1271), ruff check/format,
+      ручная проверка prod-вывода и оба grep-критерия — всё совпало с
+      handoff-заявлением исполнителя.
+    - >-
+      Проверены пять мутаций из задания ревью: открытость по умолчанию и
+      закрытие внутри schema_urls, зашитая строка в base.html — пойманы;
+      частичная разводка openapi_url в вызове FastAPI(...) в main.py и
+      удаление строки templates.env.globals["api_docs_url"] = docs_url — НЕ
+      пойманы ни одним из 1271 теста.
+    - >-
+      Самостоятельно поднял приложение через TestClient на APP_ENV=prod и
+      APP_ENV=dev: подтверждена закрытость /api/docs, /api/openapi.json,
+      /redoc, /api/redoc, /docs, /openapi.json в prod; открытость всех тех же
+      маршрутов в dev; /health открыт без авторизации в обоих режимах.
+    - >-
+      Проверено замечание исполнителя о критерии 2 плана
+      (FastAPI(*schema_urls("prod"))) через inspect.signature — подтверждено:
+      docs_url/openapi_url не в начале сигнатуры FastAPI.__init__, буквальная
+      формулировка плана некорректна, дефект в тексте плана, а не в работе.
+  artifacts:
+    - .planning/evidence/Э5-И4-review.md (закоммичен до ответа)
+    - .planning/evidence/Э5-И4-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_web_api_schema.py -v: 9 passed"
+    - "pytest tests/test_web_templates.py tests/test_web_auth.py tests/test_web_flow_e2e.py -v: 12 passed"
+    - "pytest -q: 1271 passed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 210 files already formatted"
+    - "мутация 'открыто по умолчанию' (app_env != prod): pytest tests/test_web_api_schema.py -q -> 2 failed, 7 passed"
+    - "мутация 'openapi_url зашит в FastAPI(...) в main.py, docs_url разведён верно': pytest -q -> 1271 passed (не поймано); live TestClient prod /api/openapi.json -> 200"
+    - "мутация 'удалена строка templates.env.globals[api_docs_url]=docs_url': pytest -q -> 1271 passed (не поймано); 'api_docs_url' in templates.env.globals -> False"
+    - "мутация 'base.html зашитый /api/docs': pytest tests/test_web_api_schema.py -q -> 1 failed, 8 passed"
+    - "мутация 'openapi_url открыт внутри самой schema_urls': pytest tests/test_web_api_schema.py -q -> 3 failed, 6 passed"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э5-И4-review.md
+    - backend/app/main.py
+    - tests/test_web_api_schema.py
+  notes: >-
+    Это цикл 1. Нужно: тест, который бьёт TestClient-ом по реальному main.app
+    и main.templates (а не по одноразовым копиям / monkeypatch напрямую) для
+    хотя бы одного env-режима — иначе регрессия в разводке schema_urls() ->
+    app / schema_urls() -> templates.env.globals пройдёт через CI незамеченной.
+    Проще всего: вынести сборку app в функцию build_app(app_env) -> FastAPI и
+    тест на неё, либо в тесте monkeypatch-нуть settings.app_env ДО импорта
+    app.main (importlib.reload) и ударить TestClient-ом по настоящему app.
+    Второй цикл — последний, дальше разбор с владельцем (§4). Совет (не
+    блокирует): docstring schema_urls обещает регистронезависимость через
+    "в нижнем регистре", но .lower() нигде не вызывается — de facto строгое
+    сравнение, безопасно (закрывает при опечатке), но текст вводит в
+    заблуждение.

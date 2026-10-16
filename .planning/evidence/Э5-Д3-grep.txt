@@ -1,0 +1,38 @@
+=== фактические имя проекта и тома в docker/docker-compose.yml ===
+12:name: techmost-scout
+162:  scout-data:
+163:  scout-out:
+164:  caddy-data:
+165:  caddy-config:
+166:  scout-backups:
+
+=== docs/deploy.md, §8: предупреждение перед up -d ===
+288:**Если связку поднимали раньше по инструкции без `name` в `docker-compose.yml`,
+
+=== docs/deploy.md, §10: полная процедура переноса ===
+292:раздел 10, «Тома переименовались после обновления, база пропала». Иначе
+404:**Тома переименовались после обновления, база «пропала».** В
+
+=== цикл 2 (ревью, находка): обе диагностические команды теперь grep -E "scout|caddy" ===
+290:`docker volume ls | grep -E "scout|caddy"` (фильтр `grep scout` без `caddy`
+430:docker volume ls | grep -E "scout|caddy"
+
+=== проверка: новый фильтр ловит все пять старых и все пять новых имён томов ===
+$ printf '%s\n' docker_scout-data docker_scout-out docker_caddy-data docker_caddy-config docker_scout-backups techmost-scout_scout-data techmost-scout_scout-out techmost-scout_caddy-data techmost-scout_caddy-config techmost-scout_scout-backups | grep -E "scout|caddy"
+docker_scout-data
+docker_scout-out
+docker_caddy-data
+docker_caddy-config
+docker_scout-backups
+techmost-scout_scout-data
+techmost-scout_scout-out
+techmost-scout_caddy-data
+techmost-scout_caddy-config
+techmost-scout_scout-backups
+(10 из 10 совпало; прежний фильтр "grep scout" пропускал docker_caddy-data и
+docker_caddy-config — ровно находка ревью цикла 1)
+
+=== цикл 2 (советы): chown ограничен scout-data/scout-out, источник смонтирован :ro, честная пометка "не прогонялось живьём" ===
+452:  -v docker_scout-data:/from:ro \
+467:docker compose run --rm -u root scout chown -R scout:scout /srv/scout/data
+485:Эту процедуру никто не прогонял на реальном Docker (перенос данных между

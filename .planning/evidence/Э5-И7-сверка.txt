@@ -1,0 +1,12 @@
+docker/docker-compose.yml:21:      - scout-data:/srv/scout/data
+docker/docker-compose.yml:22:      - scout-out:/srv/scout/out
+docker/docker-compose.yml:69:      - scout-backups:/backups
+docker/docker-compose.yml:112:  scout-backups:
+docker/Dockerfile:5:WORKDIR /srv/scout
+docker/Dockerfile:28:# каталога app/config.py и благодаря этому совпадают с /srv/scout.
+docker/Dockerfile:29:ENV PYTHONPATH=/srv/scout/backend
+docker/Dockerfile:36:    && mkdir -p /srv/scout/data /srv/scout/out \
+docker/Dockerfile:37:    && chown -R scout:scout /srv/scout
+docker/Dockerfile:39:# Ловушка: именованный том scout-data наследует содержимое /srv/scout/data
+docker/Dockerfile:44:VOLUME /srv/scout/data
+docker/Dockerfile:45:VOLUME /srv/scout/out

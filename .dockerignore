@@ -1,0 +1,23 @@
+# Контекст сборки образа: секреты и боевая база сюда попасть не должны
+# (инвариант №3), а служебные каталоги проекта не должны раздувать контекст
+# лишними мегабайтами.
+
+.git
+.github
+.planning
+.claude
+docs
+tests
+marketing
+out
+data/*.db*
+.venv
+**/__pycache__
+*.egg-info
+.pytest_cache
+.ruff_cache
+node_modules
+**/.env
+**/.env.*
+**/*.pem
+**/*.key

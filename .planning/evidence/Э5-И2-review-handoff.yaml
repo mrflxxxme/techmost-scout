@@ -1,0 +1,66 @@
+handoff:
+  from: reviewer
+  to: implementer-B
+  task: Э5-И2
+  did:
+    - >-
+      Прочитаны PLAN.md (раздел Э5-И2 и «Контракты»), INVARIANTS.md,
+      docker/docker-compose.yml, tests/test_docker_compose.py, РЕШ-229;
+      воспроизведены все заявленные в handoff проверки (pytest, ruff,
+      docker compose config, git status).
+    - >-
+      Прогнаны 7 обязательных мутаций из задания ревью с откатом файла после
+      каждой. Пять ловятся штатно. Две выживают весь набор pytest (1243
+      тестов): предел ротации 140 суток вместо 14 (RETENTION_DAYS = 140) и
+      пропажа печати отказа именно ветки копии в stderr — тест проверяет
+      присутствие подстроки file=sys.stderr где угодно, а не по каждой из
+      двух except-веток отдельно.
+    - >-
+      Разобран вопрос порядка build/pull для сервиса backup без собственного
+      build — по исходникам docker/compose (pkg/compose/build.go,
+      pull.go) подтверждено, что Compose гасит неизбежный провал pull для
+      локального тега и строит образ раньше старта контейнеров; порядок
+      гарантирован механизмом Compose, отдельный шаг в docs/deploy.md не
+      нужен — не находка.
+    - >-
+      Практическим экспериментом подтверждено, что sqlite3.Connection.backup
+      работает на файле, открытом mode=ro, при read-only директории
+      (имитация :ro bind-mount), пока -wal/-shm уже созданы пишущей стороной.
+    - >-
+      Diff сверен с границами задачи: изменены только docker-compose.yml,
+      test_docker_compose.py и три файла evidence; Dockerfile и Caddyfile не
+      тронуты.
+  artifacts:
+    - .planning/evidence/Э5-И2-review.md (закоммичен до ответа)
+    - .planning/evidence/Э5-И2-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_docker_compose.py -v: 17 passed"
+    - "pytest -q: 1243 passed, 1 warning in ~70s"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 207 files already formatted"
+    - "docker compose config (docker/, временный пустой .env): exit 0, OK; git status --porcelain docker/ после — пусто"
+    - "rg -n 'required: false' docker/docker-compose.yml: совпадений нет"
+    - "grep -rE 'sk-|gigachat|Api-Key' docker/ tests/test_docker_compose.py .planning/evidence/Э5-И2-*: пусто"
+    - "мутация :ro у scout-data в backup убрана -> test_backup_том_базы_только_на_чтение FAILED"
+    - "мутация том копий = scout-data -> test_backup_том_копий_отдельный_от_тома_базы FAILED"
+    - "мутация depends_on в короткую форму -> test_caddy_ждёт_scout_живым FAILED"
+    - "мутация добавлен scout.ports -> test_scout_имеет_env_file_и_не_публикует_порт FAILED"
+    - "мутация env_file required: false -> 2 теста FAILED"
+    - "мутация RETENTION_DAYS = 999999 (предел снят) -> test_backup_ротация_копий_14_дней FAILED"
+    - "мутация RETENTION_DAYS = 140 -> pytest -q: 1243 passed (дыра, не поймано)"
+    - "мутация DAY = 186400 -> test_backup_период_суточный PASSED (дыра, не поймано)"
+    - "мутация: печать отказа копии убрана (ветка except Exception), ветка ротации не тронута -> pytest -q: 1243 passed (дыра, не поймано)"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел «Э5-И2» и «Контракты, закреплённые планом»)
+    - tests/test_docker_compose.py
+    - .planning/evidence/Э5-И2-review.md
+  notes: >-
+    Вердикт ВЕРНУТЬ, блокирующих 2 — обе про недостаточную точность проверок
+    в tests/test_docker_compose.py (тест_backup_ротация_копий_14_дней и
+    тест_backup_отказ_печатается_в_stderr_и_цикл_продолжается), а не про
+    docker-compose.yml: сама связка реализует 14 суток и печать обоих
+    отказов верно, но тесты приняли бы регрессию. Это цикл 1 из 2 — при
+    новой находке того же класса во втором цикле дальше идёт разбор с
+    владельцем, третьего цикла не будет.

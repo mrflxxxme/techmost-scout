@@ -1,0 +1,117 @@
+Задача Э5-П3 — фактический вывод проверочных команд (из корня рабочей копии).
+
+=== 1. Старых номеров пунктов не осталось ===
+
+$ grep -n "п\. 8" docs/acceptance.md
+(нет совпадений — старая ссылка на Yandex Search API в deps-manual.md устранена)
+
+$ grep -n "любом другом значении" docs/deploy.md
+(нет совпадений — ложное обоснование APP_ENV убрано)
+
+$ grep -n "Все три сервиса пишут" docs/deploy.md
+(нет совпадений — заявление про журналы всех трёх сервисов заменено на фактическое)
+
+=== 2. Новые номера ведут туда, куда написано ===
+
+$ grep -n "Yandex Search API заведён" docs/acceptance.md
+24:| Ключ Yandex Search API заведён (`docs/deps-manual.md`, п. 6) | |
+
+$ sed -n '74p' docs/deps-manual.md
+### 6. Yandex Search API — оба контура веба — ✅ РАБОТАЕТ
+
+$ grep -n "Semantic Scholar" docs/sources.md
+13:| Semantic Scholar | работает, 429 без ключа | Общий пул. Свой ключ — по заявке (см. deps-manual.md, п. 8) |
+
+$ sed -n '136p' docs/deps-manual.md
+### 8. Semantic Scholar — свой ключ вместо общего пула — ⏳ ЗАЯВКА ПОДАНА
+
+=== 3. deploy.md §3: обоснование APP_ENV=prod по факту кода (backend/app/main.py) ===
+
+$ grep -n "APP_ENV=prod\|Опасен ровно один случай" docs/deploy.md
+121:- **`APP_ENV=prod`** — закрывает `/api/docs` и `/api/openapi.json`
+124:  закрытую схему. Опасен ровно один случай: переменной нет вовсе — тогда
+
+Факт из backend/app/main.py:40 — `if app_env in ("dev", "test"):` открывает схему
+только при этих двух значениях; любое другое (включая пустую строку, "PROD",
+опечатку) даёт закрытую схему. Опасен только случай отсутствия переменной —
+тогда backend/app/config.py:29 подставляет умолчание `dev`.
+
+=== 4. deploy.md §10: журналы сайдкара — по факту docker-compose.yml на ветке задачи ===
+
+$ grep -n "секции \`logging\` нет" docs/deploy.md
+364:JSON-логов (10 МБ, 3 файла на сервис); у `backup` секции `logging` нет — без
+
+$ grep -n "logging:" docker/docker-compose.yml
+25:    logging:
+44:    logging:
+
+Две секции logging — у scout (строка 10) и caddy (строка 31); у backup
+(строка 57) секции logging нет. Формулировка деплоя больше не утверждает
+обратное.
+
+=== 5. deploy.md §10: симптом незамененного плейсхолдера хэша пароля ===
+
+$ grep -n "ХЭШ_ПАРОЛЯ_ЗАМЕНИТЬ_ПРИ_ДЕПЛОЕ" docs/deploy.md
+154:| `ХЭШ_ПАРОЛЯ_ЗАМЕНИТЬ_ПРИ_ДЕПЛОЕ` | вывод команды хеширования пароля ниже |
+175:  -e 's/ХЭШ_ПАРОЛЯ_ЗАМЕНИТЬ_ПРИ_ДЕПЛОЕ/<ХЭШ>/' \
+333:**Вход в веб-интерфейс работает, а `/health` через Caddy вечно отвечает
+335:плейсхолдер `ХЭШ_ПАРОЛЯ_ЗАМЕНИТЬ_ПРИ_ДЕПЛОЕ` в `Caddyfile` не заменён на
+
+=== Полный набор проверок ===
+
+$ /home/user/techmost-scout/.venv/bin/python -m pytest -q
+... (см. хвост)
+1275 passed, 1 warning in 71.11s (0:01:11)
+
+$ /home/user/techmost-scout/.venv/bin/ruff check .
+All checks passed!
+
+$ /home/user/techmost-scout/.venv/bin/ruff format --check .
+211 files already formatted
+
+=== Цикл 2 (после ревью): журналы сайдкара и depends_on/pull_policy по факту слитой ветки ===
+
+Раздел 4 выше фиксировал состояние на момент цикла 1 (docker-compose.yml
+ветки задачи, где у backup ещё не было logging/depends_on/pull_policy).
+После слияния параллельных задач волны в wave5/fixes-integration сайдкару
+добавили эти секции — текст docs/deploy.md §10 обновлён по факту слитого
+файла, а не по памяти о цикле 1.
+
+$ git show wave5/fixes-integration:docker/docker-compose.yml | grep -n "logging:"
+30:    logging:
+49:    logging:
+88:    logging:
+
+Три совпадения — logging задан всем трём сервисам (scout, caddy, backup).
+
+$ git show wave5/fixes-integration:docker/docker-compose.yml | grep -n "depends_on\|pull_policy\|service_healthy"
+46:    depends_on:
+48:        condition: service_healthy
+67:    pull_policy: never
+72:    # ожидания следующей попытки. service_healthy у scout гарантирует, что
+75:    depends_on:
+77:        condition: service_healthy
+
+(строки 46/48 — depends_on у caddy; строки 67, 75/77 — pull_policy и
+depends_on у backup, оба на service_healthy у scout — факты подтверждены
+содержимым файла, не выдуманы)
+
+$ grep -n "У всех трёх сервисов" docs/deploy.md
+381:**Журналы вообще.** У всех трёх сервисов (`scout`, `caddy`, `backup`) в
+
+$ grep -n "секции \`logging\` нет" docs/deploy.md
+(нет совпадений — устаревшая формулировка цикла 1 из docs/deploy.md убрана)
+
+$ grep -n "depends_on\|pull_policy\|service_healthy" docs/deploy.md
+365:`depends_on: {scout: {condition: service_healthy}}` — он ждёт, пока `scout`
+374:Отдельно у `backup` стоит `pull_policy: never` — сайдкар никогда не полезет
+393:`depends_on`, раздел «Healthcheck» плана этапа) — проверьте
+
+$ /home/user/techmost-scout/.venv/bin/python -m pytest -q (после цикла 2)
+1275 passed, 1 warning in 69.59s (0:01:09)
+
+$ /home/user/techmost-scout/.venv/bin/ruff check . (после цикла 2)
+All checks passed!
+
+$ /home/user/techmost-scout/.venv/bin/ruff format --check . (после цикла 2)
+211 files already formatted

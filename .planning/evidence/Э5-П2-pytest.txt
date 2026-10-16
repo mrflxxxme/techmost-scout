@@ -1,0 +1,76 @@
+........................................................................ [  5%]
+........................................................................ [ 11%]
+........................................................................ [ 16%]
+........................................................................ [ 22%]
+........................................................................ [ 27%]
+........................................................................ [ 33%]
+........................................................................ [ 39%]
+........................................................................ [ 44%]
+........................................................................ [ 50%]
+........................................................................ [ 55%]
+........................................................................ [ 61%]
+........................................................................ [ 67%]
+........................................................................ [ 72%]
+........................................................................ [ 78%]
+........................................................................ [ 83%]
+........................................................................ [ 89%]
+........................................................................ [ 95%]
+...............................................................          [100%]
+=============================== warnings summary ===============================
+../../../.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1287 passed, 1 warning in 71.94s (0:01:11)
+
+===== pytest tests/test_docker_compose.py -v =====
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/user/techmost-scout/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a3fdb51f9da103426
+configfile: pyproject.toml
+plugins: respx-0.23.1, anyio-4.14.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 31 items
+
+tests/test_docker_compose.py::test_yaml_разбирается_без_ошибок PASSED    [  3%]
+tests/test_docker_compose.py::test_состав_сервисов_ровно_три PASSED      [  6%]
+tests/test_docker_compose.py::test_scout_имеет_env_file_и_не_публикует_порт PASSED [  9%]
+tests/test_docker_compose.py::test_scout_тома_смонтированы_по_путям_из_контракта PASSED [ 12%]
+tests/test_docker_compose.py::test_caddy_ждёт_scout_живым PASSED         [ 16%]
+tests/test_docker_compose.py::test_caddy_образ_закреплён_версией PASSED  [ 19%]
+tests/test_docker_compose.py::test_backup_том_базы_только_на_чтение PASSED [ 22%]
+tests/test_docker_compose.py::test_backup_том_копий_отдельный_от_тома_базы PASSED [ 25%]
+tests/test_docker_compose.py::test_backup_не_ставит_пакеты_и_не_alpine PASSED [ 29%]
+tests/test_docker_compose.py::test_backup_использует_образ_приложения_без_второй_сборки PASSED [ 32%]
+tests/test_docker_compose.py::test_backup_ротация_копий_14_дней PASSED   [ 35%]
+tests/test_docker_compose.py::test_backup_период_суточный PASSED         [ 38%]
+tests/test_docker_compose.py::test_backup_цикл_бесконечный PASSED        [ 41%]
+tests/test_docker_compose.py::test_backup_отказ_копии_печатается_в_stderr PASSED [ 45%]
+tests/test_docker_compose.py::test_backup_отказ_ротации_печатается_в_stderr PASSED [ 48%]
+tests/test_docker_compose.py::test_backup_работает_от_root_для_записи_в_чужой_том PASSED [ 51%]
+tests/test_docker_compose.py::test_все_сервисы_перезапускаются_сами PASSED [ 54%]
+tests/test_docker_compose.py::test_объявлены_все_пять_томов PASSED       [ 58%]
+tests/test_docker_compose.py::test_секретов_нет_в_файле PASSED           [ 61%]
+tests/test_docker_compose.py::test_env_file_не_ослаблен PASSED           [ 64%]
+tests/test_docker_compose.py::test_имя_проекта_зафиксировано PASSED      [ 67%]
+tests/test_docker_compose.py::test_backup_ждёт_живости_scout PASSED      [ 70%]
+tests/test_docker_compose.py::test_backup_не_тянет_образ_из_реестра PASSED [ 74%]
+tests/test_docker_compose.py::test_backup_журнал_ограничен_как_у_остальных_сервисов PASSED [ 77%]
+tests/test_docker_compose.py::test_backup_скрипт_читает_боевую_базу_только_на_чтение PASSED [ 80%]
+tests/test_docker_compose.py::test_backup_путь_к_боевой_базе_соответствует_точке_монтирования PASSED [ 83%]
+tests/test_docker_compose.py::test_backup_соединения_закрываются_в_finally PASSED [ 87%]
+tests/test_docker_compose.py::test_backup_предел_ожидания_блокировки_в_разумных_границах PASSED [ 90%]
+tests/test_docker_compose.py::test_backup_успешный_проход_создаёт_годную_копию PASSED [ 93%]
+tests/test_docker_compose.py::test_backup_прерванный_проход_не_оставляет_файл_пустышку PASSED [ 96%]
+tests/test_docker_compose.py::test_backup_ожидание_снятия_блокировки_ограничено PASSED [100%]
+
+============================== 31 passed in 2.27s ==============================
+
+===== ruff check . =====
+All checks passed!
+===== ruff format --check . =====
+211 files already formatted
+===== docker compose config (временный docker/.env, удалён после проверки) =====
+docker compose -f docker/docker-compose.yml --project-directory docker config (пустой docker/.env создан и удалён после проверки): exit=0, конфигурация разобрана без ошибок.

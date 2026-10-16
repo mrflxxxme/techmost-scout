@@ -1,0 +1,71 @@
+handoff:
+  from: implementer-B
+  to: reviewer
+  task: Э5-Д2
+  did:
+    - "Долг 1 (L2): test_backup_журнал_ограничен_как_у_остальных_сервисов
+       сравнивает logging сервиса backup с фактическими значениями у scout и
+       caddy (services['scout']['logging'] и services['caddy']['logging']),
+       а не с литералом '10m' — согласованное повышение лимита у всех трёх
+       сервисов сразу больше не роняет набор."
+    - "Долг 2 (совет 1 / M16): добавлен test_caddy_публикует_порты_80_и_443
+       в tests/test_docker_compose.py — единственная мутация, пережившая оба
+       прохода аудита, теперь закрыта."
+    - "Долг 3 (совет 2): _run_backup_body в
+       tests/test_docker_compose_backup_runtime.py передаёт подмены
+       time.sleep/sys.stderr не через unittest.mock.patch на настоящих
+       модулях, а через локальный __import__ в пространстве имён
+       исполняемого скрипта (_namespace_local_module). Даже вечно висящий
+       daemon-поток не портит реальные time/sys для остальных тестов
+       сессии. Добавлены test_backup_зависший_проход_не_подменяет_настоящие_time_и_sys
+       и test_backup_после_зависшего_прохода_time_sleep_работает_как_обычно."
+    - "Долг 4 (советы 3 и 4): ротация сайдкара в docker/docker-compose.yml
+       теперь ищет и scout-*.db, и scout-*.db.part (огрызки от жёсткого
+       убийства контейнера между записью временного файла и rename);
+       закреплено test_backup_ротация_учитывает_и_part_файлы и
+       test_backup_ротация_удаляет_старые_part_файлы. Отдельно закреплён
+       pages=1 (test_backup_копирует_постранично_а_не_одним_шагом,
+       структурно через ast) и его смысл — способность прерывать
+       медленное (но не заблокированное) копирование
+       (test_backup_pages_1_позволяет_прервать_медленное_копирование,
+       сквозной прогон с реальным ~50 МБ источником)."
+    - "tests/test_docker_compose.py вырос бы далеко за 500 строк —
+       runtime-помощники (_run_backup_body и всё, что вокруг exec()) и
+       тесты сквозного исполнения тела скрипта сайдкара вынесены в новый
+       файл tests/test_docker_compose_backup_runtime.py (импортирует
+       _backup_script/_find_calls из test_docker_compose.py — общий каталог
+       tests/ без __init__.py уже в sys.path). Оба файла — 375 и 372 строки,
+       страж tests/test_tests_layout.py зелёный без правки списка
+       исключений."
+  artifacts:
+    - docker/docker-compose.yml
+    - tests/test_docker_compose.py
+    - tests/test_docker_compose_backup_runtime.py
+    - .planning/evidence/Э5-Д2-мутации.txt
+  self_audit: pass
+  checks:
+    - "pytest -q: 1300 passed"
+    - "pytest tests/test_docker_compose.py tests/test_docker_compose_backup_runtime.py -v: 29 + 9 passed"
+    - "pytest tests/test_tests_layout.py -v: 3 passed"
+    - "ruff check .: All checks passed"
+    - "ruff format --check .: 212 files already formatted"
+    - "docker compose -f docker/docker-compose.yml --project-directory docker config: прошла без ошибок (временный пустой docker/.env создан и удалён; git status --porcelain docker/ содержит только легитимную правку docker-compose.yml)"
+    - "мутации по каждому из четырёх долгов сняты и откачены — см. .planning/evidence/Э5-Д2-мутации.txt"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача Э5-Д2)
+    - .planning/evidence/audit-Э5-повтор.md (раздел 3, находка L2; раздел 4, советы 1-4)
+    - docker/docker-compose.yml
+    - tests/test_docker_compose.py
+    - tests/test_docker_compose_backup_runtime.py
+    - .planning/evidence/Э5-Д2-мутации.txt
+  notes: |
+    Контейнеры не поднимались, демона Docker нет — только
+    `docker compose config` для синтаксической проверки связки (без сети,
+    без сборки). Тест test_backup_pages_1_позволяет_прервать_медленное_копирование
+    создаёт временную базу ~50 МБ и делает два прохода сквозного скрипта —
+    занимает больше времени, чем остальные тесты файла (около секунды),
+    но остаётся детерминированным: сравнение идёт кратным отношением
+    времени (>3x), а не абсолютным порогом, привязанным к конкретному диску.
+    За границами задачи не замечено ничего нового сверх того, что уже было
+    в отчёте аудита.
