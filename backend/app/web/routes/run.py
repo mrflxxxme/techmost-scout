@@ -157,7 +157,13 @@ def _progress_fragment(request: Request, request_id: int) -> HTMLResponse:
     )
 
 
-async def _run_pipeline(request_id: int, brief: Brief, *, initial_cost_rub: float = 0.0) -> None:
+async def _run_pipeline(
+    request_id: int,
+    brief: Brief,
+    *,
+    initial_cost_rub: float = 0.0,
+    pipeline_kwargs: dict[str, object] | None = None,
+) -> None:
     """Тело фоновой задачи: пайплайн, публикация прогресса, снятие замка.
 
     Замок снимается в `finally` при любом исходе — успехе, отказе пайплайна
@@ -172,6 +178,10 @@ async def _run_pipeline(request_id: int, brief: Brief, *, initial_cost_rub: floa
     роутер этой фазы стартует с этой суммой, а не с нуля, иначе стоп-кран
     `COST_LIMIT_RUB_PER_REQUEST` действовал бы отдельно на каждую фазу
     веб-пути вместо запроса целиком.
+
+    `pipeline_kwargs` — дополнительные именованные аргументы `ScoutPipeline.run`
+    (сырой текст, журнал и оговорки интейка) для прогона из `/api/v1`, где
+    интейк идёт в той же фоновой задаче (РЕШ-250). Веб их не передаёт.
     """
     from app.db import session_scope
 
@@ -187,7 +197,7 @@ async def _run_pipeline(request_id: int, brief: Brief, *, initial_cost_rub: floa
     pipeline = ScoutPipeline(session_factory=session_scope, progress=hook, router=router)
     failed = False
     try:
-        await pipeline.run(brief, request_id=request_id)
+        await pipeline.run(brief, request_id=request_id, **(pipeline_kwargs or {}))
     except Exception:
         failed = True
         log.exception("прогон запроса №%s завершился отказом пайплайна", request_id)

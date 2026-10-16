@@ -297,6 +297,9 @@ def _brief_row(request_id: int, brief: Brief) -> BriefRow:
         timeline_hint=brief.timeline_hint,
         keywords_ru=list(brief.keywords_ru),
         keywords_en=list(brief.keywords_en),
+        region_code=brief.region_code,
+        need_id=brief.need_id,
+        mode=brief.mode,
     )
 
 
@@ -314,6 +317,9 @@ def _apply_brief(row: BriefRow, brief: Brief) -> None:
     row.timeline_hint = brief.timeline_hint
     row.keywords_ru = list(brief.keywords_ru)
     row.keywords_en = list(brief.keywords_en)
+    row.region_code = brief.region_code
+    row.need_id = brief.need_id
+    row.mode = brief.mode
 
 
 def _card_row(request_id: int, position: int, card: SolutionCard, *, is_contest: bool) -> SolutionCardRow:

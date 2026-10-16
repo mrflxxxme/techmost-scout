@@ -79,6 +79,11 @@ class Request(Base):
     #: failed`) колонка пуста, а не пустая строка — иначе пустой JSON читался бы
     #: как валидный, но бессмысленный отчёт.
     report_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Имя приложения экосистемы, создавшего запрос через `/api/v1` (РЕШ-250):
+    #: приложение видит только свои запросы. `NULL` — запрос заведён в
+    #: интерфейсе или командой `scout run`, ни одному приложению он не виден.
+    #: В уже существующую базу колонку дописывает `app.db.init_db`.
+    api_client: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     brief: Mapped[Brief | None] = relationship(back_populates="request", uselist=False, cascade="all, delete-orphan")
     candidates: Mapped[list[Candidate]] = relationship(back_populates="request", cascade="all, delete-orphan")
@@ -121,6 +126,14 @@ class Brief(Base):
     keywords_ru: Mapped[list] = mapped_column(JSON, default=list)
     keywords_en: Mapped[list] = mapped_column(JSON, default=list)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Поля экосистемы из `LaunchContext` (РЕШ-250): код субъекта ФНС, ID
+    #: потребности RADAR и режим подачи. Все три nullable — их дописывает в
+    #: существующую базу `app.db.init_db`, а `ALTER TABLE ADD COLUMN` без
+    #: умолчания возможен только для nullable-колонки. `NULL` в `mode` читается
+    #: как `business` (`brief_store.load_brief`).
+    region_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    need_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     request: Mapped[Request] = relationship(back_populates="brief")
 

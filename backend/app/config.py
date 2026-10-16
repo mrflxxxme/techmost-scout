@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     web_auth_user: str = Field(default="scout")
     web_auth_password: SecretStr = Field(default=SecretStr("change-me"))
 
+    # JSON-API для приложений экосистемы (РЕШ-250). Ключи — строкой
+    # `имя:ключ,имя2:ключ2`; пусто — API выключен целиком. Лимиты частоты —
+    # на приложение, в памяти процесса; запуски стоят денег, поэтому их лимит
+    # отдельный и тесный.
+    scout_api_keys: SecretStr = Field(default=SecretStr(""), validation_alias="SCOUT_API_KEYS")
+    api_rate_limit_runs_per_hour: int = Field(default=5, ge=1, validation_alias="API_RATE_LIMIT_RUNS_PER_HOUR")
+    api_rate_limit_reads_per_minute: int = Field(default=60, ge=1, validation_alias="API_RATE_LIMIT_READS_PER_MINUTE")
+
     # ── Языковые модели ─────────────────────────────────────────────────────
     # Бесплатный провайдер массовых стадий выпилен (РЕШ-171): двухпровайдерная
     # экономия обслуживала путь, которым никто не ходил — все вызовы прогона

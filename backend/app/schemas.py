@@ -12,10 +12,22 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 _DOI_PREFIXES = ("https://doi.org/", "http://doi.org/", "doi:")
 _DOI_VERSION_SUFFIX = re.compile(r"\.v\d+$")
+
+#: Код субъекта ФНС — ровно две ASCII-цифры (Э-48 экосистемы: в ОКАТО не
+#: различаются НАО, ХМАО и ЯНАО, у ФНС это 83, 86 и 89). `[0-9]`, а не `\d`:
+#: `\d` пропустил бы цифры других письменностей.
+REGION_CODE_PATTERN = r"^[0-9]{2}$"
+#: Стабильный идентификатор потребности из таксономии RADAR v1.0.0.
+NEED_ID_PATTERN = r"^[a-z][a-z0-9_]{1,63}$"
+#: Режим подачи из `LaunchContext`: business — весь мир, gov — дружественные страны.
+BriefMode = Literal["business", "gov"]
+#: Поля брифа, которые приходят только из `LaunchContext` экосистемы (РЕШ-250):
+#: модель их не заполняет, ни одна стадия «Науки» их не читает.
+ECOSYSTEM_BRIEF_FIELDS = ("region_code", "need_id", "mode")
 
 
 class MaturityStage(StrEnum):
@@ -107,6 +119,17 @@ class Brief(BaseModel):
     timeline_hint: str | None = None
     keywords_ru: list[str] = Field(default_factory=list)
     keywords_en: list[str] = Field(default_factory=list)
+    # Три поля экосистемы (РЕШ-250) исключены из сериализации (`exclude=True`):
+    # бриф уходит в промпты дампом `model_dump_json` (метка `BRIEF_JSON`), и
+    # без исключения поля попали бы в каждый промпт и сломали кэш префикса.
+    # Хранятся они в колонках `briefs`, наружу отдаются JSON-выгрузкой явно.
+    region_code: str | None = Field(
+        default=None, pattern=REGION_CODE_PATTERN, exclude=True, description="Код субъекта ФНС, две цифры"
+    )
+    need_id: str | None = Field(
+        default=None, pattern=NEED_ID_PATTERN, exclude=True, description="ID потребности таксономии RADAR"
+    )
+    mode: BriefMode = Field(default="business", exclude=True, description="Режим подачи из LaunchContext")
 
 
 class IntakeQuestion(BaseModel):
@@ -117,6 +140,24 @@ class IntakeQuestion(BaseModel):
 class IntakeResult(BaseModel):
     questions: list[IntakeQuestion] = Field(default_factory=list, max_length=5)
     draft_brief: Brief
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_ecosystem_fields(cls, data: object) -> object:
+        """Снять с ответа модели поля экосистемы (РЕШ-250).
+
+        `IntakeResult` разбирается из ответа модели (`run_intake`, `refine_brief`,
+        дозаполнение ограничений). Промпт этих полей не называет, но модель,
+        вернувшая `region_code` по своей догадке, не должна попасть в бриф:
+        поля приходят только из `LaunchContext`, иначе код региона в выгрузке
+        был бы фактом без источника.
+        """
+        if isinstance(data, dict):
+            draft = data.get("draft_brief")
+            if isinstance(draft, dict) and any(name in draft for name in ECOSYSTEM_BRIEF_FIELDS):
+                cleaned = {key: value for key, value in draft.items() if key not in ECOSYSTEM_BRIEF_FIELDS}
+                data = {**data, "draft_brief": cleaned}
+        return data
 
 
 class SearchQuery(BaseModel):
