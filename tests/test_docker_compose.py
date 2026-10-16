@@ -157,6 +157,16 @@ def test_backup_том_базы_только_на_чтение():
     assert data_mounts[0].endswith(":ro")
 
 
+def test_backup_не_наследует_healthcheck_образа():
+    """Сайдкар без веб-сервера: проверка /health из образа сделала бы его unhealthy.
+
+    Найдено на первом живом деплое (РЕШ-249): `docker compose ps` показывал
+    backup unhealthy при исправно сделанной копии.
+    """
+    backup = _load()["services"]["backup"]
+    assert backup.get("healthcheck", {}).get("disable") is True
+
+
 def test_backup_том_копий_отдельный_от_тома_базы():
     """Копия на том же томе, что и база, не переживёт повреждение тома."""
     backup = _load()["services"]["backup"]

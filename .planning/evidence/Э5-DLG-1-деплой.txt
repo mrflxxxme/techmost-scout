@@ -1,0 +1,43 @@
+DLG-1 · живой деплой на 194.87.187.207 (Э-37, РЕШ-249), 17.10.2026, агент после «да» владельца
+
+Образ: собран на машине владельца (Docker Desktop), коммит 43771be, перенесён docker save | docker load.
+Дым образа до переноса: health=healthy, /health {"status":"ok","env":"prod"}, id -u = 10001,
+Chromium печатает PDF под непривилегированным пользователем: pdf bytes 5635.
+
+Сервер: 3910 МБ RAM (доступно 2919 до деплоя), 2 CPU, Docker Compose v5.3.1, сеть edge.
+Стек: /opt/techmost-scout/docker, docker compose -f docker-compose.yml -f docker-compose.edge.yml
+
+$DC ps
+techmost-scout-backup-1 Up
+techmost-scout-scout-1  Up (healthy)          порты: 8000/tcp (не опубликован)
+
+docker stats --no-stream
+techmost-scout-scout-1  0.20%  107MiB / 1.5GiB
+techmost-scout-backup-1 0.00%  5.539MiB / 256MiB
+
+curl https://scout.194.87.187.207.sslip.io/health
+без пароля basic_auth: 401
+с паролем:             {"status":"ok","env":"prod"}
+/api/docs:             404 (APP_ENV=prod, схема закрыта)
+/demo:                 401 до входа — второй рубеж WEB_AUTH приложения
+
+Копия базы: /backups/scout-20261016-214523.db (сайдкар, первый проход)
+Соседи по edge после reload: uklonskiyk.ru 200, arisheniaa.ru 200
+
+Edge-caddy: копии Caddyfile.bak-20261017-scout и Caddyfile.live-20261017-before-scout.
+Находка: контейнер видел файл с другим inode (2284004 против 2274621 на хосте) — живой конфиг
+содержал блок course.uklonskiyk.ru, которого не было в файле хоста; рестарт edge его бы потерял.
+Итоговый файл = живой конфиг + блок Скаута; применён caddy validate + caddy reload
+(через временный файл в томе /config, корень контейнера только для чтения), затем записан
+на месте в /opt/edge-caddy/Caddyfile. Рестарта edge не было. В живом конфиге: course-caddy:8080,
+techmost-scout:8000.
+
+Находка 2: сайдкар backup наследовал HEALTHCHECK образа и был unhealthy — исправлено в
+docker-compose.yml (healthcheck.disable), тест test_backup_не_наследует_healthcheck_образа.
+
+Учётные данные: /opt/techmost-scout/credentials.txt (600, root) — вход WEB_AUTH и basic_auth.
+.env: из локальной копии владельца; на сервере APP_ENV=prod, DATABASE_URL на /srv/scout/data,
+WEB_AUTH_PASSWORD сгенерирован заново (change-me: 0).
+
+Linux-прогон (python:3.12-slim, SQLAlchemy 2.1.5): ruff чист, 212 файлов отформатированы, 1301 passed.
+Не проверено агентом: вход по паролю в браузере и открытие /demo глазами — за владельцем.

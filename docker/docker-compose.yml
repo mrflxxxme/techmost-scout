@@ -79,6 +79,10 @@ services:
     # (uid 10001, см. Dockerfile) писать в него не смог бы. Это не отменяет
     # правило "приложение не от root" — оно про сервис scout, а не про сайдкар.
     user: "0:0"
+    # HEALTHCHECK образа опрашивает /health, а веб-сервера в сайдкаре нет:
+    # без отключения `docker compose ps` вечно показывает backup unhealthy.
+    healthcheck:
+      disable: true
     volumes:
       # Только чтение: копия не должна иметь возможность повредить рабочую базу.
       - scout-data:/data:ro

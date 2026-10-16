@@ -18,7 +18,7 @@ dependencies = [
     # (`MaxLen` в `pipeline/stages.py`): прямой импорт объявляется прямой
     # зависимостью, иначе смена внутренностей pydantic ломает нас молча.
     "annotated-types>=0.6",
-    "sqlalchemy[asyncio]>=2.0",
+    "sqlalchemy[asyncio]>=2.0,<2.2",  # верхняя граница — РЕШ-248
     "aiosqlite>=0.20",
     "pyyaml>=6.0",
     # Сеть
