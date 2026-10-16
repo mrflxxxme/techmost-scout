@@ -502,6 +502,23 @@ $DC up -d
 $DC ps
 ```
 
+**Сеть `edge` обязана существовать до запуска.** Она объявлена внешней:
+стек к ней только присоединяется, а создаёт её edge-прокси. Если сети нет,
+`up -d` откажет сразу — `network edge declared as external, but could not be
+found`. Проверить до запуска и убедиться, что в той же сети стоит сам
+edge-прокси, иначе имя `techmost-scout` он не разрешит и отдаст 502:
+
+```bash
+docker network ls --filter name=edge
+docker network inspect edge --format '{{range .Containers}}{{.Name}} {{end}}'
+```
+
+Во втором выводе обязан быть контейнер edge-прокси. Если сети нет вовсе, её
+заводит стек edge-прокси в `/opt/edge-caddy` — создавать её руками рядом с
+чужим стеком не нужно: одноимённая, но другая сеть даст ровно ту же картину
+«поднялось и не работает».
+
+
 Блок сайта (`basic_auth`, заголовки — как в `docker/Caddyfile`, но
 `reverse_proxy techmost-scout:8000`) дописывается в конец
 `/opt/edge-caddy/Caddyfile`. Порядок: копия файла, запись **на месте**
