@@ -1,0 +1,13 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: Э5-CI-страж-адреса-базы
+  did:
+    - "Диагноз подтверждён: SQLAlchemy 2.1.5 печатает адрес с %3A, url.database остаётся ':memory:'"
+    - "Мутации, обратная сторона, поиск той же болезни, границы и полный набор прогнаны сами"
+  artifacts:
+    - .planning/evidence/Э5-CI-страж-адреса-базы-review.md
+    - .planning/evidence/Э5-CI-страж-адреса-базы-review-handoff.yaml
+  self_audit: pass
+  verdict: ПРИНЯТЬ
+  escalate: none
