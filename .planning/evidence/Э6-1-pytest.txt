@@ -1,0 +1,12 @@
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_docker_compose_backup_runtime.py::test_backup_____
+FAILED tests/test_docker_compose_backup_runtime.py::test_backup______
+FAILED tests/test_docker_compose_backup_runtime.py::test_backup____
+FAILED tests/test_docker_compose_backup_runtime.py::test_backup______time__sys
+FAILED tests/test_docker_compose_backup_runtime.py::test_backup____part_
+FAILED tests/test_docker_compose_backup_runtime.py::test_backup_pages_1____
+6 failed, 1412 passed, 8 warnings in 504.20s (0:08:24)
