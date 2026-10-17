@@ -25,7 +25,7 @@ from sqlalchemy import select
 from app import main
 from app.db import session_scope
 from app.models import Brief as BriefRow
-from app.schemas import Brief, IntakeResult
+from app.schemas import Brief, IntakeQuestion, IntakeResult
 from app.web.brief_store import load_brief
 
 _TASK_TEXT = "Катализатор гидроочистки теряет активность быстрее ожидаемого, нужна альтернатива."
@@ -160,3 +160,34 @@ async def test_deidentification_warning_carries_hidden_solution_kind_and_resend_
     row = await _fetch_brief_row(_request_id(resent))
     assert row is not None
     assert row.solution_kind == "digital"
+
+
+# ── (г) ответы на вопросы интейка ─────────────────────────────────────────────
+
+
+async def test_answers_step_passes_solution_kind_to_refine_brief_and_keeps_it(client, monkeypatch):
+    """Шаг «ответы на вопросы» (без `confirm`) отдаёт `refine_brief` вид из черновика.
+
+    Без этого `refine_brief` получил бы умолчание «research» и выбор человека молча
+    стал бы «Наукой» (ревью цикла 2, мутация М4)."""
+    refine_calls: list[str] = []
+
+    async def fake_run_intake(router, task, *, industry_hint="не указана", solution_kind="research"):
+        draft = Brief(industry="нефтепереработка", task_summary=task, solution_kind=solution_kind)
+        return IntakeResult(questions=[IntakeQuestion(question="Какая нагрузка?", why="для отбора")], draft_brief=draft)
+
+    async def fake_refine_brief(router, task, answers, *, industry_hint="не указана", solution_kind="research"):
+        refine_calls.append(solution_kind)
+        return Brief(industry="нефтепереработка", task_summary=task, solution_kind=solution_kind)
+
+    monkeypatch.setattr("app.pipeline.stages.run_intake", fake_run_intake)
+    monkeypatch.setattr("app.pipeline.stages.refine_brief", fake_refine_brief)
+
+    created = client.post("/requests", data={"raw_text": _TASK_TEXT, "solution_kind": "digital"})
+    request_id = int(re.search(r'hx-post="/requests/(\d+)/brief"', created.text).group(1))
+
+    step = client.post(f"/requests/{request_id}/brief", data={"question": "Какая нагрузка?", "answer": "100 RPS"})
+    assert step.status_code == 200
+
+    assert refine_calls == ["digital"]
+    assert (await _loaded_brief(request_id)).solution_kind == "digital"
