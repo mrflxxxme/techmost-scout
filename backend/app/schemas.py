@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
@@ -28,6 +28,13 @@ BriefMode = Literal["business", "gov"]
 #: Поля брифа, которые приходят только из `LaunchContext` экосистемы (РЕШ-250):
 #: модель их не заполняет, ни одна стадия «Науки» их не читает.
 ECOSYSTEM_BRIEF_FIELDS = ("region_code", "need_id", "mode")
+#: Вид искомого решения (Э6-1): «Наука» ищет разработки (`research`), рынок — готовые
+#: продукты, цифровые решения и бизнес-модели. Выбирает человек на форме задачи.
+SolutionKind = Literal["research", "product", "digital", "business_model"]
+#: Виды, для которых работает слой аналогов; `research` в их число не входит.
+MARKET_KINDS = ("product", "digital", "business_model")
+#: Код страны — ISO 3166-1 alpha-2, строго прописными ASCII-буквами.
+COUNTRY_CODE_PATTERN = r"^[A-Z]{2}$"
 
 
 class MaturityStage(StrEnum):
@@ -52,6 +59,9 @@ class SourceType(StrEnum):
     #: отдельную секцию отчёта и разводит конкурсные формулировки `site:` от
     #: грантовых. В `web` всё это делалось бы угадыванием по тексту.
     CONTEST = "contest"
+    #: Зарубежный аналог для рынка (Э6-1): отдельный тип, чтобы код разводил аналоги
+    #: и научные источники, а не угадывал по тексту. Поведение вводит Э6-2а.
+    ANALOG = "analog"
 
 
 class IPStatus(StrEnum):
@@ -130,6 +140,12 @@ class Brief(BaseModel):
         default=None, pattern=NEED_ID_PATTERN, exclude=True, description="ID потребности таксономии RADAR"
     )
     mode: BriefMode = Field(default="business", exclude=True, description="Режим подачи из LaunchContext")
+    # Вид решения исключён из сериализации по той же причине, что и поля экосистемы:
+    # стадии «Науки» его не видят, кэш префикса их промптов не меняется. Хранится в
+    # колонке `briefs.solution_kind`; пусто (`NULL`) читается как `research`.
+    solution_kind: SolutionKind = Field(
+        default="research", exclude=True, description="Вид искомого решения, выбирает человек"
+    )
 
 
 class IntakeQuestion(BaseModel):
@@ -157,6 +173,25 @@ class IntakeResult(BaseModel):
             if isinstance(draft, dict) and any(name in draft for name in ECOSYSTEM_BRIEF_FIELDS):
                 cleaned = {key: value for key, value in draft.items() if key not in ECOSYSTEM_BRIEF_FIELDS}
                 data = {**data, "draft_brief": cleaned}
+        return data
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_unknown_solution_kind(cls, data: object) -> object:
+        """Снять с черновика брифа значение вида решения, которого нет в перечне.
+
+        Модель вправе ответить `unknown` или чем-то своим: разбор целого ответа из-за
+        этого падать не должен. Отброшенное значение читается как умолчание, а
+        `resolve_solution_kind` решает, что с ним делать.
+        """
+        if isinstance(data, dict):
+            draft = data.get("draft_brief")
+            if (
+                isinstance(draft, dict)
+                and "solution_kind" in draft
+                and draft["solution_kind"] not in get_args(SolutionKind)
+            ):
+                data = {**data, "draft_brief": {k: v for k, v in draft.items() if k != "solution_kind"}}
         return data
 
 
@@ -194,6 +229,9 @@ class Candidate(BaseModel):
     provider: str = Field(description="Имя адаптера: crossref, cyberleninka, showcase, …")
     pdf_url: HttpUrl | None = Field(
         default=None, description="Ссылка на открытый полный текст, если источник её отдаёт"
+    )
+    country: str | None = Field(
+        default=None, pattern=COUNTRY_CODE_PATTERN, description="Страна источника, ISO 3166-1 alpha-2"
     )
 
     @field_validator("year")
@@ -318,6 +356,25 @@ class SolutionCard(BaseModel):
         return len(self.evidence) == 0
 
 
+class AnalogCard(BaseModel):
+    """Зарубежный аналог для рынка: что делают в мире (Э6-1).
+
+    Только контракт данных. Подбор аналогов и их показ вводят Э6-2а и Э6-4. Ссылки
+    (`candidate_urls`, `country_evidence_url`) заполняет код, а не модель.
+    """
+
+    title: str
+    essence: str
+    country: str = Field(pattern=COUNTRY_CODE_PATTERN, description="Страна аналога, ISO 3166-1 alpha-2")
+    country_evidence_url: HttpUrl = Field(description="Ссылка, подтверждающая страну")
+    business_model: str
+    traction: str = Field(default="", description="Что известно о распространении; пусто — «не найдено»")
+    transferability_ru: str = Field(description="Что мешает или помогает перенести аналог в РФ")
+    what_to_do_in_ru: str = Field(description="Что делать в РФ с этим аналогом")
+    evidence: list[Evidence] = Field(default_factory=list)
+    candidate_urls: list[HttpUrl] = Field(default_factory=list)
+
+
 class ReportSummary(BaseModel):
     comparison_rows: list[dict[str, str]] = Field(default_factory=list)
     recommendation: str
@@ -334,6 +391,9 @@ class Report(BaseModel):
     #: функции, не доехали бы до базы — `persist_run` пишет то, что лежит в
     #: отчёте. Один путь на отчёт, базу и будущий веб (РЕШ-92).
     contest_cards: list[SolutionCard] = Field(default_factory=list)
+    #: Аналоги из мира (Э6-1) — секция вне лимита карточек. Старые отчёты без поля
+    #: читаются с пустым списком.
+    analog_cards: list[AnalogCard] = Field(default_factory=list)
     summary: ReportSummary
     sources_unavailable: list[str] = Field(
         default_factory=list, description="Источники, которые не ответили — честно пишем в отчёт"

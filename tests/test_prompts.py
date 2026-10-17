@@ -23,7 +23,7 @@ PLACEHOLDER = re.compile(r"\{\{([A-Z_]+)\}\}")
 
 #: Какие метки обязан заполнять код для каждого промпта.
 EXPECTED_PLACEHOLDERS = {
-    "intake": {"RAW_TASK_TEXT", "INDUSTRY_HINT"},
+    "intake": {"RAW_TASK_TEXT", "INDUSTRY_HINT", "SOLUTION_KIND"},
     "planner": {"BRIEF_JSON"},
     # Т-21: стадия второго прохода. Прежние формулировки и первая выдача едут
     # отдельными метками — модель обязана видеть, что уже спрашивали и что из

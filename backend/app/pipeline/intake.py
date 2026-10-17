@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from app.llm import LLMRouter, Message
 from app.pipeline.prompting import _GO, neutralize_placeholders, render_prompt
-from app.schemas import Brief, IntakeResult
+from app.schemas import MARKET_KINDS, Brief, IntakeResult, SolutionKind
+
+#: Выбор человека «пусть определит система»: вид решения тогда ставит модель.
+SOLUTION_KIND_UNKNOWN = "unknown"
 
 #: Предел длины `task_summary` запасного брифа — короткое описание, а не
 #: письмо целиком; отчёту хватает первых сотен знаков для сверки.
@@ -29,15 +32,45 @@ def brief_from_raw_text(raw_text: str, *, industry_hint: str = "не указа�
     return Brief(industry=neutralize_placeholders(industry_hint), task_summary=summary or "не указано")
 
 
+def resolve_solution_kind(selected: str, model_value: str) -> SolutionKind:
+    """Свести выбор человека и ответ модели в один вид решения.
+
+    Выбор человека сильнее модели: любое значение кроме `unknown` возвращается как
+    есть. При `unknown` берётся ответ модели, но только из `MARKET_KINDS`: «Науку»
+    модель назначить не вправе (без явного выбора система её не угадывает), и
+    любой иной ответ даёт `product`.
+    """
+    if selected != SOLUTION_KIND_UNKNOWN:
+        return selected  # type: ignore[return-value]
+    if model_value in MARKET_KINDS:
+        return model_value  # type: ignore[return-value]
+    return "product"
+
+
+def _with_resolved_kind(result: IntakeResult, selected: str) -> IntakeResult:
+    """Проставить в черновике брифа итоговый вид решения вместо ответа модели."""
+    resolved = resolve_solution_kind(selected, result.draft_brief.solution_kind)
+    result.draft_brief = result.draft_brief.model_copy(update={"solution_kind": resolved})
+    return result
+
+
 # ── 1. Интейк ───────────────────────────────────────────────────────────────
-async def run_intake(router: LLMRouter, raw_text: str, *, industry_hint: str = "не указана") -> IntakeResult:
-    """Из свободного текста — уточняющие вопросы и черновик брифа."""
-    return await router.complete_json(
+async def run_intake(
+    router: LLMRouter, raw_text: str, *, industry_hint: str = "не указана", solution_kind: str = "research"
+) -> IntakeResult:
+    """Из свободного текста — уточняющие вопросы и черновик брифа.
+
+    `solution_kind` — выбор человека на форме (четыре вида или `unknown`); итоговый
+    вид в черновике определяет `resolve_solution_kind`.
+    """
+    result = await router.complete_json(
         "intake",
         [
             Message(
                 role="system",
-                content=render_prompt("intake", RAW_TASK_TEXT=raw_text, INDUSTRY_HINT=industry_hint),
+                content=render_prompt(
+                    "intake", RAW_TASK_TEXT=raw_text, INDUSTRY_HINT=industry_hint, SOLUTION_KIND=solution_kind
+                ),
             ),
             Message(role="user", content=_GO),
         ],
@@ -50,10 +83,16 @@ async def run_intake(router: LLMRouter, raw_text: str, *, industry_hint: str = "
         # ничего. 8000 — ответ плюс сопоставимый запас на рассуждение.
         max_tokens=8000,
     )
+    return _with_resolved_kind(result, solution_kind)
 
 
 async def refine_brief(
-    router: LLMRouter, raw_text: str, answers: dict[str, str], *, industry_hint: str = "не указана"
+    router: LLMRouter,
+    raw_text: str,
+    answers: dict[str, str],
+    *,
+    industry_hint: str = "не указана",
+    solution_kind: str = "research",
 ) -> Brief:
     """Собрать финальный бриф с учётом ответов на уточняющие вопросы."""
     answers_text = "\n".join(f"— {q}\n  Ответ: {a or 'не знаю'}" for q, a in answers.items())
@@ -63,7 +102,9 @@ async def refine_brief(
         [
             Message(
                 role="system",
-                content=render_prompt("intake", RAW_TASK_TEXT=enriched, INDUSTRY_HINT=industry_hint),
+                content=render_prompt(
+                    "intake", RAW_TASK_TEXT=enriched, INDUSTRY_HINT=industry_hint, SOLUTION_KIND=solution_kind
+                ),
             ),
             Message(
                 role="user",
@@ -78,4 +119,4 @@ async def refine_brief(
         # нет, зато `draft_brief` заполнен целиком.
         max_tokens=8000,
     )
-    return result.draft_brief
+    return _with_resolved_kind(result, solution_kind).draft_brief

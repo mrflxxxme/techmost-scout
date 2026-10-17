@@ -13,6 +13,7 @@
     <form hx-post="/requests" hx-target="#stage" hx-swap="innerHTML">
       <input type="hidden" name="raw_text" value="{{ raw_text }}">
       <input type="hidden" name="accept_risks" value="1">
+      <input type="hidden" name="solution_kind" value="{{ solution_kind }}">
       <button class="btn" type="submit">Отправить как есть <span class="dot">→</span></button>
     </form>
   </div>
