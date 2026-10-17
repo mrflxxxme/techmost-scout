@@ -1,0 +1,33 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: Э6-3
+  did:
+    - "backend/app/countries.py: CountryStatus (main|footnote|excluded) и country_status(code, mode); business -> main всем, gov -> excluded для gov_excluded (Тайвань), затем footnote для перечня 430-р, иначе main; не ^[A-Z]{2}$ или режим не business/gov -> ValueError"
+    - "backend/app/reference/countries_gov.yaml: source_url, source_title, edition, checked_at, verified_against_source=false, unfriendly_430r (52 записи: 27 ЕС, GB + JE/AI/VG/GI, TW, US, JP, KR, UA и др.), gov_excluded [TW]; коды в кавычках"
+    - "Загрузчик lru_cache, путь от Path(__file__); проверяет str, ^[A-Z]{2}$, отсутствие дублей (нестрока вроде NO->False даёт ValueError)"
+    - "tests/test_countries.py: 31 тест"
+  artifacts:
+    - backend/app/countries.py
+    - backend/app/reference/countries_gov.yaml
+    - tests/test_countries.py
+  self_audit: pass
+  checks:
+    - "pytest tests/test_countries.py -q: 31 passed"
+    - "мутация A (сноска проверяется раньше исключения): 1 failed, 30 passed (test_gov_mode_taiwan_is_excluded_though_listed_in_430r)"
+    - "мутация B (режим gov -> всегда main): 7 failed, 24 passed"
+    - "pytest -q (полный): 1 failed, 1256 passed; единственный красный tests/test_env_isolation.py::test_db_engine_uses_in_memory_sqlite - assert ':memory:' in 'sqlite+aiosqlite:///%3Amemory%3A', файлы не мои, на Э6-3 не завязан"
+    - "ruff check .: All checks passed!; ruff format --check .: 208 files already formatted"
+    - "Grep \"TW\"|'TW' в backend/app: только reference/countries_gov.yaml (строки 71, 79); в .py вхождений нет"
+  escalate: "Владельцу в PR: утвердить редакцию 430-р (состав и edition) и source_url"
+  read_first:
+    - backend/app/countries.py
+    - backend/app/reference/countries_gov.yaml
+    - tests/test_countries.py
+  notes:
+    - "РЕДАКЦИЯ НА УТВЕРЖДЕНИЕ ВЛАДЕЛЬЦУ: состав перечня составлен по памяти, без сверки с текстом (сеть не использовалась); verified_against_source: false, edition = 'не подтверждена'; source_url пока общий http://publication.pravo.gov.ru/ - подставить точную ссылку на документ при сверке. Возможные поздние изменения 430-р (добавления/исключения после марта 2022) не учтены."
+    - "Состав: AL AD AU GB JE AI VG GI, 27 стран ЕС, IS CA LI FM MC NZ NO KR SM MK SG US TW UA ME CH JP."
+    - "Критерий 2 плана (rg TW в backend/app - пусто) выполнен по смыслу: Тайвань только в справочнике; буквально rg найдёт 2 строки в countries_gov.yaml."
+    - "Рабочая копия отведена от HEAD 9b9ba30 без PLAN.md этапа 6 (план читал из соседнего worktree jolly-wilbur, только чтение); все файлы задачи новые, конфликтов с Э6-1 нет."
+    - "Режимы - строки 'business'/'gov'; Brief.mode в этой базе в schemas.py ещё не лежит, потребителей задача не подключает."
+    - "git status показывает предупреждения LF->CRLF - окружение Windows, не правка."
