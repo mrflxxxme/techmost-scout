@@ -1,0 +1,27 @@
+Э6-1, цикл починки после ревью цикла 1. Вывод проверок (фактический).
+
+$ python -m pytest tests/test_solution_kind_web.py tests/test_solution_kind.py -v
+25 passed, 1 warning in 3.14s
+  (6 новых тестов tests/test_solution_kind_web.py + 19 прежних test_solution_kind.py)
+
+$ python -m pytest -q --deselect tests/test_docker_compose_backup_runtime.py
+1415 passed, 9 deselected, 1 warning in 344.27s (0:05:44)
+  (база 1409 + 6 новых; 0 failed; 9 deselected — тесты docker_compose_backup_runtime)
+
+$ python -m ruff check .
+All checks passed!
+
+$ python -m ruff format --check .
+223 files already formatted
+
+$ git diff --stat origin/claude/e6-1 -- tests/   (до коммита файл был untracked)
+  tests/test_solution_kind_web.py — новый файл, 162 строки; прежние тесты не тронуты
+
+Мутации (по одной, откат git checkout -- <файл>), pytest tests/test_solution_kind_web.py:
+  М1  routes/intake.py::_confirm_brief — удалена строка fields["solution_kind"] = saved.solution_kind ...
+      -> 1 failed, 5 passed (test_confirm_brief_keeps_solution_kind_of_saved_draft)
+  М2  routes/intake.py::create_request — удалена строка solution_kind=kind в run_intake_stage(...)
+      -> 5 failed, 1 passed (3 параметра test_create_request_passes_..., confirm, deidentification)
+  М3  _deidentification_warning.html — удалено скрытое поле solution_kind
+      -> 1 failed, 5 passed (test_deidentification_warning_carries_hidden_solution_kind_and_resend_keeps_it)
+После отката: git status — только новый файл теста.

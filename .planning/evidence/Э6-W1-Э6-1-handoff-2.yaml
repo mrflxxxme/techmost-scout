@@ -1,0 +1,40 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: Э6-1
+  cycle: 2 (починка после ревью цикла 1, вердикт ВЕРНУТЬ, блокирующая находка 1)
+  did:
+    - "Добавлен tests/test_solution_kind_web.py (162 строки, 6 тестов на TestClient, заглушка app.pipeline.stages.run_intake, сети нет)"
+    - "(а) POST /requests с solution_kind=digital/product/business_model доводит вид до интейка и до briefs.solution_kind; форма без поля = research"
+    - "(б) подтверждение брифа (_confirm_brief) сохраняет digital из черновика: load_brief и briefs.solution_kind после confirm = digital"
+    - "(в) страница предупреждения об обезличивании несёт скрытое поле solution_kind=digital; повторный POST с собранными из HTML скрытыми полями доводит вид до интейка"
+    - "Код продукта не менялся: тесты не вскрыли дефектов. Советы ревью 1-3 не делались (Э6-2а)"
+  artifacts:
+    - tests/test_solution_kind_web.py
+    - .planning/evidence/Э6-1-fix-checks.txt
+    - .planning/evidence/Э6-W1-Э6-1-handoff-2.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_solution_kind_web.py tests/test_solution_kind.py -v: 25 passed"
+    - "pytest -q --deselect tests/test_docker_compose_backup_runtime.py: 1415 passed, 9 deselected, 0 failed (1409 + 6 новых)"
+    - "ruff check .: All checks passed!; ruff format --check .: 223 files already formatted"
+    - "git diff --stat origin/claude/e6-1 -- tests/: только новый файл tests/test_solution_kind_web.py"
+  mutations:
+    - "М1 убрана строка fields[solution_kind] в _confirm_brief: 1 failed (test_confirm_brief_keeps_solution_kind_of_saved_draft)"
+    - "М2 убрано solution_kind=kind в create_request -> run_intake_stage: 5 failed (3 параметра test_create_request_passes_..., confirm, deidentification)"
+    - "М3 убрано скрытое поле в _deidentification_warning.html: 1 failed (test_deidentification_warning_carries_hidden_solution_kind_and_resend_keeps_it)"
+    - "Все три откачены git checkout -- <файл>; git status после — только тест"
+  escalate: none
+  read_first:
+    - tests/test_solution_kind_web.py
+    - .planning/evidence/Э6-1-fix-checks.txt
+    - .planning/evidence/Э6-W1-Э6-1-review.md (находка 1)
+  notes: |
+    Отступление от постановки: рабочая копия e6-1-rev недоступна из-за изоляции
+    агента, работа велена в собственной копии (ветка worktree-agent-a25a1c04a1a1f8246),
+    предварительно git reset --hard origin/claude/e6-1; пуш HEAD:claude/e6-1.
+    Тесты запускались интерпретатором из jolly-wilbur-e2b13b/.venv (editable-установка
+    app указывает туда, но pytest с pythonpath=["backend"] берёт код этой копии:
+    мутации в этой копии роняли тесты, значит, проверялся именно её код).
+    Заглушка run_intake принимает solution_kind с умолчанием research, как настоящая
+    функция, поэтому потеря аргумента на пути видна как research в утверждениях.
