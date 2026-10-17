@@ -174,7 +174,12 @@ async def retry_constraints_if_missing(
             [
                 Message(
                     role="system",
-                    content=render_prompt("intake", RAW_TASK_TEXT=raw_text, INDUSTRY_HINT=industry_hint),
+                    content=render_prompt(
+                        "intake",
+                        RAW_TASK_TEXT=raw_text,
+                        INDUSTRY_HINT=industry_hint,
+                        SOLUTION_KIND=brief.solution_kind,
+                    ),
                 ),
                 Message(role="user", content=CONSTRAINTS_RETRY_MESSAGE),
             ],

@@ -1,0 +1,7 @@
+Прогон объединённой ветки claude/e6-w1 (Э6-1 + Э6-3), Windows, venv jolly-wilbur, app из этой копии
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1447 passed, 9 deselected, 1 warning in 304.27s (0:05:04)
+ruff check: All checks passed!
+ruff format --check: 225 files already formatted

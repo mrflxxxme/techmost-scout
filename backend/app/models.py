@@ -134,6 +134,9 @@ class Brief(Base):
     region_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
     need_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    #: Вид искомого решения (Э6-1, `schemas.SolutionKind`). Nullable по той же
+    #: причине, что и поля выше; `NULL` читается как `research`.
+    solution_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     request: Mapped[Request] = relationship(back_populates="brief")
 

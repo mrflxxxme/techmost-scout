@@ -20,6 +20,14 @@
         Пишите обезличенно: без названия компании и данных под соглашением о конфиденциальности —
         только техническая суть. Текст задачи уходит во внешнюю языковую модель.
       </p>
+      <label for="solution_kind">Что ищем</label>
+      <select id="solution_kind" name="solution_kind">
+        <option value="research" selected>Наука — научные разработки</option>
+        <option value="product">Продукт — готовые продукты</option>
+        <option value="digital">Цифровое решение</option>
+        <option value="business_model">Бизнес-модель</option>
+        <option value="unknown">Определить по описанию</option>
+      </select>
       <div class="mt-lg">
         <button class="btn" type="submit">
           Начать подбор <span class="dot">→</span>

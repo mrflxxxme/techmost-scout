@@ -1,0 +1,52 @@
+handoff:
+  from: implementer-Э6-1
+  to: reviewer
+  task: Э6-1
+  base: claude/e6-w1 (b65bbb4)
+  branch: claude/e6-1
+  did:
+    - "schemas.py: SolutionKind, MARKET_KINDS, COUNTRY_CODE_PATTERN, Brief.solution_kind (exclude=True), SourceType.ANALOG, Candidate.country, AnalogCard, Report.analog_cards; IntakeResult снимает solution_kind вне перечня (unknown от модели не валит разбор)"
+    - "pipeline/intake.py: resolve_solution_kind, run_intake/refine_brief(solution_kind=), метка SOLUTION_KIND; intake_flow и constraints_guard заполняют метку (guard берёт brief.solution_kind)"
+    - "models.Brief.solution_kind + ADDED_COLUMNS (догон nullable-колонки); brief_store сохраняет/читает, NULL = research; brief_from_form принимает поле"
+    - "web: форма новой задачи (select, умолчание Наука), routes/intake.py передаёт вид в интейк и сохраняет при подтверждении брифа"
+    - "prompts/intake.md 1.4 + запись CHANGELOG; EXPECTED_PLACEHOLDERS['intake'] расширен"
+  artifacts:
+    - backend/app/schemas.py
+    - backend/app/pipeline/intake.py
+    - backend/app/pipeline/intake_flow.py
+    - backend/app/pipeline/constraints_guard.py
+    - backend/app/models.py
+    - backend/app/db.py
+    - backend/app/web/brief_store.py
+    - backend/app/web/routes/intake.py
+    - backend/app/web/templates/index.html
+    - prompts/intake.md
+    - prompts/CHANGELOG.md
+    - tests/test_prompts.py
+    - tests/test_solution_kind.py
+    - tests/test_schemas_e6.py
+  self_audit: pass
+  checks:
+    - "pytest -q (весь набор): 6 failed, 1412 passed — 6 failed это tests/test_docker_compose_backup_runtime.py (Windows, известная база)"
+    - "pytest tests/test_solution_kind.py tests/test_schemas_e6.py tests/test_prompts.py: 91 passed"
+    - "мутация resolve_solution_kind «всегда значение модели»: tests/test_solution_kind.py — 8 failed, 11 passed; возвращено git checkout"
+    - "ruff check .: All checks passed!; ruff format --check .: 222 files already formatted"
+    - "rg solution_kind prompts/{planner,card_author,verifier,summary}.md: пусто"
+    - "git diff --stat b65bbb4 HEAD -- tests/: test_prompts.py (1 строка) + два новых файла"
+    - "прямого httpx в новом коде нет"
+  escalate: none
+  read_first:
+    - backend/app/pipeline/intake.py (resolve_solution_kind)
+    - backend/app/web/routes/intake.py (_SOLUTION_KIND_CHOICES, create_request, _confirm_brief)
+    - prompts/intake.md (правило 13, раздел «Вход»)
+  texts_for_owner_approval:
+    - "Подпись поля на форме: «Что ищем»"
+    - "Варианты: «Наука — научные разработки», «Продукт — готовые продукты», «Цифровое решение», «Бизнес-модель», «Определить по описанию»"
+    - "Правило 13 и блок «Вид решения» в prompts/intake.md; запись CHANGELOG 1.4"
+  notes:
+    - "Отступление от списка файлов: правлен backend/app/web/templates/_deidentification_warning.html (+1 скрытое поле solution_kind). Без него выбор вида терялся бы при повторной отправке после предупреждения об обезличивании. Если нужен откат — выбор сбрасывается в «Наука»."
+    - "run_intake_stage/refine_brief_stage передают solution_kind в run_intake/refine_brief только если он не research (_kind_kwargs): заменители run_intake в прежних тестах (tests/test_cli_run.py) не знают аргумента, правка прежних тестов запрещена правилом 4. Поведение то же: умолчание вызываемой функции research."
+    - "Запасной бриф (отказ интейка) получает вид: выбор человека, при unknown — product (модели нет, research не назначается)."
+    - "pipeline/persistence_write.py (не в списке задачи) пишет строку briefs при прогоне и solution_kind не трогает: на update значение остаётся из save_brief, на insert без веб-пути будет NULL = research. Для Э6-2а, когда вид понадобится в прогоне из CLI, поле нужно добавить туда."
+    - "Известная база Windows: 6 тестов test_docker_compose_backup_runtime.py падают, к задаче не относятся."
+    - "Кроме '_kind_kwargs' поведения аналогов задача не вводит: AnalogCard и ANALOG — только контракт."
