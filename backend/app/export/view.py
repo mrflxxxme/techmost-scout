@@ -40,6 +40,10 @@ from app.schemas import Verdict as VerdictDecision
 from app.summary_overrides import SummaryOverrideData, apply_summary_override
 from app.verdicts import CardKey, effective_verdicts, hidden_reason, visible_position_count, visible_report
 
+#: Статусы, в которых пометка «черновик» снята вердиктом эксперта (РЕШ-199).
+#: Одна точка правды для `ExportView.is_draft` и статуса запроса в `/api/v1`.
+VALIDATED_STATUSES = frozenset({RequestStatus.VALIDATED, RequestStatus.EXPORTED})
+
 
 @dataclass
 class ExportView:
@@ -196,7 +200,7 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
         report=visible,
         client_report=client_visible,
         card_ids=card_ids,
-        is_draft=request_row.status not in (RequestStatus.VALIDATED, RequestStatus.EXPORTED),
+        is_draft=request_row.status not in VALIDATED_STATUSES,
         reviewer_name=latest.reviewer_name if latest is not None else "",
         validated_at=latest.created_at if latest is not None else None,
         rework_keys=rework_keys,

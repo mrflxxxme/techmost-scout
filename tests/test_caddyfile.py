@@ -70,6 +70,22 @@ def test_reverse_proxy_и_basic_auth_настроены() -> None:
     assert "basic_auth" in text, "нет блока basic_auth — второй рубеж пароля отсутствует"
 
 
+def test_basic_auth_пропускает_только_api_v1() -> None:
+    """РЕШ-250: `/api/v1/*` защищён ключом приложения и идёт мимо пароля
+    прокси; всё остальное — по-прежнему под `basic_auth`. Пароль навешен через
+    именованный матчер, исключающий ровно `/api/v1/*`: голый `basic_auth {`
+    без матчера закрыл бы API, а матчер шире (`/api*`) открыл бы схему API
+    `/api/docs` и всё, что когда-нибудь ляжет рядом."""
+    text = _read_caddyfile()
+    matcher = re.search(r"^\s*@(\w+)\s+not\s+path\s+(\S+)\s*$", text, re.MULTILINE)
+    assert matcher is not None, "нет матчера `@имя not path …` для basic_auth"
+    assert matcher.group(2) == "/api/v1/*", f"матчер исключает {matcher.group(2)!r}, а не ровно /api/v1/*"
+    assert re.search(rf"^\s*basic_auth\s+@{matcher.group(1)}\s*\{{", text, re.MULTILINE), (
+        "basic_auth не привязан к матчеру — либо закрыт API, либо пароль снят со всего сайта"
+    )
+    assert len(re.findall(r"^\s*basic_auth\b", text, re.MULTILINE)) == 1, "basic_auth должен быть ровно один"
+
+
 def test_пять_заголовков_безопасности() -> None:
     """В блоке `header` должны присутствовать все пять заголовков защиты."""
     text = _read_caddyfile()

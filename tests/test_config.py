@@ -83,11 +83,27 @@ def test_в_примере_окружения_нет_следов_двойног
     assert found == [], f"следы повторного кодирования: {found}"
 
 
+#: Переменные JSON-API (РЕШ-250), которые владелец дописывает в `.env.example`
+#: сам: шаблон окружения правит только он. Описаны в `docs/deploy.md` §3.
+#: Список закрытый: как только имя появится в примере, тест ниже потребует
+#: убрать его отсюда, — исключение не переживёт правку владельца молча.
+_AWAITING_OWNER_IN_EXAMPLE = frozenset(
+    {"SCOUT_API_KEYS", "API_RATE_LIMIT_RUNS_PER_HOUR", "API_RATE_LIMIT_READS_PER_MINUTE"}
+)
+
+
 def test_каждая_переменная_settings_объявлена_в_примере():
     """Настройка, которой нет в примере, до `.env` владельца не доедет."""
-    missing = sorted(_settings_names() - _example_names())
+    missing = sorted(_settings_names() - _example_names() - _AWAITING_OWNER_IN_EXAMPLE)
 
     assert missing == [], f"нет в .env.example: {missing}"
+
+
+def test_исключения_ждущие_владельца_ещё_не_в_примере_и_есть_в_settings():
+    """Исключение выше — только для настоящих имён `Settings`, ещё не внесённых в пример."""
+    assert _settings_names() >= _AWAITING_OWNER_IN_EXAMPLE
+    already_there = sorted(_AWAITING_OWNER_IN_EXAMPLE & _example_names())
+    assert already_there == [], f"уже в .env.example, уберите из _AWAITING_OWNER_IN_EXAMPLE: {already_there}"
 
 
 def test_в_примере_нет_переменных_которых_settings_не_читает():

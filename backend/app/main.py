@@ -115,6 +115,13 @@ def build_app(app_env: str) -> FastAPI:
     # Один общий вход на всех маршрутах, кроме /health (РЕШ-16): защита живёт в
     # приложении, пароль на Caddy при деплое — второй рубеж, а не единственный.
     app.include_router(web_router, dependencies=[Depends(require_auth)])
+
+    # JSON-API экосистемы (РЕШ-250) — не под общим паролем интерфейса, а под
+    # ключом приложения: зависимость `require_api_client` стоит на самих
+    # маршрутах роутера. В `web_router` он не входит намеренно.
+    from app.web.routes.api_v1 import router as api_v1_router
+
+    app.include_router(api_v1_router)
     return app
 
 

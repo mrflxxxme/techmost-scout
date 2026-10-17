@@ -149,6 +149,9 @@ async def save_brief(session: AsyncSession, request_id: int, brief: Brief, *, co
     row.timeline_hint = brief.timeline_hint
     row.keywords_ru = list(brief.keywords_ru)
     row.keywords_en = list(brief.keywords_en)
+    row.region_code = brief.region_code
+    row.need_id = brief.need_id
+    row.mode = brief.mode
     if confirmed:
         row.confirmed_at = utcnow()
 
@@ -178,4 +181,9 @@ async def load_brief(session: AsyncSession, request_id: int) -> Brief | None:
         timeline_hint=row.timeline_hint,
         keywords_ru=list(row.keywords_ru),
         keywords_en=list(row.keywords_en),
+        region_code=row.region_code,
+        need_id=row.need_id,
+        # Строки, записанные до РЕШ-250, колонки не заполняли: `NULL` — это
+        # умолчание контракта `LaunchContext`, режим business.
+        mode=row.mode or "business",
     )
