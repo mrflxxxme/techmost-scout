@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, get_args
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Brief as BriefRow
 from app.models import utcnow
 from app.pipeline.stages import neutralize_placeholders
-from app.schemas import Brief, MaturityStage, OwnerAnswer
+from app.schemas import Brief, MaturityStage, OwnerAnswer, SolutionKind
 
 
 def _clean(text: str) -> str:
@@ -103,7 +103,12 @@ def brief_from_form(fields: Mapping[str, Any]) -> Brief:
     geography_raw = fields.get("geography")
     geography = _clean(str(geography_raw)) if geography_raw else "РФ"
 
+    # Вид решения: значение не из перечня читается как «Наука» (поля нет на старых формах).
+    solution_kind_raw = fields.get("solution_kind")
+    solution_kind = solution_kind_raw if solution_kind_raw in get_args(SolutionKind) else "research"
+
     return Brief(
+        solution_kind=solution_kind,
         industry=_clean(str(fields.get("industry", ""))),
         task_summary=_clean(str(fields.get("task_summary", ""))),
         constraints=constraints,
@@ -152,6 +157,7 @@ async def save_brief(session: AsyncSession, request_id: int, brief: Brief, *, co
     row.region_code = brief.region_code
     row.need_id = brief.need_id
     row.mode = brief.mode
+    row.solution_kind = brief.solution_kind
     if confirmed:
         row.confirmed_at = utcnow()
 
@@ -186,4 +192,6 @@ async def load_brief(session: AsyncSession, request_id: int) -> Brief | None:
         # Строки, записанные до РЕШ-250, колонки не заполняли: `NULL` — это
         # умолчание контракта `LaunchContext`, режим business.
         mode=row.mode or "business",
+        # `NULL` — строка записана до Э6-1: вид решения тогда не выбирался, это «Наука».
+        solution_kind=row.solution_kind or "research",
     )

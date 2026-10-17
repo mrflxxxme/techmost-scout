@@ -1,0 +1,29 @@
+handoff:
+  from: implementer
+  to: verifier
+  task: Э6-1
+  did:
+    - "Узкая правка по РЕШ-270 (находка 1 ревью цикла 2, мутация М4): один тест в tests/test_solution_kind_web.py"
+    - "test_answers_step_passes_solution_kind_to_refine_brief_and_keeps_it: POST /requests с solution_kind=digital, заглушка интейка возвращает вопрос, POST /brief с ответом без confirm; заглушка refine_brief (solution_kind='research' по умолчанию, как настоящая) получила digital, load_brief после шага даёт digital"
+    - "Номер запроса в новом тесте берётся из hx-post=\"/requests/N/brief\" (совет 2 ревью); прежние тесты файла и _request_id не тронуты"
+    - "Код продукта не менялся"
+  artifacts:
+    - tests/test_solution_kind_web.py
+  self_audit: pass
+  checks:
+    - "pytest tests/test_solution_kind_web.py -v: 7 passed (было 6)"
+    - "Мутация М4 (sed-удалена строка `solution_kind=draft.solution_kind,` в backend/app/web/routes/intake.py::_draft_brief_from_answers): 1 failed, 6 passed; упал test_answers_step_passes_solution_kind_to_refine_brief_and_keeps_it (AssertionError: assert ['research'] == ['digital']). Откат `git checkout -- backend/app/web/routes/intake.py`, git status чистый по коду продукта"
+    - "pytest -q --deselect tests/test_docker_compose_backup_runtime.py: 1416 passed, 9 deselected, 0 failed (было 1415)"
+    - "ruff check .: All checks passed!; ruff format --check .: 223 files already formatted"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э6-W1-Э6-1-review-2.md (находка 1)
+    - tests/test_solution_kind_web.py (тест (г) в конце файла)
+    - backend/app/web/routes/intake.py (_draft_brief_from_answers)
+  notes: |
+    Ловушка окружения: venv jolly-wilbur-e2b13b установлен в режиме editable на СВОЙ backend,
+    поэтому без PYTHONPATH тесты в этой копии импортируют app из чужого дерева (мутация там
+    не видна). Все итоговые прогоны (включая мутацию М4 и полный pytest) сделаны с
+    PYTHONPATH=<эта копия>/backend, проверено `import app` -> путь этой копии.
+    Верификатору: при проверке М4 в другой копии проверить app.__file__ тем же способом.
+    Тестовый файл вырос на ~33 строки, страж tests/test_tests_layout.py зелёный (в полном прогоне).

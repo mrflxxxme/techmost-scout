@@ -55,7 +55,7 @@ from __future__ import annotations
 
 import html
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, get_args
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
@@ -68,12 +68,13 @@ from app.export.markdown import CONSTRAINTS_UNRESOLVED_NOTICE, MATURITY_RU
 from app.llm import CostLimitExceededError, LLMRouter
 from app.models import Request as RequestRow
 from app.models import RequestStatus
+from app.pipeline.intake import SOLUTION_KIND_UNKNOWN
 from app.pipeline.intake_flow import (
     refine_brief_stage,
     resolve_constraints_stage,
     run_intake_stage,
 )
-from app.schemas import Brief, IntakeResult, MaturityStage
+from app.schemas import Brief, IntakeResult, MaturityStage, SolutionKind
 from app.web.brief_store import brief_from_form, load_brief, save_brief
 
 if TYPE_CHECKING:  # только для аннотаций, см. докстроку app.pipeline.intake_flow
@@ -114,6 +115,11 @@ TRL_INVALID_NOTICE = "Целевой TRL указан некорректно (о
 #: не новая формулировка). `UNKNOWN` не предлагается: просить «неизвестную»
 #: зрелость как целевую бессмысленно — это машинный признак отсутствия данных.
 _MATURITY_OPTIONS = [(stage.value, MATURITY_RU[stage]) for stage in MaturityStage if stage != MaturityStage.UNKNOWN]
+
+
+#: Допустимые значения поля «Вид решения» на форме новой задачи (Э6-1); `unknown` —
+#: «определить по описанию». Любое иное значение читается как `research`.
+_SOLUTION_KIND_CHOICES = (*get_args(SolutionKind), SOLUTION_KIND_UNKNOWN)
 
 
 def _templates(request: Request):
@@ -183,6 +189,7 @@ async def create_request(
     request: Request,
     raw_text: str = Form(...),
     accept_risks: str | None = Form(None),
+    solution_kind: str = Form("research"),
     session: AsyncSession = Depends(get_session),
 ):
     """Создать запрос и провести разбор текста интейком.
@@ -199,6 +206,7 @@ async def create_request(
     Исчерпание стоп-крана — красная плашка, запрос помечен `failed`.
     """
     text = raw_text.strip()
+    kind = solution_kind if solution_kind in _SOLUTION_KIND_CHOICES else "research"
     risks = find_deidentification_risks(text)
     if risks and not accept_risks:
         # Регулярка бесплатна — риск проверяется раньше первого платного
@@ -208,7 +216,7 @@ async def create_request(
         return _templates(request).TemplateResponse(
             request=request,
             name="_deidentification_warning.html",
-            context={"raw_text": text, "warning": warning},
+            context={"raw_text": text, "warning": warning, "solution_kind": kind},
         )
 
     row = RequestRow(raw_text=text, status=RequestStatus.INTAKE)
@@ -220,7 +228,12 @@ async def create_request(
 
     try:
         outcome = await run_intake_stage(
-            llm_router, text, industry_hint=_INDUSTRY_HINT_DEFAULT, session_factory=None, stage_log=stage_log
+            llm_router,
+            text,
+            industry_hint=_INDUSTRY_HINT_DEFAULT,
+            session_factory=None,
+            stage_log=stage_log,
+            solution_kind=kind,
         )
     except CostLimitExceededError as exc:
         return await _fail_with_cost_limit(session, row, llm_router, exc)
@@ -294,6 +307,7 @@ async def _draft_brief_from_answers(request: Request, session: AsyncSession, row
                 industry_hint=_INDUSTRY_HINT_DEFAULT,
                 session_factory=None,
                 stage_log=stage_log,
+                solution_kind=draft.solution_kind,
             )
             brief = outcome.brief
             caveats.extend(outcome.caveats)
@@ -373,6 +387,10 @@ async def _confirm_brief(request: Request, session: AsyncSession, row: RequestRo
     }
     if target_trl is not None:
         fields["target_trl"] = target_trl
+
+    # Вид решения на форме подтверждения не правится: берётся из сохранённого черновика.
+    saved = await load_brief(session, row.id)
+    fields["solution_kind"] = saved.solution_kind if saved is not None else "research"
 
     brief = brief_from_form(fields)
     row.status = RequestStatus.BRIEFING

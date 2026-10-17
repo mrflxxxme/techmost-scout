@@ -144,6 +144,15 @@ async def _persist_intake_stop(
     )
 
 
+def _kind_kwargs(solution_kind: str) -> dict[str, str]:
+    """Именованный аргумент вида решения для `run_intake`/`refine_brief`.
+
+    Для «Науки» не передаётся совсем: умолчание вызываемой функции то же самое,
+    а заменители `run_intake` в прежних тестах и скриптах про аргумент не знают.
+    """
+    return {} if solution_kind == "research" else {"solution_kind": solution_kind}
+
+
 @dataclass(slots=True)
 class IntakeStageOutcome:
     """Итог стадии разбора текста задачи (`run_intake`).
@@ -168,6 +177,7 @@ async def run_intake_stage(
     industry_hint: str,
     session_factory: SessionFactory | None,
     stage_log: list[StageRecord],
+    solution_kind: str = "research",
 ) -> IntakeStageOutcome:
     """Разобрать текст задачи через `run_intake` с запасным брифом на отказе.
 
@@ -179,12 +189,13 @@ async def run_intake_stage(
     стоимости (РЕШ-45) — исключение: команда «стоп тратить», не отказ модели,
     и она пробрасывается наружу как есть.
     """
+    from app.pipeline.intake import resolve_solution_kind
     from app.pipeline.stages import brief_from_raw_text, run_intake
 
     started = datetime.now(UTC)
     cost_before = dict(router.cost.by_provider)
     try:
-        intake = await run_intake(router, task, industry_hint=industry_hint)
+        intake = await run_intake(router, task, industry_hint=industry_hint, **_kind_kwargs(solution_kind))
     except CostLimitExceededError as exc:
         await _persist_intake_stop(
             session_factory,
@@ -205,7 +216,10 @@ async def run_intake_stage(
         )
         return IntakeStageOutcome(
             intake=None,
-            brief=brief_from_raw_text(task, industry_hint=industry_hint),
+            # Запасной бриф ответа модели не имеет: при `unknown` вид решения — `product`.
+            brief=brief_from_raw_text(task, industry_hint=industry_hint).model_copy(
+                update={"solution_kind": resolve_solution_kind(solution_kind, "research")}
+            ),
             caveats=[INTAKE_FALLBACK_CAVEAT],
             warning=warning,
         )
@@ -234,6 +248,7 @@ async def refine_brief_stage(
     industry_hint: str,
     session_factory: SessionFactory | None,
     stage_log: list[StageRecord],
+    solution_kind: str = "research",
 ) -> RefineStageOutcome:
     """Свести ответы владельца в постановку одним вызовом `refine_brief`.
 
@@ -249,7 +264,7 @@ async def refine_brief_stage(
     started = datetime.now(UTC)
     cost_before = dict(router.cost.by_provider)
     try:
-        brief = await refine_brief(router, task, answers, industry_hint=industry_hint)
+        brief = await refine_brief(router, task, answers, industry_hint=industry_hint, **_kind_kwargs(solution_kind))
     except CostLimitExceededError as exc:
         await _persist_intake_stop(
             session_factory,
