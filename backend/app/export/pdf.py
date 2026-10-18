@@ -24,6 +24,7 @@ from typing import Protocol
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from app.export.analogs import ANALOG_FOOTNOTES_TITLE, ANALOG_SECTION_TITLE
 from app.export.markdown import (
     COMPARISON_HEADERS_RU,
     COMPARISON_TABLE_HIDDEN_NOTICE,
@@ -134,6 +135,9 @@ def render_print_html(view: ExportView) -> str:
         maturity_ru=MATURITY_RU,
         confidence_ru=CONFIDENCE_RU,
         contest_heading=CONTEST_SECTION_HEADING.removeprefix("## "),
+        analog_sections=view.analog_sections,
+        analog_title=ANALOG_SECTION_TITLE,
+        analog_footnotes_title=ANALOG_FOOTNOTES_TITLE,
         recommendation_printable=recommendation_ok,
         recommendation_notice=recommendation_notice,
         comparison_table_hidden=view.comparison_table_hidden,

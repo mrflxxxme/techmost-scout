@@ -21,9 +21,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.export.analogs import analog_payload
 from app.export.markdown import (
     COMPARISON_TABLE_HIDDEN_NOTICE,
     SUMMARY_NOT_PRINTABLE_NO_TABLE_NOTICE,
@@ -31,7 +31,6 @@ from app.export.markdown import (
     limitations_lines,
 )
 from app.export.view import ExportView, build_export_view, caveats_printable, recommendation_printable
-from app.models import Brief as BriefRow
 from app.schemas import ECOSYSTEM_BRIEF_FIELDS, Brief, SolutionCard
 from app.verdicts import signature_line
 
@@ -63,13 +62,13 @@ def _card_payload(card: SolutionCard) -> dict[str, Any]:
     return card.model_dump(mode="json", exclude=set(_CARD_INTERNAL_FIELDS))
 
 
-def build_report_payload(view: ExportView, *, brief: Brief | None = None) -> dict[str, Any]:
+def build_report_payload(view: ExportView) -> dict[str, Any]:
     """Собрать словарь JSON-выгрузки из `ExportView` — тот же клиентский вид, что печать.
 
-    `brief` — бриф из строки `briefs` с полями экосистемы: в `report_json`
-    они не сохраняются (исключены из сериализации `Brief`), поэтому
-    вызывающий передаёт их отдельно. Без него поля экосистемы берутся из
-    `view.client_report.brief`, то есть умолчания.
+    Поля экосистемы брифа (регион, потребность, режим) уже наложены на
+    `view.client_report.brief` в `build_export_view` — своего пути к строке
+    `briefs` этот модуль не ведёт. Секция `analog_cards` — из
+    `view.analog_sections`: `{main: [...], footnotes: [{title, country, url}]}`.
 
     `ReportNotValidatedError` — отчёт ещё черновик: выгрузки нет ни в каком
     режиме (РЕШ-199, РЕШ-250).
@@ -82,10 +81,6 @@ def build_report_payload(view: ExportView, *, brief: Brief | None = None) -> dic
     recommendation_ok = recommendation_printable(view, printed_total)
     caveats_ok = caveats_printable(view, printed_total)
     table_printed = bool(report.summary.comparison_rows)
-
-    report_brief = report.brief
-    if brief is not None:
-        report_brief = report_brief.model_copy(update={name: getattr(brief, name) for name in ECOSYSTEM_BRIEF_FIELDS})
 
     recommendation_notice = None
     if not recommendation_ok:
@@ -101,9 +96,10 @@ def build_report_payload(view: ExportView, *, brief: Brief | None = None) -> dic
             "validated_at": view.validated_at.isoformat() if view.validated_at is not None else None,
             "signature": signature_line(view.reviewer_name, view.validated_at) if view.validated_at else None,
         },
-        "brief": brief_payload(report_brief),
+        "brief": brief_payload(report.brief),
         "cards": [_card_payload(card) for card in report.cards],
         "contest_cards": [_card_payload(card) for card in report.contest_cards],
+        "analog_cards": analog_payload(view.analog_sections),
         "summary": {
             "recommendation": report.summary.recommendation if recommendation_ok else None,
             "recommendation_notice": recommendation_notice,
@@ -127,10 +123,4 @@ async def export_report_json(session: AsyncSession, request_id: int) -> dict[str
     view = await build_export_view(session, request_id)
     if view.is_draft:
         raise ReportNotValidatedError(f"отчёт запроса №{request_id} ещё не проверен экспертом")
-    row = (await session.execute(select(BriefRow).where(BriefRow.request_id == request_id))).scalars().one_or_none()
-    brief = None
-    if row is not None:
-        brief = view.client_report.brief.model_copy(
-            update={"region_code": row.region_code, "need_id": row.need_id, "mode": row.mode or "business"}
-        )
-    return build_report_payload(view, brief=brief)
+    return build_report_payload(view)
