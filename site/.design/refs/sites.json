@@ -1,0 +1,20 @@
+[
+ {"key":"hadrian","name":"Hadrian","role":"Точное производство деталей. Промышленный бренд, собранный как продукт","url":"https://www.hadrian.co/"},
+ {"key":"anduril","name":"Anduril","role":"Оборонный хардвер. Эталон «серьёзно и современно» без канцелярщины","url":"https://www.anduril.com/"},
+ {"key":"boom","name":"Boom Superfactory","role":"Цех и свет. Вы сами отобрали этот кадр в прошлом прогоне","url":"https://boomsupersonic.com/superfactory"},
+ {"key":"helion","name":"Helion Energy","role":"Термояд. Наука, поданная бизнесу","url":"https://www.helionenergy.com/"},
+ {"key":"cfs","name":"Commonwealth Fusion","role":"Термояд, институциональный регистр","url":"https://cfs.energy/"},
+ {"key":"varda","name":"Varda Space","role":"Производство в космосе. Тёмная оптика, крупный набор","url":"https://www.varda.com/"},
+ {"key":"impulse","name":"Impulse Space","role":"Космический хардвер","url":"https://www.impulsespace.com/"},
+ {"key":"applied","name":"Applied Intuition","role":"Софт для промышленности. Корпоративный, но не мёртвый","url":"https://www.appliedintuition.com/"},
+ {"key":"terraform","name":"Terraform Industries","role":"Химия и энергия. Минимум средств, максимум характера","url":"https://terraformindustries.com/"},
+ {"key":"radiant","name":"Radiant Nuclear","role":"Атом. Тёплая палитра в технологичной теме","url":"https://www.radiantnuclear.com/"},
+ {"key":"machina","name":"Machina Labs","role":"Роботизированное производство","url":"https://www.machinalabs.ai/"},
+ {"key":"formlabs","name":"Formlabs","role":"Оборудование. Как показывают продукт и данные","url":"https://formlabs.com/"},
+ {"key":"dsv","name":"Deep Science Ventures","role":"Прямой аналог модели: наука в компании. Смотреть в первую очередь","url":"https://www.deepscienceventures.com/"},
+ {"key":"cambridge","name":"Cambridge Consultants","role":"Прямой конкурент категории: научно-технический консалтинг","url":"https://www.cambridgeconsultants.com/"},
+ {"key":"sciencegroup","name":"Science Group","role":"Публичный научно-технический консалтинг","url":"https://www.sciencegroup.com/"},
+ {"key":"ef","name":"Entrepreneur First","role":"Тalent-to-company. Смелый бренд в институциональной теме","url":"https://www.joinef.com/"},
+ {"key":"embacy","name":"Embacy","role":"Кириллица уровня tier-1: как набирают русский","url":"https://embacy.io/"},
+ {"key":"typetoday","name":"type.today","role":"Кириллическая словолитня. Что сейчас есть и как это выглядит","url":"https://type.today/ru"}
+]

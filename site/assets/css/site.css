@@ -1,0 +1,491 @@
+/* Направление «Изумруд», редакция «Чернила». Лок — site/.design/DIRECTION-LOCK.md.
+
+   Режиссура — i.moscow: крупные радиусы, стекло, кнопка-пилюля, слова
+   по строкам в дисплее. Палитра и логика чередования — из дек компании.
+
+   Правило света, снятое с дек и подтверждённое владельцем: страница светлая,
+   чернильных островов ровно три — обложка, цикл, контакт. Динамика между ними
+   держится не сменой фона, а **чернильными элементами на светлом**: плашками,
+   рамками, кнопками и числами. Деки устроены так же: светлый слайд с четырьмя
+   светлыми обоймами и одной чернильной плашкой справа.
+
+   Акцент горит только на чернильном: лайм на белом даёт 1,26:1 и текстом там
+   не живёт. На светлых секциях роль «выделено» берёт сам чернильный, а лайм
+   появляется внутри чернильных элементов. */
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:calc(var(--hdr) + 12px)}
+body{margin:0;background:var(--l-bg);color:var(--l-text);
+  font-family:var(--disp);font-weight:400;font-size:var(--t-body);line-height:1.65;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+p{margin:0}
+h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:-.03em;line-height:1.06;
+  text-wrap:balance;color:var(--l-head)}
+h1{font-size:var(--t-hero);letter-spacing:-.042em;line-height:.94}
+h2{font-size:var(--t-display)}
+h3{font-size:var(--t-title);line-height:1.16;letter-spacing:-.02em}
+:focus-visible{outline:2px solid var(--ink-navy);outline-offset:3px;border-radius:var(--r-sm)}
+.wrap{max-width:1320px;margin:0 auto;padding-inline:var(--gut)}
+.num{font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.045em;line-height:.9;
+  display:block;color:var(--l-head)}
+.meas{font-family:var(--mono);font-weight:400;font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--l-dim)}
+.src{font-family:var(--mono);font-weight:400;font-size:10.5px;font-style:normal;
+  letter-spacing:.03em;display:block;color:var(--l-dim)}
+.src a{border-bottom:1px solid var(--l-line)}
+.src a:hover{color:var(--ink-navy);border-color:var(--ink-navy)}
+.kicker{font-family:var(--mono);font-weight:500;font-size:var(--t-label);letter-spacing:.16em;
+  text-transform:uppercase;display:flex;align-items:center;gap:12px;color:var(--l-dim)}
+.kicker::before{content:"";width:22px;height:5px;border-radius:3px;background:var(--ink-navy);flex:0 0 auto}
+
+/* ── кнопка-пилюля. На светлом чернильная с лаймовой надписью,
+      на чернильном — лаймовая с чернильной. Форма одна на всю страницу. ── */
+.pill{position:relative;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;
+  font-weight:500;font-size:15px;line-height:1;padding:16px 28px;border-radius:var(--r-pill);
+  background:var(--ink-bg);color:var(--acc);isolation:isolate;white-space:nowrap;
+  box-shadow:0 1px 0 rgba(255,255,255,.14) inset,0 14px 28px -16px rgba(16,22,58,.8);
+  transition:transform var(--base) var(--ease),box-shadow var(--base) var(--ease),
+             background var(--base) var(--ease)}
+.pill::before{content:"";position:absolute;inset:0;z-index:-1;opacity:0;
+  background:radial-gradient(180px 120px at var(--mx,50%) var(--my,50%),rgba(214,242,75,.3),transparent 70%);
+  transition:opacity var(--base) var(--ease)}
+.pill:hover{transform:translateY(-2px);
+  box-shadow:0 1px 0 rgba(255,255,255,.16) inset,0 22px 38px -18px rgba(16,22,58,.85)}
+.pill:hover::before{opacity:1}
+.pill:active{transform:translateY(0) scale(.985)}
+.pill.big{height:60px;padding-inline:36px;font-size:16px}
+.island .pill{background:var(--acc);color:var(--ink-bg);
+  box-shadow:0 1px 0 rgba(255,255,255,.45) inset,0 14px 28px -16px rgba(120,150,20,.7)}
+.island .pill::before{background:radial-gradient(180px 120px at var(--mx,50%) var(--my,50%),rgba(255,255,255,.55),transparent 70%)}
+.tlink{font-size:15px;position:relative;padding-bottom:5px;color:var(--l-head)}
+.tlink::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;border-radius:2px;
+  background:var(--ink-navy);transform-origin:left;transition:transform var(--base) var(--ease)}
+.tlink:hover::after{transform:scaleX(.4)}
+.island .tlink{color:var(--on-ink)}
+.island .tlink::after{background:var(--acc)}
+
+/* ── шапка: стекло, принимает цвет подложки ── */
+/* Шапка вынута из потока: при прилипшей шапке на самом верху страницы
+   под её стеклом ничего нет, и чернильный остров начинается только под ней —
+   стекло показывало светлый фон и читалось чужой серой планкой. */
+.hdr{position:fixed;left:0;right:0;top:0;z-index:40;display:flex;align-items:center;gap:18px;
+  padding:14px var(--gut);color:var(--l-head);
+  background:rgba(242,245,252,.74);-webkit-backdrop-filter:blur(22px) saturate(1.4);
+  backdrop-filter:blur(22px) saturate(1.4);
+  box-shadow:0 1px 0 rgba(255,255,255,.7) inset;
+  transition:background var(--base) var(--ease),box-shadow var(--base) var(--ease),color var(--base) var(--ease)}
+.hdr.stuck{box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 1px 0 var(--l-line),
+  0 18px 34px -28px rgba(16,22,58,.5)}
+.hdr.on-dark{color:var(--on-ink);background:rgba(16,22,58,.64);
+  box-shadow:0 1px 0 rgba(205,220,249,.14) inset}
+.hdr.on-dark.stuck{background:rgba(16,22,58,.86);
+  box-shadow:0 1px 0 rgba(205,220,249,.14) inset,0 1px 0 var(--ink-line),
+  0 18px 34px -28px rgba(0,0,0,.8)}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .hdr{background:var(--l-bg)}
+  .hdr.on-dark{background:var(--ink-bg)}
+}
+body.sheet-on .hdr{opacity:0;pointer-events:none;transition:opacity var(--fast) var(--ease)}
+.hdr .bd{font-weight:700;font-size:21px;letter-spacing:-.04em;color:inherit}
+.hdr .sp{flex:1}
+.hdr .nav{font:inherit;font-size:14px;color:inherit;background:none;border:0;cursor:pointer;
+  display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--r-sm);
+  transition:background var(--fast) var(--ease)}
+.hdr .nav:hover{background:rgba(27,33,64,.07)}
+.hdr.on-dark .nav:hover{background:rgba(255,255,255,.11)}
+.hdr .nav s{display:block;width:22px;height:8px;text-decoration:none;
+  border-top:1.5px solid var(--ink-navy);border-bottom:1.5px solid var(--ink-navy);
+  transition:transform var(--base) var(--ease)}
+.hdr.on-dark .nav s{border-color:var(--acc)}
+.hdr .nav:hover s{transform:scaleX(.76)}
+.hdr .pill{padding:11px 20px;font-size:14px}
+.hdr.on-dark .pill{background:var(--acc);color:var(--ink-bg)}
+
+/* ══ ЧЕРНИЛЬНЫЙ ОСТРОВ ══
+   Три на страницу: обложка, цикл, контакт. Остров лежит на светлом
+   с полями и радиусом — плита, а не полоса поперёк экрана. */
+.island{position:relative;isolation:isolate;background:var(--ink-bg);color:var(--on-ink-2);
+  border-radius:var(--r-lg);margin-inline:var(--gut);overflow:hidden;overflow:clip;
+  box-shadow:0 1px 0 rgba(205,220,249,.1) inset,0 40px 80px -50px rgba(16,22,58,.7);
+  /* clip, а не только hidden: hidden делает остров контейнером прокрутки,
+     и position:sticky внутри него перестаёт работать — кульминация цикла
+     уезжала вверх, оставляя две трети чернильного блока пустыми. clip режет
+     так же, контейнером прокрутки не становится; hidden оставлен запасным
+     для браузеров, которые clip не знают */}
+.island h1,.island h2,.island h3,.island h4{color:var(--on-ink)}
+.island .kicker{color:var(--on-ink-3)}
+.island .kicker::before{background:var(--acc)}
+.island .num{color:var(--acc)}
+.island .src{color:var(--on-ink-3)}
+.island .src a{border-bottom:1px solid var(--ink-line)}
+.island .src a:hover{color:var(--acc);border-color:var(--acc)}
+.island .meas{color:var(--on-ink-3)}
+/* свет острова: прилипший слой в один экран, вычтенный из потока —
+   на прокрутке он не перерисовывается (слой во всю высоту стоил 16 кадров) */
+.island .field{position:sticky;top:0;z-index:0;height:100svh;margin-bottom:-100svh;
+  pointer-events:none;will-change:transform;
+  background:
+    radial-gradient(58% 52% at 84% 4%,rgba(214,242,75,.13),transparent 66%),
+    radial-gradient(62% 56% at 2% 42%,rgba(30,39,97,.92),transparent 68%),
+    radial-gradient(48% 44% at 74% 96%,rgba(214,242,75,.07),transparent 70%)}
+.island>*{position:relative;z-index:1}
+
+/* ── 1. обложка ── */
+.cover{margin-inline:0;border-radius:0 0 var(--r-lg) var(--r-lg)}
+.cover .inner{min-height:100svh;display:flex;align-items:center;
+  padding-block:clamp(56px,8vw,120px)}
+#spark{position:absolute;inset:0;width:100%;height:100%;z-index:0;display:block;opacity:.85}
+.cover-grid{display:grid;gap:clamp(36px,5vw,72px);grid-template-columns:1fr;align-items:end;width:100%}
+@media(min-width:1000px){.cover-grid{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr)}}
+.cover .kicker{margin-bottom:clamp(20px,2.6vw,34px)}
+.cover h1 span{display:block}
+.cover .lead{margin-top:clamp(24px,2.8vw,38px);max-width:46ch;font-size:var(--t-lead);
+  line-height:1.55;color:var(--on-ink-2)}
+.acts{display:flex;gap:24px;align-items:center;margin-top:clamp(28px,3.2vw,42px);flex-wrap:wrap}
+.proof{border-radius:var(--r-lg);padding:clamp(24px,2.6vw,34px);
+  background:linear-gradient(150deg,rgba(205,220,249,.13),rgba(205,220,249,.05) 60%,rgba(205,220,249,.09));
+  box-shadow:0 0 0 1px var(--ink-line),0 1px 0 rgba(205,220,249,.18) inset,
+             0 40px 70px -44px rgba(0,0,0,.9)}
+.proof .num{font-size:clamp(46px,5vw,72px)}
+.proof p{margin-top:16px;font-size:15px;line-height:1.5;color:var(--on-ink-2);max-width:32ch}
+.proof .src{margin-top:18px}
+
+/* ══ СВЕТЛЫЕ СЕКЦИИ ══ */
+.sec{padding-block:var(--sec);scroll-margin-top:var(--hdr)}
+/* два поля подряд складываются в двойное: между светлыми соседями верхнее
+   ужимается, полное поле остаётся только на стыке с чернильным островом */
+.sec + .sec{padding-top:calc(var(--sec) * .55)}
+.island{scroll-margin-top:var(--hdr)}
+.sec h2{max-width:15ch}
+
+/* чернильная плашка на светлом — то, чем держится динамика */
+.chip{background:var(--ink-bg);color:var(--on-ink-2);border-radius:var(--r-lg);
+  box-shadow:0 1px 0 rgba(205,220,249,.1) inset,0 30px 60px -40px rgba(16,22,58,.55)}
+.chip h3,.chip h4{color:var(--on-ink)}
+.chip .num{color:var(--acc)}
+.chip .meas,.chip .src{color:var(--on-ink-3)}
+.chip .src a{border-bottom:1px solid var(--ink-line)}
+.chip .src a:hover{color:var(--acc);border-color:var(--acc)}
+
+/* светлая обойма дек: белое ядро в светлой рамке, без коробки в коробке */
+.bezel{background:var(--l-plate);border-radius:var(--r-md);
+  box-shadow:0 0 0 1px var(--l-line),0 0 0 5px var(--l-bg),0 0 0 6px var(--l-hair)}
+
+/* ── 2. разрыв: плитки разного веса, одна чернильная ── */
+.tiles{display:grid;gap:var(--col);grid-template-columns:1fr;margin:clamp(24px,2.6vw,36px) 0 0;padding:0}
+@media(min-width:760px){.tiles{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:1080px){.tiles{grid-template-columns:repeat(4,1fr)}
+  .tiles .t-wide{grid-column:span 2}}
+.tile{list-style:none;position:relative;overflow:hidden;border-radius:var(--r-lg);
+  padding:clamp(26px,2.4vw,34px);display:grid;gap:12px;align-content:start;
+  background:var(--l-plate);box-shadow:0 0 0 1px var(--l-line);
+  transition:box-shadow var(--base) var(--ease),transform var(--base) var(--ease)}
+.tile:hover{transform:translateY(-2px);box-shadow:0 0 0 1px var(--l-line),0 26px 48px -32px rgba(16,22,58,.4)}
+.tile .num{font-size:clamp(38px,3.4vw,54px)}
+.tile.t-wide .num{font-size:clamp(56px,6.6vw,104px)}
+.tile h3{font-size:17px;line-height:1.3;letter-spacing:-.015em}
+.tile.t-wide h3{font-size:clamp(20px,1.9vw,26px)}
+.tile p{font-size:14px;line-height:1.55;color:var(--l-text)}
+.tile .src{margin-top:4px}
+/* фон объявляется здесь заново: .tile идёт в файле позже .chip и при равной
+   специфичности перебивал его — лаймовое число оказывалось на белом, 1,26:1 */
+.tile.chip{background:var(--ink-bg);
+  box-shadow:0 1px 0 rgba(205,220,249,.1) inset,0 30px 60px -40px rgba(16,22,58,.55)}
+.tile.chip p{color:var(--on-ink-3)}
+.tile.chip:hover{box-shadow:0 1px 0 rgba(205,220,249,.15) inset,0 34px 64px -34px rgba(16,22,58,.65)}
+
+/* ── 3. цитата: светлая, знак чернильный ──
+   Стоит внутри «Разрыва», а не отдельной секцией: одна строка на 459 px
+   собственной высоты — это и была половина жалобы на пустоту, а источник
+   у цитаты тот же, что у плитки «200+». */
+.quote{margin-top:clamp(24px,2.6vw,36px);padding-top:clamp(22px,2.4vw,32px);
+  border-top:1px solid var(--l-line)}
+.quote blockquote{margin:0;display:grid;gap:clamp(20px,2.4vw,32px);
+  grid-template-columns:1fr;align-items:start}
+@media(min-width:900px){.quote blockquote{grid-template-columns:auto minmax(0,1fr)}}
+.quote .mark{width:clamp(56px,5vw,76px);height:clamp(56px,5vw,76px);border-radius:var(--r-md);
+  background:var(--ink-bg);color:var(--acc);display:grid;place-items:center;
+  font-size:clamp(34px,3vw,46px);font-weight:700;line-height:1;padding-top:.3em}
+.quote blockquote p{font-weight:700;font-size:clamp(24px,3.6vw,50px);line-height:1.12;
+  letter-spacing:-.032em;max-width:22ch;color:var(--l-head)}
+.quote blockquote footer{margin-top:clamp(18px,2.2vw,28px);font-family:var(--mono);font-size:11px;
+  letter-spacing:.03em;color:var(--l-dim)}
+.quote blockquote footer a{border-bottom:1px solid var(--l-line)}
+.quote blockquote footer a:hover{color:var(--ink-navy);border-color:var(--ink-navy)}
+
+/* ── 4. позиция: лента на одной обойме ── */
+.ribbon{display:grid;grid-template-columns:1fr;gap:0;margin:clamp(22px,2.4vw,34px) 0 0;padding:0;
+  overflow:hidden;border-radius:var(--r-lg);background:var(--l-plate);
+  box-shadow:0 0 0 1px var(--l-line)}
+@media(min-width:1000px){.ribbon{grid-template-columns:1.35fr 1fr 1fr 1.2fr}}
+.ribbon li{list-style:none;display:grid;gap:10px;align-content:start;
+  padding:clamp(28px,2.6vw,38px) clamp(24px,2.2vw,32px);border-top:1px solid var(--l-hair)}
+.ribbon li:first-child{border-top:0}
+@media(min-width:1000px){
+  .ribbon li{border-top:0;border-left:1px solid var(--l-hair)}
+  .ribbon li:first-child{border-left:0}
+  .ribbon li:first-child,.ribbon li:last-child{background:var(--l-bg)}
+}
+.ribbon h3{font-size:19px}
+.ribbon p{font-size:14px;line-height:1.55;color:var(--l-text)}
+
+/* ── 5. цикл: чернильный остров, кульминация ──
+   Было: четыре свёрнутых карточки в ряд и 411 px пустоты под ними на каждом
+   закреплённом кадре — самая большая дыра страницы, и держалась она дольше всех.
+   Стало: слева лента из четырёх шагов со сроками, справа развёрнутый активный шаг.
+   Панели переключаются, а не раскрываются: при скрабе раскрытие двигало бы
+   соседние строки на каждом кадре. */
+.cycle .stage{position:sticky;top:var(--hdr);min-height:calc(100svh - var(--hdr));
+  display:flex;flex-direction:column;justify-content:center;overflow:hidden;
+  padding-block:clamp(30px,3.6vw,54px)}
+.cycle .track{height:260vh}
+.cycle h2{max-width:16ch;margin-top:12px}
+.cyc{display:grid;grid-template-columns:1fr;gap:clamp(18px,2.2vw,32px);
+  margin-top:clamp(22px,2.6vw,38px);align-items:start}
+@media(min-width:1000px){.cyc{grid-template-columns:minmax(0,.86fr) minmax(0,1.14fr)}}
+
+.rail{margin:0;padding:0;list-style:none;display:grid;gap:8px;counter-reset:none}
+.rail li{list-style:none}
+.rail button{font:inherit;text-align:left;color:inherit;border:0;cursor:pointer;width:100%;
+  border-radius:var(--r-md);padding:15px 18px;position:relative;overflow:hidden;
+  display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 14px;align-items:center;
+  opacity:.6;background:transparent;
+  box-shadow:0 0 0 1px var(--ink-line);
+  transition:opacity var(--base) var(--ease),box-shadow var(--base) var(--ease),
+             background var(--base) var(--ease)}
+.rail button:hover{opacity:.85}
+.rail button[aria-selected="true"]{opacity:1;
+  background:linear-gradient(155deg,rgba(205,220,249,.13),rgba(205,220,249,.04));
+  box-shadow:0 0 0 1px var(--acc),0 1px 0 rgba(255,255,255,.16) inset}
+.rail button[aria-selected="true"]::before{content:"";position:absolute;left:0;top:0;bottom:0;
+  width:3px;background:var(--acc)}
+.rail .n{font-family:var(--mono);font-size:11px;color:var(--acc);letter-spacing:.1em;grid-row:span 2}
+.rail .t{font-weight:500;font-size:17px;color:var(--on-ink)}
+.rail .w{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--on-ink-3)}
+
+.pane{border-radius:var(--r-lg);padding:clamp(22px,2.4vw,32px);
+  background:linear-gradient(155deg,rgba(205,220,249,.12),rgba(205,220,249,.04) 62%,rgba(205,220,249,.09));
+  box-shadow:0 0 0 1px var(--ink-line),0 1px 0 rgba(205,220,249,.14) inset}
+.pane h3{margin:10px 0 0;font-size:var(--t-title);color:var(--on-ink);letter-spacing:-.02em}
+.pane .what{margin-top:12px;font-size:var(--t-lead);line-height:1.5;color:var(--on-ink-2);max-width:44ch}
+.pane dl{margin:clamp(16px,1.8vw,24px) 0 0;display:grid;gap:10px;
+  padding-top:clamp(16px,1.8vw,24px);border-top:1px solid var(--ink-line)}
+.pane dl div{display:grid;grid-template-columns:80px minmax(0,1fr);gap:12px;align-items:baseline}
+.pane dt{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--on-ink-3);margin:0}
+.pane dd{margin:0;font-size:14px;line-height:1.5;color:var(--on-ink-2)}
+.pane .out{margin-top:clamp(16px,1.8vw,24px);padding-top:clamp(14px,1.6vw,20px);
+  border-top:1px solid var(--ink-line);font-size:14px;line-height:1.5;color:var(--on-ink)}
+.pane .out .meas{display:block;margin-bottom:4px;color:var(--acc)}
+/* без скрипта видны все четыре панели: прячет их только он */
+.panes{display:grid;gap:12px}
+
+/* ── 6. ценность: четыре светлые обоймы и чернильный счёт справа ──
+   Композиция взята со слайда «Ценность для клиента» один в один. */
+.value-grid{display:grid;gap:clamp(16px,2vw,28px);grid-template-columns:1fr;
+  margin-top:clamp(22px,2.4vw,34px);align-items:start}
+@media(min-width:1040px){.value-grid{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}}
+.tools{display:grid;gap:14px;margin:0;padding:0}
+.tools li{list-style:none;padding:20px 24px;display:grid;gap:6px}
+.tools b{font-weight:700;font-size:16px;color:var(--l-head);letter-spacing:-.015em}
+.tools p{font-size:14px;line-height:1.5;color:var(--l-text)}
+/* источник — содержимое, а не подпись: моноширинный в 10,5 пункта
+   приглушённым цветом замеряется на 4,3:1 и читается хуже расчётных 5,65 */
+.tools .src{margin-top:4px;font-size:11.5px;color:var(--l-text)}
+.deal{padding:clamp(26px,2.6vw,34px)}
+.deal .kicker{color:var(--acc);margin-bottom:20px}
+.deal .kicker::before{background:var(--acc)}
+.deal dl{margin:0;display:grid;gap:11px}
+.deal dl div{display:flex;gap:14px;align-items:baseline;justify-content:space-between;
+  font-size:14.5px;color:var(--on-ink-2)}
+.deal dt{margin:0}
+.deal dd{margin:0;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--on-ink)}
+.deal dl div:first-child dt,.deal dl div:first-child dd{font-weight:500}
+.deal hr{border:0;border-top:1px solid var(--ink-line);margin:20px 0}
+.deal .out{font-size:clamp(30px,3.2vw,44px);font-weight:700;letter-spacing:-.04em;
+  color:var(--acc);line-height:1;font-variant-numeric:tabular-nums;display:block}
+.deal .out+p{margin-top:12px;font-size:13.5px;line-height:1.5;color:var(--on-ink-2);max-width:30ch}
+.deal .note{margin-top:18px;padding-top:16px;border-top:1px solid var(--ink-line);
+  font-size:12px;line-height:1.5;color:var(--on-ink-3)}
+.deal .note a{border-bottom:1px solid var(--ink-line)}
+.deal .note a:hover{color:var(--acc);border-color:var(--acc)}
+
+/* ── 7. скаут ── */
+.scout-grid{display:grid;gap:clamp(30px,4vw,56px);grid-template-columns:1fr;align-items:start}
+@media(min-width:1040px){
+  .scout-grid{grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr)}
+  .scout .card{margin-right:calc(var(--gut) * -1 + 8px);margin-top:clamp(18px,3vw,48px)}
+}
+.scout h2{max-width:15ch;margin-top:14px}
+.scout .intro{margin-top:16px;color:var(--l-dim);font-size:var(--t-lead);max-width:40ch}
+.claims{margin:clamp(28px,3.4vw,44px) 0 0;padding:0;display:grid;gap:24px}
+.claims li{list-style:none;display:grid;gap:6px}
+.claims h3{font-size:17px}
+.claims p{font-size:14px;color:var(--l-dim);max-width:36ch}
+.card{position:relative;border-radius:var(--r-lg);background:var(--l-plate);
+  box-shadow:0 0 0 1px var(--l-line),0 40px 72px -44px rgba(16,22,58,.35)}
+.card .cap{display:flex;align-items:center;gap:10px;padding:18px 26px;border-bottom:1px solid var(--l-hair)}
+.card .cap b{font-weight:700;font-size:14px;letter-spacing:-.02em;color:var(--l-head);margin-right:auto}
+.card .body{padding:26px;display:grid;gap:20px}
+.card h4{font-size:20px;line-height:1.22}
+.card dl{margin:0;display:grid;gap:14px}
+.card dl div{display:grid;grid-template-columns:126px minmax(0,1fr);gap:16px;align-items:baseline}
+.card dt{margin:0}
+.card dd{margin:0;font-size:13.5px;color:var(--l-text)}
+.card .task{padding-bottom:18px;border-bottom:1px solid var(--l-hair);display:grid;gap:8px;font-size:14.5px}
+.card .evid{display:grid;gap:8px;font-size:12.5px;line-height:1.55;color:var(--l-text)}
+.card .evid a{border-bottom:1px solid var(--l-line);width:fit-content;max-width:100%}
+.card .evid a:hover{color:var(--ink-navy);border-color:var(--ink-navy)}
+.card .note{padding-top:16px;border-top:1px solid var(--l-hair);font-size:12px;color:var(--l-dim);
+  line-height:1.55}
+
+/* ── 8. развилка ── */
+.tabs{display:flex;gap:5px;padding:5px;border-radius:var(--r-pill);width:max-content;max-width:100%;
+  flex-wrap:wrap;margin-bottom:clamp(26px,3vw,42px);background:var(--l-plate);
+  box-shadow:0 0 0 1px var(--l-line)}
+.tabs button{font:inherit;font-size:14px;padding:12px 24px;border:0;cursor:pointer;
+  border-radius:var(--r-pill);background:transparent;color:var(--l-dim);
+  transition:background var(--fast) var(--ease),color var(--fast) var(--ease)}
+.tabs button:hover{color:var(--l-head);background:rgba(27,33,64,.05)}
+.tabs button[aria-selected="true"]{background:var(--ink-bg);color:var(--acc);font-weight:500;
+  box-shadow:0 1px 0 rgba(255,255,255,.14) inset,0 10px 20px -14px rgba(16,22,58,.9)}
+.fork{display:grid;gap:clamp(22px,2.8vw,40px) clamp(26px,3.2vw,52px);grid-template-columns:1fr;margin:0;padding:0}
+@media(min-width:820px){.fork{grid-template-columns:1.5fr 1fr 1fr 1fr}}
+.fork li{list-style:none;display:grid;gap:10px;align-content:start}
+.fork li:first-child .num{font-size:clamp(44px,5.4vw,84px)}
+.fork .num{font-size:clamp(32px,3.4vw,50px);line-height:1.02}
+.fork p{font-size:14px;color:var(--l-text);max-width:24ch}
+.fork-cta{margin-top:clamp(22px,2.4vw,34px);display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+
+/* ── 9. команда ── */
+.team{display:grid;grid-template-columns:1fr;overflow:hidden;border-radius:var(--r-lg);
+  background:var(--l-plate);box-shadow:0 0 0 1px var(--l-line);margin-top:clamp(20px,2.2vw,30px)}
+@media(min-width:960px){.team{grid-template-columns:1.5fr 1fr 1fr}}
+.team ul{margin:0;padding:0;display:contents}
+.team li{padding:30px 28px;list-style:none;border-top:1px solid var(--l-hair)}
+.team li:first-child{border-top:0}
+@media(min-width:960px){
+  .team li{border-top:0;border-left:1px solid var(--l-hair)}
+  .team li:first-child{border-left:0}
+}
+.team li.open{background:var(--l-bg)}
+.team h3{font-size:19px;margin-bottom:6px}
+.team .role{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-navy);margin-bottom:16px}
+.team p{font-size:13.5px;color:var(--l-text)}
+.team li:first-child p{font-size:14.5px;max-width:44ch}
+.qa{margin-top:clamp(30px,3.2vw,46px);display:grid;gap:clamp(24px,2.8vw,40px);grid-template-columns:1fr}
+@media(min-width:900px){.qa{grid-template-columns:repeat(3,1fr)}}
+.qa ul{margin:0;padding:0;display:contents}
+.qa li{list-style:none}
+.qa h3{font-size:16px;margin-bottom:10px;max-width:22ch}
+.qa p{font-size:13.5px;color:var(--l-text);max-width:38ch}
+
+/* ── 10. контакт: третий чернильный остров ── */
+.contact{padding:clamp(46px,5.4vw,86px) 0;margin-bottom:clamp(24px,2.8vw,42px)}
+.contact-grid{display:grid;grid-template-columns:1fr;gap:clamp(26px,3.4vw,56px);align-items:end}
+@media(min-width:1000px){.contact-grid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}}
+/* правая колонка отвечает на единственный вопрос, который остаётся у читателя
+   перед письмом: что, собственно, писать */
+.ask{border-radius:var(--r-lg);padding:clamp(20px,2.2vw,30px);
+  background:linear-gradient(155deg,rgba(205,220,249,.12),rgba(205,220,249,.04) 62%,rgba(205,220,249,.09));
+  box-shadow:0 0 0 1px var(--ink-line),0 1px 0 rgba(205,220,249,.14) inset}
+.ask ol{margin:16px 0 0;padding:0;list-style:none;display:grid;gap:12px;counter-reset:ask}
+.ask li{counter-increment:ask;display:grid;grid-template-columns:22px minmax(0,1fr);
+  gap:2px 10px;align-items:baseline}
+.ask li::before{content:counter(ask,decimal-leading-zero);grid-row:span 2;
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--acc)}
+.ask b{font-weight:500;font-size:15px;color:var(--on-ink)}
+.ask span{font-size:13.5px;line-height:1.5;color:var(--on-ink-2)}
+.ask .next{margin-top:clamp(16px,1.8vw,22px);padding-top:clamp(14px,1.6vw,18px);
+  border-top:1px solid var(--ink-line);font-size:13.5px;line-height:1.5;color:var(--on-ink-2)}
+.ask .next .meas{display:block;margin-bottom:4px;color:var(--acc)}
+.contact .big{display:inline-block;margin-top:clamp(18px,2.2vw,30px);font-weight:700;
+  font-size:clamp(28px,5.4vw,76px);letter-spacing:-.045em;line-height:1.02;color:var(--acc);
+  word-break:break-word}
+.contact .big:hover{color:var(--on-ink)}
+.contact .after{margin-top:clamp(22px,2.6vw,36px);max-width:52ch;font-size:var(--t-lead);
+  color:var(--on-ink-2)}
+
+.foot{padding:0 var(--gut) 34px;display:flex;gap:14px 34px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;color:var(--l-dim)}
+.foot b{color:var(--l-head);font-weight:500}
+.foot a:hover{color:var(--ink-navy)}
+
+/* ── лист разделов ── */
+.sheet{position:fixed;inset:0;z-index:60;background:rgba(16,22,58,.92);color:var(--on-ink);
+  -webkit-backdrop-filter:blur(16px) saturate(1.1);backdrop-filter:blur(16px) saturate(1.1);
+  display:flex;flex-direction:column;justify-content:center;padding:0 var(--gut);
+  opacity:0;visibility:hidden;transform:translateY(-1.5%);
+  transition:opacity var(--base) var(--ease),transform var(--slow) var(--ease),visibility 0s linear var(--base)}
+.sheet.open{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .sheet{background:rgba(16,22,58,.99)}
+}
+.sheet a{display:block;font-weight:700;font-size:clamp(24px,4.4vw,48px);line-height:1.4;
+  letter-spacing:-.035em;opacity:0;transform:translateY(18px);color:var(--on-ink);
+  transition:opacity var(--base) var(--ease),transform var(--slow) var(--ease)}
+.sheet a var{font-family:var(--mono);font-style:normal;font-size:11px;color:var(--acc);
+  letter-spacing:.1em;margin-right:16px;vertical-align:middle}
+.sheet.open a{opacity:1;transform:none}
+.sheet.open a:nth-child(2){transition-delay:70ms}
+.sheet.open a:nth-child(3){transition-delay:120ms}
+.sheet.open a:nth-child(4){transition-delay:170ms}
+.sheet.open a:nth-child(5){transition-delay:220ms}
+.sheet.open a:nth-child(6){transition-delay:270ms}
+.sheet.open a:nth-child(7){transition-delay:320ms}
+.sheet a:hover{color:var(--acc)}
+.sheet .m{font-family:var(--mono);font-weight:400;font-size:14px;margin-top:24px;letter-spacing:0;
+  color:var(--on-ink-2)}
+.sheet .x{position:absolute;top:18px;right:var(--gut);background:rgba(255,255,255,.1);border:0;
+  cursor:pointer;color:var(--on-ink);font:inherit;font-size:14px;padding:10px 20px;
+  border-radius:var(--r-pill);transition:background var(--fast) var(--ease)}
+.sheet .x:hover{background:rgba(255,255,255,.2)}
+
+/* ── вход сцены ── */
+.rise{transition:opacity var(--slow) var(--ease),transform var(--slow) var(--ease),filter var(--slow) var(--ease)}
+.rise.armed[data-rise="up"]{opacity:0;transform:translateY(26px);filter:blur(5px)}
+.rise.armed.in[data-rise="up"]{opacity:1;transform:none;filter:none}
+.rise.armed[data-rise="wipe"]{opacity:1;transform:none;filter:none}
+.rise.armed[data-rise="wipe"]>*{clip-path:inset(0 101% 0 0);transition:clip-path 900ms var(--ease)}
+.rise.armed.in[data-rise="wipe"]>*{clip-path:inset(0 0 0 0)}
+.rise.armed[data-rise="wipe"]>*:nth-child(2){transition-delay:170ms}
+.tiles .rise.armed[data-rise="up"]:nth-child(2){transition-delay:90ms}
+.tiles .rise.armed[data-rise="up"]:nth-child(3){transition-delay:170ms}
+.tiles .rise.armed[data-rise="up"]:nth-child(4){transition-delay:250ms}
+
+@media(max-width:900px){
+  .island{margin-inline:14px;border-radius:var(--r-md)}
+  .cover{margin-inline:0;border-radius:0 0 var(--r-md) var(--r-md)}
+  .cycle .track{height:auto}
+  .cycle .stage{position:static;min-height:0;padding-block:clamp(34px,7vw,52px)}
+  .rail{display:none}
+  .panes{gap:12px}
+  .cyc{margin-top:16px;gap:12px}
+  .rail{gap:6px}
+  .rail button{padding:11px 14px;grid-template-columns:auto minmax(0,1fr) auto;align-items:baseline}
+  .rail .n{grid-row:1}
+  .rail .t{font-size:15px}
+  .rail .w{font-size:9.5px;text-align:right}
+  .pane{padding:18px}
+  .pane h3{font-size:20px}
+  .pane .what{font-size:15px}
+  .pane dl div{grid-template-columns:64px minmax(0,1fr);gap:10px}
+}
+@media(max-width:560px){
+  .hdr .pill{padding:10px 15px;font-size:13px}
+  .hdr .nav span{display:none}
+  .card dl div{grid-template-columns:1fr;gap:4px}
+  .pane dl div{grid-template-columns:1fr;gap:3px}
+  .deal dl div{flex-direction:column;gap:2px;align-items:flex-start}
+}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  .rise,.rise.armed,.rise.armed[data-rise="wipe"]>*{opacity:1;transform:none;filter:none;clip-path:none}
+  .rail button{opacity:1}
+  /* без скраба держать экран три прокрутки нечем: трек отпускает кульминацию */
+  .cycle .track{height:auto}
+  .sheet a{opacity:1;transform:none}
+}

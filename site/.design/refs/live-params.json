@@ -1,0 +1,835 @@
+[
+ {
+  "key": "hadrian",
+  "name": "Hadrian",
+  "role": "Точное производство деталей. Промышленный бренд, собранный как продукт",
+  "url": "https://www.hadrian.co/",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [
+   "soehne",
+   "soehne Fallback",
+   "soehneBreit",
+   "soehneBreit Fallback",
+   "soehneMono",
+   "soehneMono Fallback"
+  ],
+  "font_decls": [
+   "soehne",
+   "soehneMono",
+   "soehneBreit",
+   "soehneBreit Fallback",
+   "soehne Fallback",
+   "soehneMono Fallback"
+  ],
+  "theme_color": "#002548",
+  "grounds": [
+   "E5E7EB",
+   "111827",
+   "002548",
+   "1A1A1A",
+   "F5F5F5",
+   "F8F9FA"
+  ],
+  "accents": [
+   "13497D",
+   "70B8FD"
+  ],
+  "vars": {
+   "--tw-prose-body": "#374151",
+   "--tw-prose-headings": "#111827",
+   "--tw-prose-lead": "#4b5563",
+   "--tw-prose-links": "#111827",
+   "--tw-prose-bold": "#111827",
+   "--tw-prose-counters": "#6b7280",
+   "--tw-prose-bullets": "#d1d5db",
+   "--tw-prose-hr": "#e5e7eb",
+   "--tw-prose-quotes": "#111827",
+   "--tw-prose-quote-borders": "#e5e7eb",
+   "--tw-prose-captions": "#6b7280",
+   "--tw-prose-kbd": "#111827",
+   "--tw-prose-code": "#111827",
+   "--tw-prose-pre-code": "#e5e7eb"
+  },
+  "title": "The Future of American Production | Hadrian"
+ },
+ {
+  "key": "anduril",
+  "name": "Anduril",
+  "role": "Оборонный хардвер. Эталон «серьёзно и современно» без канцелярщины",
+  "url": "https://www.anduril.com/",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [],
+  "font_decls": [],
+  "theme_color": "#000000",
+  "grounds": [
+   "FFFFFF",
+   "000000",
+   "010101"
+  ],
+  "accents": [
+   "DFF140"
+  ],
+  "vars": {},
+  "title": "Transforming U.S. Defense Capabilities with Advanced Technology | Anduril"
+ },
+ {
+  "key": "boom",
+  "name": "Boom Superfactory",
+  "role": "Цех и свет. Вы сами отобрали этот кадр в прошлом прогоне",
+  "url": "https://boomsupersonic.com/superfactory",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [
+   "Styrene A"
+  ],
+  "font_decls": [
+   "ui-monospace",
+   "Styrene A"
+  ],
+  "theme_color": "#000000",
+  "grounds": [
+   "FFF555",
+   "212427",
+   "1A1A1A",
+   "000000",
+   "0D0F10",
+   "252525"
+  ],
+  "accents": [
+   "FACC15",
+   "F59E0B",
+   "8B5CF6",
+   "EF4444",
+   "3182CE",
+   "FF6568",
+   "FFE02A"
+  ],
+  "vars": {
+   "--sb-accent": "#facc15",
+   "--color-red-400": "#ff6568",
+   "--color-yellow-300": "#ffe02a",
+   "--color-boom-yellow": "#fff555",
+   "--color-boom-mid-gray": "#88898a",
+   "--color-boom-border": "#212427",
+   "--tw-gradient-from": "#1a1a1a",
+   "--tw-gradient-to": "#252525",
+   "--tw-ring-color": "#fff555"
+  },
+  "title": "Superfactory | Boom Supersonic"
+ },
+ {
+  "key": "helion",
+  "name": "Helion Energy",
+  "role": "Термояд. Наука, поданная бизнесу",
+  "url": "https://www.helionenergy.com/",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [
+   "Geistmono",
+   "General Sans",
+   "Inter",
+   "webflow-icons"
+  ],
+  "font_decls": [
+   "General Sans",
+   "Inter",
+   "webflow-icons",
+   "webflow-icons!important",
+   "Helvetica Neue",
+   "Geistmono"
+  ],
+  "theme_color": null,
+  "grounds": [
+   "EEF2F5",
+   "FAFAFA",
+   "1C2B44",
+   "1D1C1A",
+   "0F0F15",
+   "192738"
+  ],
+  "accents": [
+   "0073E6",
+   "1C2B44",
+   "FF2D55",
+   "3898EC",
+   "0082F3",
+   "D14424",
+   "6290CC",
+   "CD2683"
+  ],
+  "vars": {
+   "--_color---neutral--white": "#eef2f5",
+   "--_color---neutral--mid-gray-1": "#cccabf",
+   "--_color---neutral--black": "#1d1c1a",
+   "--_color---neutral--dark-gray": "#292825",
+   "--_color---helion--black": "#0f0f15",
+   "--_color---neutral--light-gray": "#f0eee6",
+   "--_color---helion--off-white": "#eef2f5",
+   "--_color---helion--blue": "#6290cc",
+   "--_color---neutral--mid-gray-2": "#474641",
+   "--_color---helion--dark-blue": "#1c2b44",
+   "--_color---helion--light-grey": "#cfcfdf",
+   "--_color---helion--l-cyan": "#cfcfdf",
+   "--_color---helion--pink": "#cd2683",
+   "--helion-black": "#0f0f15"
+  },
+  "title": "Helion | Building the world&#x27;s first fusion power plant"
+ },
+ {
+  "key": "cfs",
+  "name": "Commonwealth Fusion",
+  "role": "Термояд, институциональный регистр",
+  "url": "https://cfs.energy/",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [
+   "madSans",
+   "madSans Fallback",
+   "nbInternational",
+   "nbInternational Fallback",
+   "nbInternationalMono",
+   "nbInternationalMono Fallback"
+  ],
+  "font_decls": [
+   "nbInternational",
+   "nbInternationalMono",
+   "madSans",
+   "nbInternational Fallback",
+   "nbInternationalMono Fallback",
+   "madSans Fallback"
+  ],
+  "theme_color": null,
+  "grounds": [
+   "152536",
+   "101C29"
+  ],
+  "accents": [
+   "CF6D46"
+  ],
+  "vars": {},
+  "title": "Home | Commonwealth Fusion Systems"
+ },
+ {
+  "key": "varda",
+  "name": "Varda Space",
+  "role": "Производство в космосе. Тёмная оптика, крупный набор",
+  "url": "https://www.varda.com/",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [
+   "MT Everyday Sans",
+   "Phosphor",
+   "Phosphor-Bold",
+   "webflow-icons"
+  ],
+  "font_decls": [
+   "MT Everyday Sans",
+   "webflow-icons",
+   "webflow-icons !important",
+   "Helvetica Neue"
+  ],
+  "theme_color": null,
+  "grounds": [
+   "FAFAFA",
+   "FFDEDE",
+   "F3F3F3",
+   "FAFCFF",
+   "EAECEE",
+   "1D1C1A"
+  ],
+  "accents": [
+   "3898EC",
+   "0073E6",
+   "0082F3",
+   "E31700",
+   "D14424",
+   "EA384C",
+   "2895F7",
+   "D06B23"
+  ],
+  "vars": {
+   "--_color---neutral--900": "#282c3d",
+   "--_color---neutral--100": "#fafcff",
+   "--_color---neutral--600": "#858d9a",
+   "--_color---orange--500": "#d06b23",
+   "--_color---neutral--200": "#eaecee",
+   "--_color---orange--400": "#e6813b",
+   "--_color---blue--900": "#0a3065",
+   "--_color---blue--700": "#1a4682",
+   "--_color---neutral--500": "#acb6ba",
+   "--_color---orange--600": "#b26127",
+   "--_color---orange--700": "#824213",
+   "--_color---blue--500": "#496792",
+   "--_color---blue--400": "#72819d",
+   "--_color---blue--300": "#90a7c7"
+  },
+  "title": "Space born, Earth bound • Varda Space Industries"
+ },
+ {
+  "key": "impulse",
+  "name": "Impulse Space",
+  "role": "Космический хардвер",
+  "url": "https://www.impulsespace.com/",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [
+   "Aeonik-Regular",
+   "Aeonik-Thin",
+   "abcMonumentGrotesk",
+   "abcMonumentGrotesk Fallback",
+   "abcMonumentGroteskMono",
+   "abcMonumentGroteskMono Fallback",
+   "swiper-icons"
+  ],
+  "font_decls": [
+   "abcMonumentGrotesk",
+   "abcMonumentGroteskMono",
+   "ui-sans-serif",
+   "Aeonik-Thin",
+   "Aeonik-Regular",
+   "ui-monospace"
+  ],
+  "theme_color": "#ffffff",
+  "grounds": [
+   "FFFFFF",
+   "F6F7F4",
+   "ECEDEA",
+   "000000",
+   "F7F7F5",
+   "E5E7EB"
+  ],
+  "accents": [
+   "00FF88",
+   "FF9300",
+   "00A8FF",
+   "8B5CF6",
+   "FF0080",
+   "007AFF"
+  ],
+  "vars": {
+   "--flash-color": "#ff0080",
+   "--tw-gradient-from": "#F6F7F4",
+   "--tw-gradient-to": "#ECEDEA",
+   "--swiper-theme-color": "#007aff"
+  },
+  "title": "Impulse Space - Mobilizing Space"
+ },
+ {
+  "key": "applied",
+  "name": "Applied Intuition",
+  "role": "Софт для промышленности. Корпоративный, но не мёртвый",
+  "url": "https://www.appliedintuition.com/",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [
+   "appliedMono",
+   "appliedMono Fallback",
+   "appliedSansDisplay",
+   "appliedSansDisplay Fallback",
+   "appliedSansJA",
+   "appliedSansJA Fallback",
+   "appliedSansKO",
+   "appliedSansKO Fallback"
+  ],
+  "font_decls": [
+   "appliedSansDisplay",
+   "appliedSansText",
+   "appliedMono",
+   "appliedSansJA",
+   "appliedSansKO",
+   "appliedSansDisplay Fallback"
+  ],
+  "theme_color": "#000000",
+  "grounds": [
+   "ECEDF4",
+   "272A30",
+   "F5F5F7",
+   "DBFAFF",
+   "000000",
+   "001D6C"
+  ],
+  "accents": [
+   "006CFA",
+   "7C3AED",
+   "FF443A",
+   "41BE64",
+   "FA4C55",
+   "0BC242",
+   "00A0FF",
+   "006F01"
+  ],
+  "vars": {
+   "--color-applied-blue": "#006cfa",
+   "--color-dark-gray": "#272a30",
+   "--color-gray": "#5a606c",
+   "--color-light-gray": "#bec2cb",
+   "--color-off-white": "#ecedf4",
+   "--color-sky": "#dbfaff",
+   "--tw-ring-color": "#006cfa"
+  },
+  "title": "Applied Intuition | Physical AI that moves the world™"
+ },
+ {
+  "key": "terraform",
+  "name": "Terraform Industries",
+  "role": "Химия и энергия. Минимум средств, максимум характера",
+  "url": "https://terraformindustries.com/",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [],
+  "font_decls": [],
+  "theme_color": null,
+  "grounds": [],
+  "accents": [],
+  "vars": {},
+  "title": ""
+ },
+ {
+  "key": "radiant",
+  "name": "Radiant Nuclear",
+  "role": "Атом. Тёплая палитра в технологичной теме",
+  "url": "https://www.radiantnuclear.com/",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [],
+  "font_decls": [],
+  "theme_color": null,
+  "grounds": [],
+  "accents": [],
+  "vars": {},
+  "title": "Just a moment..."
+ },
+ {
+  "key": "machina",
+  "name": "Machina Labs",
+  "role": "Роботизированное производство",
+  "url": "https://www.machinalabs.ai/",
+  "ok": true,
+  "google_fonts": [
+   "Roboto",
+   "Roboto Mono"
+  ],
+  "font_faces": [
+   "Roboto",
+   "Roboto Mono"
+  ],
+  "font_decls": [
+   "Roboto",
+   "Roboto Mono"
+  ],
+  "theme_color": null,
+  "grounds": [
+   "191919",
+   "FCFCFC",
+   "FFFFFF",
+   "13100F",
+   "000000",
+   "F3F0EE"
+  ],
+  "accents": [
+   "FF9900",
+   "F2545B",
+   "FFD580",
+   "FF144A"
+  ],
+  "vars": {
+   "--clr-base-dk": "#191919",
+   "--clr-accent-dk": "#44413e",
+   "--clr-base-lt": "#fcfcfc",
+   "--clr-accent-lt": "#cfcdca",
+   "--clr-primary": "#191919",
+   "--clr-background-html": "#fcfcfc",
+   "--clr-background-dk": "#191919",
+   "--clr-background-lt": "#fcfcfc",
+   "--clr-background-accent-dk": "#44413e",
+   "--clr-background-accent-lt": "#cfcdca",
+   "--clr-text-dk": "#fcfcfc",
+   "--clr-text-lt": "#191919",
+   "--clr-intro-title-dk": "#fcfcfc",
+   "--clr-intro-title-lt": "#191919"
+  },
+  "title": "Home | Machina"
+ },
+ {
+  "key": "formlabs",
+  "name": "Formlabs",
+  "role": "Оборудование. Как показывают продукт и данные",
+  "url": "https://formlabs.com/",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [],
+  "font_decls": [
+   "ui-monospace",
+   "Roboto",
+   "inherit!important"
+  ],
+  "theme_color": null,
+  "grounds": [
+   "FFFFFF",
+   "000000",
+   "F3F3F3",
+   "E5E7EB",
+   "F1F1F1",
+   "E5E5E5"
+  ],
+  "accents": [
+   "0762C8",
+   "5DB5FF",
+   "2763C1",
+   "003594",
+   "BD3500",
+   "1082F0",
+   "82AFE3",
+   "FF5A00"
+  ],
+  "vars": {
+   "--black": "#000000",
+   "--white": "#ffffff",
+   "--grey700": "#1f1f1f",
+   "--grey600": "#333333",
+   "--grey400": "#63666a",
+   "--grey300": "#a4a6a8",
+   "--grey200": "#d0d0ce",
+   "--grey100": "#e0e0e0",
+   "--grey50": "#f3f3f3",
+   "--blue700": "#001a47",
+   "--blue600": "#002566",
+   "--blue500": "#003594",
+   "--blue400": "#0762c8",
+   "--blue200": "#5db5ff"
+  },
+  "title": "Professional 3D Printers by Formlabs | Formlabs"
+ },
+ {
+  "key": "dsv",
+  "name": "Deep Science Ventures",
+  "role": "Прямой аналог модели: наука в компании. Смотреть в первую очередь",
+  "url": "https://www.deepscienceventures.com/",
+  "ok": true,
+  "google_fonts": [
+   "DM Sans",
+   "Inter"
+  ],
+  "font_faces": [
+   "Bwgradual",
+   "Inter",
+   "webflow-icons"
+  ],
+  "font_decls": [
+   "Bwgradual",
+   "Inter",
+   "arial",
+   "Roboto",
+   "Inter!important",
+   "&quot"
+  ],
+  "theme_color": null,
+  "grounds": [
+   "040404",
+   "FCFCF8",
+   "E9E9E9",
+   "E5E5D9",
+   "F5F5EF",
+   "FAFAFA"
+  ],
+  "accents": [
+   "0092FF",
+   "FF4949",
+   "FC8F6C",
+   "93CF64",
+   "FFC738",
+   "E382E5",
+   "3EC5E3",
+   "3898EC"
+  ],
+  "vars": {
+   "--primary-cream": "#fcfcf8",
+   "--primary-black": "#040404",
+   "--base-color-neutral--neutral": "#9d9d9d",
+   "--base-color-brand--orange": "#fb693a",
+   "--base-color-neutral--neutral-lightest": "#f5f5ef",
+   "--base-color-neutral--neutral-dark": "#414141",
+   "--secondary-green": "#93cf64",
+   "--base-color-brand--purple": "#e382e5",
+   "--base-color-brand--yellow": "#ffc738",
+   "--base-color-brand--blue": "#3ec5e3",
+   "--base-color-neutral--neutral-lighter": "#edede3",
+   "--base-color-brand--education-purple": "#9d90f4",
+   "--base-color-brand--blue-light": "#d9e5ff",
+   "--base-color-brand--pink-dark": "#3c043b"
+  },
+  "title": "Deep Science Ventures"
+ },
+ {
+  "key": "cambridge",
+  "name": "Cambridge Consultants",
+  "role": "Прямой конкурент категории: научно-технический консалтинг",
+  "url": "https://www.cambridgeconsultants.com/",
+  "ok": true,
+  "google_fonts": [
+   "Lora",
+   "Montserrat",
+   "Open Sans"
+  ],
+  "font_faces": [
+   "Glyphicons Halflings",
+   "swiper-icons"
+  ],
+  "font_decls": [
+   "FontAwesome",
+   "ETmodules!important",
+   "ETmodules",
+   "swiper-icons",
+   "Roboto",
+   "Open Sans"
+  ],
+  "theme_color": null,
+  "grounds": [
+   "FFFFFF",
+   "0D1D2C",
+   "272936",
+   "FDF497",
+   "000000",
+   "D0EEF8"
+  ],
+  "accents": [
+   "2098D1",
+   "12ABDB",
+   "33BEDE",
+   "337AB7",
+   "0075FF",
+   "27AE60",
+   "82D344",
+   "CC3700"
+  ],
+  "vars": {
+   "--wp--preset--color--black": "#000000",
+   "--wp--preset--color--cyan-bluish-gray": "#abb8c3",
+   "--wp--preset--color--white": "#ffffff",
+   "--wp--preset--color--pale-pink": "#f78da7",
+   "--wp--preset--color--vivid-red": "#cf2e2e",
+   "--wp--preset--color--luminous-vivid-orange": "#ff6900",
+   "--wp--preset--color--luminous-vivid-amber": "#fcb900",
+   "--wp--preset--color--light-green-cyan": "#7bdcb5",
+   "--wp--preset--color--vivid-green-cyan": "#00d084",
+   "--wp--preset--color--pale-cyan-blue": "#8ed1fc",
+   "--wp--preset--color--vivid-cyan-blue": "#0693e3",
+   "--wp--preset--color--vivid-purple": "#9b51e0",
+   "--swiper-theme-color": "#007aff",
+   "--swiper-navigation-color": "#000000"
+  },
+  "title": "Cambridge Consultants | The deep tech powerhouse of Capgemini"
+ },
+ {
+  "key": "sciencegroup",
+  "name": "Science Group",
+  "role": "Публичный научно-технический консалтинг",
+  "url": "https://www.sciencegroup.com/",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [
+   "Atlas"
+  ],
+  "font_decls": [
+   "meno-banner",
+   "Tahoma"
+  ],
+  "theme_color": null,
+  "grounds": [
+   "FFFFFF",
+   "000000",
+   "F8F8F8",
+   "212121",
+   "002B5C",
+   "F4F4F4"
+  ],
+  "accents": [
+   "00B9FF",
+   "0A73FF",
+   "1A2C56",
+   "1C5C5F",
+   "EF8724",
+   "FF1428",
+   "00CD62",
+   "1863DC"
+  ],
+  "vars": {
+   "--wp-admin-theme-color": "#007cba",
+   "--wp-admin-theme-color-darker-10": "#006ba1",
+   "--wp-admin-theme-color-darker-20": "#005a87",
+   "--wp-block-synced-color": "#7a00df",
+   "--wp--preset--color--black": "#000000",
+   "--wp--preset--color--cyan-bluish-gray": "#abb8c3",
+   "--wp--preset--color--white": "#ffffff",
+   "--wp--preset--color--pale-pink": "#f78da7",
+   "--wp--preset--color--vivid-red": "#cf2e2e",
+   "--wp--preset--color--luminous-vivid-orange": "#ff6900",
+   "--wp--preset--color--luminous-vivid-amber": "#fcb900",
+   "--wp--preset--color--light-green-cyan": "#7bdcb5",
+   "--wp--preset--color--vivid-green-cyan": "#00d084",
+   "--wp--preset--color--pale-cyan-blue": "#8ed1fc"
+  },
+  "title": "Defined by science. Inspired by technology."
+ },
+ {
+  "key": "ef",
+  "name": "Entrepreneur First",
+  "role": "Тalent-to-company. Смелый бренд в институциональной теме",
+  "url": "https://www.joinef.com/",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [
+   "PS Times",
+   "neue-haas-grotesk-display"
+  ],
+  "font_decls": [
+   "neue-haas-grotesk-display",
+   "Verdana"
+  ],
+  "theme_color": null,
+  "grounds": [
+   "1D0040",
+   "DFEAEA",
+   "6300DD",
+   "FFFFFF",
+   "000000",
+   "23282F"
+  ],
+  "accents": [
+   "FF7448",
+   "00B3FF",
+   "F64121",
+   "FD0B0B",
+   "6E24F5",
+   "58CB72",
+   "F78DA7",
+   "CF2E2E"
+  ],
+  "vars": {
+   "--wp--preset--color--black": "#000000",
+   "--wp--preset--color--cyan-bluish-gray": "#abb8c3",
+   "--wp--preset--color--white": "#ffffff",
+   "--wp--preset--color--pale-pink": "#f78da7",
+   "--wp--preset--color--vivid-red": "#cf2e2e",
+   "--wp--preset--color--luminous-vivid-orange": "#ff6900",
+   "--wp--preset--color--luminous-vivid-amber": "#fcb900",
+   "--wp--preset--color--light-green-cyan": "#7bdcb5",
+   "--wp--preset--color--vivid-green-cyan": "#00d084",
+   "--wp--preset--color--pale-cyan-blue": "#8ed1fc",
+   "--wp--preset--color--vivid-cyan-blue": "#0693e3",
+   "--wp--preset--color--vivid-purple": "#9b51e0",
+   "--plyr-color-main": "#ff7448"
+  },
+  "title": "Found, don&#039;t follow | Entrepreneurs First"
+ },
+ {
+  "key": "embacy",
+  "name": "Embacy",
+  "role": "Кириллица уровня tier-1: как набирают русский",
+  "url": "https://embacy.io/",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [
+   "Haffer",
+   "Neuehaasunicaw1g",
+   "Stixtwotext",
+   "Subset Sohne",
+   "Tiemposheadline",
+   "webflow-icons"
+  ],
+  "font_decls": [
+   "Haffer",
+   "Neuehaasunicaw1g",
+   "Stixtwotext",
+   "Subset Sohne",
+   "webflow-icons",
+   "webflow-icons!important"
+  ],
+  "theme_color": null,
+  "grounds": [
+   "181818",
+   "FAFAFA",
+   "FFFFFF",
+   "F3F3F3",
+   "F4F4F4",
+   "F2F2F2"
+  ],
+  "accents": [
+   "3898EC",
+   "6C44E4",
+   "6D45E5",
+   "FF5319",
+   "FFD500",
+   "0082F3",
+   "EA384C",
+   "2895F7"
+  ],
+  "vars": {
+   "--orange-red": "#ff5319",
+   "--violet": "#6c44e4",
+   "--yellow": "#ffd500",
+   "--orange": "#ff531a",
+   "--dark-orange": "#e63900",
+   "--milk": "#f7f7f7",
+   "--light-grey": "#cbcbcb",
+   "--btn-new": "#f4f4f4"
+  },
+  "title": "Web Design &amp; Development Company for Tech Brands | Embacy"
+ },
+ {
+  "key": "typetoday",
+  "name": "type.today",
+  "role": "Кириллическая словолитня. Что сейчас есть и как это выглядит",
+  "url": "https://type.today/ru",
+  "ok": true,
+  "google_fonts": [],
+  "font_faces": [
+   "CSTMXprmntl02",
+   "Graphik LC Web",
+   "Spectral",
+   "icon"
+  ],
+  "font_decls": [
+   "Graphik LC Web",
+   "Spectral",
+   "icon!important",
+   "icon",
+   "CSTMXprmntl02"
+  ],
+  "theme_color": "#ffffff",
+  "grounds": [
+   "E6E6E6",
+   "F2F2F2",
+   "F0F0F0",
+   "F7F7F7",
+   "000000",
+   "FFFFFF"
+  ],
+  "accents": [
+   "FF00E5",
+   "24FFD9",
+   "E100CB",
+   "F10000",
+   "008905",
+   "3498DB",
+   "07BC0C",
+   "F1C40F"
+  ],
+  "vars": {
+   "--local-tab-active-color": "#ff00e5",
+   "--local-tab-count-color": "#ff00e5",
+   "--toastify-color-dark": "#121212",
+   "--toastify-color-info": "#3498db",
+   "--toastify-color-success": "#07bc0c",
+   "--toastify-color-warning": "#f1c40f",
+   "--toastify-color-error": "#e74c3c",
+   "--toastify-text-color-light": "#757575",
+   "--toastify-spinner-color": "#616161",
+   "--toastify-spinner-color-empty-area": "#e0e0e0",
+   "--toastify-color-progress-dark": "#bb86fc"
+  },
+  "title": "type.today"
+ }
+]

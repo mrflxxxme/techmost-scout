@@ -1,0 +1,92 @@
+/* Направление «Изумруд», редакция «Чернила». Лок — site/.design/DIRECTION-LOCK.md.
+
+   Режиссура — i.moscow (референс владельца): крупные радиусы, стекло,
+   кнопка-пилюля, слова по строкам в дисплее.
+   Палитра — из дек компании, чтобы сайт и материалы читались одним голосом:
+   INKBG #10163A, NAVY #1E2761, ICE #CDDCF9, плита #1C2452, волосок #2C3670,
+   светлая обойма #F2F5FC / #FFFFFF / #E3EAF8.
+   Акцент — лайм #D6F24B, выбран владельцем по кадрам: 13,91:1 на чернильном,
+   ход Anduril #DFF140. На светлом он даёт 1,26:1 и текстом там не живёт,
+   поэтому на светлых секциях акцент живёт внутри чернильных элементов.
+
+   Все контрасты посчитаны и вынесены в комментарии — правило репозитория. */
+
+/* Geologica, OFL. Кириллица и латиница разведены по unicode-range: русской
+   странице латинский файл нужен только под цифры и несколько названий. */
+@font-face{font-family:"Geologica";font-weight:700;font-style:normal;font-display:swap;
+  src:url("../fonts/gl-700-c.woff2") format("woff2");
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:"Geologica";font-weight:700;font-style:normal;font-display:swap;
+  src:url("../fonts/gl-700-l.woff2") format("woff2")}
+@font-face{font-family:"Geologica";font-weight:500;font-style:normal;font-display:swap;
+  src:url("../fonts/gl-500-c.woff2") format("woff2");
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:"Geologica";font-weight:500;font-style:normal;font-display:swap;
+  src:url("../fonts/gl-500-l.woff2") format("woff2")}
+@font-face{font-family:"Geologica";font-weight:400;font-style:normal;font-display:swap;
+  src:url("../fonts/gl-400-c.woff2") format("woff2");
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:"Geologica";font-weight:400;font-style:normal;font-display:swap;
+  src:url("../fonts/gl-400-l.woff2") format("woff2")}
+@font-face{font-family:"Martian Mono";font-weight:500;font-style:normal;font-display:swap;
+  src:url("../fonts/mm-500.woff2") format("woff2")}
+@font-face{font-family:"Martian Mono";font-weight:400;font-style:normal;font-display:swap;
+  src:url("../fonts/mm-400.woff2") format("woff2")}
+
+:root{
+  /* ── чернильные острова: обложка, цикл, контакт ── */
+  --ink-bg:#10163A;      /* INKBG дек */
+  --ink-plate:#1C2452;   /* DCORE дек */
+  --ink-shell:#171F4A;   /* DSHELL дек */
+  --ink-navy:#1E2761;    /* NAVY дек */
+  --ink-line:#2C3670;    /* DHAIR дек */
+  --ink-hair:rgba(205,220,249,.14);
+  --on-ink:#FFFFFF;      /* 17,53:1 к чернильному */
+  --on-ink-2:#CDDCF9;    /* ICE дек, 12,69:1 */
+  --on-ink-3:#A9B8DC;    /* 8,83:1 к чернильному, 7,43:1 к плите */
+
+  /* ── светлая база ── */
+  --l-bg:#F2F5FC;        /* SHELL дек */
+  --l-plate:#FFFFFF;     /* CORE дек */
+  --l-sunk:#E9EEF9;
+  --l-line:#E3EAF8;      /* HAIR дек */
+  --l-hair:#EDF2FB;      /* HAIR2 дек */
+  --l-ink:#1B2140;       /* INK дек, 14,38:1 на светлом */
+  --l-head:#1E2761;      /* NAVY дек, 12,68:1 */
+  --l-text:#42506E;      /* 7,39:1 */
+  --l-dim:#5A6786;       /* 5,17:1 — AA для мелкого */
+
+  /* ── акцент ──
+     Лайм горит только на чернильном. На светлом он живёт внутри чернильных
+     плашек, а роль «выделено» там берёт сам чернильный. */
+  --acc:#D6F24B;         /* 13,91:1 на чернильном, 11,70:1 на плите */
+  --acc-deep:#B7D42E;
+  --acc-soft:rgba(214,242,75,.16);
+
+  --disp:"Geologica",-apple-system,"Segoe UI",system-ui,sans-serif;
+  --mono:"Martian Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+
+  --t-hero:clamp(40px,7.4vw,112px);
+  --t-display:clamp(30px,4.6vw,64px);
+  --t-title:clamp(22px,2.4vw,32px);
+  --t-lead:clamp(16px,1.35vw,19px);
+  --t-body:16px;
+  --t-label:11px;
+
+  --r-lg:28px;
+  --r-md:18px;
+  --r-sm:10px;
+  --r-pill:999px;
+
+  --hdr:64px;          /* высота вынутой из потока шапки, замерена браузером */
+  --gut:clamp(20px,3.6vw,56px);
+  /* вертикальный шаг секции. Было 132 px: между двумя светлыми секциями
+     набегало 244 px пустоты — половина экрана ни на что */
+  --sec:clamp(52px,5.2vw,82px);
+  --col:clamp(12px,1.4vw,20px);
+
+  --ease:cubic-bezier(.16,1,.3,1);
+  --fast:200ms;
+  --base:360ms;
+  --slow:700ms;
+}
