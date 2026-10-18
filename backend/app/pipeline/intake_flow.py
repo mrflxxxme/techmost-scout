@@ -144,6 +144,15 @@ async def _persist_intake_stop(
     )
 
 
+def _kind_kwargs(solution_kind: str) -> dict[str, str]:
+    """Именованный аргумент вида решения для `run_intake`/`refine_brief`.
+
+    Для «Науки» не передаётся совсем: умолчание вызываемой функции то же самое,
+    а заменители `run_intake` в прежних тестах и скриптах про аргумент не знают.
+    """
+    return {} if solution_kind == "research" else {"solution_kind": solution_kind}
+
+
 @dataclass(slots=True)
 class IntakeStageOutcome:
     """Итог стадии разбора текста задачи (`run_intake`).
@@ -186,7 +195,7 @@ async def run_intake_stage(
     started = datetime.now(UTC)
     cost_before = dict(router.cost.by_provider)
     try:
-        intake = await run_intake(router, task, industry_hint=industry_hint, solution_kind=solution_kind)
+        intake = await run_intake(router, task, industry_hint=industry_hint, **_kind_kwargs(solution_kind))
     except CostLimitExceededError as exc:
         await _persist_intake_stop(
             session_factory,
@@ -255,7 +264,7 @@ async def refine_brief_stage(
     started = datetime.now(UTC)
     cost_before = dict(router.cost.by_provider)
     try:
-        brief = await refine_brief(router, task, answers, industry_hint=industry_hint, solution_kind=solution_kind)
+        brief = await refine_brief(router, task, answers, industry_hint=industry_hint, **_kind_kwargs(solution_kind))
     except CostLimitExceededError as exc:
         await _persist_intake_stop(
             session_factory,

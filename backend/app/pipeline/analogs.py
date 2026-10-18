@@ -46,7 +46,9 @@ def prefilter_analog_candidates(scored: list[ScoredCandidate], mode: str) -> lis
     for item in scored:
         code = item.candidate.country
         if code is not None and country_status(code, mode) is CountryStatus.EXCLUDED:
-            log.info("аналог «%s»: страна %s исключена в режиме %s — модели не отдаётся", item.candidate.title, code, mode)
+            log.info(
+                "аналог «%s»: страна %s исключена в режиме %s — модели не отдаётся", item.candidate.title, code, mode
+            )
             continue
         kept.append(item)
     return kept
@@ -107,13 +109,18 @@ async def author_analog_card(router: LLMRouter, brief: Brief, group: list[Scored
     card.candidate_urls = [item.candidate.url for item in group]
     structural = {item.candidate.country for item in group if item.candidate.country}
     if len(structural) > 1:
-        log.warning("аналог «%s»: у кандидатов группы разные страны %s — не публикуется", card.title, sorted(structural))
+        log.warning(
+            "аналог «%s»: у кандидатов группы разные страны %s — не публикуется", card.title, sorted(structural)
+        )
         return None
     if structural:
         (code,) = structural
         if card.country != code:
             log.warning(
-                "аналог «%s»: модель назвала страну %s, источник даёт %s — не публикуется", card.title, card.country, code
+                "аналог «%s»: модель назвала страну %s, источник даёт %s — не публикуется",
+                card.title,
+                card.country,
+                code,
             )
             return None
     elif card.country == UNKNOWN_COUNTRY:

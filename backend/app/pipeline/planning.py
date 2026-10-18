@@ -124,7 +124,9 @@ def strip_analog_queries(plan: SearchPlan) -> SearchPlan:
     kept = [q for q in plan.queries if q.source_type is not SourceType.ANALOG]
     if len(kept) == len(plan.queries):
         return plan
-    log.info("strip_analog_queries: формулировок analog второго прохода срезано кодом: %s", len(plan.queries) - len(kept))
+    log.info(
+        "strip_analog_queries: формулировок analog второго прохода срезано кодом: %s", len(plan.queries) - len(kept)
+    )
     return plan.model_copy(update={"queries": kept})
 
 

@@ -135,7 +135,9 @@ def test_analog_candidates_to_json_несёт_страну_а_общий_сер�
     common = json.loads(stages.candidates_to_json(group))
 
     assert [item["country"] for item in payload] == ["US", None]
-    assert all("country" not in item for item in common), "общий сериализатор менять нельзя: он уходит в промпты «Науки»"
+    assert all("country" not in item for item in common), (
+        "общий сериализатор менять нельзя: он уходит в промпты «Науки»"
+    )
 
 
 # ── Сборка карточки ──────────────────────────────────────────────────────────
@@ -317,7 +319,14 @@ async def test_plan_search_при_рынке_сохраняет_analog_и_наз
 async def test_guard_ограничений_передаёт_вид_решения_при_не_research(settings, brief, fake_provider_factory):
     market = brief.model_copy(update={"solution_kind": "product", "constraints": []})
     answer = json.dumps(
-        {"questions": [], "draft_brief": {"industry": "логистика", "task_summary": "Нужен мониторинг", "constraints": ["не выше 8 °C"]}},
+        {
+            "questions": [],
+            "draft_brief": {
+                "industry": "логистика",
+                "task_summary": "Нужен мониторинг",
+                "constraints": ["не выше 8 °C"],
+            },
+        },
         ensure_ascii=False,
     )
     router, provider = _router(settings, fake_provider_factory, answer)
