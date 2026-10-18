@@ -48,7 +48,9 @@ def _client(app, host: str) -> AsyncClient:
 
 
 # ── Публичный хост ────────────────────────────────────────────────────────────
-@pytest.mark.parametrize("path", ["/request/1", "/history", "/requests/1/report", "/api/docs", "/api/openapi.json"])
+@pytest.mark.parametrize(
+    "path", ["/request/1", "/history", "/requests", "/requests/1/report", "/api/docs", "/api/openapi.json"]
+)
 async def test_публичный_хост_закрывает_рабочие_пути_404_без_пароля(path: str):
     async with _client(_build(PUBLIC), PUBLIC) as client:
         response = await client.get(path)  # заголовка Authorization нет
@@ -78,15 +80,13 @@ async def test_публичный_хост_пускает_scan_health_static_и_
         result = await client.get("/scan/abc.json")
         health = await client.get("/health")
         api = await client.get("/api/v1/requests/1")  # без ключа: 401 самого API, не 404
-        static = await client.get("/static/нет-такого-файла.css")
+        static = await client.get("/static/theme.css")  # настоящий файл приложения
 
     assert scan.status_code == 200
     assert result.json() == {"token": "abc"}
     assert health.status_code == 200
     assert api.status_code == 401
-    # Файла нет, но 404 отдаёт StaticFiles текстом, а не прослойка своим JSON.
-    assert static.status_code == 404
-    assert static.headers["content-type"].startswith("text/plain")
+    assert static.status_code == 200
 
 
 async def test_api_v1_на_публичном_хосте_отвечает_как_на_рабочем():
@@ -102,7 +102,7 @@ async def test_api_v1_на_публичном_хосте_отвечает_как
 async def test_хост_с_портом_и_в_верхнем_регистре_распознан(host: str):
     app = _build(PUBLIC)
     async with _client(app, WORK) as client:
-        response = await client.get("/history", headers={"Host": host})
+        response = await client.get("/requests", headers={"Host": host})
 
     assert response.status_code == 404
     assert "www-authenticate" not in response.headers
@@ -123,7 +123,7 @@ async def test_рабочий_хост_не_отдаёт_scan_и_оставля�
     async with _client(app, WORK) as client:
         scan = await client.get("/scan")
         result = await client.get("/scan/abc.json")
-        history = await client.get("/history")  # прежний путь: общий пароль, а не 404
+        history = await client.get("/requests")  # прежний путь: общий пароль, а не 404
         health = await client.get("/health")
         root = await client.get("/", follow_redirects=False)
 
@@ -140,7 +140,7 @@ async def test_без_настройки_scan_закрыт_везде_а_раб�
     app = _build("")
     async with _client(app, host) as client:
         scan = await client.get("/scan")
-        history = await client.get("/history")
+        history = await client.get("/requests")
         root = await client.get("/", follow_redirects=False)
 
     assert scan.status_code == 404
@@ -162,7 +162,7 @@ def test_normalize_host(raw: str, expected: str):
     assert normalize_host(raw) == expected
 
 
-def test_умолчания_настроек_скана_по_РЕШ_258():
+def test_умолчания_настроек_скана_по_реш_258():
     settings = Settings(_env_file=None)
 
     assert settings.scan_limit_per_ip_per_day == 2

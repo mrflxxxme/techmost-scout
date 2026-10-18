@@ -55,10 +55,15 @@ async def _scan(
     cost: float = 0.0,
     status: RequestStatus = RequestStatus.DRAFTED,
     at: datetime = NOON,
-    token: str | None = "t",
+    tag: str | None = "t",
 ) -> None:
-    db.add(RequestRow(raw_text="скан", status=status, cost_rub=cost, scan_token=token, created_at=at))
+    db.add(RequestRow(raw_text="скан", status=status, cost_rub=cost, scan_token=tag, created_at=at))
     await db.flush()
+
+
+async def _verdict(db: AsyncSession, cfg: Settings, ip: str = IP) -> ScanAdmission:
+    """Допуск при пустом счётчике адреса: проверяется только потолок расходов."""
+    return await admit_scan(db, ip, NOON, counter=IpDailyCounter(), settings=cfg)
 
 
 def _http(peer: str | None, forwarded: str | None = None) -> HttpRequest:
@@ -126,49 +131,49 @@ async def test_отказ_по_потолку_не_расходует_попыт
 async def test_потрачено_291_отказ_285_допуск(session):
     cfg = _settings()
     await _scan(session, cost=291)
-    assert await admit_scan(session, IP, NOON, counter=IpDailyCounter(), settings=cfg) is ScanAdmission.BUDGET_EXHAUSTED
+    assert await _verdict(session, cfg) is ScanAdmission.BUDGET_EXHAUSTED
 
     await session.rollback()
     await _scan(session, cost=285)
-    assert await admit_scan(session, IP, NOON, counter=IpDailyCounter(), settings=cfg) is ScanAdmission.OK
+    assert await _verdict(session, cfg) is ScanAdmission.OK
 
 
 async def test_граница_остатка_равного_стоп_крану_допуск(session):
     cfg = _settings()
     await _scan(session, cost=290)
-    assert await admit_scan(session, IP, NOON, counter=IpDailyCounter(), settings=cfg) is ScanAdmission.OK
+    assert await _verdict(session, cfg) is ScanAdmission.OK
 
     await _scan(session, cost=0.5)
-    assert await admit_scan(session, IP, NOON, counter=IpDailyCounter(), settings=cfg) is ScanAdmission.BUDGET_EXHAUSTED
+    assert await _verdict(session, cfg) is ScanAdmission.BUDGET_EXHAUSTED
 
 
 async def test_два_незавершённых_скана_резервируют_20_рублей(session):
     cfg = _settings()
-    await _scan(session, cost=0, status=RequestStatus.SEARCHING, token="a")
-    await _scan(session, cost=0, status=RequestStatus.INTAKE, token="b")
-    await _scan(session, cost=0, status=RequestStatus.FAILED, token="c")  # завершён — резерва нет
+    await _scan(session, cost=0, status=RequestStatus.SEARCHING, tag="a")
+    await _scan(session, cost=0, status=RequestStatus.INTAKE, tag="b")
+    await _scan(session, cost=0, status=RequestStatus.FAILED, tag="c")  # завершён — резерва нет
 
     assert await spent_today_rub(session, NOON, cfg) == 20
     # 20 резерва + 270 = 290, остаток ровно 10: допуск; ещё 0,5 ₽ — отказ.
     await _scan(session, cost=270)
-    assert await admit_scan(session, IP, NOON, counter=IpDailyCounter(), settings=cfg) is ScanAdmission.OK
+    assert await _verdict(session, cfg) is ScanAdmission.OK
     await _scan(session, cost=0.5)
-    assert await admit_scan(session, IP, NOON, counter=IpDailyCounter(), settings=cfg) is ScanAdmission.BUDGET_EXHAUSTED
+    assert await _verdict(session, cfg) is ScanAdmission.BUDGET_EXHAUSTED
 
 
 async def test_яндекс_поиск_входит_в_потолок_по_пределу_запросов(session):
     cfg = _settings(yandex_search_rub_per_query=0.5)  # 6 запросов × 0,5 ₽ = 3 ₽ на скан
-    await _scan(session, token="a")
-    await _scan(session, token="b")
+    await _scan(session, tag="a")
+    await _scan(session, tag="b")
 
     assert await spent_today_rub(session, NOON, cfg) == 6
 
 
 async def test_в_потолок_входят_только_сканы_текущих_суток(session):
     cfg = _settings()
-    await _scan(session, cost=290, at=NOON - timedelta(days=1), token="old")
-    await _scan(session, cost=1000, token=None)  # обычный запрос, не скан
-    await _scan(session, cost=5, token="new")
+    await _scan(session, cost=290, at=NOON - timedelta(days=1), tag="old")
+    await _scan(session, cost=1000, tag=None)  # обычный запрос, не скан
+    await _scan(session, cost=5, tag="new")
 
     assert await spent_today_rub(session, NOON, cfg) == 5
 
@@ -177,7 +182,7 @@ async def test_потолок_берётся_из_настройки(session):
     cfg = _settings(scan_daily_budget_rub=50)
     await _scan(session, cost=41)
 
-    assert await admit_scan(session, IP, NOON, counter=IpDailyCounter(), settings=cfg) is ScanAdmission.BUDGET_EXHAUSTED
+    assert await _verdict(session, cfg) is ScanAdmission.BUDGET_EXHAUSTED
 
 
 # ── Адрес клиента ─────────────────────────────────────────────────────────────
@@ -188,9 +193,9 @@ def test_с_частного_адреса_берётся_последний_forw
 
 
 def test_поддельный_forwarded_for_с_публичного_адреса_ip_не_меняет():
-    request = _http("198.51.100.5", forwarded="203.0.113.99")
+    request = _http("8.8.8.8", forwarded="203.0.113.99")
 
-    assert client_ip(request) == "198.51.100.5"
+    assert client_ip(request) == "8.8.8.8"
 
 
 def test_без_заголовка_или_с_мусором_берётся_адрес_соединения():
