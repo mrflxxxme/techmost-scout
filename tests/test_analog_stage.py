@@ -305,6 +305,29 @@ async def test_plan_search_отдаёт_вид_решения_в_промпт_и
     assert "```\nresearch\n```" in system
 
 
+@pytest.mark.parametrize("kind", ["research", "product"])
+async def test_replan_search_снимает_analog_второго_прохода_при_любом_виде_решения(
+    settings, brief, fake_provider_factory, kind
+):
+    """Модель реплана вернула две `analog` и две `web`: аналоги ищутся один раз за прогон,
+    в первом плане, поэтому `replan_search` снимает их кодом (Б1 ревью Э6-2а), а `web` остаются."""
+    new_plan = SearchPlan(
+        queries=[
+            _q("cold chain saas 0", SourceType.ANALOG),
+            _q("лаборатория", SourceType.WEB, "ru"),
+            _q("cold chain saas 1", SourceType.ANALOG),
+            _q("lab", SourceType.WEB),
+        ]
+    )
+    router, _ = _router(settings, fake_provider_factory, new_plan.model_dump_json())
+    kind_brief = brief.model_copy(update={"solution_kind": kind})
+
+    result = await stages.replan_search(router, kind_brief, _plan_with_analogs(2), [_scored(_candidate(1))])
+
+    assert SourceType.ANALOG not in _types(result)
+    assert [query.text for query in result.queries] == ["лаборатория", "lab"]
+
+
 async def test_plan_search_при_рынке_сохраняет_analog_и_называет_вид(settings, brief, fake_provider_factory):
     market = brief.model_copy(update={"solution_kind": "digital"})
     router, provider = _router(settings, fake_provider_factory, _plan_with_analogs(2).model_dump_json())
