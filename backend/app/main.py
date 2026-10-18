@@ -20,6 +20,7 @@ from fastapi.templating import Jinja2Templates
 from app.config import get_settings
 from app.db import init_db
 from app.export.markdown import TEMPLATE_FILTERS
+from app.web.host_routing import HostRoutingMiddleware
 
 log = logging.getLogger(__name__)
 settings = get_settings()
@@ -76,8 +77,11 @@ async def lifespan(_: FastAPI):
     yield
 
 
-def build_app(app_env: str) -> FastAPI:
+def build_app(app_env: str, *, public_scan_host: str = "") -> FastAPI:
     """Собирает приложение целиком для заданного окружения.
+
+    `public_scan_host` включает роутинг по Host (`app.web.host_routing`): пусто —
+    публичного режима нет и `/scan*` недоступен на любом хосте.
 
     Единственное место, где результат `schema_urls` довозится и до объекта
     `FastAPI` (`docs_url`/`openapi_url`), и до `templates.env.globals`
@@ -122,7 +126,11 @@ def build_app(app_env: str) -> FastAPI:
     from app.web.routes.api_v1 import router as api_v1_router
 
     app.include_router(api_v1_router)
+
+    # Прослойка ставится последней и потому оказывается самой внешней: на
+    # публичном хосте чужой путь получает 404 до любой проверки пароля.
+    app.add_middleware(HostRoutingMiddleware, public_scan_host=public_scan_host)
     return app
 
 
-app = build_app(settings.app_env)
+app = build_app(settings.app_env, public_scan_host=settings.public_scan_host)
