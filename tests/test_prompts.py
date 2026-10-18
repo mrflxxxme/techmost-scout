@@ -24,7 +24,9 @@ PLACEHOLDER = re.compile(r"\{\{([A-Z_]+)\}\}")
 #: Какие метки обязан заполнять код для каждого промпта.
 EXPECTED_PLACEHOLDERS = {
     "intake": {"RAW_TASK_TEXT", "INDUSTRY_HINT", "SOLUTION_KIND"},
-    "planner": {"BRIEF_JSON"},
+    # Э6-2а: вид решения исключён из `BRIEF_JSON` (`exclude=True`), поэтому едет
+    # отдельной меткой — от неё зависит, просит ли планировщик формулировки `analog`.
+    "planner": {"BRIEF_JSON", "SOLUTION_KIND"},
     # Т-21: стадия второго прохода. Прежние формулировки и первая выдача едут
     # отдельными метками — модель обязана видеть, что уже спрашивали и что из
     # этого вышло, иначе «уточнённый» план получается пересказом прежнего.
@@ -37,6 +39,9 @@ EXPECTED_PLACEHOLDERS = {
     # Д-6 волны Э2-З (РЕШ-152): семантический судья дублей — список отобранных
     # кандидатов номером, заголовком, организацией и фрагментом одной меткой.
     "dedup_judge": {"CANDIDATES_LISTING"},
+    # Э6-2а: карточка зарубежного аналога. Кандидаты едут своим сериализатором
+    # (`analogs.analog_candidates_to_json`) — со страной, которой нет в общем.
+    "analog_scorer": {"BRIEF_JSON", "ANALOG_CANDIDATES_JSON"},
 }
 
 
@@ -158,7 +163,8 @@ def test_render_prompt_fails_loudly_on_missing_value():
 
 
 @pytest.mark.parametrize(
-    "name", ["intake", "planner", "replanner", "card_author", "verifier", "summary", "scorer", "dedup_judge"]
+    "name",
+    ["intake", "planner", "replanner", "card_author", "verifier", "summary", "scorer", "dedup_judge", "analog_scorer"],
 )
 def test_prompt_has_error_section(name: str):
     """У каждого промпта есть раздел про ошибки: дешёвые модели без него врут."""

@@ -88,6 +88,7 @@ STAGE_MESSAGES: dict[str, Callable[[PipelineLogEntry], str]] = {
     "dedup_judge": lambda _e: "Свожу похожие варианты в один.",
     "cards": lambda _e: "Собираю карточки решений.",
     "contest_cards": lambda _e: "Собираю карточки конкурсных решений.",
+    "analog_cards": lambda _e: "Собираю карточки аналогов из мира.",
     "summary": lambda _e: "Составляю сводку и рекомендацию.",
 }
 
