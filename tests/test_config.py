@@ -83,12 +83,24 @@ def test_в_примере_окружения_нет_следов_двойног
     assert found == [], f"следы повторного кодирования: {found}"
 
 
-#: Переменные JSON-API (РЕШ-250), которые владелец дописывает в `.env.example`
-#: сам: шаблон окружения правит только он. Описаны в `docs/deploy.md` §3.
+#: Переменные JSON-API (РЕШ-250) и экспресс-скана (Э6-6а), которые владелец
+#: дописывает в `.env.example` сам: шаблон окружения правит только он. API
+#: описан в `docs/deploy.md` §3, скан опишет Э6-6в.
 #: Список закрытый: как только имя появится в примере, тест ниже потребует
 #: убрать его отсюда, — исключение не переживёт правку владельца молча.
 _AWAITING_OWNER_IN_EXAMPLE = frozenset(
-    {"SCOUT_API_KEYS", "API_RATE_LIMIT_RUNS_PER_HOUR", "API_RATE_LIMIT_READS_PER_MINUTE"}
+    {
+        "SCOUT_API_KEYS",
+        "API_RATE_LIMIT_RUNS_PER_HOUR",
+        "API_RATE_LIMIT_READS_PER_MINUTE",
+        "PUBLIC_SCAN_HOST",
+        "SCAN_COST_LIMIT_RUB",
+        "SCAN_DAILY_BUDGET_RUB",
+        "SCAN_LIMIT_PER_IP_PER_DAY",
+        "SCAN_ORDER_EMAIL",
+        "SCAN_ORDER_TELEGRAM_URL",
+        "YANDEX_SEARCH_RUB_PER_QUERY",
+    }
 )
 
 
