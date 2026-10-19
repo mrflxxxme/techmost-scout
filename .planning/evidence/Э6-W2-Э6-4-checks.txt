@@ -1,0 +1,31 @@
+Э6-4 · проверки (подхват кода прежнего исполнителя, коммит 0da6488; правок кода не потребовалось)
+
+pytest tests/test_export_analogs.py tests/test_export_json.py tests/test_export_markdown.py tests/test_export_view.py
+  tests/test_export_view_p15_audit5.py tests/test_export_signature.py tests/test_export_pdf.py tests/test_export_docx.py
+  tests/test_web_export.py tests/test_web_report.py tests/test_cli_export.py -q
+  -> 154 passed, 1 warning
+
+pytest tests/test_export_analogs.py -q -> 10 passed (в составе прогона выше)
+
+Мутации (каждая откатана git checkout, дерево чистое):
+  1. убрана строка `raw_report = await _with_briefs_fields(...)` в build_export_view -> 4 failed, 6 passed
+  2. markdown печатает `AnalogSections(main=tuple(report.analog_cards))` вместо analog_sections -> 4 failed, 6 passed
+  3. analog_sections: ветки EXCLUDED и FOOTNOTE отключены, всё в main -> 5 failed, 5 passed
+
+rg -n "country_status" backend/app/export
+  -> только backend/app/export/analogs.py (строки 8, 24, 76: докстрока, импорт, вызов)
+
+rg -ln httpx backend/app | rg -v "<разрешённые слои>" -> пусто (инв. 6)
+
+wc -l backend/app/export/markdown.py -> 449 (предел 500)
+
+ruff check .          -> All checks passed!
+ruff format --check . -> 227 files already formatted
+
+pytest -q -p no:cacheprovider (полный, Windows)
+  -> 6 failed, 1460 passed, 8 warnings in 265.52s
+  6 failed — только tests/test_docker_compose_backup_runtime.py (Linux-специфика, как в базе: 1447 passed + 13 новых)
+  tests/test_backend_layout.py входит в прогон и зелёный.
+
+Прогон в Linux-контейнере (docker run python:3.12-slim): не выполнен — клиент docker есть,
+движок Docker Desktop не запущен ("dockerDesktopLinuxEngine: The system cannot find the file specified").
