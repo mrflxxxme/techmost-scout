@@ -1,0 +1,56 @@
+Э6-8 · фактический вывод проверок (исполнитель, 2026-10-21). Вердикт ставит верификатор.
+Окружение: Linux, Python 3.12, общий .venv; перед pytest сняты переменные ключей и маршрутов (список из постановки).
+База: ветка claude/sleepy-planck-11w8jv (5cce7c5, 1673 passed). Коммиты задачи: 581acc7 (проба), 52c9843 (код и тесты).
+
+Кр. 1  rg -c "gisp\.gov\.ru|reestr\.digital\.gov\.ru|productradar\.ru" .planning/evidence/Э6-W4-Э6-8-probe.txt
+       -> 9   (требуется >= 3)
+
+Кр. 2  pytest tests/test_ru_registries.py -q
+       -> 31 passed
+       Покрыто: ru_registries — ровно три домена РЕШ-261 и каждый покрыт списком (адаптера нет);
+       схема/путь/пробел/регистр/число/дубль/пересечение с мировым списком/без name_ru/пустая секция — ValueError;
+       русская analog — site: только реестров (одна платная пачка), английская — ни одного домена реестров;
+       registry_analog_query: product/digital/business_model — одна русская analog с текстом русской web;
+       без русской web — первые три keywords_ru; без обоих — None и строка в журнале; research — None;
+       план 8+2 (10+2) + русская + 2 конкурсные <= 12, аналоги не вытеснены; второй проход без analog;
+       Яндекс (respx) получает русскую с site:реестров и английскую без них; предел исчерпан — домены реестров
+       названы в limit_problems; отказ Яндекса — SearchError;
+       сквозной: бриф product -> план -> Яндекс (respx) с site:reestr.digital.gov.ru -> кандидат ANALOG
+       https://reestr.digital.gov.ru/reestr/1234567/ -> split_analog_candidates (аналоговая часть).
+
+Кр. 3  Адаптер Product Radar не написан (проба: машинного текстового поиска продуктов без ключа нет).
+       rg -ln "productradar" backend/app --glob "*.py"   -> пусто (rc=1); причина — в evidence/Э6-W4-Э6-8-probe.txt
+       (раздел «Решение по пробе»).
+
+Кр. 4  rg -ln "gisp\.gov\.ru|reestr\.digital\.gov\.ru" backend/app --glob "*.py"  -> пусто (rc=1)
+
+Кр. 5  Мутации (каждая отдельно, откат, дерево чисто после): pytest tests/test_ru_registries.py -q
+       М1 русская analog сужается мировым списком (analog_domains не различает ru)  -> 6 failed, 25 passed
+       М2 normalize_plan_queries не зовёт registry_analog_query                       -> 5 failed, 26 passed
+       М3 registry_analog_query не проверяет research                                 -> 2 failed, 29 passed
+       М4 with_site_filter не передаёт язык формулировки                              -> 1 failed, 30 passed
+       М5 адаптер не передаёт язык в plan_analog_queries                              -> 3 failed, 28 passed
+       М6 русская analog от модели принимается (нет отсева)                           -> 1 failed, 30 passed
+       М7 текст берётся у любой первой web, а не русской                              -> 3 failed, 28 passed
+       Мутация «HTTP-ошибка -> []» для адаптера — неприменима: адаптера нет.
+
+Кр. 6  pytest tests/test_yandex_analog.py tests/test_search_yandex.py tests/test_yandex_limit_visibility.py
+              tests/test_analog_stage.py tests/test_analog_flow.py tests/test_backend_layout.py
+              tests/test_prompts.py tests/test_tests_layout.py -q
+       -> 185 passed
+       git diff --stat 5cce7c5 -- tests/ :
+         tests/test_analog_flow.py   |   5 +-   (счёт analog: 2 английские + <= 1 русская)
+         tests/test_analog_stage.py  |   9 +-   (то же, два теста)
+         tests/test_ru_registries.py | 403 +    (новый)
+         tests/test_yandex_analog.py |   9 +-   (русская analog сужается реестрами, а не мировым списком)
+       Промпты не менялись: git diff 5cce7c5 -- prompts/ пуст.
+
+Общие  pytest -q (весь набор)            -> 1704 passed, 0 failed  (база 1673 + 31 новых)
+       ruff check .                      -> All checks passed!
+       ruff format --check .             -> 244 files already formatted
+       Прямой httpx в planning.py / analog_sources.py: rg -n httpx -> пусто (инв. 6).
+       Файлы: analog_sources.py, planning.py, yandex_parse.py, yandex_search.py < 500 строк;
+       test_ru_registries.py — 403 строки (< 500).
+
+Живая проверка (не сделана, отложена): доступность gisp.gov.ru и reestr.digital.gov.ru с сервера в РФ и живая
+выдача Яндекса по site: реестров — через деплой Э6-9 (DLG-Э6-1).

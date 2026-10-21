@@ -223,11 +223,14 @@ def test_формулировка_без_места_под_site_называет
     assert plan.unfit == analog_domains()
 
 
-@pytest.mark.parametrize(("text", "lang"), [(TEXT_EN, "en"), (TEXT_RU, "ru")])
-def test_with_site_filter_сужает_analog_в_любом_контуре(text, lang):
+@pytest.mark.parametrize(
+    ("text", "lang", "expected_site"), [(TEXT_EN, "en", "ycombinator.com"), (TEXT_RU, "ru", "gisp.gov.ru")]
+)
+def test_with_site_filter_сужает_analog_в_любом_контуре(text, lang, expected_site):
+    # Английская — мировой список, русская — реестры РФ (Э6-8); состав списков проверяет test_ru_registries.
     narrowed = with_site_filter(_query(text, lang=lang), "SEARCH_TYPE_COM" if lang == "en" else "SEARCH_TYPE_RU")
     assert narrowed.startswith(text)
-    assert "ycombinator.com" in _sites(narrowed)
+    assert expected_site in _sites(narrowed)
     assert len(narrowed) <= ANALOG_QUERY_MAX_CHARS
 
 

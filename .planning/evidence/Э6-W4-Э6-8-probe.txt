@@ -1,0 +1,61 @@
+Проба доступа к реестрам РФ · задача Э6-8 · 2026-10-21 (21:32 UTC)
+Среда: облачная, зарубежный адрес, через общий прокси агента. Ключей и платных вызовов нет.
+Все запросы — GET без авторизации; robots.txt productradar.ru соблюдён: `/search/`, `?s=`, `&s=`,
+`?orderby=`, `/wp-json/productradar/v1/*badge*` не использовались.
+
+1. gisp.gov.ru (ГИСП Минпромторга)
+   GET https://gisp.gov.ru/ -> 403 (text/html, 1295 байт) — защита от роботов.
+   Вывод: машинного доступа из этой среды нет; адаптер не пишется. С сервера в РФ ответ
+   может отличаться — живая проверка отложена на деплой Э6-9 (см. handoff).
+
+2. reestr.digital.gov.ru (реестр российского ПО Минцифры)
+   GET https://reestr.digital.gov.ru/ -> таймаут соединения (curl 28, 25 с).
+   Вывод: недоступен из этой среды; адаптер не пишется. Живая проверка с сервера — отложена.
+
+3. productradar.ru (Product Radar)
+   GET https://productradar.ru/robots.txt -> 200
+   GET https://productradar.ru/wp-json/ -> 200, application/json, 509 732 байт, WordPress.
+   Пространства имён: oembed/1.0, code-block-pro/v1, webp-converter/v1, wp-telegram/v1,
+   post-views-counter, pr-invest/v1, productradar/v1, radar/v1, wp/v2, wp-site-health/v1,
+   wp-block-editor/v1, wp-abilities/v1.
+
+   Маршруты productradar/v1 и radar/v1 и их аргументы:
+     /radar/v1/base-feed                      GET  [page]                     -> 401 rest_forbidden
+     /radar/v1/products/(?P<cat_id>\d+)       GET  [cat_id, page]             -> 401 rest_forbidden
+         (то же с ?search=crm: 401; аргумента search у маршрута нет)
+     /productradar/v1/cities                  GET  [search, country]          — только города,
+         без country -> 400 rest_missing_callback_param; продуктов не ищет
+     /productradar/v1/city/(?P<city_id>\d+)/products GET [city_id, page]     -> 400 при city_id=1
+         (по городу, не по тексту; обход категорий/городов запрещён границами задачи)
+     /productradar/v1/{badge,votes-badge,resident-badge,top-badge}            — значки, закрыты robots.txt
+     /productradar/v1/base-relevance/{confirm,archive}                        — POST, служебные
+   Аргументов q / s / per_page у маршрутов продуктов нет; `search` есть только у `cities`.
+
+   Стандартный поиск WordPress:
+     GET /wp-json/wp/v2/search?search=crm&per_page=5 -> 200, JSON; в выдаче только
+         subtype blog (статьи блога), продуктов нет.
+     /wp-json/wp/v2/types -> post, page, attachment, nav_menu_item, wp_block, wp_template,
+         wp_template_part, wp_global_styles, wp_navigation, wp_font_family, wp_font_face, blog.
+         Типа product в REST нет.
+     GET /wp-json/wp/v2/posts?search=... -> 200, JSON, но x-wp-total=18: это 18 статей-подборок
+         («10 перспективных российских стартапов…», «Топ-50…»), а не каталог продуктов.
+         Запросы «склад», «сварка», «автоматизация склада», «контроль качества сварных швов» -> 0 записей.
+     GET /wp-json/wp/v2/blog?per_page=1 -> x-wp-total=261 (статьи блога, не продукты).
+     GET /wp-json/wp/v2/product?search=crm  -> 404
+     GET /wp-json/wp/v2/products?search=crm -> 404
+     GET /wp-json/productradar/v1/products?search=crm -> 404
+     GET /wp-json/radar/v1/products?search=crm -> 404
+
+   Карта сайта: /wp-sitemap.xml -> 200; /wp-sitemap-posts-product-1.xml -> 200, страницы продуктов
+   вида https://productradar.ru/product/<slug>/. Продукты существуют как тип записи `product` на
+   странице сайта, но в REST не выставлены; страницы продуктов отдаются HTML (разбор HTML реестров
+   и обход карты сайта запрещены границами задачи).
+
+Решение по пробе
+   Маршрута текстового поиска продуктов Product Radar без ключа НЕТ: маршруты продуктов закрыты
+   (401) и не принимают текст, стандартный поиск WordPress продуктов не видит, поиск сайта
+   (`/search/`, `?s=`) закрыт robots.txt. Условие контракта п. 5 («200, JSON, без ключа, один запрос
+   на формулировку, продукты») не выполнено — `ProductRadarAdapter` не пишется, файлы
+   `search/product_radar.py`, `search/__init__.py`, `tests/test_product_radar.py` не создаются.
+   Все три реестра опрашиваются Яндекс-поиском по домену (`ru_registries`, РЕШ-261, автономное решение 33).
+   Подсказка для Яндекса: записи продуктов Product Radar лежат под /product/<slug>/.

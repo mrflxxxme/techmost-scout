@@ -299,8 +299,9 @@ async def _fixed_plan_search(router, brief: Brief) -> SearchPlan:
 async def test_product_даёт_до_трёх_аналогов_вне_cards(settings, brief, stub_stages, db_session_factory):
     report, adapter, provider = await _run(settings, brief, kind="product", session_factory=db_session_factory)
 
-    assert len(adapter.analog_queries()) == 2
-    assert all(q.lang == "en" for q in adapter.analog_queries())
+    assert len(adapter.analog_queries()) <= 3
+    assert [q.lang for q in adapter.analog_queries()].count("en") == 2
+    assert [q.lang for q in adapter.analog_queries()].count("ru") <= 1  # русскую добавляет код (Э6-8)
     assert len(report.analog_cards) == ANALOG_CARDS_TARGET
     assert provider.called_with("`AnalogCard`") == ANALOG_CARDS_TARGET
     # `target_cards` не задет: основная секция осталась шестью карточками без аналогов.

@@ -1,0 +1,22 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: Э6-8
+  did:
+    - Проверены diff (9 файлов в границах задачи плюс evidence), десять инвариантов и грабли §0.1; прогнаны pytest, ruff, прицельные мутации
+    - Блокирующих нет; шесть советов, из них один для владельца (предел 6 платных запросов Яндекса, хвост плана, РЕШ-283)
+  artifacts:
+    - .planning/evidence/Э6-W4-Э6-8-review.md
+    - .planning/evidence/Э6-W4-Э6-8-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q: 1728 passed, 1 warning"
+    - "pytest tests/test_ru_registries.py: 31 passed"
+    - "ruff check .: All checks passed; ruff format --check .: 245 files already formatted"
+    - "мутации по файлу test_ru_registries.py: M1 6 failed, M2 5, M3 (research) 2, M4 1, M5 3, M6 1, M9 1, M10 1; секция ru_registries убрана из YAML: 7 failed; выживших нет, дерево после каждой чисто"
+    - "rg productradar / gisp / reestr.digital в backend/app *.py: пусто; rg -c по probe.txt: 9"
+  escalate: Э-4 принята по умолчанию (вариант А); совет 1 (предел 6, место русской analog в плане) и РЕШ-283 — решение за владельцем
+  verdict: ПРИНЯТЬ
+  read_first:
+    - .planning/evidence/Э6-W4-Э6-8-review.md
+  notes: Цикл 1, блокирующих нет, второй цикл не нужен
