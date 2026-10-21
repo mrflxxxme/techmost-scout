@@ -96,13 +96,14 @@ async def test_корень_публичного_хоста_ведёт_на_scan
 async def test_публичный_хост_пускает_scan_health_static_и_api():
     async with _client(_build(PUBLIC), PUBLIC) as client:
         scan = await client.get("/scan")
-        result = await client.get("/scan/abc.json")
         health = await client.get("/health")
         api = await client.get("/api/v1/requests/1")  # без ключа: 401 самого API, не 404
         static = await client.get("/static/theme.css")  # настоящий файл приложения
 
     assert scan.status_code == 200
-    assert result.json() == {"token": "abc"}
+    # С Э6-6в `/scan/{token}.json` — настоящий маршрут с базой, пробник его не перекрывает:
+    # прослойка должна лишь пропустить путь (ответ маршрута проверяет test_scan_routes).
+    assert HostRoutingMiddleware(_build(PUBLIC), public_scan_host=PUBLIC).decision(PUBLIC, "/scan/abc.json") is None
     assert health.status_code == 200
     assert api.status_code == 401
     assert static.status_code == 200
