@@ -1,0 +1,51 @@
+Э6-9 · починка по ревью цикла 1 · фактический вывод проверок (значений секретов нет)
+
+$ pytest -q   (ключи и маршруты моделей вычищены из окружения)
+2119 passed, 1 warning in 107.38s            # было 2012; +107 тестов (87 + 20)
+
+$ pytest -q tests/test_deploy_steps.py        -> 87 passed   (новый: поведение шагов на заглушках)
+$ pytest -q tests/test_deploy_caddy_blocks.py -> 20 passed   (новый: заголовки блоков, запасной хэш, шаблон, раздел 13)
+$ pytest -q tests/test_deploy_workflow.py     -> 30 passed
+$ pytest -q tests/test_deploy_server.py       -> 42 passed
+
+$ ruff check .            -> All checks passed!
+$ ruff format --check .   -> 261 files already formatted
+
+$ wc -l: scripts/deploy_server.py 499, tests/test_deploy_server.py 500, tests/test_deploy_steps.py 486,
+         tests/test_deploy_caddy_blocks.py 206, tests/test_deploy_workflow.py 439
+$ rg 194.87 .github docker docs/deploy.md scripts   -> пусто
+
+Мутации (по одной, файл возвращается; прогон test_deploy_steps + test_deploy_workflow + test_deploy_server):
+ 1  соседи: fail=1 -> fail=0                      KILLED  6 failed
+ 2  JSON-API: 000|502|504) fail=1 -> fail=0       KILLED  3 failed
+ 3  ожидание готовности: убрать exit 1            KILLED  4 failed
+ 4  откат: убрать проверку пути копии             KILLED  1 failed
+ 5  убрать --scan-host                            KILLED  1 failed
+ 6  убрать --force-recreate                       KILLED  1 failed
+ 7a ref: убрать запрет -*                         KILLED  1 failed
+ 7b ref: убрать запрет *..*                       KILLED  2 failed
+ 8  doctor: убрать проверку строки готовности     KILLED  2 failed
+ 9  doctor: убрать проверку расхождения/моделей   KILLED  2 failed
+ 10 doctor: убрать только «Ни одна модель…»       KILLED  1 failed
+ 11 ветка по умолчанию: убрать проверку           KILLED  6 failed
+ 13 заголовки curl: не снимать CRLF               KILLED  2 failed
+ 14 схема адресов соседей не проверяется          KILLED  5 failed
+ 15 откат только по failure() (без cancelled())   KILLED  1 failed
+ 16 копия Caddyfile: убрать проверку пути         KILLED  4 failed
+ 17 validate с «|| true»                          KILLED  2 failed
+ 12 (эквивалентная) диапазон остановки повторов соседа 1-4 -> 1-5: выжила, на статичных заглушках
+    поведение то же (меняется только момент выхода из цикла повторов), не дефект защиты.
+
+Мутации серверного скрипта (tests/test_deploy_caddy_blocks.py):
+ адреса только со строки с «{» (joined = clean)           KILLED  8 failed   <- мутация из задания
+ заголовок не продолжается после запятой                  KILLED  8 failed
+ начало блока не с первой строки заголовка                KILLED  2 failed
+ однострочный блок не распознаётся                        KILLED  4 failed
+ WEB_AUTH_HASH не предпочитается вычислению               KILLED  2 failed
+
+Находка тестов: curl -D отдаёт заголовки с CRLF, `awk '{print $2}'` возвращал «502\r», и проверка
+JSON-API на 502/504 в реальности не срабатывала (на заглушках с LF ревью её не видело).
+Исправлено: `| tr -d '\r'` перед разбором. Мутация 13 это закрепляет.
+
+Живого ssh и деплоя не было; Caddy-синтаксис `request_body @scan { … }` (матчер) проверится
+первым `caddy validate` при caddy-apply, локально Caddy нет.

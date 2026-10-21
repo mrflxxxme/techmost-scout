@@ -1,0 +1,43 @@
+handoff:
+  from: implementer-e6-9-fix
+  to: reviewer
+  task: Э6-9
+  cycle: 2
+  branch: worktree-agent-a6a0dc13bd8ce3e97
+  base: claude/e6-9 (1b5e58b)
+  did:
+    - "Блокирующая 1: scripts/deploy_server.py top_level_blocks собирает заголовок блока по всем строкам (строка на запятую продолжается, комментарии и пустые строки пропускаются), распознаёт однострочный блок; сосед над нашим хостом или под ним в любом порядке — отказ, файл не тронут. Тесты tests/test_deploy_caddy_blocks.py (оба порядка, три строки, комментарии, однострочный, висячая запятая над областью, неизменность файла и inode)"
+    - "Блокирующая 2: шаг «Проверка scout doctor» пропускает вывод через tee и краснеет, если нет строки «Готово к работе.» или есть «Схема базы разошлась» / «Ни одна модель не отвечает» (код продукта не тронут)"
+    - "Блокирующая 3: tests/test_deploy_steps.py (87 тестов) выполняет настоящий run шагов из YAML под bash -eo pipefail с заглушками curl, sleep, docker, ssh (локально исполняет «удалённый» скрипт, /opt подменён каталогом теста) и настоящим deploy_server.py; убиты все 8 выживших мутаций ревью и ещё 9 новых"
+    - "Советы: откат при отмене и таймауте (failure() || cancelled()); первый шаг отказывает запуску не из ветки по умолчанию; адреса EDGE_NEIGHBOR_URLS со схемой http(s) (совет 9); request_body max_size только для @scan path /scan* (JSON-API не ограничен); раздел 13: состояние сервера после красного шага и при провале сборки, environment с ограничением main (Deployment branches), запасной хэш без --plaintext, подсказка в сообщении об отказе хэширования; поддержан ключ WEB_AUTH_HASH в docker/.env (в одинарных кавычках)"
+    - "Найден и исправлен дефект: curl -D отдаёт CRLF, код 502/504 JSON-API не совпадал с шаблоном (на LF-заглушках ревью не виден)"
+  artifacts:
+    - .github/workflows/deploy.yml
+    - scripts/deploy_server.py
+    - docker/edge/scout-sites.caddy
+    - docs/deploy.md
+    - tests/test_deploy_server.py
+    - tests/test_deploy_workflow.py
+    - tests/test_deploy_steps.py
+    - tests/test_deploy_caddy_blocks.py
+    - .planning/evidence/Э6-W4-Э6-9-fix-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest -q: 2119 passed (было 2012), 0 failed"
+    - "tests/test_deploy_steps.py 87 passed; test_deploy_caddy_blocks.py 20 passed; test_deploy_workflow.py 30 passed; test_deploy_server.py 42 passed"
+    - "ruff check и ruff format --check: чисто (261 файл)"
+    - "wc -l: deploy_server.py 499, test_deploy_server.py 500, test_deploy_steps.py 486"
+    - "мутации: см. Э6-W4-Э6-9-fix-checks.txt, все содержательные убиты (≥1 failed)"
+  escalate:
+    - "environment: чтобы секреты лежали в окружении, ограниченном main, в задание run нужна строка environment: <имя>; существующий тест test_нет_environment запрещает её ставить без решения владельца. Сейчас в docs совет описан и сказано, что строку добавляют одной правкой до первого запуска. Решение владельца: класть секреты в environment (тогда добавить строку и снять запрет в тесте) или оставить уровень репозитория"
+  read_first:
+    - .planning/evidence/Э6-W4-Э6-9-review.md
+    - .github/workflows/deploy.yml
+    - tests/test_deploy_steps.py
+    - scripts/deploy_server.py (top_level_blocks, run_caddy_block)
+    - docs/deploy.md (раздел 13)
+  notes:
+    - "Не делал (советы по усмотрению): 1 идемпотентность хэша, 5 снимок кодов соседей до правки и пауза для ACME, 6 отказ env-upsert при отсутствии .env, 10 refspec для тегов, 11 SHA-пин actions/checkout и маскирование вывода Caddy, 12 обратная кавычка в _BAD_VALUE_RE. Файл test_deploy_server.py остался в 500 строк: правка одной строки теста шаблона (матчер @scan)"
+    - "Синтаксис request_body @scan { max_size … } взят из документации Caddy (матчер — необязательный первый аргумент директивы); локально Caddy нет, проверится первым caddy validate при caddy-apply, при провале сработает откат"
+    - "WEB_AUTH_HASH: значение в docker/.env ставится в одинарные кавычки, иначе compose разберёт «$»; скрипт снимает кавычки и проверяет bcrypt"
+    - "Живого ssh и деплоя не делалось, секреты не использовались"

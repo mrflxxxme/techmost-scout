@@ -170,3 +170,37 @@ def test_отказ_хэширования_подсказывает_запасн
         ds.hash_password("stub-password-3c91")
     text = str(caught.value)
     assert "WEB_AUTH_HASH" in text and "раздел 13" in text and "stub-password-3c91" not in text
+
+
+# ── шаблон и раздел 13 документации ─────────────────────────────────────────
+
+
+def _section13() -> str:
+    text = (REPO_ROOT / "docs" / "deploy.md").read_text(encoding="utf-8")
+    return text.split("## 13. Деплой через GitHub Actions", 1)[1]
+
+
+def test_предел_тела_запроса_только_для_путей_скана_а_не_для_json_api() -> None:
+    """`task` JSON-API — до 20 000 знаков (≈40 КБ в UTF-8): общий предел 32 КБ дал бы 413."""
+    text = TEMPLATE.read_text(encoding="utf-8")
+    assert "@scan path /scan*" in text and "request_body @scan {" in text
+    assert "request_body {" not in text, "предел без матчера действует на весь хост, включая /api/v1/*"
+    assert "max_size 32KB" in text
+
+
+def test_раздел_13_описывает_состояние_после_красного_прогона_и_запасной_хэш() -> None:
+    """Что остаётся на сервере, замок на секреты, запасной путь хэша без пароля в аргументах."""
+    section = _section13()
+    for phrase in (
+        "Сервер уже на новом коммите",
+        "Контейнер новой версии остаётся запущенным",
+        "WEB_AUTH_HASH",
+        "caddy hash-password",
+        "Deployment branches",
+        "при отмене запуска",
+        "ветки по умолчанию",
+        "Готово к работе.",
+    ):
+        assert phrase in section, f"в разделе 13 нет: {phrase}"
+    fences = section.split("```")[1::2]
+    assert fences and not any("--plaintext" in block for block in fences), "пароль в аргументах команд раздела 13"
