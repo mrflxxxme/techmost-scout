@@ -1,0 +1,23 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: Э6-4
+  did:
+    - "Проверены diff (11 файлов задачи + evidence), 10 инвариантов, грабли §0.1; прогнаны pytest, ruff"
+    - "Поставлены мутации карточки (3) и сверх неё (2): все убиты прицельным прогоном tests/test_export_analogs.py, включая печать analog_cards в каждом из пяти выходов по одному"
+    - "Блокирующих нет; 3 совета (режим вне BriefMode, CLI-markdown без режима, подписи на утверждение владельцу)"
+  artifacts:
+    - .planning/evidence/Э6-W2-Э6-4-review.md
+    - .planning/evidence/Э6-W2-Э6-4-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q (полный, Linux, без боевых переменных): 1466 passed, 1 warning in 78.85s"
+    - "ruff check: All checks passed!; ruff format --check: 227 files already formatted"
+    - "pytest tests/test_export_analogs.py -q: 10 passed; мутации: 4/4/4/4/4 failed (по выходам), 4 failed (без наложения briefs), 5 failed (всё в main)"
+    - "rg country_status backend/app/export: только export/analogs.py; markdown.py 449 строк"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э6-W2-Э6-4-review.md
+    - backend/app/export/analogs.py
+    - backend/app/export/view.py (_with_briefs_fields)
+  notes: "Вердикт ПРИНЯТЬ. Подписи клиенту (совет 3) — владельцу на утверждение до ворот этапа; задача входит в аудит этапа (РЕШ-244, факты аналогов клиенту). Цикл 1 из лёгкого режима."

@@ -1,0 +1,28 @@
+handoff:
+  from: verifier
+  to: implementer-1 (через оркестратора)
+  task: Э6-4
+  did:
+    - Прогнаны критерии 1–5 из PLAN.md (раздел Э6-4) и общие правила 3, 4, 5, 6, 9 этапа; закрыто 6 из 7 пунктов
+    - Мутации: 8 мутаций в копиях из git archive, все дают failed (M1, M2a–e по одному выходу, M3a, M3b)
+    - Полный pytest: HEAD 1466 passed; база 776b9c1 1456 (+10 = 1466); интеграция e6-w2 + патч задачи 1517 (= 1507 + 10); без сети 1466 passed
+    - ruff check и ruff format --check: чисто
+    - Инварианты 1–10 подтверждены способами из INVARIANTS.md; секреты значениями не выводились
+  artifacts:
+    - .planning/evidence/Э6-W2-Э6-4-verify.md
+    - .planning/evidence/Э6-W2-Э6-4-verify-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_export_analogs.py -v: 10 passed"
+    - "pytest -q (HEAD): 1466 passed, 0 failed"
+    - "pytest -q при заблокированной сети (unshare -rn): 1466 passed"
+    - "ruff check .: All checks passed!; ruff format --check .: 227 files already formatted"
+    - "rg country_status backend/app/export: только export/analogs.py"
+    - "git diff --stat origin/claude/e6-w2 HEAD -- tests/: 7 файлов, не закрыто (отставание ветки от базы)"
+    - "git diff --stat 776b9c1 HEAD -- tests/: только tests/test_export_analogs.py (+302)"
+  escalate: orchestrator — слияние origin/claude/e6-w2 в claude/e6-4 (§11), затем повторная проверка правила 4; DLG-1 (контейнер python:3.12-slim, Docker недоступен, заменён CI) — владельцу до ворот
+  read_first:
+    - .planning/evidence/Э6-W2-Э6-4-verify.md (таблица, причина FAIL)
+    - tests/test_export_analogs.py
+    - backend/app/export/analogs.py
+  notes: "Вердикт FAIL: единственный незакрытый пункт — общее правило 4 в литеральной форме против origin/claude/e6-w2. Ветка создана от 776b9c1 и не содержит восьми коммитов Э6-2а; патч задачи накладывается на e6-w2 без конфликтов (1517 passed). Код задачи не менялся. DLG-1 открыт."

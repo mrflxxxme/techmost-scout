@@ -28,6 +28,8 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.export.analogs import AnalogSections, analog_sections
+from app.models import Brief as BriefRow
 from app.models import Request as RequestRow
 from app.models import RequestStatus
 from app.models import SolutionCard as SolutionCardRow
@@ -120,6 +122,12 @@ class ExportView:
     #: а не на причину её отсутствия — этот флаг называет только одну из
     #: возможных причин и сам по себе фактом не является.
     comparison_table_hidden: bool = False
+    #: Секция «Что делают в мире» (Э6-4): полные карточки и сноски по режиму
+    #: брифа, аналоги без `evidence` и из исключённых стран уже убраны.
+    #: Страница отчёта, PDF, DOCX и JSON читают это поле, markdown зовёт ту же
+    #: `analogs.analog_sections`. Без явного значения считается из
+    #: `client_report` — аналоги не зависят от вердиктов по карточкам.
+    analog_sections: AnalogSections | None = None
 
     def __post_init__(self) -> None:
         """`client_report` без явного значения — `report`, довычищенный от пустого `evidence`.
@@ -131,6 +139,8 @@ class ExportView:
         """
         if self.client_report is None:
             self.client_report = visible_report(self.report, {}, {}, require_evidence=True)
+        if self.analog_sections is None:
+            self.analog_sections = analog_sections(self.client_report)
 
 
 @asynccontextmanager
@@ -151,6 +161,7 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
         raise ReportNotFoundError(f"запрос №{request_id} не найден")
 
     raw_report = await load_report(lambda: _session_scope(session), request_id)
+    raw_report = await _with_briefs_fields(session, request_id, raw_report)
 
     card_rows = (
         (await session.execute(select(SolutionCardRow).where(SolutionCardRow.request_id == request_id))).scalars().all()
@@ -208,7 +219,32 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
         recommendation_edited=recommendation_edited,
         caveats_edited=caveats_edited,
         comparison_table_hidden=comparison_table_hidden,
+        analog_sections=analog_sections(client_visible),
     )
+
+
+async def _with_briefs_fields(session: AsyncSession, request_id: int, report: Report) -> Report:
+    """Наложить на бриф отчёта режим, регион, потребность и вид решения из строки `briefs`.
+
+    Эти поля живут только в колонках `briefs` и в `report_json` не попадают
+    (`exclude=True` в схеме) — без наложения потребитель получил бы умолчание
+    `business` вместо режима запроса, и фильтр стран сработал бы вхолостую.
+    Единственная точка наложения: `report` и `client_report` строятся из уже
+    дополненного отчёта, JSON-выгрузка своего второго пути к `briefs` не ведёт.
+    Строки нет — бриф остаётся как прочитан; `NULL` в колонках читается как
+    умолчание контракта (`business`, `research`) — строки, записанные до
+    Э6-1 и РЕШ-250.
+    """
+    row = (await session.execute(select(BriefRow).where(BriefRow.request_id == request_id))).scalars().one_or_none()
+    if row is None:
+        return report
+    update = {
+        "region_code": row.region_code,
+        "need_id": row.need_id,
+        "mode": row.mode or "business",
+        "solution_kind": row.solution_kind or "research",
+    }
+    return report.model_copy(update={"brief": report.brief.model_copy(update=update)})
 
 
 def _comparison_table_hidden(

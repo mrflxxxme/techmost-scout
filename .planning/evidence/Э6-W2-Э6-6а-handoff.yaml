@@ -1,0 +1,50 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: Э6-6а
+  did:
+    - Код писал прежний исполнитель (умер Git Bash, ни разу не запускался); этот исполнитель довёл его до зелёного. Изменены только тесты — код продукта не менялся.
+    - "backend/app/web/host_routing.py (чистая ASGI-прослойка), web/scan_limits.py (client_ip, IpDailyCounter, admit_scan, spent_today_rub), config.py (7 настроек), models.py и db.py (requests.scan_token, догон в init_db), main.py (build_app(..., public_scan_host) подключает прослойку самой внешней)."
+    - "Тесты tests/test_host_routing.py и tests/test_scan_limits.py: 41 passed. Правки: /history в приложении нет, рабочий путь /requests; статика проверяется по настоящему /static/theme.css; публичный адрес соединения 8.8.8.8 (is_private истинен для RFC 5737); ruff (строки 121 символ, S107, N802)."
+    - "Мутации (по одной, откат): без резерва незавершённых 1 failed; XFF доверять всегда 2 failed; пропускать рабочие пути на публичном хосте 7 failed."
+  artifacts:
+    - backend/app/web/host_routing.py
+    - backend/app/web/scan_limits.py
+    - backend/app/config.py
+    - backend/app/models.py
+    - backend/app/db.py
+    - backend/app/main.py
+    - tests/test_host_routing.py
+    - tests/test_scan_limits.py
+    - .planning/evidence/Э6-W2-Э6-6а-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_host_routing.py tests/test_scan_limits.py: 41 passed"
+    - "pytest -q: 1490 passed, 7 failed (6 — test_docker_compose_backup_runtime.py, Linux-специфика; 1 — tests/test_config.py, см. escalate)"
+    - "ruff check . : All checks passed; ruff format --check . : 229 files already formatted"
+    - "test_backend_layout + test_tests_layout: 6 passed; инв. 6 — пусто; rg captcha — пусто"
+    - "контейнерный прогон python:3.12-slim НЕ выполнен: Docker Desktop не запущен"
+  escalate:
+    question: "tests/test_config.py::test_каждая_переменная_settings_объявлена_в_примере красный: 7 новых настроек (PUBLIC_SCAN_HOST, SCAN_COST_LIMIT_RUB, SCAN_DAILY_BUDGET_RUB, SCAN_LIMIT_PER_IP_PER_DAY, SCAN_ORDER_EMAIL, SCAN_ORDER_TELEGRAM_URL, YANDEX_SEARCH_RUB_PER_QUERY) не объявлены в .env.example. И .env.example, и test_config.py вне границ Э6-6а (шаблон окружения правит только владелец, прежние тесты не правятся). План этого пересечения не предусмотрел."
+    options:
+      - "A: внести 7 имён в _AWAITING_OWNER_IN_EXAMPLE в tests/test_config.py (прецедент Э5: SCOUT_API_KEYS и др.), владелец дописывает .env.example сам; тест-страж потребует убрать исключения, когда имена появятся в примере."
+      - "B: владелец сразу дописывает 7 строк в .env.example."
+    recommendation: "A на время волны плюс B владельцем до ворот этапа; решает оркестратор (затрагивает файл вне границ)."
+  read_first:
+    - .planning/PLAN.md (Э6-6а, контракты «Роутинг по Host», «Настройки»)
+    - backend/app/web/scan_limits.py
+    - backend/app/web/host_routing.py
+    - .planning/evidence/Э6-W2-Э6-6а-checks.txt
+  notes:
+    tariff: "YANDEX_SEARCH_RUB_PER_QUERY=0.48 — 480 ₽ с НДС за 1000 синхронных запросов в сутки, https://yandex.cloud/ru/docs/search-api/pricing, проверено оркестратором 18.10.2026. РЕШ-269 (Э-1): потолок суток = модели + запросы Яндекса × тариф; стоп-кран 10 ₽ — только модели."
+    autonomous_decisions_for_DECISIONS_md:
+      - "Запросы Яндекса на скан в базе не хранятся: потолок считает консервативно — каждый скан суток = 6 запросов (предел YandexSearchAdapter.max_queries) × тариф."
+      - "Скан = строка requests с scan_token не NULL; сутки [00:00, 24:00) по фиксированному UTC+3, границы переводятся в UTC для сравнения с created_at; в потолок входят только сканы текущих суток."
+      - "Незавершённый скан = статус не из {drafted, validated, exported, failed}; на каждый такой резервируется SCAN_COST_LIMIT_RUB сверх его cost_rub. Допуск при остатке >= SCAN_COST_LIMIT_RUB включительно (290 ₽ потрачено — допуск, 291 — отказ)."
+      - "request.client is None — IP «unknown»; порядок в admit_scan: сначала IP, затем потолок; admit_scan ничего не пишет, ip_counter.record зовёт маршрут (Э6-6в), чтобы отказ по потолку не расходовал попытку адреса."
+      - "requests.scan_token без индекса: SQLite не удаляет проиндексированную колонку, а test_brief_ecosystem_fields дропает колонки из ADDED_COLUMNS; сканов десятки в сутки."
+      - "client_ip: доверие к X-Forwarded-For определяется ipaddress.is_private соединения. Замечание: is_private истинен и для документационных диапазонов RFC 5737 — на практике безвредно (в проде peer — адрес контейнера Caddy), в тестах «публичный» адрес — 8.8.8.8."
+    deviations:
+      - "Критерий 1 называет /history как рабочий путь; такого маршрута нет (история — /requests). /history оставлен в параметрах публичного хоста (404), рабочий хост проверяется на /requests (401)."
+      - "Маршрутов /scan нет (Э6-6в): в test_host_routing.py на собранное приложение навешиваются пробные /scan и /scan/{token}.json."
+    environment: "Git Bash падал add_item errno 1 (прогоны шли по одному, повторы до восстановления). Ветка claude/e6-6a занята другим worktree, работа шла в worktree-agent-ab0a2153096bbf04c на коммите 7b24aee; пуш — git push origin HEAD:claude/e6-6a."
