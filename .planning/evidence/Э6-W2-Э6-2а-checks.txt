@@ -1,0 +1,47 @@
+Э6-2а · Слой аналогов в пайплайне — вывод проверок (Windows, Python 3.12, venv jolly-wilbur с PYTHONPATH=<копия>/backend)
+
+Путь пакета: python -c "import app; print(app.__file__)" -> ...\agent-a928021888c4e8921\backend\app\__init__.py
+
+Критерий 1: pytest tests/test_analog_stage.py tests/test_analog_flow.py
+  test_analog_stage.py: 27 тестов, test_analog_flow.py: 15 тестов (заглушки, без сети)
+  -> вместе с критериями 2 и 5 ниже: 130 passed in 8.46s
+
+Критерий 2: pytest tests/test_prompts.py tests/test_plan_types.py
+  planner = {"BRIEF_JSON","SOLUTION_KIND"}, analog_scorer = {"BRIEF_JSON","ANALOG_CANDIDATES_JSON"} (EXPECTED_PLACEHOLDERS)
+  -> passed (входят в 130 passed выше)
+
+Критерий 3: мутации, pytest tests/test_analog_flow.py -q (без мутаций: 15 passed)
+  а) убран вызов prefilter_analog_candidates (run_analogs: allowed = analog_scored)
+       -> 1 failed, 14 passed   (test_кандидат_tw_в_gov_не_доходит_до_модели)
+  б) убрана проверка статуса страны в select_publishable_analogs (if False:)
+       -> 1 failed, 14 passed   (test_tw_от_модели_по_кандидату_без_страны_в_gov_не_публикуется)
+  в) убрано снятие analog при research (planning: kept = analog[:ANALOG_QUERIES])
+       -> 1 failed, 14 passed   (test_research_не_зовёт_analog_scorer_и_не_шлёт_analog_источнику)
+  г) ANALOG убран из COVERAGE_EXCLUDED_SOURCE_TYPES
+       -> 1 failed, 14 passed   (test_аналоги_не_засчитываются_в_покрытие_типов)
+  Все четыре откачены git checkout; после отката 15 passed.
+
+Критерий 4: rg -n "analog" prompts/card_author.md prompts/verifier.md prompts/summary.md prompts/scorer.md prompts/intake.md
+  -> пусто (код возврата rg 1)
+
+Критерий 5: pytest tests/test_backend_layout.py tests/test_pipeline_layout.py tests/test_tests_layout.py tests/test_stage_token_budgets.py
+  -> passed; run_stages.py 457 строк (было 430), planning.py 325, analogs.py 153, run_analogs.py 115;
+     новые тесты 450 и 342 строки (< 500)
+
+Критерий 6: git diff --stat origin/claude/e6-w2 -- tests/
+  новые: test_analog_flow.py, test_analog_stage.py; названные: test_prompts.py (+10/-), test_plan_types.py (+34);
+  вынужденные (см. notes handoff): test_cli_run.py (1 строка), test_brief_ecosystem_fields.py (3 строки) —
+  прямой render_prompt("planner", ...) без новой обязательной метки.
+
+Общие критерии:
+  pytest -q (полный, Windows): 6 failed, 1499 passed in 279.51s
+    6 failed — все в tests/test_docker_compose_backup_runtime.py (известная Linux-специфика, допустима)
+    база волны 1447 passed -> 1499 passed (+52: 42 новых теста слоя аналогов и 10 от нового ключа analog_scorer в параметризациях
+    test_prompts.py и двух новых тестов test_plan_types.py)
+  ruff check .          -> All checks passed!
+  ruff format --check . -> 230 files already formatted
+  Инв. 6: rg -ln httpx backend/app --path-separator // | rg -v "backend/app/(llm/|search/|cli_doctor\.py$|pipeline/pipeline_context\.py$|pipeline/pipeline_search\.py$)"
+    -> пусто
+  Контейнер python:3.12-slim: НЕ выполнен — демон Docker Desktop не запущен
+    (docker info: «open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified»).
+    Подготовлен запуск: монтирование копии :ro, cp -r, pip install -e '.[dev,export]', pytest -q.

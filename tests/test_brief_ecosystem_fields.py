@@ -93,8 +93,10 @@ def test_поля_экосистемы_не_попадают_в_дамп_бри�
 def test_промпт_планировщика_не_меняется_от_полей_экосистемы(brief: Brief):
     marked = brief.model_copy(update={"region_code": "86", "need_id": "restaurants_cafes", "mode": "gov"})
 
-    plain = render_prompt("planner", BRIEF_JSON=brief.model_dump_json(indent=2))
-    with_fields = render_prompt("planner", BRIEF_JSON=marked.model_dump_json(indent=2))
+    plain = render_prompt("planner", BRIEF_JSON=brief.model_dump_json(indent=2), SOLUTION_KIND=brief.solution_kind)
+    with_fields = render_prompt(
+        "planner", BRIEF_JSON=marked.model_dump_json(indent=2), SOLUTION_KIND=marked.solution_kind
+    )
 
     assert with_fields == plain
 

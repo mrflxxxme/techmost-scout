@@ -481,7 +481,7 @@ async def test_placeholder_in_raw_text_does_not_break_prompt_rendering(
     assert "{{" not in brief.industry
     assert "CLIENT_NAME" in brief.task_summary, "текст оператора не должен пропадать — снимаются только скобки"
     # Сквозная проверка: именно на этой сборке промпта прогон и падал.
-    render_prompt("planner", BRIEF_JSON=brief.model_dump_json(indent=2))
+    render_prompt("planner", BRIEF_JSON=brief.model_dump_json(indent=2), SOLUTION_KIND=brief.solution_kind)
 
 
 @pytest.mark.parametrize("raw_text", ["", "   \n\t  "])

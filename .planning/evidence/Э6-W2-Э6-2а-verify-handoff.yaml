@@ -1,0 +1,23 @@
+handoff:
+  from: verifier
+  to: orchestrator
+  task: Э6-2а
+  did:
+    - Прогнаны все критерии 1-7 из PLAN.md (общие правила 37-67, раздел 260-278), закрыто 7 из 7
+    - Поставлены и откачены 4 мутации, каждая даёт ровно 1 failed в test_analog_flow.py
+    - Подтверждены инварианты 1, 3-8 способами из INVARIANTS.md
+  artifacts:
+    - .planning/evidence/Э6-W2-Э6-2а-verify.md
+    - .planning/evidence/Э6-W2-Э6-2а-verify-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest test_analog_stage + test_analog_flow: 44 passed"
+    - "pytest test_prompts + test_plan_types: 72 passed"
+    - "pytest -q: 6 failed (известные test_docker_compose_backup_runtime), 1501 passed"
+    - "ruff check: All checks passed; ruff format --check: 230 files already formatted"
+    - "rg httpx вне допустимых: пусто; rg analog в 5 промптах: пусто"
+  escalate: "DLG-1: контейнерный прогон не выполнен, Docker Desktop не запущен; действие владельца - запустить Docker и повторить команду; на вердикт не влияет"
+  verdict: PASS
+  read_first:
+    - .planning/evidence/Э6-W2-Э6-2а-verify.md
+  notes: Отступления - _kind_kwargs долг, починка Б1 от оркестратора, две вынужденные правки тестов (test_cli_run.py, test_brief_ecosystem_fields.py), правка yandex_search.py (4 строки).

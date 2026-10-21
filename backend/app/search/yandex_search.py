@@ -123,7 +123,9 @@ class YandexSearchAdapter(SearchAdapter):
     #: `GRANT` добавлен РЕШ-173: грантовая формулировка планировщика больше не
     #: маскируется под `web` — она доходит до адаптера собственным типом, и
     #: кандидаты из неё размечаются им же (см. `search_raw`).
-    source_types = (SourceType.WEB, SourceType.CONTEST, SourceType.GRANT)
+    #: `ANALOG` добавлен Э6-2а: без него формулировка `analog` из плана при виде
+    #: решения «Рынок» не доходила бы ни до одного источника (тип недостижим).
+    source_types = (SourceType.WEB, SourceType.CONTEST, SourceType.GRANT, SourceType.ANALOG)
     #: Бесплатного тарифа нет — без ключа и каталога адаптер не включается
     requires_key = True
     #: Запросы платные и асинхронные; частота ограничена не жёстко
