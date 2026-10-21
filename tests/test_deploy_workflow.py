@@ -364,13 +364,14 @@ def test_шаг_выполняется_только_для_своих_дейст
 def test_откат_только_при_сбое_и_только_после_копии() -> None:
     """Откат Caddyfile запускается по `failure()`, когда копия уже снята."""
     step = _steps()[_step_index("file-restore")]
-    assert "failure()" in step["if"] and "steps.bak.outcome == 'success'" in step["if"]
+    assert "failure()" in step["if"] and "cancelled()" in step["if"], "отмена и таймаут тоже откатывают файл"
+    assert "steps.bak.outcome == 'success'" in step["if"]
     assert _steps()[_step_index("file-backup /opt/edge-caddy/Caddyfile")]["id"] == "bak"
 
 
 def test_проверка_кодов_соседей_и_своих_хостов() -> None:
     """Рабочий `/` — 401, JSON-API не закрыт паролем прокси, скан — 200, соседи — не 5xx и не 000."""
-    run = _steps()[_step_index("EDGE_NEIGHBOR_URLS//")]["run"]
+    run = _steps()[_step_index("code_of() {")]["run"]
     assert '/" 401' in run and "/api/v1/" in run and "www-authenticate" in run.lower()
     assert '/scan" 200' in run
     assert "[1-4][0-9][0-9]" in run, "соседний сайт с 5xx или 000 обязан давать красный шаг"

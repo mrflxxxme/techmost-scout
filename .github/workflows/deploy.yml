@@ -1,8 +1,9 @@
 # Деплой Скаута на общий сервер через ssh (Э6-9, РЕШ-272, РЕШ-249).
 #
-# Запуск только вручную (workflow_dispatch) и только из ветки по умолчанию,
-# пока файл не влит в main: GitHub не показывает кнопку запуска для workflow,
-# которого нет в ветке по умолчанию. Порядок первого раскатывания и список
+# Запуск только вручную (workflow_dispatch) и только из ветки по умолчанию:
+# первый шаг отказывает любой другой ветке (страховка от ошибки; настоящий замок —
+# environment, ограниченный main, docs/deploy.md раздел 13). Пока файл не влит в
+# main, GitHub не показывает кнопку запуска. Порядок первого раскатывания и список
 # секретов и переменных — docs/deploy.md, раздел 13.
 #
 # Правила, которые держит tests/test_deploy_workflow.py:
@@ -56,9 +57,15 @@ jobs:
       SCOUT_WORK_HOST: ${{ vars.SCOUT_WORK_HOST }}
       SCOUT_SCAN_HOST: ${{ vars.SCOUT_SCAN_HOST }}
       EDGE_NEIGHBOR_URLS: ${{ vars.EDGE_NEIGHBOR_URLS }}
+      RUN_REF: ${{ github.ref }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
     steps:
-      - name: Проверка входов
+      - name: Проверка входов и ветки запуска
         run: |
+          if [ "$RUN_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+            echo "::error::запуск только из ветки по умолчанию: секреты репозитория отдаются только ей"
+            exit 1
+          fi
           if [[ ! "$REF" =~ ^[A-Za-z0-9._/-]+$ || "$REF" == -* || "$REF" == *..* ]]; then
             echo "::error::ref не прошёл проверку: допустимы буквы, цифры, точка, подчёркивание, дефис и косая черта"
             exit 1
@@ -67,6 +74,14 @@ jobs:
             echo "::error::хосты в переменных репозитория задаются без схемы, порта и пути"
             exit 1
           fi
+          set -f
+          for url in ${EDGE_NEIGHBOR_URLS//,/ }; do
+            if [[ ! "$url" =~ ^https?://[^[:space:]]+$ ]]; then
+              echo "::error::адреса в EDGE_NEIGHBOR_URLS задаются полностью, со схемой http:// или https://"
+              exit 1
+            fi
+          done
+          set +f
           if [ "$ACTION" = caddy-apply ]; then
             if [ -z "$SCOUT_WORK_HOST" ]; then
               echo "::error::переменная SCOUT_WORK_HOST пуста: блок рабочего хоста собрать не из чего"
@@ -252,7 +267,7 @@ jobs:
       - name: Проверка scout doctor
         if: inputs.action == 'deploy' || inputs.action == 'env-keys' || inputs.action == 'doctor'
         run: |
-          ssh scout-deploy bash -s <<'REMOTE'
+          ssh scout-deploy bash -s <<'REMOTE' | tee "$RUNNER_TEMP/doctor.out"
           main() {
             set -euo pipefail
             cd /opt/techmost-scout/docker
@@ -260,6 +275,16 @@ jobs:
           }
           main "$@"
           REMOTE
+          # scout doctor кончается кодом 0 и при мёртвых ключах: признак смотрим по тексту вывода
+          # (в нём статусы и тексты ошибок источников, значений ключей нет).
+          if ! grep -qF 'Готово к работе.' "$RUNNER_TEMP/doctor.out"; then
+            echo "::error::scout doctor не сообщил готовность к работе"
+            exit 1
+          fi
+          if grep -qE 'Схема базы разошлась|Ни одна модель не отвечает' "$RUNNER_TEMP/doctor.out"; then
+            echo "::error::scout doctor нашёл расхождение схемы базы или не достучался ни до одной модели"
+            exit 1
+          fi
 
       - name: Копия Caddyfile
         id: bak
@@ -309,7 +334,8 @@ jobs:
             if [ "$got" != "$want" ]; then fail=1; fi
           }
           expect "Рабочий хост без пароля" "https://${SCOUT_WORK_HOST}/" 401
-          hdr=$(curl -sS -o /dev/null -D - --max-time 20 "https://${SCOUT_WORK_HOST}/api/v1/requests/0" 2>/dev/null || true)
+          # curl отдаёт заголовки с CRLF: без снятия \r код «502» не совпал бы с шаблоном ниже
+          hdr=$(curl -sS -o /dev/null -D - --max-time 20 "https://${SCOUT_WORK_HOST}/api/v1/requests/0" 2>/dev/null | tr -d '\r' || true)
           api=$(awk 'NR == 1 { print $2 }' <<< "$hdr")
           echo "JSON-API мимо пароля: ${api:-000}"
           case "${api:-000}" in 000|502|504) fail=1 ;; esac
@@ -333,7 +359,7 @@ jobs:
           exit "$fail"
 
       - name: Откат Caddyfile из копии
-        if: failure() && inputs.action == 'caddy-apply' && steps.bak.outcome == 'success'
+        if: (failure() || cancelled()) && inputs.action == 'caddy-apply' && steps.bak.outcome == 'success'
         env:
           BAK: ${{ steps.bak.outputs.path }}
         run: |

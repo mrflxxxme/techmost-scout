@@ -260,8 +260,8 @@ def test_блок_скана_содержит_блок_раздела_публи
     rest = iter(tpl)
     assert all(line in rest for line in doc), "блок шаблона разошёлся с разделом «Публичный скан»"
     extra = [ln for ln in tpl if ln not in doc]
-    assert extra[:2] == ["request_body {", "max_size 32KB"] and len(extra) == 3
-    assert extra[2].startswith("Content-Security-Policy \"default-src 'self'; script-src 'self';")
+    assert extra[:3] == ["@scan path /scan*", "request_body @scan {", "max_size 32KB"] and len(extra) == 4
+    assert extra[3].startswith("Content-Security-Policy \"default-src 'self'; script-src 'self';")
 
 
 def test_csp_скана_не_шире_того_что_грузят_шаблоны() -> None:
