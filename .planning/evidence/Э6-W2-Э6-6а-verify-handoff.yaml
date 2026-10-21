@@ -1,0 +1,26 @@
+handoff:
+  from: verifier
+  to: implementer-1
+  task: "Э6-6а"
+  did:
+    - "Прогнаны 4 критерия приёмки из PLAN.md и общие правила этапа; закрыто 3 из 4, критерий 1 не закрыт (путь /request/1 не проверен тестом)"
+    - "Мутации критерия 3 по одной с откатом: резерв незавершённых 1 failed, XFF всегда 2 failed, рабочие пути на публичном 12 failed"
+    - "Полный прогон pytest -q: 1557 passed, 0 failed; прогон без сети (unshare -rn): 1557 passed"
+    - "ruff check и ruff format --check: чисто; rg captcha: пусто; test_prompts 59 passed; test_team_docs 35 passed"
+  artifacts:
+    - ".planning/evidence/Э6-W2-Э6-6а-verify.md"
+    - ".planning/evidence/Э6-W2-Э6-6а-verify-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_host_routing.py -v: 30 passed; литеральный /request/1 в тестах отсутствует, критерий 1 не закрыт"
+    - "pytest tests/test_scan_limits.py -v: 20 passed"
+    - "pytest -q: 1557 passed, 0 failed (база 1507 + 50 новых)"
+    - "ruff check .: All checks passed!; ruff format --check .: 234 files already formatted"
+    - "rg -ni captcha backend/ tests/: пусто"
+    - "grep httpx backend/app: только llm/, search/, cli_doctor.py, pipeline_context.py, pipeline_search.py"
+  escalate: "DLG-1: контейнерный прогон python:3.12-slim не выполнен (Docker недоступен), по РЕШ-276 заменён CI — вывод CI приложить к evidence владельцем"
+  read_first:
+    - ".planning/evidence/Э6-W2-Э6-6а-verify.md"
+    - "tests/test_host_routing.py (параметризация test_публичный_хост_закрывает_рабочие_пути_404_без_пароля)"
+    - "backend/app/web/host_routing.py"
+  notes: "Вердикт FAIL из-за критерия 1: нужен случай /request/1 в тестах либо решение оркестратора о признании отступления для этого пути. Остальные критерии закрыты. Инвариант 3: совпадения grep по набору совпадают с базой, новых нет."

@@ -1,0 +1,24 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: "Э6-6а (починка по ревью цикла 1)"
+  did:
+    - "Блокирующее: tests/test_scan_limits.py::test_init_db_возвращает_scan_token_в_старую_базу — DROP COLUMN scan_token, init_db, колонка вернулась, SELECT по Request работает"
+    - "Совет 1: в tests/test_host_routing.py вырожденные пути заменены на существующие (/requests/1/review, /requests/1/export.pdf, /demo, /showcase), POST /run заменён на POST /requests (404 на публичном хосте, 401 на рабочем)"
+    - "Совет 2: тесты пустой PUBLIC_SCAN_HOST и пустого Host (decision и сквозной запрос без заголовка Host)"
+    - "Совет 3: тест test_скан_следующих_суток_в_потолок_не_входит (граница end, +1 день)"
+  artifacts:
+    - tests/test_scan_limits.py
+    - tests/test_host_routing.py
+    - .planning/evidence/Э6-W2-Э6-6а-fix-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest -q (env -u боевых переменных): 1506 passed (было 1497, +9), 0 failed"
+    - "ruff check .: All checks passed; ruff format --check .: 229 files already formatted"
+    - "мутации: M1 ADDED_COLUMNS без scan_token 1 failed; M2 пропуск рабочих путей 12 failed; M3 без проверки пустой настройки 3 failed; M4 граница +1 день 1 failed; M5 граница <= 1 failed"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э6-W2-Э6-6а-fix-checks.txt
+    - tests/test_scan_limits.py
+    - tests/test_host_routing.py
+  notes: "Код продукта не менялся. Советы 4-6 ревью вне скоупа (4 — для Э6-6в, 5 — безвредная ветка websocket, 6 — при дописывании .env.example). Мутации прогнаны после коммита тестов, откат подтверждён чистым git status."
