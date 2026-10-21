@@ -60,6 +60,8 @@ DEFAULT_WEB_PASSWORD = "change-me"  # noqa: S105
 #: идёт в stdin, а не аргументом, чтобы не попасть в список процессов сервера.
 HASH_COMMAND = ["docker", "exec", "-i", "edge-caddy", "caddy", "hash-password"]
 
+HASH_FALLBACK = "хэш вручную по docs/deploy.md (раздел 13) и ключ WEB_AUTH_HASH в docker/.env"
+
 _HOST_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$")
 _USER_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _BCRYPT_RE = re.compile(r"^\$2[aby]\$\d\d\$[./A-Za-z0-9]{53}$")
@@ -232,24 +234,36 @@ def _strip_noise(line: str) -> str:
     return "".join(out)
 
 
+#: Конец заголовка блока в однострочной записи `адрес { директива }`.
+_HEAD_END_RE = re.compile(r"\s\{(\s|$)")
+
+
 def top_level_blocks(lines: list[str]) -> list[tuple[int, int, list[str]]]:
-    """Верхнеуровневые блоки `адреса { … }`: (первая строка, строка после последней, адреса)."""
+    """Верхнеуровневые блоки `адреса { … }`: (первая строка заголовка, строка после последней, адреса).
+
+    Заголовок собирается по всем строкам: строка на запятую продолжается следующей (пустые
+    строки и комментарии между ними Caddy пропускает). Однострочный блок тоже распознаётся.
+    """
     blocks: list[tuple[int, int, list[str]]] = []
-    depth = 0
-    start = -1
-    addresses: list[str] = []
+    depth, start, head = 0, -1, ""
+    addresses: list[str] | None = None
     for index, raw in enumerate(lines):
-        clean = _strip_noise(raw.rstrip("\r\n"))
-        if depth == 0 and clean.strip():
-            head = clean.rstrip()
-            if head.endswith("{"):
-                start = index
-                addresses = [a for a in re.split(r"[,\s]+", head[:-1].strip()) if a]
+        clean = _strip_noise(raw.rstrip("\r\n")).strip()
+        if depth == 0 and clean:
+            start = start if head else index
+            joined = (head + " " + clean).strip()
+            one_line = _HEAD_END_RE.search(joined) if clean.endswith("}") else None
+            head = joined if clean.endswith(",") else ""
+            if clean.endswith("{"):
+                addresses = [a for a in re.split(r"[,\s]+", joined[:-1]) if a]
+            elif one_line:
+                addresses = [a for a in re.split(r"[,\s]+", joined[: one_line.start()]) if a]
         depth += clean.count("{") - clean.count("}")
         if depth <= 0:
-            if start >= 0:
+            if addresses is not None:
                 blocks.append((start, index + 1, addresses))
-            start = -1
+                addresses = None
+            start = start if head else -1
             depth = 0
     return blocks
 
@@ -362,17 +376,17 @@ def _append_region(caddyfile: str, region: str) -> str:
 
 def hash_password(password: str) -> str:
     """bcrypt-хэш пароля от `caddy hash-password` edge-контейнера; пароль идёт через stdin."""
+    code, hashed = "не выполнен", ""
     try:
         result = subprocess.run(  # noqa: S603
             HASH_COMMAND, input=(password + "\n").encode("utf-8"), capture_output=True, timeout=120, check=False
         )
+        code = f"код {result.returncode}"
+        hashed = result.stdout.decode("utf-8", "replace").strip() if result.returncode == 0 else ""
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise DeployError(f"caddy hash-password не выполнен: {type(exc).__name__}") from None
-    if result.returncode != 0:
-        raise DeployError(f"caddy hash-password завершился с кодом {result.returncode}")
-    hashed = result.stdout.decode("utf-8", "replace").strip()
+        code = type(exc).__name__
     if not _BCRYPT_RE.match(hashed):
-        raise DeployError("caddy hash-password вернул не bcrypt-хэш")
+        raise DeployError(f"caddy hash-password не дал bcrypt-хэш ({code}); запасной путь — {HASH_FALLBACK}")
     return hashed
 
 
@@ -381,12 +395,13 @@ def run_caddy_block(caddyfile: str, template: str, env_file: str, work_host: str
     with open(env_file, encoding="utf-8") as handle:
         env_text = handle.read()
     user = env_value(env_text, "WEB_AUTH_USER", "scout")
+    hashed = env_value(env_text, "WEB_AUTH_HASH")  # запасной путь: хэш, посчитанный вручную
     password = env_value(env_text, "WEB_AUTH_PASSWORD")
-    if not password or password == DEFAULT_WEB_PASSWORD:
+    if not hashed and (not password or password == DEFAULT_WEB_PASSWORD):
         raise DeployError("WEB_AUTH_PASSWORD в .env не задан или остался умолчанием — хэш считать не от чего")
     with open(template, encoding="utf-8") as handle:
         template_text = handle.read()
-    region = render_sites(template_text, work_host, scan_host, user, hash_password(password))
+    region = render_sites(template_text, work_host, scan_host, user, hashed or hash_password(password))
     with open(caddyfile, encoding="utf-8", errors="surrogateescape", newline="") as handle:
         old = handle.read()
     new = merge_sites(old, region, [work_host, scan_host])
@@ -418,17 +433,16 @@ def run_db_backup(source: str, target: str) -> str:
     part = target + ".part"
     src = sqlite3.connect(f"file:{quote(source)}?mode=ro", uri=True, timeout=5)
     dst = sqlite3.connect(part, timeout=5)
+    copied = False
     try:
         with dst:
             src.backup(dst)
-    except BaseException:
+        copied = True
+    finally:
         dst.close()
         src.close()
-        if os.path.exists(part):
+        if not copied and os.path.exists(part):
             os.remove(part)
-        raise
-    dst.close()
-    src.close()
     os.rename(part, target)
     return f"копия базы: {target}"
 
