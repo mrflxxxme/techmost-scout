@@ -14,7 +14,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app import main
 from app.config import Settings, get_settings
-from app.web.host_routing import is_public_path, normalize_host
+from app.web.host_routing import HostRoutingMiddleware, is_public_path, normalize_host
 
 PUBLIC = "scan.example.ru"
 WORK = "scout.example.ru"
@@ -49,7 +49,17 @@ def _client(app, host: str) -> AsyncClient:
 
 # ── Публичный хост ────────────────────────────────────────────────────────────
 @pytest.mark.parametrize(
-    "path", ["/request/1", "/history", "/requests", "/requests/1/report", "/api/docs", "/api/openapi.json"]
+    "path",
+    [
+        "/requests",
+        "/requests/1/report",
+        "/requests/1/review",
+        "/requests/1/export.pdf",
+        "/demo",
+        "/showcase",
+        "/api/docs",
+        "/api/openapi.json",
+    ],
 )
 async def test_публичный_хост_закрывает_рабочие_пути_404_без_пароля(path: str):
     async with _client(_build(PUBLIC), PUBLIC) as client:
@@ -61,9 +71,18 @@ async def test_публичный_хост_закрывает_рабочие_п�
 
 async def test_публичный_хост_закрывает_рабочие_пути_и_для_post():
     async with _client(_build(PUBLIC), PUBLIC) as client:
-        response = await client.post("/run", data={"task": "x"})
+        response = await client.post("/requests", data={"raw_text": "x"})
 
+    # Без прослойки тот же POST упёрся бы в проверку пароля (401), с ней — 404.
     assert response.status_code == 404
+    assert "www-authenticate" not in response.headers
+
+
+async def test_post_requests_на_рабочем_хосте_упирается_в_пароль():
+    async with _client(_build(PUBLIC), WORK) as client:
+        response = await client.post("/requests", data={"raw_text": "x"})
+
+    assert response.status_code == 401
 
 
 async def test_корень_публичного_хоста_ведёт_на_scan():
@@ -146,6 +165,31 @@ async def test_без_настройки_scan_закрыт_везде_а_раб�
     assert scan.status_code == 404
     assert history.status_code == 401
     assert root.status_code == 401
+
+
+@pytest.mark.parametrize("host", ["", "   ", "scan.example.ru"])
+def test_пустая_настройка_и_пустой_host_не_публичный_режим(host: str):
+    middleware = HostRoutingMiddleware(_build(""), public_scan_host="")
+
+    assert middleware.decision(host, "/requests") is None
+    assert middleware.decision(normalize_host(host), "/") is None
+    assert middleware.decision(host, "/scan") is not None  # /scan закрыт и без публичного режима
+
+
+async def test_запрос_без_заголовка_host_при_пустой_настройке_идёт_как_рабочий():
+    app = _build("")
+    scope = {"type": "http", "method": "GET", "path": "/requests", "headers": [], "query_string": b""}
+    sent: list[dict] = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    await app(scope, receive, send)
+
+    assert sent[0]["status"] == 401  # рабочий путь: общий пароль, а не 404 публичного режима
 
 
 # ── Мелочи ────────────────────────────────────────────────────────────────────
