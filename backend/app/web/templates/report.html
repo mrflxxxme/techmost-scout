@@ -79,6 +79,24 @@
 </div>
 {% endif %}
 
+{% if analog_sections %}
+<h2 class="mt-xl">{{ analog_title }}</h2>
+<div class="grid two">
+  {% for analog in analog_sections.main %}
+  {% set num = loop.index %}
+  {% include "_analog_card.html" %}
+  {% endfor %}
+</div>
+{% if analog_sections.footnotes %}
+<p class="mb-sm"><strong>{{ analog_footnotes_title }}:</strong></p>
+<ul>
+  {% for note in analog_sections.footnotes %}
+  <li>{{ note.title }} — {{ note.country }} — <a href="{{ note.url }}">{{ note.url }}</a></li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endif %}
+
 {% if limitation_lines %}
 <h2 class="mt-xl">Ограничения этого поиска</h2>
 <div class="notice mb-lg">

@@ -43,6 +43,25 @@ class Settings(BaseSettings):
     api_rate_limit_runs_per_hour: int = Field(default=5, ge=1, validation_alias="API_RATE_LIMIT_RUNS_PER_HOUR")
     api_rate_limit_reads_per_minute: int = Field(default=60, ge=1, validation_alias="API_RATE_LIMIT_READS_PER_MINUTE")
 
+    # ── Публичный экспресс-скан (Э6-6а, РЕШ-258) ────────────────────────────
+    # `PUBLIC_SCAN_HOST` пуст — публичного режима нет, `/scan*` отвечает 404
+    # на любом хосте. Заполнен — этот хост отдаёт только `/scan*`, `/static/*`,
+    # `/api/v1/*` и `/health` (`app.web.host_routing`).
+    public_scan_host: str = Field(default="", validation_alias="PUBLIC_SCAN_HOST")
+    scan_limit_per_ip_per_day: int = Field(default=2, ge=1, validation_alias="SCAN_LIMIT_PER_IP_PER_DAY")
+    # Суточный потолок скана (РЕШ-258, РЕШ-269): модели + платный Яндекс Поиск.
+    scan_daily_budget_rub: float = Field(default=300.0, gt=0, validation_alias="SCAN_DAILY_BUDGET_RUB")
+    # Стоп-кран одного скана — только модели (как `cost_limit_rub_per_request`);
+    # он же резерв на каждый незавершённый скан в суточном потолке.
+    scan_cost_limit_rub: float = Field(default=10.0, gt=0, validation_alias="SCAN_COST_LIMIT_RUB")
+    # Тариф Yandex Search API: 480 ₽ с НДС за 1000 синхронных запросов в сутки,
+    # то есть 0,48 ₽ за запрос (https://yandex.cloud/ru/docs/search-api/pricing,
+    # проверено 18.10.2026). Платный поиск в `cost_rub` не входит — потолок суток
+    # прибавляет его отдельно.
+    yandex_search_rub_per_query: float = Field(default=0.48, ge=0, validation_alias="YANDEX_SEARCH_RUB_PER_QUERY")
+    scan_order_telegram_url: str = Field(default="", validation_alias="SCAN_ORDER_TELEGRAM_URL")
+    scan_order_email: str = Field(default="", validation_alias="SCAN_ORDER_EMAIL")
+
     # ── Языковые модели ─────────────────────────────────────────────────────
     # Бесплатный провайдер массовых стадий выпилен (РЕШ-171): двухпровайдерная
     # экономия обслуживала путь, которым никто не ходил — все вызовы прогона

@@ -1,0 +1,56 @@
+handoff:
+  from: implementer-2
+  to: reviewer
+  task: Э6-4
+  did:
+    - "Код писал прежний исполнитель (его Git Bash умер до прогона); этот исполнитель подхватил коммит 0da6488, прогнал проверки, правок кода не вносил"
+    - "backend/app/export/analogs.py: analog_sections(report) — единственное место фильтра аналогов (evidence + country_status по report.brief.mode); main / footnotes (название — страна — ссылка по evidence[0].url) / пропуск"
+    - "view.py: _with_briefs_fields накладывает region_code/need_id/mode/solution_kind из briefs один раз после load_report; ExportView.analog_sections"
+    - "json.py: второй путь к BriefRow и параметр brief= у build_report_payload удалены; ключ analog_cards {main, footnotes}, schema_version остаётся 1.0; прежние тесты JSON зелёные без правок"
+    - "markdown/pdf/docx/страница отчёта (report.html, _analog_card.html, report_print.html, routes/report.py) печатают секцию после основных и конкурсных карточек, вне лимита 5-7"
+    - "tests/test_export_analogs.py: 10 тестов (gov: CN в секции, US сноской, TW и бессылочный нигде; business: все три; режим из briefs; NULL режим = business; старый отчёт без аналогов)"
+  artifacts:
+    - backend/app/export/analogs.py
+    - backend/app/export/view.py
+    - backend/app/export/json.py
+    - backend/app/export/markdown.py
+    - backend/app/export/pdf.py
+    - backend/app/export/docx.py
+    - backend/app/web/routes/report.py
+    - backend/app/web/templates/_analog_card.html
+    - backend/app/web/templates/report.html
+    - backend/app/web/templates/report_print.html
+    - tests/test_export_analogs.py
+    - .planning/evidence/Э6-W2-Э6-4-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest выгрузок+страницы отчёта (11 файлов): 154 passed"
+    - "pytest -q полный: 1460 passed, 6 failed — только tests/test_docker_compose_backup_runtime.py (Linux-специфика, как в базе)"
+    - "мутации: _with_briefs_fields убран -> 4 failed; markdown печатает report.analog_cards -> 4 failed; analog_sections всё в main -> 5 failed"
+    - "rg country_status backend/app/export: только analogs.py; инв. 6 — пусто; markdown.py 449 строк"
+    - "ruff check: All checks passed; ruff format --check: 227 files already formatted"
+    - "Linux-контейнер: не запускался — движок Docker Desktop не отвечает"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (задача Э6-4)
+    - backend/app/export/analogs.py
+    - backend/app/export/view.py (_with_briefs_fields)
+    - tests/test_export_analogs.py
+  notes: |
+    ADR для DECISIONS.md: «Какие зарубежные аналоги видит читатель, решает одна функция
+    export.analogs.analog_sections по режиму из briefs (накладывается один раз в
+    export.view.build_export_view). Аналог без evidence не печатается нигде; excluded — нигде;
+    footnote — одной строкой «название — страна — ссылка» (первая ссылка evidence);
+    main — полной карточкой. Страница отчёта, markdown, PDF, DOCX, JSON не считают это сами.
+    JSON: analog_cards {main, footnotes}, schema_version остаётся "1.0"; json.py второго пути
+    к briefs не ведёт».
+    Подписи клиенту — на утверждение владельцу (§9 п. 4): заголовок «Что делают в мире» (задан SPEC);
+    «Справочно: аналоги из других стран» (блок сносок); подписи полей карточки аналога — «Страна»,
+    «Бизнес-модель», «Распространение», «Переносимость в РФ», «Что делать в РФ»; «Чем подтверждено»;
+    «Страна аналога: <страна>» первым пунктом подтверждений; «не найдено» вместо пустого распространения.
+    Отступления: нет. Рабочий вопрос РЕШ-244 (факты аналогов клиенту) закрыт кр. 1-2; в аудит этапа.
+    Замечание: у JSON-карточки аналога скрыто поле candidate_urls (след отбора), как у SolutionCard.
+    Все три риска прежнего исполнителя проверены: include в цикле report.html получает analog/num через
+    {% set num %} — тесты страницы зелёные; циклических импортов нет; ruff format чист; async-фикстура
+    factory в синхронных тестах работает.
+    Движок Docker не был запущен — Linux-прогон не сделан (6 падений backup-runtime ожидаемы на Windows).

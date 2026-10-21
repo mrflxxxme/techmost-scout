@@ -19,6 +19,14 @@ from docx import Document
 from docx.document import Document as DocumentObject
 from docx.shared import Pt
 
+from app.export.analogs import (
+    ANALOG_FOOTNOTES_TITLE,
+    ANALOG_SECTION_TITLE,
+    AnalogSections,
+    analog_evidence,
+    analog_fields,
+    footnote_line,
+)
 from app.export.markdown import (
     COMPARISON_HEADERS_RU,
     COMPARISON_TABLE_HIDDEN_NOTICE,
@@ -96,6 +104,8 @@ def export_docx(view: ExportView, out_path: Path) -> Path:
         document.add_heading(CONTEST_SECTION_HEADING.removeprefix("## "), level=1)
         for index, card in enumerate(printable_contest_cards, start=1):
             _add_card(document, card, index)
+
+    _add_analog_section(document, view.analog_sections)
 
     _add_limitations_section(document, report, printable_caveats)
 
@@ -264,6 +274,29 @@ def _add_card(document: DocumentObject, card: SolutionCard, index: int) -> None:
         document.add_paragraph("Не подтверждено проверкой:")
         for claim in card.unsourced_claims:
             document.add_paragraph(claim, style="List Bullet")
+
+
+def _add_analog_section(document: DocumentObject, sections: AnalogSections) -> None:
+    """Секция «Что делают в мире» (Э6-4): полные карточки и сноски; пусто — секции нет.
+
+    Что видно, решил `export.analogs.analog_sections` (подтверждения и страна
+    режима) — этот файл своего фильтра не ведёт.
+    """
+    if not sections:
+        return
+    document.add_heading(ANALOG_SECTION_TITLE, level=1)
+    for index, card in enumerate(sections.main, start=1):
+        document.add_heading(f"{index}. {card.title}", level=2)
+        document.add_paragraph(card.essence)
+        for label, value in analog_fields(card):
+            document.add_paragraph(f"{label}: {value}")
+        document.add_paragraph("Чем подтверждено:")
+        for claim, url in analog_evidence(card):
+            document.add_paragraph(f"{claim} — {url}", style="List Bullet")
+    if sections.footnotes:
+        document.add_paragraph(f"{ANALOG_FOOTNOTES_TITLE}:")
+        for footnote in sections.footnotes:
+            document.add_paragraph(footnote_line(footnote), style="List Bullet")
 
 
 def _add_limitations_section(document: DocumentObject, report: Report, printable: bool) -> None:

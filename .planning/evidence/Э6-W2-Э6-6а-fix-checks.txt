@@ -1,0 +1,36 @@
+## pytest -q (боевые переменные сняты env -u, общий интерпретатор)
+1506 passed, 1 warning in 76.60s (0:01:16)
+## ruff check .
+All checks passed!
+## ruff format --check .
+229 files already formatted
+
+## мутации (одна мутация, прогон тестового файла, откат; git status после чистый)
+## M1 убрать (requests,scan_token) из ADDED_COLUMNS
+FAILED tests/test_scan_limits.py::test_init_db_возвращает_scan_token_в_старую_базу
+1 failed, 19 passed in 1.32s
+## M2 пропускать рабочие пути на публичном хосте
+FAILED tests/test_host_routing.py::test_публичный_хост_закрывает_рабочие_пути_404_без_пароля[/requests]
+FAILED tests/test_host_routing.py::test_публичный_хост_закрывает_рабочие_пути_404_без_пароля[/requests/1/report]
+FAILED tests/test_host_routing.py::test_публичный_хост_закрывает_рабочие_пути_404_без_пароля[/requests/1/review]
+FAILED tests/test_host_routing.py::test_публичный_хост_закрывает_рабочие_пути_404_без_пароля[/requests/1/export.pdf]
+FAILED tests/test_host_routing.py::test_публичный_хост_закрывает_рабочие_пути_404_без_пароля[/demo]
+FAILED tests/test_host_routing.py::test_публичный_хост_закрывает_рабочие_пути_404_без_пароля[/showcase]
+FAILED tests/test_host_routing.py::test_публичный_хост_закрывает_рабочие_пути_404_без_пароля[/api/docs]
+FAILED tests/test_host_routing.py::test_публичный_хост_закрывает_рабочие_пути_404_без_пароля[/api/openapi.json]
+FAILED tests/test_host_routing.py::test_публичный_хост_закрывает_рабочие_пути_и_для_post
+FAILED tests/test_host_routing.py::test_хост_с_портом_и_в_верхнем_регистре_распознан[SCAN.Example.RU]
+FAILED tests/test_host_routing.py::test_хост_с_портом_и_в_верхнем_регистре_распознан[scan.example.ru:8443]
+FAILED tests/test_host_routing.py::test_хост_с_портом_и_в_верхнем_регистре_распознан[Scan.Example.Ru.:443]
+12 failed, 18 passed in 0.91s
+## M3 публичный режим без проверки пустой настройки
+FAILED tests/test_host_routing.py::test_пустая_настройка_и_пустой_host_не_публичный_режим[]
+FAILED tests/test_host_routing.py::test_пустая_настройка_и_пустой_host_не_публичный_режим[   ]
+FAILED tests/test_host_routing.py::test_запрос_без_заголовка_host_при_пустой_настройке_идёт_как_рабочий
+3 failed, 27 passed in 0.87s
+## M4 верхняя граница суток сдвинута на +1 день
+FAILED tests/test_scan_limits.py::test_скан_следующих_суток_в_потолок_не_входит
+1 failed, 19 passed in 1.36s
+## M5 верхняя граница суток включительно (<=)
+FAILED tests/test_scan_limits.py::test_скан_следующих_суток_в_потолок_не_входит
+1 failed, 19 passed in 1.48s

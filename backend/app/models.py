@@ -84,6 +84,11 @@ class Request(Base):
     #: интерфейсе или командой `scout run`, ни одному приложению он не виден.
     #: В уже существующую базу колонку дописывает `app.db.init_db`.
     api_client: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: Неугадываемый токен публичного экспресс-скана (Э6-6а): `secrets.token_urlsafe(32)`.
+    #: Не `NULL` — запрос является сканом, результат отдаётся по токену, номер
+    #: запроса наружу не уходит. Без индекса: колонку дописывает `init_db`, а
+    #: SQLite не удаляет проиндексированную колонку, да и сканов — десятки в сутки.
+    scan_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     brief: Mapped[Brief | None] = relationship(back_populates="request", uselist=False, cascade="all, delete-orphan")
     candidates: Mapped[list[Candidate]] = relationship(back_populates="request", cascade="all, delete-orphan")
