@@ -1,0 +1,54 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: Э6-2б
+  wave: Э6-W3
+  base: 6766af0
+  did:
+    - "backend/app/search/wikidata.py: SPARQL query.wikidata.org (EntitySearch + P31 по перечню классов компаний и продуктов), User-Agent с контактом, кандидат ANALOG (url wikidata.org/wiki/Q…, raw_id Q…, year из P571, snippet «описание; страна; основана; сайт; отрасль», country из P17→P297 только при одном значении). HTTP-ошибка, 429, обрыв, не-JSON, ответ без results.bindings — SearchError; пустой успех — []. Один повтор укороченной формулировкой при пустой выдаче."
+    - "backend/app/search/yc_catalog.py: all.json (≈10,6 МБ) один раз на экземпляр под asyncio.Lock, в памяти урезан до нужных полей; совпадение основ слов с именем, однострочным и длинным описанием, тегами, отраслью; url только ycombinator.com (иной узел — пропуск); country по таблице названий стран при однозначном месте; отказ не кэшируется, SearchError."
+    - "backend/app/search/__init__.py: оба в ADAPTERS (в конце), contact_email ← crossref_mailto, в __all__."
+    - "tests/test_wikidata.py (28 тестов) и tests/test_yc_catalog.py (32), respx, сеть не нужна."
+    - "tests/test_plan_types.py: ОДНА правка в тесте test_каждый_рабочий_адаптер_достижим_типом_из_промпта — см. escalate."
+  artifacts:
+    - backend/app/search/wikidata.py
+    - backend/app/search/yc_catalog.py
+    - backend/app/search/__init__.py
+    - tests/test_wikidata.py
+    - tests/test_yc_catalog.py
+    - tests/test_plan_types.py
+    - .planning/evidence/Э6-W3-Э6-2б-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_wikidata.py tests/test_yc_catalog.py -v: 60 passed"
+    - "pytest tests/test_plan_types.py tests/test_search_failures.py -v: 31 passed"
+    - "pytest -q (полный набор, переменные окружения сняты): 1576 passed, 0 failed (база 1507; +60 новых, +9 параметризованных стражей по реестру адаптеров)"
+    - "ruff check . и ruff format --check .: чисто"
+    - "инв. 6 (rg httpx вне разрешённых): пусто"
+    - "мутации по одной с откатом, все ≥1 failed: YC без проверки узла; YC без кэша экземпляра; Wikidata берёт первую из двух стран; Wikidata гасит HTTP-отказ; YC гасит не-JSON; адаптеры убраны из реестра"
+    - "git diff --stat 6766af0 -- tests/: только test_wikidata.py, test_yc_catalog.py (новые) и test_plan_types.py (+9/-2)"
+  escalate:
+    - "ОДНА правка вне списка файлов задачи: tests/test_plan_types.py::test_каждый_рабочий_адаптер_достижим_типом_из_промпта. Страж считал достижимость адаптера только по типам правила 1 planner.md, а Э6-2а объявила analog отдельным правилом 14 (и закрепила, что в правило 1 он не входит). Адаптер только на analog при этом краснел («недостижим ни одним типом промпта»), хотя критерий 2 задачи требует зелёный test_plan_types. Правка: достижимыми считаются типы правила 1 плюс analog, при условии что правило 14 есть в промпте (_planner_analog_rule()). Контракт ANALOG-only не менялся. Если оркестратор против — альтернатива: правка стража в Э6-2а-стиле или реестр с типом WEB у адаптеров (нарушает контракт задачи)."
+  autonomous_decisions_for_DECISIONS_md:
+    - "Wikidata: поиск EntitySearch (по названиям и псевдонимам) вместо полнотекстового: сервис Generic на query.wikidata.org отсутствует («Service name Generic not found»). Подклассы через P279* не раскрываются — на живой проверке такой запрос и GROUP BY давали 504; прямой P31 по перечню классов (business, company, enterprise, public company, software company, commercial organization, product, brand, software; метки проверены запросом) отвечает за ~6 с."
+    - "Wikidata: при пустой выдаче длинной формулировки — один повтор первыми тремя содержательными словами (как arxiv/Роспатент), детерминированно; пауза между запросами 1 с."
+    - "Wikidata: сообщение SearchError не содержит URL запроса (там весь SPARQL) — только код HTTP или тип исключения."
+    - "YC: порог совпадения — не менее двух различных основ слов формулировки (одно слово, если оно единственное); основа = первые 6 букв, без словаря и модели; вес поля: имя 4, одна строка 3, теги/отрасль 2, длинное описание 1. Русская формулировка пропускается без запроса (каталог англоязычный, как у arXiv)."
+    - "YC: country — все места компании (all_locations, разделитель «;», последний элемент после запятой) сводятся к таблице из 70 названий стран → ISO alpha-2; «Remote» не считается; место вне таблицы или две страны — None. year кандидата — год набора (batch), не launched_at."
+    - "YC: статус (Active/Inactive/Acquired/Public) и набор попадают в snippet, закрытые и поглощённые компании не отбрасываются — как прецеденты аналогов они остаются."
+    - "YC: таймаут загрузки — таймаут общего клиента (search_timeout_seconds = 30 с, это таймаут на чтение чанка, а не на весь файл); отдельной настройки не заведено (config.py вне границ)."
+  read_first:
+    - .planning/PLAN.md (Э6-2б)
+    - backend/app/search/wikidata.py
+    - backend/app/search/yc_catalog.py
+    - tests/test_plan_types.py (diff, +9/-2)
+  notes: >-
+    Живой ответ смотрелся вручную 21.10.2026: Wikidata отвечает 200 на простой запрос
+    (Techstars: US, 2006, techstars.com), но на втором запросе подряд сервис вернул 429
+    «1 req / min» из-за аварийного ограничения (wdqs outage) — в прогоне это даст
+    sources_unavailable, а не пустой успех; ограничение внешнее. all.json: 6320 записей,
+    все url на www.ycombinator.com, 6280 с сайтом. В общем каталоге scratchpad сессии
+    (/tmp/claude-0/.../scratchpad) мой промежуточный checks.sh перезаписал одноимённый
+    файл другого исполнителя, если он был, — рабочие файлы там временные, на код не влияет.
+    Проверка длины: wikidata.py 256, yc_catalog.py 319, __init__.py 244 строки (< 500).
+    Секретов нет; ключи не нужны.
