@@ -1,0 +1,26 @@
+handoff:
+  from: reviewer
+  to: implementer
+  task: "Э6-6в"
+  did:
+    - "Проверены diff (14 файлов), десять инвариантов, грабли §0.1; прогнаны pytest -q (1940 passed), ruff check, ruff format --check; проверен живой uvicorn на двух хостах"
+    - "Поставлены 23 мутации (прицельно) и шесть выживших прогнаны на полном наборе: все шесть проходят 1940 passed"
+    - "Найдено 2 блокирующих (нет теста на экранирование эха текста посетителя; сырой путь в заголовке HX-Redirect даёт 500 на реальном uvicorn), 11 советов"
+  artifacts:
+    - ".planning/evidence/Э6-W4-Э6-6в-review.md (закоммичен до ответа)"
+    - ".planning/evidence/Э6-W4-Э6-6в-review-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest -q: 1940 passed"
+    - "ruff check .: All checks passed; ruff format --check .: 256 files already formatted"
+    - "мутации `|safe` на task и error в scan_form.html: 0 failed на полном наборе (выжили)"
+    - "GET /scan/a%0d%0aX-Injected:%20yes/status на живом uvicorn: RuntimeError Invalid HTTP header value, соединение рвётся"
+  escalate:
+    - "Отступление от критерия 4 (правка 3 строк tests/test_host_routing.py) — в ворота записью, как РЕШ-282; страж не ослаблен"
+    - "Совет 10: публичный скан занимает общий замок _active_runs и блокирует рабочее место — следствие РЕШ-147, на решение владельца"
+  read_first:
+    - ".planning/evidence/Э6-W4-Э6-6в-review.md"
+    - backend/app/web/routes/scan.py
+    - backend/app/web/templates/scan_form.html
+    - tests/test_scan_routes.py
+  notes: "Цикл 1 из 2. Второй цикл последний; остаток блокирующих после него — BLOCKED и разбор с владельцем. tests/test_scan_routes.py стоит ровно на пределе 500 строк: новые тесты — в отдельный файл или потеснив существующие."

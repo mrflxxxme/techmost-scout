@@ -1,0 +1,102 @@
+{% extends "scan_base.html" %}
+{% block title %}Экспресс-обзор — ТехМост Скаут{% endblock %}
+{% block head_extra %}
+{% if state == "running" %}<noscript><meta http-equiv="refresh" content="15"></noscript>{% endif %}
+{% endblock %}
+
+{% macro source_link(url) -%}
+{%- if url.startswith("https://") or url.startswith("http://") -%}
+<a href="{{ url }}" rel="noopener noreferrer nofollow">источник</a>
+{%- else -%}источник не указан{%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+{% if state == "running" %}
+<p class="kicker">Экспресс-обзор</p>
+<h1>Готовим обзор</h1>
+{% include "_scan_progress.html" %}
+
+{% elif state != "ready" %}
+<p class="kicker">Экспресс-обзор</p>
+<h1>{% if state == "missing" %}Страница не найдена{% else %}Обзор не получился{% endif %}</h1>
+<div class="notice danger" role="alert" data-scan-error>{{ text }}</div>
+<p><a class="btn ghost" href="/scan">Вернуться к форме</a></p>
+
+{% else %}
+<p class="kicker">Экспресс-обзор</p>
+<h1>Что удалось найти</h1>
+
+<h2>Найденные решения</h2>
+{% if view.cards_note %}
+<p class="muted">{{ view.cards_note }}</p>
+{% endif %}
+{% for card in view.cards %}
+<div class="bezel appear">
+  <div class="core">
+    <h3>{{ loop.index }}. {{ card.title }}</h3>
+    <span class="badge mb-sm">{{ card.maturity_stage }}</span>
+    <p>{{ card.essence }}</p>
+    <p><strong>Разработчик:</strong> {{ card.developer_org }}</p>
+    <p><strong>Применимость к задаче:</strong> {{ card.applicability }}</p>
+    <p class="mb-sm"><strong>Чем подтверждено:</strong></p>
+    <ul>
+      {% for fact in card.evidence %}
+      <li>{{ fact.claim }} — {{ source_link(fact.url) }}</li>
+      {% else %}
+      <li>не найдено</li>
+      {% endfor %}
+    </ul>
+    {% if card.gov_support %}
+    <p class="mb-sm"><strong>Господдержка:</strong></p>
+    <ul>
+      {% for item in card.gov_support %}
+      <li>{{ item.instrument }} — {{ source_link(item.url) }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+
+<h2>Что делают в мире</h2>
+{% if view.analogs_note %}
+<p class="muted">{{ view.analogs_note }}</p>
+{% endif %}
+{% for analog in view.analogs %}
+<div class="bezel appear">
+  <div class="core">
+    <h3>{{ loop.index }}. {{ analog.title }}</h3>
+    <p>{{ analog.essence }}</p>
+    <p><strong>Страна:</strong> {{ analog.country }} ({{ source_link(analog.country_evidence_url) }})</p>
+    <p><strong>Бизнес-модель:</strong> {{ analog.business_model }}</p>
+    <p><strong>Подтверждённый результат:</strong> {{ analog.traction }}</p>
+    <p><strong>Что можно перенести в Россию:</strong> {{ analog.transferability_ru }}</p>
+    <p class="mb-sm"><strong>Чем подтверждено:</strong></p>
+    <ul>
+      {% for fact in analog.evidence %}
+      <li>{{ fact.claim }} — {{ source_link(fact.url) }}</li>
+      {% else %}
+      <li>не найдено</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endfor %}
+
+{% if view.sources_unavailable %}
+<p class="hint">Не ответили источники: {{ view.sources_unavailable|join("; ") }}. Обзор может быть неполным.</p>
+{% endif %}
+
+{% if order %}
+<section class="bezel dark scan-order" data-next-step>
+  <div class="core">
+    <h2>Нужен полный отчёт?</h2>
+    <p>Полный отчёт проверяет эксперт: контакты разработчиков, стадия готовности и план внедрения.</p>
+    <a class="btn" href="{{ order.primary_url }}" rel="noopener noreferrer">Заказать полный отчёт <span class="dot">→</span></a>
+    {% if order.secondary_url %}<p class="hint">Или напишите на <a href="{{ order.secondary_url }}">почту</a>.</p>{% endif %}
+    <p class="hint">Номер обзора: <strong>{{ order.number }}</strong> — назовите его в сообщении.</p>
+  </div>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

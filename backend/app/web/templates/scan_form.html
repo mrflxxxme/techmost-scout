@@ -1,0 +1,38 @@
+{% extends "scan_base.html" %}
+{% block title %}Экспресс-обзор решений — ТехМост Скаут{% endblock %}
+
+{% block content %}
+<p class="kicker">Экспресс-обзор</p>
+<h1>Опишите задачу — найдём решения за несколько минут</h1>
+<p class="lead">
+  Система найдёт до трёх решений и до трёх зарубежных аналогов. Каждое утверждение
+  подкреплено ссылкой на источник. Обзор автоматический и экспертом не проверен.
+</p>
+
+{% if error %}
+<div class="notice danger" role="alert" data-scan-error>{{ error }}</div>
+{% endif %}
+
+<div class="bezel">
+  <div class="core">
+    <form method="post" action="/scan">
+      <label for="task">Задача</label>
+      <textarea id="task" name="task" required minlength="{{ task_min }}" maxlength="{{ task_max }}"
+        placeholder="Например: на установке гидроочистки катализатор теряет активность за 8 месяцев вместо 24, замена стоит около 40 млн рублей.">{{ task }}</textarea>
+      <p class="hint">
+        Пишите обезличенно: без названия компании, фамилий и контактов, только техническая суть.
+        Текст уходит во внешнюю языковую модель. Не более {{ task_max }} знаков.
+      </p>
+      <label for="kind">Что ищем</label>
+      <select id="kind" name="kind">
+        {% for value, label in kinds %}
+        <option value="{{ value }}"{% if value == kind %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <div class="mt-lg">
+        <button class="btn" type="submit">Получить обзор <span class="dot">→</span></button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: Э6-6в
+  cycle: 2
+  did:
+    - "Проверены diff починки, 10 инвариантов; прогнаны pytest, ruff; поставлены мутации |safe (task, error, text), is_scan_token всегда True, снятие проверки на каждом из трёх маршрутов, регулярка с \\n?, HX-Redirect на //evil - все дали >= 1 failed"
+    - "Оба блокирующих цикла 1 закрыты; is_scan_token совпадает с token_urlsafe(32) (200000 проб); новых дыр нет"
+    - "Вердикт: ПРИНЯТО, блокирующих 0, советов 4"
+  artifacts:
+    - .planning/evidence/Э6-W4-Э6-6в-review-2.md
+    - .planning/evidence/Э6-W4-Э6-6в-review-2-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q: 1977 passed, 1 warning"
+    - "ruff check .: All checks passed; ruff format --check .: 257 files already formatted"
+    - "мутации: task|safe, error|safe, text|safe, is_scan_token=True, три снятия проверки, регулярка \\n?, HX-Redirect //evil - каждая >= 1 failed"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э6-W4-Э6-6в-review-2.md
+  notes:
+    - "Третьего цикла нет. Решение владельца: ложные 422 на названиях ПО. Остальные советы цикла 1 - в ворота."

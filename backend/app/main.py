@@ -127,6 +127,14 @@ def build_app(app_env: str, *, public_scan_host: str = "") -> FastAPI:
 
     app.include_router(api_v1_router)
 
+    # Публичный экспресс-скан (Э6-6в) — тоже без общего пароля: посетитель не
+    # входит в систему. Закрывает его роутинг по Host (`PUBLIC_SCAN_HOST` пуст —
+    # 404 на любом хосте; рабочий хост `/scan*` не отдаёт), лимит по адресу и
+    # суточный потолок расходов (`app.web.scan_limits`).
+    from app.web.routes.scan import router as scan_router
+
+    app.include_router(scan_router)
+
     # Прослойка ставится последней и потому оказывается самой внешней: на
     # публичном хосте чужой путь получает 404 до любой проверки пароля.
     app.add_middleware(HostRoutingMiddleware, public_scan_host=public_scan_host)
