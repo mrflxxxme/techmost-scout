@@ -1,0 +1,28 @@
+handoff:
+  from: verifier
+  to: auditor
+  task: Э6-10
+  did:
+    - "Прогнаны 6 критериев приёмки дополнения РЕШ-285 (PLAN.md), закрыто 6 из 6"
+    - "Проведены 8 мутаций критерия 2 по одной с откатом; каждая дала не меньше одного failed"
+    - "Подтверждены инварианты 3, 4, 5, 6, 7, 8 способами из INVARIANTS.md; №1, №2, №9, №10 к задаче не относятся"
+  artifacts:
+    - ".planning/evidence/Э6-W4-Э6-10-verify.md"
+    - ".planning/evidence/Э6-W4-Э6-10-verify-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest -q (env -u): 1891 passed, 0 failed (база 1877 + 14 новых)"
+    - "pytest -q под unshare -rn (без сети): 1891 passed"
+    - "pytest tests/test_yandex_quota.py -v: 14 passed"
+    - "pytest 16 прежних файлов кр. 3: 344 passed; diff tests/ относительно базы — только tests/test_yandex_quota.py"
+    - "ruff check .: All checks passed!; ruff format --check .: 252 files already formatted"
+    - "мутации M1-M8: 10 / 9 / 6 / 4 / 5 / 2 / 1 / 6 failed; откат после каждой, git status чист"
+    - "grep инв. 6 (httpx вне llm/, search/, трёх разрешённых модулей): пусто; grep ключей по добавленным строкам: пусто"
+    - "размеры: yandex_search.py 425, pipeline_search.py 434, yandex_quota.py 140 строк"
+  escalate: none
+  read_first:
+    - ".planning/evidence/Э6-W4-Э6-10-verify.md"
+    - "backend/app/search/yandex_quota.py"
+    - "backend/app/search/yandex_search.py"
+    - "tests/test_yandex_quota.py"
+  notes: "Вердикт PASS. DLG-N нет. Коммит содержит только два файла .planning/evidence/Э6-W4-Э6-10-verify*. Не пушено."

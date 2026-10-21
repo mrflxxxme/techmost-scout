@@ -142,6 +142,17 @@ class SearchMixin:
         tasks: list[tuple[str, str, asyncio.Task[list[Candidate]]]] = []
         problems: list[str] = []
 
+        # Состав прохода платному источнику сообщается заранее (Э6-10): резерв
+        # мест под `analog` считается по плану, а не по порядку прихода задач.
+        # Спрашивается у объекта, как `drain_limit_problems`: контракт не растёт.
+        for adapter in adapters:
+            begin_pass = getattr(adapter, "begin_pass", None)
+            if begin_pass is not None:
+                suitable = [
+                    q for q in plan.queries if not adapter.source_types or q.source_type in adapter.source_types
+                ]
+                begin_pass(suitable)
+
         try:
             async with asyncio.TaskGroup() as group:
                 for adapter in adapters:
