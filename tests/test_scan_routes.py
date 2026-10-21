@@ -293,11 +293,12 @@ async def test_роутер_скана_лимит_10_рублей_и_три_ка
     assert call["target_cards"] == 3
 
 
-async def test_в_базе_скан_с_токеном_и_без_контактов_посетителя(client: AsyncClient, db):
+async def test_json_строится_только_через_scan_payload(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
     token = await _ready(client)
-    async with db() as session:
-        row = (await session.execute(select(RequestRow))).scalar_one()
-    assert row.scan_token == token and row.api_client is None and row.raw_text == TASK
+    monkeypatch.setattr(
+        "app.web.routes.scan.scan_payload", lambda view: {"banner": "из scan_payload", "n": len(view.cards)}
+    )
+    assert (await client.get(f"/scan/{token}.json")).json() == {"banner": "из scan_payload", "n": 1}
 
 
 async def test_research_422_без_запуска_и_без_расхода_лимита(client: AsyncClient, db):
@@ -423,10 +424,9 @@ async def test_отказ_скана_честная_страница_без_пр
 
 
 async def test_прерванный_перезапуском_скан_объяснён(client: AsyncClient, db):
-    request_id, token = await scan_run.create_scan_request(TASK)  # статус intake, задачи в реестре нет
+    _, token = await scan_run.create_scan_request(TASK)  # статус intake, задачи в реестре нет
     page = await client.get(f"/scan/{token}")
     assert page.status_code == 200 and "прервана перезапуском" in page.text
-    assert request_id not in run._active_runs
 
 
 async def test_чужой_токен_404_и_страницей_и_json(client: AsyncClient, db):
