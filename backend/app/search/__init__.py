@@ -41,7 +41,9 @@ from app.search.patents_view import PatentsViewAdapter
 from app.search.rospatent import RospatentAdapter
 from app.search.semanticscholar import SemanticScholarAdapter
 from app.search.showcase import ShowcaseAdapter
+from app.search.wikidata import WikidataAdapter
 from app.search.yandex_search import YandexSearchAdapter
+from app.search.yc_catalog import YCCatalogAdapter
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +58,9 @@ ADAPTERS: dict[str, type[SearchAdapter]] = {
     "openalex": OpenAlexAdapter,
     "patents_view": PatentsViewAdapter,
     "yandex_search": YandexSearchAdapter,
+    # Аналоги (Э6-2б): оба бесплатные, ключа не требуют и обслуживают тип `analog`
+    "wikidata": WikidataAdapter,
+    "yc_catalog": YCCatalogAdapter,
 }
 
 #: Настройки, без которых источник с requires_key = True не включается
@@ -97,6 +102,9 @@ CONSTRUCTOR_SETTINGS: dict[str, dict[str, tuple[str, ...]]] = {
         "api_key": ("yandex_search_api_key",),
         "folder_id": ("yandex_catalog_id", "yandex_folder_id"),
     },
+    # Контакт владельца в User-Agent — та же `crossref_mailto`, что у Роспатента
+    "wikidata": {"contact_email": ("crossref_mailto",)},
+    "yc_catalog": {"contact_email": ("crossref_mailto",)},
 }
 
 
@@ -226,6 +234,8 @@ __all__ = [
     "SearchError",
     "SemanticScholarAdapter",
     "ShowcaseAdapter",
+    "WikidataAdapter",
+    "YCCatalogAdapter",
     "YandexSearchAdapter",
     "adapter_status",
     "build_adapters",
