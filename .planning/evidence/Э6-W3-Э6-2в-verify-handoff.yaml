@@ -1,0 +1,29 @@
+handoff:
+  from: verifier
+  to: auditor
+  task: Э6-2в
+  did:
+    - "Прогнаны 3 критерия приёмки Э6-2в из PLAN.md, по подпунктам 1а–1з закрыты все; общие критерии G1–G8 закрыты"
+    - "Мутация критерия 3 («снять сужение для analog» в with_site_filter): 3 failed, откат с совпадением sha256"
+    - "Независимо проверены: список 27 доменов (25 reports + 2 catalogs), наличие ycombinator.com и producthunt.com, длины формулировок ≤ 400, отказы загрузчика (схема, путь, пробел, порт, localhost, дубли внутри и между секциями, нестрока)"
+    - "Инварианты 3, 5, 6, 7, 8, 10 подтверждены способами из INVARIANTS.md; 1, 2, 4 к задаче не относятся, 9 — только принятая правка yandex_search.py"
+  artifacts:
+    - ".planning/evidence/Э6-W3-Э6-2в-verify.md"
+    - ".planning/evidence/Э6-W3-Э6-2в-verify-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_yandex_analog.py -v: 37 passed"
+    - "pytest tests/test_search_yandex.py tests/test_yandex_limit_visibility.py -v: 39 passed, файлы не правились"
+    - "мутация снятия сужения analog: 3 failed, 34 passed; откат, sha256 совпал"
+    - "pytest -q: 1609 passed, 0 failed (база 1572 из архива claude/sleepy-planck-11w8jv + 37)"
+    - "pytest -q под unshare -rn: 1609 passed; в namespace только lo"
+    - "ruff check .: All checks passed!; ruff format --check .: 239 files already formatted"
+    - "rg httpx backend/app вне разрешённых путей: пусто; rg unsafe_load/yaml.load(: пусто"
+    - "git diff --name-status claude/sleepy-planck-11w8jv HEAD -- tests/: только A tests/test_yandex_analog.py"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (Э6-2в и «Общие правила этапа»)"
+    - "backend/app/search/analog_sources.py (plan_analog_queries, _validate, ANALOG_QUERY_MAX_CHARS)"
+    - "backend/app/search/yandex_search.py (_search_analog, строки 217–257)"
+    - "tests/test_yandex_analog.py"
+  notes: "Вердикт PASS, открытых DLG нет. Вне критериев: живой вызов Яндекс Search не делался (критерии его не требуют); состав белого списка и тексты утверждает владелец в PR (РЕШ-257, правило 7 этапа). Временный файл вывода pytest был записан в .planning/evidence/ рабочей копии по ошибке и удалён до коммита."
