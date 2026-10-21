@@ -1,0 +1,137 @@
+# Э6-2б: вывод проверок (код на коммите 22b3752)
+
+$ pytest tests/test_wikidata.py tests/test_yc_catalog.py -v
+tests/test_wikidata.py::test_контракт_адаптера PASSED                    [  1%]
+tests/test_wikidata.py::test_разбор_в_кандидата_с_полями_контракта PASSED [  3%]
+tests/test_wikidata.py::test_строки_одной_сущности_склеиваются_в_одного_кандидата PASSED [  5%]
+tests/test_wikidata.py::test_две_страны_p17_дают_country_none PASSED     [  6%]
+tests/test_wikidata.py::test_одна_страна_повторённая_строками_остаётся_страной PASSED [  8%]
+tests/test_wikidata.py::test_нет_страны_нет_года_нет_сайта_кандидат_всё_равно_есть PASSED [ 10%]
+tests/test_wikidata.py::test_год_до_нашей_эры_не_берётся PASSED          [ 11%]
+tests/test_wikidata.py::test_сущность_без_названия_отброшена PASSED      [ 13%]
+tests/test_wikidata.py::test_предел_limit_соблюдён PASSED                [ 15%]
+tests/test_wikidata.py::test_http_ошибка_поднимает_searcherror[500] PASSED [ 16%]
+tests/test_wikidata.py::test_http_ошибка_поднимает_searcherror[429] PASSED [ 18%]
+tests/test_wikidata.py::test_http_ошибка_поднимает_searcherror[503] PASSED [ 20%]
+tests/test_wikidata.py::test_обрыв_соединения_поднимает_searcherror[error0] PASSED [ 21%]
+tests/test_wikidata.py::test_обрыв_соединения_поднимает_searcherror[error1] PASSED [ 23%]
+tests/test_wikidata.py::test_не_json_поднимает_searcherror PASSED        [ 25%]
+tests/test_wikidata.py::test_json_без_results_bindings_поднимает_searcherror[body0] PASSED [ 26%]
+tests/test_wikidata.py::test_json_без_results_bindings_поднимает_searcherror[body1] PASSED [ 28%]
+tests/test_wikidata.py::test_json_без_results_bindings_поднимает_searcherror[body2] PASSED [ 30%]
+tests/test_wikidata.py::test_json_без_results_bindings_поднимает_searcherror[\u0441\u0442\u0440\u043e\u043a\u0430] PASSED [ 31%]
+tests/test_wikidata.py::test_пустой_успех_это_пустой_список_без_исключения PASSED [ 33%]
+tests/test_wikidata.py::test_пустая_выдача_длинной_формулировки_повторяется_один_раз_укороченной PASSED [ 35%]
+tests/test_wikidata.py::test_короткая_формулировка_без_повтора PASSED    [ 36%]
+tests/test_wikidata.py::test_повтор_при_отказе_тоже_searcherror PASSED   [ 38%]
+tests/test_wikidata.py::test_запрос_json_формата_и_только_компании_и_продукты PASSED [ 40%]
+tests/test_wikidata.py::test_кавычка_в_формулировке_не_выходит_из_строкового_литерала PASSED [ 41%]
+tests/test_wikidata.py::test_русская_формулировка_ищется_по_русским_названиям PASSED [ 43%]
+tests/test_wikidata.py::test_user_agent_несёт_контакт_из_настройки PASSED [ 45%]
+tests/test_wikidata.py::test_build_adapters_включает_wikidata_без_ключей_и_передаёт_контакт PASSED [ 46%]
+tests/test_yc_catalog.py::test_контракт_адаптера PASSED                  [ 48%]
+tests/test_yc_catalog.py::test_разбор_в_кандидата_с_полями_контракта PASSED [ 50%]
+tests/test_yc_catalog.py::test_кандидат_не_на_ycombinator_com_отброшен PASSED [ 51%]
+tests/test_yc_catalog.py::test_голый_ycombinator_com_и_поддомен_допустимы PASSED [ 53%]
+tests/test_yc_catalog.py::test_второй_поиск_не_делает_второго_запроса PASSED [ 55%]
+tests/test_yc_catalog.py::test_параллельные_поиски_качают_каталог_один_раз PASSED [ 56%]
+tests/test_yc_catalog.py::test_http_ошибка_поднимает_searcherror[500] PASSED [ 58%]
+tests/test_yc_catalog.py::test_http_ошибка_поднимает_searcherror[429] PASSED [ 60%]
+tests/test_yc_catalog.py::test_обрыв_соединения_поднимает_searcherror[error0] PASSED [ 61%]
+tests/test_yc_catalog.py::test_обрыв_соединения_поднимает_searcherror[error1] PASSED [ 63%]
+tests/test_yc_catalog.py::test_не_json_и_не_список_поднимают_searcherror[<html>Not Found</html>] PASSED [ 65%]
+tests/test_yc_catalog.py::test_не_json_и_не_список_поднимают_searcherror[{"companies": []}] PASSED [ 66%]
+tests/test_yc_catalog.py::test_не_json_и_не_список_поднимают_searcherror["\u0441\u0442\u0440\u043e\u043a\u0430"] PASSED [ 68%]
+tests/test_yc_catalog.py::test_отказ_не_запоминается_следующий_поиск_пробует_снова PASSED [ 70%]
+tests/test_yc_catalog.py::test_успешный_пустой_каталог_и_нет_совпадений_это_пустой_список PASSED [ 71%]
+tests/test_yc_catalog.py::test_одно_общее_слово_из_нескольких_не_считается_совпадением PASSED [ 73%]
+tests/test_yc_catalog.py::test_совпадение_по_имени_тегам_отрасли_и_длинному_описанию PASSED [ 75%]
+tests/test_yc_catalog.py::test_основа_слова_ловит_словоформы PASSED      [ 76%]
+tests/test_yc_catalog.py::test_выдача_упорядочена_по_весу_совпадений_и_ограничена_limit PASSED [ 78%]
+tests/test_yc_catalog.py::test_русская_формулировка_пропускается_без_запроса PASSED [ 80%]
+tests/test_yc_catalog.py::test_страна_только_при_однозначном_сопоставлении[San Francisco, CA, USA-US] PASSED [ 81%]
+tests/test_yc_catalog.py::test_страна_только_при_однозначном_сопоставлении[San Francisco, CA, USA; Remote-US] PASSED [ 83%]
+tests/test_yc_catalog.py::test_страна_только_при_однозначном_сопоставлении[New York, NY, USA; Austin, TX, USA-US] PASSED [ 85%]
+tests/test_yc_catalog.py::test_страна_только_при_однозначном_сопоставлении[London, England, United Kingdom-GB] PASSED [ 86%]
+tests/test_yc_catalog.py::test_страна_только_при_однозначном_сопоставлении[San Francisco, CA, USA; London, England, United Kingdom-None] PASSED [ 88%]
+tests/test_yc_catalog.py::test_страна_только_при_однозначном_сопоставлении[Remote-None] PASSED [ 90%]
+tests/test_yc_catalog.py::test_страна_только_при_однозначном_сопоставлении[-None] PASSED [ 91%]
+tests/test_yc_catalog.py::test_страна_только_при_однозначном_сопоставлении[Atlantis, Nowhere-None] PASSED [ 93%]
+tests/test_yc_catalog.py::test_страна_только_при_однозначном_сопоставлении[Berlin, Germany; Atlantis, Nowhere-None] PASSED [ 95%]
+tests/test_yc_catalog.py::test_страна_кандидата_по_таблице_и_без_неё PASSED [ 96%]
+tests/test_yc_catalog.py::test_запись_без_названия_и_не_словарь_пропущены PASSED [ 98%]
+tests/test_yc_catalog.py::test_build_adapters_включает_yc_catalog_без_ключей PASSED [100%]
+============================== 60 passed in 4.27s ==============================
+
+$ pytest tests/test_plan_types.py tests/test_search_failures.py -v
+============================== 31 passed in 1.57s ==============================
+
+$ pytest -q  (полный набор)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1576 passed, 1 warning in 82.00s (0:01:22)
+
+$ ruff check . && ruff format --check .
+All checks passed!
+235 files already formatted
+
+$ rg -ln httpx backend/app | rg -v "backend/app/(llm/|search/|cli_doctor\.py$|pipeline/pipeline_context\.py$|pipeline/pipeline_search\.py$)"  (инв. 6, ожидается пусто)
+(конец вывода; код rg: 1)
+
+$ git diff --stat 6766af0 -- tests/  (только новые и названные файлы)
+ tests/test_plan_types.py |   9 +-
+ tests/test_wikidata.py   | 260 +++++++++++++++++++++++++++++++++++++++++++++++
+ tests/test_yc_catalog.py | 253 +++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 520 insertions(+), 2 deletions(-)
+
+$ wc -l новых файлов (предел 500)
+  256 backend/app/search/wikidata.py
+  319 backend/app/search/yc_catalog.py
+  244 backend/app/search/__init__.py
+  260 tests/test_wikidata.py
+  253 tests/test_yc_catalog.py
+ 1332 total
+
+# Мутации по одной, с откатом
+--- МУТАЦИЯ: YC: не проверять узел ycombinator.com
+tests/test_yc_catalog.py:99: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_yc_catalog.py::test_кандидат_не_на_ycombinator_com_отброшен
+1 failed, 31 passed in 0.83s
+(откат: 1 изменённых файлов)
+
+--- МУТАЦИЯ: YC: качать каталог на каждый поиск (убрать кэш экземпляра)
+=========================== short test summary info ============================
+FAILED tests/test_yc_catalog.py::test_второй_поиск_не_делает_второго_запроса
+FAILED tests/test_yc_catalog.py::test_параллельные_поиски_качают_каталог_один_раз
+2 failed, 30 passed in 1.24s
+(откат: 1 изменённых файлов)
+
+--- МУТАЦИЯ: Wikidata: при двух странах брать первую
+tests/test_wikidata.py:103: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_wikidata.py::test_две_страны_p17_дают_country_none - Assert...
+1 failed, 27 passed in 3.05s
+(откат: 1 изменённых файлов)
+
+--- МУТАЦИЯ: Wikidata: гасить HTTP-отказ в пустой список
+FAILED tests/test_wikidata.py::test_http_ошибка_поднимает_searcherror[429] - ...
+FAILED tests/test_wikidata.py::test_http_ошибка_поднимает_searcherror[503] - ...
+FAILED tests/test_wikidata.py::test_повтор_при_отказе_тоже_searcherror - Fail...
+4 failed, 24 passed in 3.12s
+(откат: 1 изменённых файлов)
+
+--- МУТАЦИЯ: YC: не-JSON гасить в пустой каталог
+FAILED tests/test_yc_catalog.py::test_обрыв_соединения_поднимает_searcherror[error0]
+FAILED tests/test_yc_catalog.py::test_обрыв_соединения_поднимает_searcherror[error1]
+FAILED tests/test_yc_catalog.py::test_не_json_и_не_список_поднимают_searcherror[<html>Not Found</html>]
+3 failed, 29 passed in 1.13s
+(откат: 1 изменённых файлов)
+
+--- МУТАЦИЯ: Реестр: убрать оба адаптера из ADAPTERS
+=========================== short test summary info ============================
+FAILED tests/test_wikidata.py::test_build_adapters_включает_wikidata_без_ключей_и_передаёт_контакт
+FAILED tests/test_yc_catalog.py::test_build_adapters_включает_yc_catalog_без_ключей
+2 failed, 58 passed in 3.97s
+(откат: 1 изменённых файлов)
+
