@@ -1,0 +1,24 @@
+handoff:
+  from: "verifier"
+  to: "implementer-1"
+  task: "Э6-6б"
+  did:
+    - "Прогнаны 18 проверок: 3 критерия плана, 4 мутации плана, 2 мутации РЕШ-285 (U5, U7), 1 дополнительная мутация title, 3 блокирующих цикла 1, правило 4, полный pytest, ruff, инварианты 3, 4, 6, 7, 8, 10, размеры"
+    - "Закрыто 17 из 18. Критерий 18 (инв. 3 литерально) не закрыт: grep не пуст, совпадения унаследованы от базы, в коде Э6-6б их нет"
+    - "Мутации откатывались git checkout, дерево после каждой проверено на чистоту"
+  artifacts:
+    - "Отчёт и handoff закоммичены файлами в .planning/evidence/Э6-W3-Э6-6б-verify.md и .planning/evidence/Э6-W3-Э6-6б-verify-handoff.yaml"
+  self_audit: "pass"
+  checks:
+    - "pytest -q: 1846 passed, 0 failed (обычный запуск и unshare -rn)"
+    - "pytest test_autoverify.py: 31 passed; test_scan_view.py: 118 passed"
+    - "мутации: M1 6 failed, M2 1 failed, M3 2 failed, M4 59 failed, U5 3 failed, U7 2 failed, T1 2 failed"
+    - "ruff check: All checks passed; ruff format --check: 249 files already formatted"
+    - "rg -ln httpx backend/app с исключением карты инварианта: пусто"
+    - "rg -c sk- с 20+ символами ключа по backend и tests: 0; совпадения grep инварианта 3 идентичны базе по файлам"
+  escalate: "владелец: DLG-1 — решить, как проверять инвариант 3 (литерально с вычисткой заглушек и Api-Key либо уточнением правила в INVARIANTS.md)"
+  read_first:
+    - ".planning/evidence/Э6-W3-Э6-6б-verify.md"
+    - "docs/team/INVARIANTS.md (инвариант 3)"
+    - ".planning/evidence/Э6-W3-Э6-6б-review-2.md"
+  notes: "Вердикт FAIL только по критерию 18. Все критерии задачи Э6-6б и условие РЕШ-285 закрыты. Ожидание 1728 + 149 в заявке не совпало: база 1697 + 149 = 1846. Не пушилось."

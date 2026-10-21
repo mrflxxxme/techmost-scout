@@ -1,0 +1,56 @@
+# Э6-6б починка по ревью цикла 1 — фактический вывод
+
+pytest -q (окружение очищено от ключей и маршрутов): 1716 passed, 0 failed (было 1612; +104 новых)
+pytest tests/test_autoverify.py tests/test_scan_view.py: 144 passed
+ruff check .: All checks passed!
+ruff format --check .: 242 files already formatted
+Размеры: scan_view.py 233, scan_scrub.py 115, autoverify.py 132, test_scan_view.py 442, test_autoverify.py 242 строк
+
+# Мутации по одной, с откатом файла после каждой
+# (pytest tests/test_autoverify.py tests/test_scan_view.py; «УБИТА» = ≥1 failed)
+# Выжившие в цикле 1: M9, M9b, M15, M18, M22, M24, M25, M26 — теперь все убиты.
+
+M9  аналог: business_model без числовой сверки: УБИТА | 1 failed
+M9b аналог: essence без числовой сверки: УБИТА | 1 failed
+M9c аналог: traction без числовой сверки: УБИТА | 1 failed
+M9d аналог: transferability_ru без числовой сверки: УБИТА | 1 failed
+M10 карточка: title без числовой сверки: УБИТА | 2 failed
+M10b аналог: title без числовой сверки: УБИТА | 1 failed
+M10c карточка: essence без сверки: УБИТА | 2 failed
+M10d карточка: applicability без сверки: УБИТА | 1 failed
+M15 sources_unavailable без вычистки: УБИТА | 4 failed
+M18 title карточки без вычистки: УБИТА | 4 failed
+M18b title аналога без вычистки: УБИТА | 4 failed
+M19 essence карточки без вычистки: УБИТА | 5 failed
+M20 developer_org без вычистки: УБИТА | 4 failed
+M22 applicability без вычистки: УБИТА | 4 failed
+M23 claim без вычистки: УБИТА | 9 failed
+M23b essence аналога без вычистки: УБИТА | 4 failed
+M24 transferability_ru аналога без вычистки: УБИТА | 4 failed
+M25 business_model аналога без вычистки: УБИТА | 4 failed
+M25b traction без вычистки: УБИТА | 5 failed
+M26 gov_support.instrument без вычистки: УБИТА | 4 failed
+M27 scan_payload не чистит готовый словарь: УБИТА | 1 failed
+M28 ссылка факта без scrub_url: УБИТА | 1 failed
+M28b ссылка господдержки без scrub_url: УБИТА | 1 failed
+M29 ссылка страны без scrub_url: УБИТА | 1 failed
+M30 телефоны: без нормализации тире и пробелов: УБИТА | 22 failed
+M31 телефоны: нет шаблона с кодом в скобках: УБИТА | 2 failed
+M32 телефоны: нет шаблона 3-3-2-2: УБИТА | 16 failed
+M33 телефоны: нет шаблона из десяти цифр: УБИТА | 1 failed
+M34 почта не вычищается: УБИТА | 19 failed
+M35 scrub_url: логин остаётся: УБИТА | 2 failed
+M36 scrub_url: фрагмент остаётся: УБИТА | 3 failed
+M37 scrub_url: mailto/tel печатаются: УБИТА | 5 failed
+M38 scrub_url: параметры с контактами не чистятся: УБИТА | 3 failed
+M39 знак минус не учитывается: УБИТА | 2 failed
+M40 поля источника соединены пробелом: УБИТА | 1 failed
+M41 международный номер без проверки числа цифр: УБИТА | 1 failed (в первом прогоне выжила — добавлен тест «+1 23 45 67»)
+M1  снять проверку чисел факта: УБИТА | 6 failed
+M2  снять проверку ссылки факта: УБИТА | 1 failed
+M3  пускать при непустом unsourced_claims: УБИТА | 2 failed
+M4  убрать требование непустого evidence: УБИТА | 2 failed
+M5  плашка пустая: УБИТА | 4 failed
+
+# Примечание: в первом прогоне M28 (шаблон не совпал после ruff format) и M34 (синтаксис мутации)
+# дали «не найдено»/«error»; шаблоны исправлены, мутации перепрогнаны — результаты выше.
