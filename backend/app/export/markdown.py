@@ -10,6 +10,7 @@ git и из него без потерь собираются PDF и DOCX на �
 
 from __future__ import annotations
 
+from app.export.analogs import analog_evidence, analog_fields, analog_markdown_lines, analog_sections
 from app.schemas import Confidence, MaturityStage, Report, SolutionCard
 
 MATURITY_RU: dict[MaturityStage, str] = {
@@ -180,7 +181,11 @@ def developer_line(card: SolutionCard) -> str:
 
 #: Точка регистрации Jinja-фильтров экспортёра — общая для страницы отчёта и
 #: печатного шаблона (Э4-И2, Э4-И4), чтобы оба использовали одну реализацию.
-TEMPLATE_FILTERS = {"developer_line": developer_line}
+TEMPLATE_FILTERS = {
+    "developer_line": developer_line,
+    "analog_fields": analog_fields,
+    "analog_evidence": analog_evidence,
+}
 
 
 def limitations_lines(report: Report, *, include_caveats: bool = True) -> list[str]:
@@ -300,6 +305,10 @@ def render_markdown(report: Report, *, validated: bool = False, reviewer: str = 
         lines.append("")
         for index, card in enumerate(report.contest_cards, start=1):
             lines.extend(_render_card(card, index, contest=True))
+
+    # «Что делают в мире» — после конкурсной секции, вне лимита 5–7; какие
+    # аналоги видны, решает одна функция (`export.analogs`, Э6-4).
+    lines.extend(analog_markdown_lines(analog_sections(report)))
 
     # Заголовок раздела печатается, если есть хоть что-то из двух: недоступные
     # источники или оговорки. Раньше он был привязан только к недоступным
