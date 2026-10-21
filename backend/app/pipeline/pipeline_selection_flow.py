@@ -23,6 +23,11 @@ from app.schemas import ScoredCandidate, SourceType
 #: — про объём работы эксперта, а не про обещанные клиенту 5–7 вариантов.
 CONTEST_CARDS_TARGET = 3
 
+#: Сколько аналогов собирается для секции «Аналоги из мира» (Э6-2а). Лимит 5–7
+#: секции не касается; число — верхняя граница объёма работы эксперта и платных
+#: вызовов модели (одна карточка аналога — один вызов), а не доля `target_cards`.
+ANALOG_CARDS_TARGET = 3
+
 #: Номер прохода у стадий условного второго поиска (РЕШ-81, РЕШ-82). Именованная
 #: величина, а не литерал в каждой записи: `replan`, вторые `search`, `enrich` и
 #: `scorer` обязаны получить одну и ту же двойку, а пропущенная в одном месте
@@ -57,6 +62,27 @@ def split_contest_candidates(
         else:
             main.append(item)
     return main, contest
+
+
+def split_analog_candidates(
+    scored: list[ScoredCandidate],
+) -> tuple[list[ScoredCandidate], list[ScoredCandidate]]:
+    """Разделить оценённых кандидатов на прочих и аналоги (Э6-2а).
+
+    Возвращает пару «прочие, аналоги». Зовётся ПЕРЕД `split_contest_candidates`:
+    аналог — зарубежный пример для рынка, он не конкурирует с российскими
+    разработками по общему скорингу и не вытесняет никого из 5–7 карточек, как и
+    конкурсный класс. Деление идёт по `source_type`, который проставляет адаптер
+    по типу формулировки плана.
+    """
+    rest: list[ScoredCandidate] = []
+    analogs: list[ScoredCandidate] = []
+    for item in scored:
+        if item.candidate.source_type is SourceType.ANALOG:
+            analogs.append(item)
+        else:
+            rest.append(item)
+    return rest, analogs
 
 
 def candidate_records(

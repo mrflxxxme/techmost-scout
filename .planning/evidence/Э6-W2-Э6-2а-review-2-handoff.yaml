@@ -1,0 +1,22 @@
+handoff:
+  from: reviewer
+  to: verifier
+  task: Э6-2а, ревью цикл 2 (последний)
+  branch: claude/e6-2a
+  did:
+    - "Б1 цикла 1 закрыта: тест через replan_search, параметризован research/product, на коде зелёный"
+    - "Мутация planning.py:325 -> strip_contest_queries(new_plan): 2 failed, 27 passed, причина верная (ANALOG остаётся в плане); откат выполнен"
+    - "Починка не вышла за границы: тест и evidence; инварианты не нарушены"
+  artifacts:
+    - ".planning/evidence/Э6-W2-Э6-2а-review-2.md"
+    - ".planning/evidence/Э6-W2-Э6-2а-review-2-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_analog_stage.py tests/test_analog_flow.py tests/test_prompts.py tests/test_plan_types.py -q: 116 passed in 12.31s"
+    - "мутация planning.py:325: 2 failed, 27 passed (tests/test_analog_stage.py)"
+    - "ruff check tests/test_analog_stage.py: All checks passed; ruff format --check: 1 file already formatted"
+  escalate: none
+  read_first:
+    - ".planning/evidence/Э6-W2-Э6-2а-review-2.md"
+    - ".planning/evidence/Э6-W2-Э6-2а-review.md"
+  notes: "Вердикт ПРИНЯТЬ. Отступление: тест перенёс и прогнал оркестратор (934ae80) из-за падения Bash исполнителя; независимо перепроверено ревьюером."

@@ -1,0 +1,30 @@
+handoff:
+  from: reviewer
+  to: implementer-1
+  task: Э6-2а
+  branch: claude/e6-2a
+  did:
+    - "Ревью+верификация цикла 1: дифф 21 файла, 10 инвариантов, грабли §0.1, критерии 1-6 воспроизведены (42 passed в тестах слоя; полный pytest 6 failed docker-Linux / 1499 passed; ruff чисто)"
+    - "Поставлено 8 мутаций: 7 убиты по правильной причине (4 из карточки + 3 мои), 1 выжила"
+    - "Блокирующая 1: проводка strip_analog_queries в replan_search (planning.py:325) без теста, мутация выжила"
+    - "Отступления исполнителя: _kind_kwargs оставить на долг (совет), две вынужденные правки прежних тестов приняты, ZZ и stages.py приняты"
+  artifacts:
+    - .planning/evidence/Э6-W2-Э6-2а-review.md
+    - .planning/evidence/Э6-W2-Э6-2а-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_analog_stage.py tests/test_analog_flow.py: 42 passed"
+    - "pytest -q: 6 failed, 1499 passed (6 - test_docker_compose_backup_runtime.py, Linux-специфика)"
+    - "ruff check .: All checks passed; ruff format --check .: 230 files already formatted"
+    - "мутации а-г из карточки: каждая >=1 failed; выжившая: убрать strip_analog_queries из replan_search - 55 passed и 52 passed на пяти файлах replan_search"
+  escalate: none
+  read_first:
+    - ".planning/evidence/Э6-W2-Э6-2а-review.md (находка Б1 и постановка)"
+    - backend/app/pipeline/planning.py (replan_search, строка 325)
+    - tests/test_analog_stage.py
+  notes: |
+    Вердикт ВЕРНУТЬ, цикл 1 из 2. Править одно: тест проводки strip_analog_queries в replan_search
+    (research и product, красный при мутации). Код не трогать. Советы С1-С6 не блокируют:
+    С1 (evidence[].url не сверяется с candidate_urls) и С2 (предел 6 платных запросов Яндекса
+    делят analog с остальными) передать в Э6-2б/в и аудит волны; _kind_kwargs - в долг этапа
+    отдельной задачей. Цикл 2 (последний) - только на Б1.
