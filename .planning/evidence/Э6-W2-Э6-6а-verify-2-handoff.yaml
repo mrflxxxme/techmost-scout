@@ -1,0 +1,31 @@
+handoff:
+  from: verifier
+  to: auditor
+  task: "Э6-6а"
+  did:
+    - "Прогнаны 4 критерия приёмки Э6-6а из PLAN.md; критерий 1 проверен по редакции РЕШ-280: закрыто 4 из 4"
+    - "Критерий 1: pytest tests/test_host_routing.py -v — 30 passed; все 8 путей параметризации найдены в роутерах; /requests/1/report — report.py:44; / → 302 passed"
+    - "Мутация «пропускать рабочие пути на публичном хосте» в host_routing.py: 12 failed; откат, дерево чистое"
+    - "Мутации критерия 3: резерв незавершённых 1 failed; X-Forwarded-For всегда 2 failed; откат выполнен"
+    - "Полный pytest -q: 1572 passed, 0 failed; unshare -rn pytest -q: 1572 passed; ruff check и ruff format --check — чисто"
+    - "git diff --stat claude/sleepy-planck-11w8jv HEAD -- tests/: только test_config.py, test_host_routing.py, test_scan_limits.py; в test_config — 7 имён в _AWAITING_OWNER_IN_EXAMPLE"
+    - "Инварианты №3, №6, №7, №8, №9 подтверждены; слияние 9de9a0c ничего не сломало"
+  artifacts:
+    - ".planning/evidence/Э6-W2-Э6-6а-verify-2.md"
+    - ".planning/evidence/Э6-W2-Э6-6а-verify-2-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_host_routing.py -v: 30 passed"
+    - "pytest tests/test_scan_limits.py -v: 20 passed"
+    - "pytest -q: 1572 passed, 0 failed (exit 0)"
+    - "ruff check .: All checks passed!; ruff format --check .: 237 files already formatted"
+    - "rg -ni captcha backend/ tests/: пусто"
+    - "rg httpx backend/app: search/, llm/, cli_doctor.py, pipeline_context.py, pipeline_search.py"
+    - "git diff --stat ... -- tests/: 3 файла, как в критерии 3"
+  escalate: "DLG-1: контейнерный прогон python:3.12-slim (РЕШ-249/РЕШ-276) не выполнен, docker-демон недоступен; действие владельца — приложить вывод CI GitHub (Ubuntu, Python 3.12) к .planning/evidence/. Открыт, идёт в ворота"
+  read_first:
+    - ".planning/evidence/Э6-W2-Э6-6а-verify-2.md"
+    - "backend/app/web/host_routing.py"
+    - "tests/test_host_routing.py (параметризация test_публичный_хост_закрывает_рабочие_пути_404_без_пароля)"
+    - "docs/team/INVARIANTS.md (строка 3: пункт о литеральном grep)"
+  notes: "Вердикт PASS по редакции РЕШ-280. Литеральный grep инварианта №3 не пуст: 10 файлов тот же набор, что в прежней верификации; в добавленных строках совпадений нет. Число 1572 против ожидания ~1567 не разобрано по коммитам, 0 failed."
