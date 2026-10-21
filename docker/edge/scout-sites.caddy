@@ -1,0 +1,44 @@
+# Блоки Скаута (Э6-9, РЕШ-272). Файл ведёт workflow «Деплой Скаута»
+# (docs/deploy.md, раздел 13): правки руками между маркерами techmost-scout
+# затрутся следующим применением. Чужие блоки файла workflow не трогает.
+#
+# Рабочий хост закрыт паролем, как docker/Caddyfile: логин — WEB_AUTH_USER,
+# хэш считается на сервере от WEB_AUTH_PASSWORD из docker/.env (РЕШ-267).
+# JSON-API приложений идёт мимо пароля (РЕШ-250): его защищает ключ в Скауте.
+%%WORK_HOST%% {
+    encode gzip
+
+    @ui not path /api/v1/*
+    basic_auth @ui {
+        %%AUTH_USER%% %%AUTH_HASH%%
+    }
+
+    reverse_proxy techmost-scout:8000
+
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        X-Robots-Tag "noindex, nofollow"
+    }
+}
+# [[scan]]
+
+# Публичный хост экспресс-скана (Э6-6в, РЕШ-254): пароля нет, посетитель его не
+# знает. Закрывает хост само приложение — на нём отвечают только /scan*, /static/*,
+# /api/v1/* и /health.
+%%SCAN_HOST%% {
+    encode gzip
+
+    reverse_proxy techmost-scout:8000
+
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        X-Robots-Tag "noindex, nofollow"
+    }
+}
+# [[/scan]]
