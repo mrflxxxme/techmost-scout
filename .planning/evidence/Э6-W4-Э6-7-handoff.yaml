@@ -1,0 +1,53 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: Э6-7
+  did:
+    - "models.py: таблица analog_verdicts (модель AnalogVerdict) — id, request_id (FK, индекс), analog_key String(16) (индекс), reviewer_name, decision, comment, created_at; новая таблица через create_all, db.py и ADDED_COLUMNS не тронуты"
+    - "verdicts.py: analog_key(card) — 16 hex sha256 от title/country/country_evidence_url через перевод строки; effective_analog_verdicts и effective_verdicts построены на одной внутренней _latest_by (последний по (created_at, id)); visible_analogs зовёт hidden_reason на каждом аналоге; типы hidden_reason расширены до SolutionCard | AnalogCard | None и Verdict | AnalogVerdict | None; сравнение с REJECT в коде по-прежнему одно"
+    - "export/view.py: build_export_view накладывает visible_analogs на client_visible.analog_cards до analog_sections — одна точка для страницы, PDF, DOCX, JSON, /api/v1 и markdown из view.client_report"
+    - "web/routes/review.py: секция аналогов на экране ревью (название, суть, страна, причина скрытия, форма без оценки 1-5) и POST /requests/{request_id}/analogs/{analog_key}/verdict; ключ не 16 hex, нет отчёта или ключа среди аналогов — 404 без записи; пустое имя и неизвестное решение — 400 без записи; поля формы необязательны на уровне разбора, чтобы пустое имя давало 400, а не 422"
+    - "review.html: макрос analog_verdict и секция после конкурсных карточек (показывается только при наличии аналогов)"
+    - "tests/test_analog_verdicts.py (новый, 24 теста, 460 строк): сценарии критерия 1 по шести выходам, 404/400 без записи, статус и подпись не меняются, экран ревью, init_db, чистые функции"
+  artifacts:
+    - backend/app/models.py
+    - backend/app/verdicts.py
+    - backend/app/export/view.py
+    - backend/app/web/routes/review.py
+    - backend/app/web/templates/review.html
+    - tests/test_analog_verdicts.py
+    - .planning/evidence/Э6-W4-Э6-7-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_analog_verdicts.py -v: 24 passed"
+    - "pytest -q: 1596 passed, 0 failed (база 1572 + 24)"
+    - "ruff check . : All checks passed; ruff format --check . : 238 files already formatted"
+    - "мутации M1-M4: 4/4/2/2 failed (каждая >= 1)"
+    - "греп: сравнение с REJECT — одна строка (verdicts.py:207); REJECT|reject в *.py — три строки; reject в шаблонах кроме option — пусто; country_status в backend/app/web — пусто; httpx вне карты инв. 6 — пусто"
+    - "pytest tests/test_export_analogs.py tests/test_backend_layout.py tests/test_tests_layout.py: 16 passed без правок прежних тестов"
+  escalate: none
+  read_first:
+    - .planning/PLAN.md (раздел Э6-7 в дополнении РЕШ-277)
+    - backend/app/verdicts.py (analog_key, _latest_by, visible_analogs, hidden_reason)
+    - backend/app/export/view.py (build_export_view)
+    - backend/app/web/routes/review.py (submit_analog_verdict, _annotate_analogs)
+    - tests/test_analog_verdicts.py
+  autonomous_decisions:
+    - "Автономные решения 28-32 плана выполнены как записаны (таблица и ключ; одна hidden_reason; вердикты аналогов вне all_cards_reviewed/статуса/подписи; форма без оценки; маршрут в review.py)."
+    - "Поля decision и reviewer_name маршрута аналога объявлены Form(default='') вместо Form(...): иначе пустое имя давало бы 422 FastAPI, а контракт требует 400 (у карточек пустое имя фактически даёт 422 — это поведение прежнего маршрута, не менялось)."
+    - "Проверка ключа: fullmatch на [0-9a-f]{16} в теле маршрута, а не regex в пути — чтобы кривой ключ давал 404, а не 422."
+    - "Одинаковый отпечаток у двух аналогов отчёта (одно название, страна и ссылка страны) даёт общий вердикт — осознанно: это один и тот же аналог по определению ключа."
+    - "Вердикт применяется только к client_report (клиентский вид и выходы); операторская view.report.analog_cards не фильтруется — отдельного потребителя у неё нет."
+  ui_texts_for_owner:
+    - "Заголовок секции на экране ревью: «Что делают в мире» (ANALOG_SECTION_TITLE из export/analogs.py, не новый)"
+    - "Подпись поля: «Страна:»"
+    - "Плашка причины: «Клиенту не уедет — причина: отклонена экспертом.» / «… нет ни одного подтверждения.» (HIDDEN_* прежние, согласование рода — через слова «причина:»)"
+    - "Подписи формы: «Решение по аналогу» (пункты «Одобрить», «На доработку», «Отклонить» — как у карточек), «Комментарий», «Имя проверяющего»"
+    - "Кнопка: «Записать вердикт по аналогу»"
+    - "Фрагмент после записи: «Вердикт по аналогу записан: {Одобрено|На доработку|Отклонено}, проверяющий {имя} — {комментарий}.»"
+    - "Отказ 404: «Аналог не найден в отчёте запроса №{request_id}.»"
+    - "Отказы 400 — прежние тексты карточек: REFUSAL_EMPTY_NAME «Укажите имя проверяющего — без имени вердикт не засчитывается.» и REFUSAL_UNKNOWN_DECISION"
+  notes: |
+    review.py вырос до 492 строк (предел 500): следующая правка этого модуля потребует выноса аналогов в отдельный модуль маршрутов, а он подключается в main.py (занят Э6-6в) — вынести после слияния.
+    Вне границ замечено, не правил: у маршрута карточек пустое имя даёт 422 (Form(...)), а не 400, как написано в тексте отказа REFUSAL_EMPTY_NAME; поведение прежнее, тест test_web_review его не проверяет.
+    Живых вызовов и сети нет. Секреты не печатались; ключ в тестах фиктивный.

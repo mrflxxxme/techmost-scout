@@ -13,7 +13,8 @@ DOCX (Э4-И5) и команды `scout export` (Э4-И6): читает `request
 проходом, строки таблицы сравнения — тем же проходом, что и карточки). Второго
 расчёта видимости для клиента в проекте не остаётся. Порядок операций важен:
 правки накладываются ДО фильтра — иначе правленый текст ещё не отклонённой
-карточки не дошёл бы до клиентского вида. Свой разбор `report_json` или
+карточки не дошёл бы до клиентского вида. Вердикты на аналоги (Э6-7) снимают
+аналоги из `client_report.analog_cards` тут же, до `analog_sections`. Свой разбор `report_json` или
 повторный вызов `apply_overrides`/`visible_report` в другом месте — второй
 путь правды, которого этот этап не заводит.
 """
@@ -29,6 +30,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.export.analogs import AnalogSections, analog_sections
+from app.models import AnalogVerdict as AnalogVerdictRow
 from app.models import Brief as BriefRow
 from app.models import Request as RequestRow
 from app.models import RequestStatus
@@ -40,7 +42,15 @@ from app.report_overrides import OverrideMap, apply_overrides
 from app.schemas import Report
 from app.schemas import Verdict as VerdictDecision
 from app.summary_overrides import SummaryOverrideData, apply_summary_override
-from app.verdicts import CardKey, effective_verdicts, hidden_reason, visible_position_count, visible_report
+from app.verdicts import (
+    CardKey,
+    effective_analog_verdicts,
+    effective_verdicts,
+    hidden_reason,
+    visible_analogs,
+    visible_position_count,
+    visible_report,
+)
 
 #: Статусы, в которых пометка «черновик» снята вердиктом эксперта (РЕШ-199).
 #: Одна точка правды для `ExportView.is_draft` и статуса запроса в `/api/v1`.
@@ -126,7 +136,7 @@ class ExportView:
     #: брифа, аналоги без `evidence` и из исключённых стран уже убраны.
     #: Страница отчёта, PDF, DOCX и JSON читают это поле, markdown зовёт ту же
     #: `analogs.analog_sections`. Без явного значения считается из
-    #: `client_report` — аналоги не зависят от вердиктов по карточкам.
+    #: `client_report`, в котором вердикты на аналоги уже применены.
     analog_sections: AnalogSections | None = None
 
     def __post_init__(self) -> None:
@@ -201,6 +211,20 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
 
     visible = visible_report(edited_report, original_ids, effective)
     client_visible = visible_report(edited_report, original_ids, effective, require_evidence=True)
+    # Э6-7: поштучные вердикты аналогов накладываются здесь же и до `analog_sections` —
+    # одна точка для страницы, PDF, DOCX, JSON, `/api/v1` и markdown.
+    analog_rows = (
+        (await session.execute(select(AnalogVerdictRow).where(AnalogVerdictRow.request_id == request_id)))
+        .scalars()
+        .all()
+    )
+    client_visible = client_visible.model_copy(
+        update={
+            "analog_cards": visible_analogs(
+                client_visible.analog_cards, effective_analog_verdicts(list(analog_rows)), require_evidence=True
+            )
+        }
+    )
     card_ids, rework_keys = _reindex_after_filter(original_ids, effective)
     comparison_table_hidden = _comparison_table_hidden(edited_report, original_ids, effective)
 

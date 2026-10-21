@@ -279,6 +279,28 @@ class Verdict(Base):
     card: Mapped[SolutionCard] = relationship(back_populates="verdicts")
 
 
+class AnalogVerdict(Base):
+    """Вердикт эксперта на один зарубежный аналог отчёта (Э6-7, РЕШ-196 п. 3).
+
+    У аналогов нет строк в базе — они живут только в `requests.report_json`,
+    поэтому вердикт привязан к запросу и отпечатку аналога (`analog_key`, см.
+    `app.verdicts.analog_key`), а не к `solution_cards.id`. Новая таблица
+    заводится `create_all`, колонок в существующих таблицах нет. Строки не
+    обновляются и не удаляются: действующий вердикт — последний по
+    `(created_at, id)`. Оценки 1–5 нет: аналог в протокол приёмки не входит.
+    """
+
+    __tablename__ = "analog_verdicts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), index=True)
+    analog_key: Mapped[str] = mapped_column(String(16), index=True)
+    reviewer_name: Mapped[str] = mapped_column(String(255))
+    decision: Mapped[str] = mapped_column(String(16))  # approve | reject | rework
+    comment: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class SummaryOverride(Base):
     """Правка эксперта поверх рекомендации и оговорок сводки отчёта (РЕШ-206).
 
