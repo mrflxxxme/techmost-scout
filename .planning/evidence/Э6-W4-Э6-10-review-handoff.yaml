@@ -1,0 +1,23 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: Э6-10
+  did:
+    - "Проверены дифф d4426fe, инварианты 1-10 и грабли 0.1; воспроизведены все критерии 1-6 карточки"
+    - "Фазз 400 случайных планов x 2 режима и отмена TaskGroup: POST никогда не больше max_queries, used равен числу POST"
+    - "Поставлено 12 мутаций (8 карточки + 4 своих), выживших нет"
+    - "Блокирующих нет; 3 совета (резерв при нехватке пачек, тест на текст ANALOG_BUSY, обрывы занимают место)"
+  artifacts:
+    - .planning/evidence/Э6-W4-Э6-10-review.md
+    - .planning/evidence/Э6-W4-Э6-10-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q: 1742 passed"
+    - "pytest прежние тесты кр. 3: 344 passed; tests/ в d4426fe - только test_yandex_quota.py"
+    - "pytest tests/test_yandex_quota.py: 14 passed"
+    - "ruff check: All checks passed; ruff format --check: 247 files already formatted"
+    - "размеры: yandex_search.py 425, yandex_quota.py 140, pipeline_search.py 434"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э6-W4-Э6-10-review.md
+  notes: "Цикл 1, вердикт ПРИНЯТЬ. Дифф задачи - git diff d4426fe~1 d4426fe (дифф к сессионной ветке шумит из-за её опережения)."

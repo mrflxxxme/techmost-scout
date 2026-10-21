@@ -1,0 +1,62 @@
+## кр.1: pytest tests/test_yandex_quota.py -v
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a8d397ec44f604780
+configfile: pyproject.toml
+plugins: respx-0.23.1, asyncio-1.4.0, anyio-4.15.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 14 items
+
+tests/test_yandex_quota.py::test_раздача_в_ширину_даёт_каждой_формулировке_по_пачке_прежде_чем_второй PASSED [  7%]
+tests/test_yandex_quota.py::test_квота_резервирует_синхронно_и_не_пускает_за_предел PASSED [ 14%]
+tests/test_yandex_quota.py::test_квота_резерв_уходит_прочим_если_аналогов_в_проходе_нет PASSED [ 21%]
+tests/test_yandex_quota.py::test_десять_параллельных_web_без_begin_pass_дают_ровно_шесть_запросов PASSED [ 28%]
+tests/test_yandex_quota.py::test_пять_web_и_два_английских_analog_без_begin_pass_дают_ровно_шесть PASSED [ 35%]
+tests/test_yandex_quota.py::test_рынок_отдаёт_аналогам_шесть_минус_три_и_называет_вытесненное PASSED [ 42%]
+tests/test_yandex_quota.py::test_без_русской_analog_прочим_достаётся_четыре_места PASSED [ 50%]
+tests/test_yandex_quota.py::test_без_английских_analog_прочим_достаётся_пять_мест PASSED [ 57%]
+tests/test_yandex_quota.py::test_без_analog_совсем_прочим_все_шесть_и_записей_о_резерве_нет PASSED [ 64%]
+tests/test_yandex_quota.py::test_одна_английская_analog_получает_обе_пачки PASSED [ 71%]
+tests/test_yandex_quota.py::test_наука_analog_снят_кодом_и_все_шесть_мест_у_web PASSED [ 78%]
+tests/test_yandex_quota.py::test_неиспользованные_места_первого_прохода_достаются_второму PASSED [ 85%]
+tests/test_yandex_quota.py::test_оборванный_запрос_место_не_возвращает_и_остаётся_searcherror PASSED [ 92%]
+tests/test_yandex_quota.py::test_queries_used_присваивается_а_begin_pass_счёт_не_сбрасывает PASSED [100%]
+
+============================== 14 passed in 1.50s ==============================
+## кр.3: прежние тесты без правок
+........................................................................ [ 83%]
+........................................................                 [100%]
+344 passed in 25.97s
+## git diff --stat <база> -- tests/
+ tests/test_yandex_quota.py | 351 +++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 351 insertions(+)
+## кр.4
+159:        max_queries: int = 6,
+34:YANDEX_QUERIES_PER_SCAN = 6
+-- diff prompts/export/web/planning/analog_sources (пусто = ок):
+-- name-only backend:
+backend/app/pipeline/pipeline_search.py
+backend/app/search/yandex_quota.py
+backend/app/search/yandex_search.py
+## кр.5
+(self._lock: rc=1)
+backend/app/pipeline/pipeline_search.py
+backend/app/search/yandex_quota.py
+backend/app/search/yandex_search.py
+## инв.6: httpx в yandex_quota/pipeline_search
+backend/app/pipeline/pipeline_search.py:18:import httpx
+backend/app/pipeline/pipeline_search.py:95:        self._client = httpx.AsyncClient(
+rc=0
+## ruff
+All checks passed!
+247 files already formatted
+## wc
+  425 backend/app/search/yandex_search.py
+  140 backend/app/search/yandex_quota.py
+  434 backend/app/pipeline/pipeline_search.py
+  351 tests/test_yandex_quota.py
+ 1350 total
+## полный pytest -q
+  /home/user/techmost-scout/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1742 passed, 1 warning in 96.54s (0:01:36)
