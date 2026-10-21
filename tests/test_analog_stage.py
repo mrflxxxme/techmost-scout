@@ -281,7 +281,10 @@ def test_нормализация_плана_не_вытесняет_analog_ко
     result = planning.normalize_plan_queries(plan, market)
 
     assert len(result.queries) == 12
-    assert _types(result).count(SourceType.ANALOG) == 2
+    analog = [query for query in result.queries if query.source_type is SourceType.ANALOG]
+    # Английских от модели ровно 2, русская от кода (Э6-8) — одна.
+    assert [query.lang for query in analog].count("en") == 2
+    assert [query.lang for query in analog].count("ru") == 1
     assert _types(result).count(SourceType.CONTEST) == 2
 
 
@@ -334,7 +337,9 @@ async def test_plan_search_при_рынке_сохраняет_analog_и_наз
 
     plan = await stages.plan_search(router, market)
 
-    assert _types(plan).count(SourceType.ANALOG) == 2
+    analog = [query for query in plan.queries if query.source_type is SourceType.ANALOG]
+    assert [query.lang for query in analog].count("en") == 2
+    assert [query.lang for query in analog].count("ru") <= 1  # русскую добавляет код (Э6-8)
     assert "```\ndigital\n```" in provider.calls[0][0].content
 
 

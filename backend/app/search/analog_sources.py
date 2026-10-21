@@ -5,6 +5,10 @@
 фонды, консультанты и каталоги стартапов. Список лежит в
 `reference/analog_sources.yaml` — домен добавляется правкой файла, без кода.
 
+Русская формулировка `analog` (Э6-8) ищет не по этому списку, а по реестрам РФ
+(`ru_registries`): ГИСП, реестр ПО Минцифры, Product Radar. Какой список взять,
+решает язык формулировки — одно правило в `analog_domains`.
+
 Оператор `site:` съедает длину запроса, а у Яндекса она ограничена, поэтому все
 домены в одну формулировку не влезают. Модуль делит их на пачки: каждая пачка —
 отдельная формулировка и отдельный платный запрос (учёт предела — в адаптере,
@@ -49,6 +53,14 @@ class AnalogSource:
 
 
 @dataclass(frozen=True)
+class RuRegistry:
+    """Один реестр РФ: домен и название для отчётов."""
+
+    domain: str
+    name_ru: str
+
+
+@dataclass(frozen=True)
 class AnalogQueryPlan:
     """Формулировка `analog`, разложенная по пачкам доменов.
 
@@ -86,14 +98,31 @@ def _entries(raw: Any, section: str) -> tuple[AnalogSource, ...]:
     return tuple(entries)
 
 
+def _registries(raw: Any) -> tuple[RuRegistry, ...]:
+    """Записи `ru_registries`: `{domain, name_ru}`. Секция необязательна; если она есть, то непустая."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("Белый список аналогов: секция «ru_registries» должна быть непустым списком")
+    entries: list[RuRegistry] = []
+    for item in raw:
+        if not isinstance(item, dict) or "domain" not in item:
+            raise ValueError("Белый список аналогов: запись без поля domain в секции «ru_registries»")
+        name_ru = item.get("name_ru")
+        if not isinstance(name_ru, str) or not name_ru.strip():
+            raise ValueError(f"Белый список аналогов: у реестра {item['domain']!r} не указано название (name_ru)")
+        entries.append(RuRegistry(domain=_check_domain(item["domain"], "ru_registries"), name_ru=name_ru))
+    return tuple(entries)
+
+
 @lru_cache(maxsize=1)
 def load_analog_sources() -> dict[str, Any]:
     """Прочитать и проверить список; результат кэшируется на процесс.
 
-    Возвращает `checked_at` и кортежи записей `reports` и `catalogs`. Чужие
-    секции файла (например, реестры РФ) игнорируются. Домен со схемой, путём,
-    пробелом, прописными буквами или повтор (в том числе между секциями) —
-    `ValueError`: тихо поправленный домен хуже остановленной загрузки.
+    Возвращает `checked_at` и кортежи записей `reports`, `catalogs` и
+    `ru_registries`. Чужие секции файла игнорируются. Домен со схемой, путём,
+    пробелом, прописными буквами или повтор (в том числе между секциями, реестры
+    РФ тоже) — `ValueError`: тихо поправленный домен хуже остановленной загрузки.
     """
     data = yaml.safe_load(_REFERENCE_PATH.read_text(encoding="utf-8"))
     return _validate(data)
@@ -108,32 +137,39 @@ def _validate(data: Any) -> dict[str, Any]:
         raise ValueError("Белый список аналогов: checked_at обязателен и пишется строкой в кавычках")
     reports = _entries(data.get("reports"), "reports")
     catalogs = _entries(data.get("catalogs"), "catalogs")
-    domains = [entry.domain for entry in (*catalogs, *reports)]
+    registries = _registries(data.get("ru_registries"))
+    domains = [entry.domain for entry in (*catalogs, *reports, *registries)]
     if len(set(domains)) != len(domains):
         repeated = sorted({d for d in domains if domains.count(d) > 1})
         raise ValueError(f"Белый список аналогов: домен повторяется: {', '.join(repeated)}")
-    return {"checked_at": checked_at, "reports": reports, "catalogs": catalogs}
+    return {"checked_at": checked_at, "reports": reports, "catalogs": catalogs, "ru_registries": registries}
 
 
-def analog_domains() -> tuple[str, ...]:
-    """Все домены списка в порядке опроса: каталоги, затем отчёты.
+def analog_domains(lang: str = "en") -> tuple[str, ...]:
+    """Домены опроса для формулировки `analog` на языке `lang`.
 
-    Каталоги стартапов идут первыми: при нехватке платных запросов в предел
-    влезают они, а хвост отчётов называется в `limit_problems`.
+    Русская (`ru`) — только реестры РФ (`ru_registries`, Э6-8); любая другая —
+    мировой список в порядке опроса: каталоги, затем отчёты. Каталоги стартапов
+    идут первыми: при нехватке платных запросов в предел влезают они, а хвост
+    отчётов называется в `limit_problems`. Это единственное место, где язык
+    выбирает список: сужение запроса и учёт пределов берут домены отсюда.
     """
     loaded = load_analog_sources()
+    if lang == "ru":
+        return tuple(entry.domain for entry in loaded["ru_registries"])
     return tuple(entry.domain for entry in (*loaded["catalogs"], *loaded["reports"]))
 
 
 def plan_analog_queries(
-    text: str, domains: tuple[str, ...] | None = None, *, max_chars: int = ANALOG_QUERY_MAX_CHARS
+    text: str, domains: tuple[str, ...] | None = None, *, lang: str = "en", max_chars: int = ANALOG_QUERY_MAX_CHARS
 ) -> AnalogQueryPlan:
     """Разложить домены по пачкам так, чтобы каждая формулировка была ≤ `max_chars`.
 
     Жадно, в порядке списка. Домен, который не помещается даже в одиночку
     (формулировка слишком длинна), попадает в `unfit` и в пачки не входит.
+    Без явного `domains` список выбирает язык формулировки (`analog_domains`).
     """
-    pool = analog_domains() if domains is None else domains
+    pool = analog_domains(lang) if domains is None else domains
     batches: list[list[str]] = []
     unfit: list[str] = []
     for domain in pool:

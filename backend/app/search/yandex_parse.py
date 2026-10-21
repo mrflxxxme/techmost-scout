@@ -150,14 +150,16 @@ def with_site_filter(query: SearchQuery, search_type: str) -> str:
       из реестров РНФ и Фонда содействия.
 
     * `analog` — по белому списку доменов (`reference/analog_sources.yaml`), в
-      любом контуре: тип несёт намерение сам. Здесь возвращается первая пачка
+      любом контуре: тип несёт намерение сам. Язык выбирает список: русская
+      формулировка — только реестры РФ (`ru_registries`), английская — мировой
+      список без них (Э6-8). Здесь возвращается первая пачка
       доменов — формулировка не длиннее предела API; остальные пачки и учёт
       платных запросов ведёт адаптер через `plan_analog_queries`.
 
     Для всего остального ограничение по сайтам убило бы смысл открытого веба.
     """
     if query.source_type is SourceType.ANALOG:
-        texts = plan_analog_queries(query.text).texts
+        texts = plan_analog_queries(query.text, lang=query.lang).texts
         if not texts:
             raise ValueError(f"Формулировка analog слишком длинна для оператора site: «{query.text[:80]}»")
         return texts[0]

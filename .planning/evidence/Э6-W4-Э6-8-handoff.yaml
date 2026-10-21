@@ -1,0 +1,56 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: Э6-8
+  branch: worktree-agent-aeba964868ac27019
+  base: claude/sleepy-planck-11w8jv (5cce7c5)
+  did:
+    - Проба доступа (первый шаг): ГИСП 403, реестр Минцифры таймаут, Product Radar 200 — но машинного текстового поиска продуктов без ключа нет; вывод в evidence/Э6-W4-Э6-8-probe.txt
+    - Адаптер Product Radar не написан (условие контракта п. 5 не выполнено); search/product_radar.py, search/__init__.py, tests/test_product_radar.py не создавались
+    - analog_sources.yaml — секция ru_registries (три домена РЕШ-261, name_ru); загрузчик читает её, проверяет домен (без схемы/пути/дубля, в том числе с мировым списком)
+    - analog_domains(lang) и plan_analog_queries(..., lang) — единственное место выбора списка: ru -> реестры РФ, иначе мировой; yandex_parse и yandex_search передают query.lang
+    - planning.registry_analog_query(plan, brief) и подключение в normalize_plan_queries до резервирования мест потолка 12; русская analog от модели отсеивается
+    - Узкие правки трёх прежних тестов (счёт analog: 2 английские + русская; русская analog сужается реестрами)
+    - tests/test_ru_registries.py, 31 тест, без сети
+  artifacts:
+    - backend/app/reference/analog_sources.yaml
+    - backend/app/search/analog_sources.py
+    - backend/app/search/yandex_parse.py
+    - backend/app/search/yandex_search.py
+    - backend/app/pipeline/planning.py
+    - tests/test_ru_registries.py
+    - tests/test_analog_stage.py
+    - tests/test_analog_flow.py
+    - tests/test_yandex_analog.py
+    - .planning/evidence/Э6-W4-Э6-8-probe.txt
+    - .planning/evidence/Э6-W4-Э6-8-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest -q: 1704 passed, 0 failed (база 1673 + 31)"
+    - "pytest tests/test_ru_registries.py -q: 31 passed"
+    - "семь мутаций, каждая >= 1 failed; дерево после чисто (evidence/Э6-W4-Э6-8-checks.txt)"
+    - "ruff check .: All checks passed; ruff format --check .: 244 files already formatted"
+    - "rg -ln productradar backend/app --glob *.py: пусто; rg -ln gisp/reestr.digital backend/app --glob *.py: пусто"
+  escalate: Э-4 принята по умолчанию — вариант А (владелец предупреждён); блокирует слияние Э6-8, решение остаётся за владельцем
+  domains_ru_registries:
+    - "gisp.gov.ru — ГИСП Минпромторга (промышленная продукция)"
+    - "reestr.digital.gov.ru — реестр российского ПО Минцифры"
+    - "productradar.ru — Product Radar (записи продуктов лежат под /product/<slug>/)"
+  autonomous_decisions:
+    - "Адаптер Product Radar не пишется: /wp-json/wp/v2/search ищет только статьи блога; wp/v2/posts даёт 18 статей-подборок (не каталог); маршруты /radar/v1/products/<cat_id> и base-feed — 401; тип product в REST не выставлен (404). Все три реестра идут через Яндекс по домену"
+    - "ru_registries в загрузчике необязательна (нет секции — пустой кортеж): иначе пришлось бы править узкий ряд прежних тестов с подменным YAML; настоящий файл держит тест — ровно три домена"
+    - "Русская analog от модели отсеивается в normalize_analog_queries (ANALOG_QUERIES = 2 — счёт английских): текст реестровой формулировки задаёт только код, иначе в реестры ушла бы произвольная формулировка модели"
+    - "Русская analog ставится в хвост плана после английских, до резервирования мест под конкурсные: при потолке 12 вытесняется основная очередь (с логом), аналоги — нет"
+    - "Фолбэк текста — первые три keywords_ru через пробел; пустой текст — None и log.info (имя логгера app.pipeline.stages)"
+    - "Три реестра помещаются в одну пачку site: — русская analog стоит ровно один платный запрос"
+  deferred:
+    - "Живая проверка с сервера в РФ: отвечают ли gisp.gov.ru и reestr.digital.gov.ru, и находит ли Яндекс записи по site: реестров — пойдёт через деплой Э6-9 (DLG-Э6-1: в журнале стадии search видна русская analog с доменами реестров; аналог из реестра — со ссылкой на запись). Если сервер получит доступ к открытым данным реестров, адаптер — отдельная задача"
+  notes:
+    - "НАБЛЮДЕНИЕ за границами задачи: предел 6 платных запросов Яндекса общий для всех типов формулировок, а формулировки analog стоят в хвосте плана. Английская analog занимает 2 запроса (27 доменов в 2 пачки), поэтому при типичном плане «Рынка» (web, конкурсы, гранты вперёд) пачки analog, включая русскую реестровую, первыми уходят в limit_problems. Это не новый дефект Э6-8 (тот же механизм у Э6-2в и недостаток атомарности предела из РЕШ-283), но достижимость события «найдено в реестре» зависит от него. Решение владельца/аудита: резервировать места под analog или ставить русскую реестровую раньше второй английской. В коде не менялось"
+    - "Не тронуты: schemas.py, config.py, prompts/*, planner.md, search/__init__.py; параллельный Э6-6б (autoverify.py, scan_view.py) не затронут"
+    - "Вне файлов задачи ничего не правилось; git diff --stat 5cce7c5 — 10 файлов (7 в границах + 3 узкие правки тестов + evidence)"
+  read_first:
+    - .planning/evidence/Э6-W4-Э6-8-probe.txt
+    - backend/app/pipeline/planning.py (registry_analog_query, normalize_analog_queries, normalize_plan_queries)
+    - backend/app/search/analog_sources.py (analog_domains, plan_analog_queries)
+    - tests/test_ru_registries.py

@@ -226,7 +226,7 @@ class YandexSearchAdapter(SearchAdapter):
         Отказ источника на любой пачке поднимается наружу как `SearchError`: уже
         полученное по ранним пачкам при этом теряется, зато отказ не прячется.
         """
-        plan = plan_analog_queries(query.text)
+        plan = plan_analog_queries(query.text, lang=query.lang)
         if plan.unfit:
             self._limit_problems.append(
                 f"yandex_search: формулировка «{query.text}» слишком длинна для оператора site: — "
