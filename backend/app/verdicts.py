@@ -28,16 +28,25 @@ _reindex_after_filter`) вправе передать `None`, не поддел�
 опираясь на порядок проверок внутри функции. `require_evidence=True` без
 карточки — ошибка вызывающего, функция называет её `ValueError`, а не падает
 `AttributeError`-ом или отвечает неверно.
+
+Поштучный вердикт на зарубежный аналог (Э6-7): `analog_key` — отпечаток
+аналога, `effective_analog_verdicts` — последний вердикт по ключу тем же
+выбором, что у карточек, `visible_analogs` зовёт ту же `hidden_reason`.
+Вердикты аналогов в `all_cards_reviewed`, статус `validated` и подпись не
+входят — замок отчёта целиком прежний (инвариант №2).
 """
 
 from __future__ import annotations
 
+import hashlib
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from typing import Literal
 
 from app.export.markdown import REVIEWED_FOOTER
+from app.models import AnalogVerdict as AnalogVerdictRow
 from app.models import Verdict as VerdictRow
-from app.schemas import Report, ReportSummary, SolutionCard
+from app.schemas import AnalogCard, Report, ReportSummary, SolutionCard
 from app.schemas import Verdict as VerdictDecision
 
 #: Причина, по которой карточка скрыта из клиентского вида. Тексты для экрана
@@ -53,8 +62,10 @@ HiddenReason = Literal["rejected", "no_evidence"]
 CardKey = tuple[bool, int]
 
 
-def effective_verdicts(rows: list[VerdictRow]) -> dict[int, VerdictRow]:
-    """Действующий вердикт каждой карточки — последняя строка по `created_at`.
+def _latest_by[Row: (VerdictRow, AnalogVerdictRow), Key](
+    rows: Iterable[Row], key_of: Callable[[Row], Key]
+) -> dict[Key, Row]:
+    """Последняя строка каждого ключа по `(created_at, id)` — общий выбор действующего вердикта.
 
     Вердикты не обновляются и не удаляются (РЕШ-196 п. 3): накопленные строки —
     обучающая выборка. Действующим считается последний по времени; при
@@ -62,12 +73,52 @@ def effective_verdicts(rows: list[VerdictRow]) -> dict[int, VerdictRow]:
     метку с точностью до микросекунды) тай-брейк — по большему `id`, иначе
     «действующий» определялся бы порядком выборки, а не решением эксперта.
     """
-    result: dict[int, VerdictRow] = {}
+    result: dict[Key, Row] = {}
     for row in rows:
-        current = result.get(row.card_id)
+        key = key_of(row)
+        current = result.get(key)
         if current is None or (row.created_at, row.id) >= (current.created_at, current.id):
-            result[row.card_id] = row
+            result[key] = row
     return result
+
+
+def effective_verdicts(rows: list[VerdictRow]) -> dict[int, VerdictRow]:
+    """Действующий вердикт каждой карточки — последняя строка по `created_at` (см. `_latest_by`)."""
+    return _latest_by(rows, lambda row: row.card_id)
+
+
+def analog_key(card: AnalogCard) -> str:
+    """Ключ аналога — первые 16 hex `sha256` от `title`, `country`, `country_evidence_url` через `\n`.
+
+    Аналоги живут только в `report_json`, строк в базе у них нет, а позиция
+    ключом не служит: порядок аналогов в отчёте может смениться при
+    пересборке, отпечаток содержимого — нет.
+    """
+    raw = "\n".join((card.title, card.country, str(card.country_evidence_url)))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def effective_analog_verdicts(rows: list[AnalogVerdictRow]) -> dict[str, AnalogVerdictRow]:
+    """Действующий вердикт каждого аналога запроса — последний по `(created_at, id)`, как у карточек."""
+    return _latest_by(rows, lambda row: row.analog_key)
+
+
+def visible_analogs(
+    cards: list[AnalogCard],
+    effective: dict[str, AnalogVerdictRow],
+    *,
+    require_evidence: bool = True,
+) -> list[AnalogCard]:
+    """Аналоги, оставшиеся видимыми: порядок прежний, решение по каждому — у `hidden_reason`.
+
+    Сравнения с отклонением здесь нет — единственная точка признака видимости
+    остаётся `hidden_reason`. Вердикт `rework` аналог не скрывает.
+    """
+    return [
+        card
+        for card in cards
+        if hidden_reason(card, effective.get(analog_key(card)), require_evidence=require_evidence) is None
+    ]
 
 
 def visible_report(
@@ -116,8 +167,8 @@ def visible_report(
 
 
 def hidden_reason(
-    card: SolutionCard | None,
-    verdict: VerdictRow | None,
+    card: SolutionCard | AnalogCard | None,
+    verdict: VerdictRow | AnalogVerdictRow | None,
     *,
     require_evidence: bool = False,
 ) -> HiddenReason | None:
@@ -149,6 +200,9 @@ def hidden_reason(
     подтверждения, не дав карточку), и функция падает `ValueError` с русским
     текстом сразу на входе, а не отвечает неверно и не роняется случайным
     `AttributeError` на `card.evidence` двумя строками ниже.
+
+    Аналог (`AnalogCard`, Э6-7) проходит тем же путём: у него то же поле
+    `evidence`, а вердикт `AnalogVerdictRow` несёт то же `decision`.
     """
     if verdict is not None and verdict.decision == VerdictDecision.REJECT:
         return "rejected"

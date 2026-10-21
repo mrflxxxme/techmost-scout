@@ -1,0 +1,118 @@
+# Э6-2в: фактический вывод проверок (2026-10-21T21:09Z); окружение без ключей
+
+## Кр. 1: pytest tests/test_yandex_analog.py -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.7.0 -- /home/user/techmost-scout/.venv/bin/python3.12
+rootdir: /home/user/techmost-scout/.claude/worktrees/agent-a5144f6d3b7eadd11
+configfile: pyproject.toml
+plugins: respx-0.23.1, asyncio-1.4.0, anyio-4.15.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 37 items
+
+tests/test_yandex_analog.py::test_справочник_читается_и_укладывается_в_20_30_доменов PASSED [  2%]
+tests/test_yandex_analog.py::test_каталоги_ycombinator_и_producthunt_в_списке PASSED [  5%]
+tests/test_yandex_analog.py::test_виды_отчётных_доменов_заполнены PASSED [  8%]
+tests/test_yandex_analog.py::test_контрольный_справочник_из_подмены_читается PASSED [ 10%]
+tests/test_yandex_analog.py::test_домен_со_схемой_путём_или_пробелом_это_ошибка_загрузки[https://a.com] PASSED [ 13%]
+tests/test_yandex_analog.py::test_домен_со_схемой_путём_или_пробелом_это_ошибка_загрузки[a.com/reports] PASSED [ 16%]
+tests/test_yandex_analog.py::test_домен_со_схемой_путём_или_пробелом_это_ошибка_загрузки[a.com/] PASSED [ 18%]
+tests/test_yandex_analog.py::test_домен_со_схемой_путём_или_пробелом_это_ошибка_загрузки[A.com] PASSED [ 21%]
+tests/test_yandex_analog.py::test_домен_со_схемой_путём_или_пробелом_это_ошибка_загрузки[a .com] PASSED [ 24%]
+tests/test_yandex_analog.py::test_домен_со_схемой_путём_или_пробелом_это_ошибка_загрузки[a.com:8080] PASSED [ 27%]
+tests/test_yandex_analog.py::test_домен_со_схемой_путём_или_пробелом_это_ошибка_загрузки[localhost] PASSED [ 29%]
+tests/test_yandex_analog.py::test_домен_со_схемой_путём_или_пробелом_это_ошибка_загрузки[-a.com] PASSED [ 32%]
+tests/test_yandex_analog.py::test_дубль_домена_внутри_секции_это_ошибка_загрузки PASSED [ 35%]
+tests/test_yandex_analog.py::test_дубль_домена_между_секциями_это_ошибка_загрузки PASSED [ 37%]
+tests/test_yandex_analog.py::test_нестроковый_домен_это_ошибка_загрузки PASSED [ 40%]
+tests/test_yandex_analog.py::test_справочник_читается_только_безопасным_загрузчиком PASSED [ 43%]
+tests/test_yandex_analog.py::test_без_вида_и_без_даты_проверки_это_ошибка_загрузки PASSED [ 45%]
+tests/test_yandex_analog.py::test_чужие_секции_файла_не_мешают PASSED    [ 48%]
+tests/test_yandex_analog.py::test_каждая_пачка_не_длиннее_предела_и_все_домены_размещены PASSED [ 51%]
+tests/test_yandex_analog.py::test_каталоги_попадают_в_первую_пачку PASSED [ 54%]
+tests/test_yandex_analog.py::test_пачки_заполняются_плотно PASSED        [ 56%]
+tests/test_yandex_analog.py::test_длинная_формулировка_даёт_пачек_больше_а_не_превышение PASSED [ 59%]
+tests/test_yandex_analog.py::test_формулировка_без_места_под_site_называет_все_домены_не_влезшими PASSED [ 62%]
+tests/test_yandex_analog.py::test_with_site_filter_сужает_analog_в_любом_контуре[industrial catalyst regeneration case studies market-en] PASSED [ 64%]
+tests/test_yandex_analog.py::test_with_site_filter_сужает_analog_в_любом_контуре[   -ru] PASSED [ 67%]
+tests/test_yandex_analog.py::test_with_site_filter_analog_слишком_длинной_формулировки_это_ошибка PASSED [ 70%]
+tests/test_yandex_analog.py::test_сужение_по_списку_аналогов_не_задевает_другие_типы PASSED [ 72%]
+tests/test_yandex_analog.py::test_analog_уходит_пачками_каждая_с_site_и_в_пределе_длины PASSED [ 75%]
+tests/test_yandex_analog.py::test_кандидаты_разных_пачек_не_задваиваются PASSED [ 78%]
+tests/test_yandex_analog.py::test_русская_формулировка_analog_идёт_в_российский_контур_тоже_суженной PASSED [ 81%]
+tests/test_yandex_analog.py::test_пачки_сверх_предела_называются_в_limit_problems_поимённо PASSED [ 83%]
+tests/test_yandex_analog.py::test_исчерпанный_предел_до_первой_пачки_называет_все_домены PASSED [ 86%]
+tests/test_yandex_analog.py::test_формулировка_без_места_под_site_не_уходит_а_домены_названы PASSED [ 89%]
+tests/test_yandex_analog.py::test_отказ_источника_на_пачке_поднимается_как_ошибка_поиска PASSED [ 91%]
+tests/test_yandex_analog.py::test_пустая_выдача_пачек_это_пустой_список_без_проблем PASSED [ 94%]
+tests/test_yandex_analog.py::test_без_ключа_analog_не_уходит_никуда PASSED [ 97%]
+tests/test_yandex_analog.py::test_прочие_типы_формулировок_уходят_одним_запросом_как_раньше PASSED [100%]
+
+============================== 37 passed in 0.57s ==============================
+
+## Кр. 2: pytest tests/test_search_yandex.py tests/test_yandex_limit_visibility.py -v (без правок этих файлов)
+.......................................                                  [100%]
+39 passed in 8.84s
+git diff --stat 6766af0 -- tests/ :
+ tests/test_yandex_analog.py | 370 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 370 insertions(+)
+ M tests/test_yandex_analog.py
+
+## Кр. 3: мутации по одной с откатом (скрипт mutate.sh), вывод:
+=== МУТАЦИЯ: снять сужение для analog в with_site_filter
+FAILED tests/test_yandex_analog.py::test_with_site_filter_сужает_analog_в_любом_контуре[   -ru]
+FAILED tests/test_yandex_analog.py::test_with_site_filter_analog_слишком_длинной_формулировки_это_ошибка
+3 failed, 34 passed in 1.12s
+=== МУТАЦИЯ: предел длины убран (max_chars в 10 раз больше)
+FAILED tests/test_yandex_analog.py::test_пачки_сверх_предела_называются_в_limit_problems_поимённо
+FAILED tests/test_yandex_analog.py::test_формулировка_без_места_под_site_не_уходит_а_домены_названы
+6 failed, 31 passed in 0.61s
+=== МУТАЦИЯ: адаптер не пишет пропуск в limit_problems
+FAILED tests/test_yandex_analog.py::test_пачки_сверх_предела_называются_в_limit_problems_поимённо
+FAILED tests/test_yandex_analog.py::test_исчерпанный_предел_до_первой_пачки_называет_все_домены
+2 failed, 35 passed in 0.54s
+=== МУТАЦИЯ: адаптер не учитывает предел запросов для пачек
+FAILED tests/test_yandex_analog.py::test_пачки_сверх_предела_называются_в_limit_problems_поимённо
+FAILED tests/test_yandex_analog.py::test_исчерпанный_предел_до_первой_пачки_называет_все_домены
+2 failed, 35 passed in 0.52s
+=== МУТАЦИЯ: адаптер шлёт analog как обычную формулировку
+FAILED tests/test_yandex_analog.py::test_исчерпанный_предел_до_первой_пачки_называет_все_домены
+FAILED tests/test_yandex_analog.py::test_формулировка_без_места_под_site_не_уходит_а_домены_названы
+4 failed, 33 passed in 0.59s
+=== МУТАЦИЯ: домен со схемой проходит проверку
+FAILED tests/test_yandex_analog.py::test_домен_со_схемой_путём_или_пробелом_это_ошибка_загрузки[localhost]
+FAILED tests/test_yandex_analog.py::test_домен_со_схемой_путём_или_пробелом_это_ошибка_загрузки[-a.com]
+8 failed, 29 passed in 0.53s
+=== МУТАЦИЯ: дубли не проверяются
+FAILED tests/test_yandex_analog.py::test_дубль_домена_внутри_секции_это_ошибка_загрузки
+FAILED tests/test_yandex_analog.py::test_дубль_домена_между_секциями_это_ошибка_загрузки
+2 failed, 35 passed in 0.51s
+=== МУТАЦИЯ: небезопасный yaml.load
+=========================== short test summary info ============================
+FAILED tests/test_yandex_analog.py::test_справочник_читается_только_безопасным_загрузчиком
+1 failed, 36 passed in 0.44s
+=== ПОСЛЕ ОТКАТА
+.....................................                                    [100%]
+37 passed in 0.54s
+
+## Общие: полный pytest
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1549 passed, 1 warning in 77.59s (0:01:17)
+
+## ruff check . && ruff format --check .
+All checks passed!
+233 files already formatted
+
+## Инв. 6: rg -ln httpx backend/app | rg -v (исключения) — пусто:
+(конец вывода)
+
+## Размеры файлов (предел 500)
+  152 backend/app/search/analog_sources.py
+  300 backend/app/search/yandex_parse.py
+  373 backend/app/search/yandex_search.py
+  370 tests/test_yandex_analog.py
+ 1195 total
+
+## Проверка стражей раскладки
+......                                                                   [100%]
+6 passed in 0.06s

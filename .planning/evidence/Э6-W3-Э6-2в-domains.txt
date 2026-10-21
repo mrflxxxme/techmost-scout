@@ -1,0 +1,62 @@
+# Проба откликов доменов белого списка аналогов (Э6-2в)
+# Дата: 2026-10-21, облачная среда исполнителя, выход через прокси среды.
+# Команда: curl -sS -m 30 -o /dev/null -w '%{http_code}' https://<домен>/   (000 — нет ответа)
+# 301 — домен отвечает переадресацией; 403 — защита сайта от роботов, домен жив.
+ycombinator.com 301
+producthunt.com 403
+mckinsey.com 301
+bcg.com 302
+bain.com 301
+deloitte.com 302
+pwc.com 301
+kpmg.com 301
+ey.com 301
+accenture.com 301
+gartner.com 301
+forrester.com 301
+cbinsights.com 301
+idc.com 301
+goldmansachs.com 301
+jpmorgan.com 301
+morganstanley.com 301
+ubs.com 302
+citi.com 301
+worldbank.org 302
+ebrd.com 301
+a16z.com 200
+sequoiacap.com 200
+ark-invest.com 301
+blackrock.com 301
+weforum.org 301
+nesta.org.uk 301
+
+# Дополнительно: перебор с переходом по переадресации (curl -L) — итоговый код после перехода.
+# mckinsey.com: корень отвечает 301, но www.mckinsey.com из этой среды обрывается (HTTP/2 INTERNAL_ERROR, 000):
+# домен жив, ограничение среды.
+mckinsey.com 000
+bcg.com 403
+bain.com 200
+deloitte.com 200
+pwc.com 403
+kpmg.com 200
+ey.com 200
+accenture.com 200
+gartner.com 403
+forrester.com 200
+cbinsights.com 200
+idc.com 200
+goldmansachs.com 200
+jpmorgan.com 200
+morganstanley.com 200
+ubs.com 403
+worldbank.org 200
+ebrd.com 200
+citi.com 200
+a16z.com 200
+sequoiacap.com 200
+ark-invest.com 403
+blackrock.com 200
+weforum.org 403
+nesta.org.uk 200
+ycombinator.com 200
+producthunt.com 403
