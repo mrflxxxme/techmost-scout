@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from sqlalchemy import inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from starlette.requests import Request as HttpRequest
 
@@ -178,11 +179,56 @@ async def test_в_потолок_входят_только_сканы_текущ
     assert await spent_today_rub(session, NOON, cfg) == 5
 
 
+async def test_скан_следующих_суток_в_потолок_не_входит(session):
+    cfg = _settings()
+    # 00:00 по Москве следующих суток — ровно верхняя граница, она в сумму не входит.
+    _, end = day_bounds_utc(NOON)
+    await _scan(session, cost=40, at=end, tag="boundary")
+    await _scan(session, cost=40, at=NOON + timedelta(days=1), tag="tomorrow")
+    await _scan(session, cost=5, at=end - timedelta(seconds=1), tag="last-second")
+
+    assert await spent_today_rub(session, NOON, cfg) == 5
+
+
 async def test_потолок_берётся_из_настройки(session):
     cfg = _settings(scan_daily_budget_rub=50)
     await _scan(session, cost=41)
 
     assert await _verdict(session, cfg) is ScanAdmission.BUDGET_EXHAUSTED
+
+
+# ── Догон колонки scan_token в существующей базе ──────────────────────────────
+async def test_init_db_возвращает_scan_token_в_старую_базу(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Боевая база без `requests.scan_token` после `init_db` читается моделью `Request`.
+
+    Колонка названа явно, а не обходом `ADDED_COLUMNS`: исчезновение записи из
+    списка иначе осталось бы незамеченным (отказал бы весь рабочий интерфейс).
+    """
+    import app.db as db_module
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'old.db'}", future=True)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("ALTER TABLE requests DROP COLUMN scan_token"))
+        await conn.execute(
+            text(
+                "INSERT INTO requests (created_at, raw_text, status, cost_rub, demo_flag) "
+                "VALUES ('2026-01-01 00:00:00', 'старая', 'drafted', 0, 0)"
+            )
+        )
+    monkeypatch.setattr(db_module, "engine", engine)
+
+    await db_module.init_db()
+
+    async with engine.connect() as conn:
+        columns = await conn.run_sync(lambda sync: {c["name"] for c in inspect(sync).get_columns("requests")})
+    assert "scan_token" in columns
+    maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    async with maker() as db:
+        rows = (await db.execute(select(RequestRow))).scalars().all()
+    assert [row.raw_text for row in rows] == ["старая"]
+    assert rows[0].scan_token is None
+    await engine.dispose()
 
 
 # ── Адрес клиента ─────────────────────────────────────────────────────────────
@@ -223,8 +269,6 @@ async def test_адрес_не_попадает_в_лог(session, caplog: pytes
 
 
 async def test_адрес_не_пишется_в_базу(session):
-    from sqlalchemy import text
-
     counter = IpDailyCounter()
     counter.record(IP, NOON)
     await admit_scan(session, IP, NOON, counter=counter, settings=_settings())
