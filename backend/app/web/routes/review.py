@@ -21,6 +21,11 @@
 на запрос (`app.models.SummaryOverride`), повторный вызов перезаписывает её
 же, а не добавляет новую — текст сводки не обучающая выборка, ценность
 только в последней версии, которая уедет клиенту.
+
+`POST /requests/{id}/analogs/{analog_key}/verdict` — поштучный вердикт на
+зарубежный аналог (Э6-7): тоже **новая** строка (`analog_verdicts`), без оценки
+1–5. Статус запроса, `all_cards_reviewed` и подпись вердикты аналогов не
+меняют — замок отчёта целиком прежний.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from html import escape
+from re import fullmatch
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -37,7 +43,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import get_session
+from app.export.analogs import ANALOG_SECTION_TITLE
 from app.export.markdown import CONTEST_SECTION_HEADING
+from app.models import AnalogVerdict as AnalogVerdictRow
 from app.models import Request as RequestRow
 from app.models import RequestStatus
 from app.models import SolutionCard as SolutionCardRow
@@ -45,10 +53,17 @@ from app.models import SummaryOverride as SummaryOverrideRow
 from app.models import Verdict as VerdictRow
 from app.pipeline.persistence import ReportNotFoundError, load_report
 from app.report_overrides import OverrideMap, apply_overrides
-from app.schemas import SolutionCard
+from app.schemas import AnalogCard, SolutionCard
 from app.schemas import Verdict as VerdictDecision
 from app.summary_overrides import SummaryOverrideData, apply_summary_override, resolve_summary_edit
-from app.verdicts import CardKey, all_cards_reviewed, effective_verdicts, hidden_reason
+from app.verdicts import (
+    CardKey,
+    all_cards_reviewed,
+    analog_key,
+    effective_analog_verdicts,
+    effective_verdicts,
+    hidden_reason,
+)
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -60,6 +75,9 @@ REFUSAL_EMPTY_NAME = "Укажите имя проверяющего — без 
 REFUSAL_RATING_RANGE = "Оценка должна быть от 1 до 5."
 REFUSAL_UNKNOWN_DECISION = "Неизвестное решение — выберите «Одобрить», «На доработку» или «Отклонить»."
 REFUSAL_EMPTY_RECOMMENDATION = "Рекомендация не может быть пустой — опишите, с чего начать."
+ANALOG_NOT_FOUND = "Аналог не найден в отчёте запроса №{request_id}."
+#: Ключ аналога в адресе — 16 hex `verdicts.analog_key`; иной вид — 404 без чтения базы.
+_ANALOG_KEY_PATTERN = r"[0-9a-f]{16}"
 
 #: Русские подписи решения — общие для формы и фрагмента с записанным вердиктом.
 DECISION_LABELS: dict[VerdictDecision, str] = {
@@ -141,6 +159,13 @@ async def _load_original_summary(session: AsyncSession, request_id: int) -> tupl
     return report.summary.recommendation, list(report.summary.caveats)
 
 
+def _reason_text(reason: str | None) -> str | None:
+    """Завизированный русский текст причины скрытия (РЕШ-205) либо `None`, если скрытия нет."""
+    if reason is None:
+        return None
+    return HIDDEN_REJECTED if reason == "rejected" else HIDDEN_NO_EVIDENCE
+
+
 def _hidden_reason(card: SolutionCard, card_id: int | None, effective: dict[int, VerdictRow]) -> str | None:
     """Причина, по которой карточка не уедет клиенту, либо `None`, если уедет.
 
@@ -152,12 +177,28 @@ def _hidden_reason(card: SolutionCard, card_id: int | None, effective: dict[int,
     текст (РЕШ-205) — саму видимость эта функция не пересчитывает.
     """
     verdict = effective.get(card_id) if card_id is not None else None
-    reason = hidden_reason(card, verdict, require_evidence=True)
-    if reason is None:
-        return None
-    if reason == "rejected":
-        return HIDDEN_REJECTED
-    return HIDDEN_NO_EVIDENCE
+    return _reason_text(hidden_reason(card, verdict, require_evidence=True))
+
+
+def _annotate_analogs(
+    cards: list[AnalogCard], effective: dict[str, AnalogVerdictRow]
+) -> list[tuple[AnalogCard, str, str | None]]:
+    """Аналоги отчёта для экрана: сама карточка, ключ формы и причина скрытия (или `None`).
+
+    Причину считает та же `verdicts.hidden_reason`, что и клиентский вид
+    (`require_evidence=True`); судьба аналога по стране здесь не показывается.
+    """
+    result: list[tuple[AnalogCard, str, str | None]] = []
+    for card in cards:
+        key = analog_key(card)
+        result.append((card, key, _reason_text(hidden_reason(card, effective.get(key), require_evidence=True))))
+    return result
+
+
+async def _load_effective_analogs(session: AsyncSession, request_id: int) -> dict[str, AnalogVerdictRow]:
+    """Действующие вердикты аналогов запроса по ключу аналога."""
+    found = await session.execute(select(AnalogVerdictRow).where(AnalogVerdictRow.request_id == request_id))
+    return effective_analog_verdicts(list(found.scalars().all()))
 
 
 def _annotate_client_view(
@@ -251,6 +292,8 @@ async def show_review(request_id: int, request: Request, session: AsyncSession =
         for index, (card, card_id, client_num, reason) in enumerate(contest_visibility)
     ]
 
+    analogs_with_keys = _annotate_analogs(report.analog_cards, await _load_effective_analogs(session, request_id))
+
     return _templates(request).TemplateResponse(
         request=request,
         name="review.html",
@@ -259,6 +302,8 @@ async def show_review(request_id: int, request: Request, session: AsyncSession =
             "report": report,
             "cards_with_ids": cards_with_ids,
             "contest_with_ids": contest_with_ids,
+            "analogs_with_keys": analogs_with_keys,
+            "analog_heading": ANALOG_SECTION_TITLE,
             "contest_heading": CONTEST_SECTION_HEADING.removeprefix("## "),
             "reviewer_default": get_settings().reviewer_name,
             "reviewed": len(effective),
@@ -388,6 +433,60 @@ async def edit_summary(
     fragment = (
         '<div class="notice mb-sm">'
         f"Сводка сохранена. Рекомендация: {escape(recommendation_text)}.{caveats_suffix}"
+        "</div>"
+    )
+    return HTMLResponse(content=fragment, status_code=200)
+
+
+@router.post("/requests/{request_id}/analogs/{analog_key_value}/verdict", response_class=HTMLResponse)
+async def submit_analog_verdict(
+    request_id: int,
+    analog_key_value: str,
+    decision: str = Form(default=""),
+    comment: str = Form(default=""),
+    reviewer_name: str = Form(default=""),
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    """Записать новую строку `analog_verdicts` на аналог отчёта и вернуть фрагмент-подтверждение.
+
+    Ключ не вида 16 hex, запрос без отчёта или ключ вне аналогов отчёта — 404;
+    пустое имя и неизвестное решение — 400 (поля формы необязательны на уровне
+    разбора, иначе FastAPI ответил бы 422); ни один отказ строку не пишет.
+    Статус запроса и счётчик «проверено N из M» вердикт аналога не трогает.
+    """
+    if fullmatch(_ANALOG_KEY_PATTERN, analog_key_value) is None:
+        return _notice(ANALOG_NOT_FOUND.format(request_id=request_id), status_code=404)
+    try:
+        report = await load_report(lambda: _session_scope(session), request_id)
+    except ReportNotFoundError:
+        return _notice(ANALOG_NOT_FOUND.format(request_id=request_id), status_code=404)
+    if analog_key_value not in {analog_key(card) for card in report.analog_cards}:
+        return _notice(ANALOG_NOT_FOUND.format(request_id=request_id), status_code=404)
+
+    name = reviewer_name.strip()
+    if not name:
+        return _notice(REFUSAL_EMPTY_NAME, status_code=400)
+    try:
+        decision_value = VerdictDecision(decision)
+    except ValueError:
+        return _notice(REFUSAL_UNKNOWN_DECISION, status_code=400)
+
+    comment_text = comment.strip()
+    session.add(
+        AnalogVerdictRow(
+            request_id=request_id,
+            analog_key=analog_key_value,
+            reviewer_name=name,
+            decision=decision_value.value,
+            comment=comment_text,
+        )
+    )
+    await session.flush()
+
+    comment_suffix = f" — {escape(comment_text)}" if comment_text else ""
+    fragment = (
+        '<div class="notice mb-sm">'
+        f"Вердикт по аналогу записан: {DECISION_LABELS[decision_value]}, проверяющий {escape(name)}{comment_suffix}."
         "</div>"
     )
     return HTMLResponse(content=fragment, status_code=200)
