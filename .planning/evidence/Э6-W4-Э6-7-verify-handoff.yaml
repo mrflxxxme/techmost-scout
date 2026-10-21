@@ -1,0 +1,30 @@
+handoff:
+  from: "verifier"
+  to: "auditor"
+  task: "Э6-7"
+  did:
+    - "Прогнаны 5 критериев приёмки Э6-7 из PLAN.md, закрыто 5 из 5; 4 мутации выполнены самостоятельно по одной с откатом, все убиты (M1 4 failed, M2 4 failed, M3 2 failed, M4 2 failed)"
+    - "Греп-критерии 3a, 3b, 3c и 4 сверены с базой claude/sleepy-planck-11w8jv: совпадают"
+    - "Общие критерии этапа: pytest без сети 1697 passed, 0 failed; ruff check и ruff format --check зелёные; tests/ изменён только новым файлом; размеры backend/app не выше 492"
+    - "Инварианты 1, 2, 4, 6, 7, 8, 9, 10 подтверждены способами из INVARIANTS.md; инвариант 3 — см. DLG-1"
+  artifacts:
+    - ".planning/evidence/Э6-W4-Э6-7-verify.md"
+    - ".planning/evidence/Э6-W4-Э6-7-verify-handoff.yaml"
+  self_audit: "pass"
+  checks:
+    - "pytest tests/test_analog_verdicts.py -v: 24 passed"
+    - "pytest -q под unshare -rn: 1697 passed, 0 failed; сеть недоступна (Network is unreachable)"
+    - "pytest tests/test_export_analogs.py tests/test_backend_layout.py -q: 13 passed"
+    - "pytest tests/test_prompts.py tests/test_team_docs.py -q: 94 passed"
+    - "ruff check: All checks passed; ruff format --check: 244 files already formatted"
+    - "grep decision == REJECT: 1 строка verdicts.py:207; grep REJECT/reject: 3 строки; templates reject: пусто; country_status: пусто"
+    - "grep httpx backend/app вне разрешённой карты: пусто"
+    - "git diff --name-status claude/sleepy-planck-11w8jv HEAD -- tests/: только A tests/test_analog_verdicts.py"
+  escalate: "DLG-1"
+  read_first:
+    - ".planning/PLAN.md (раздел Дополнение РЕШ-277, Э6-7)"
+    - ".planning/evidence/Э6-W4-Э6-7-verify.md"
+    - "backend/app/verdicts.py"
+    - "backend/app/web/routes/review.py"
+    - "tests/test_analog_verdicts.py"
+  notes: "Вердикт PASS. Открытый DLG-1: буквальный grep инварианта 3 не пуст из-за 18 совпадений, которые уже есть на базе и классифицированы как имя заголовка и фиктивные значения в тестах; в diff задачи совпадений 0. Действие владельца — подтвердить классификацию и решить, сужать ли проверку в INVARIANTS.md."
