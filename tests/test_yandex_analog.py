@@ -15,6 +15,7 @@ import re
 import httpx
 import pytest
 import respx
+import yaml
 
 from app.schemas import SearchQuery, SourceType
 from app.search import analog_sources
@@ -157,6 +158,13 @@ def test_дубль_домена_между_секциями_это_ошибка
 def test_нестроковый_домен_это_ошибка_загрузки(custom_reference):
     custom_reference(_yaml(reports='  - {domain: 123, kind: "bank"}'))
     with pytest.raises(ValueError, match="Белый список аналогов"):
+        load_analog_sources()
+
+
+def test_справочник_читается_только_безопасным_загрузчиком(custom_reference):
+    """Инвариант №10: тег объекта Python в файле не исполняется, а отвергается."""
+    custom_reference(_yaml(reports='  - {domain: !!python/name:os.getcwd "", kind: "bank"}'))
+    with pytest.raises(yaml.YAMLError):
         load_analog_sources()
 
 

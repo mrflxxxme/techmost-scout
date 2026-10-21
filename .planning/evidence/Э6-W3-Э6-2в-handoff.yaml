@@ -1,0 +1,77 @@
+handoff:
+  from: implementer (Э6-2в)
+  to: reviewer
+  task: Э6-2в
+  did:
+    - "Белый список backend/app/reference/analog_sources.yaml: checked_at, reports (25 доменов банков, фондов, консультантов), catalogs (ycombinator.com, producthunt.com). Всего 27."
+    - "Новый backend/app/search/analog_sources.py: загрузчик (yaml.safe_load, кэш), проверка домена (без схемы, пути, пробелов, прописных, повторов внутри и между секциями), ANALOG_QUERY_MAX_CHARS = 400 со ссылкой на схему API, plan_analog_queries — жадное разбиение доменов на пачки."
+    - "yandex_parse.with_site_filter: analog сужается списком в любом контуре (возвращает первую пачку); _narrowed теперь делегирует narrow_text, поведение прежнее."
+    - "yandex_search.py (см. автономное решение 1): analog уходит в _search_analog — каждая пачка отдельный платный запрос в пределах max_queries, не влезшие домены и пачки сверх предела называются поимённо в limit_problems."
+    - "tests/test_yandex_analog.py: 37 тестов (respx, тело запроса перехватывается)."
+  artifacts:
+    - backend/app/reference/analog_sources.yaml
+    - backend/app/search/analog_sources.py
+    - backend/app/search/yandex_parse.py
+    - backend/app/search/yandex_search.py
+    - tests/test_yandex_analog.py
+    - .planning/evidence/Э6-W3-Э6-2в-checks.txt
+    - .planning/evidence/Э6-W3-Э6-2в-domains.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_yandex_analog.py -v: 37 passed"
+    - "pytest tests/test_search_yandex.py tests/test_yandex_limit_visibility.py: 39 passed, файлы не правились"
+    - "pytest -q (окружение без ключей): 1549 passed, 0 failed"
+    - "ruff check . : All checks passed; ruff format --check . : 233 files already formatted"
+    - "мутации по одной с откатом: снятие сужения analog -> 3 failed; предел длины 4000 -> 6 failed; пропуск без записи в limit_problems -> 2 failed; без учёта предела -> 2 failed; analog как обычная формулировка -> 4 failed; домен со схемой допущен -> 8 failed; дубли не проверяются -> 2 failed; yaml.unsafe_load -> 1 failed. После отката 37 passed."
+    - "инв. 6: rg -ln httpx backend/app с исключениями плана — пусто; git diff --stat 6766af0 -- tests/ — только новый tests/test_yandex_analog.py"
+  escalate: none
+  gate_items_for_owner:
+    note: "РЕШ-275: список и тексты доверены исполнителю; выносится на утверждение владельцу в PR (правило 7 плана). Отклик проверен curl 21.10.2026, см. Э6-W3-Э6-2в-domains.txt; 403 — защита от роботов, домен жив; все 27 доменов ответили."
+    catalogs:
+      - {domain: ycombinator.com, kind: catalog, code: 301}
+      - {domain: producthunt.com, kind: catalog, code: 403}
+    reports:
+      - {domain: mckinsey.com, kind: consultant, code: 301}
+      - {domain: bcg.com, kind: consultant, code: 302}
+      - {domain: bain.com, kind: consultant, code: 301}
+      - {domain: deloitte.com, kind: consultant, code: 302}
+      - {domain: pwc.com, kind: consultant, code: 301}
+      - {domain: kpmg.com, kind: consultant, code: 301}
+      - {domain: ey.com, kind: consultant, code: 301}
+      - {domain: accenture.com, kind: consultant, code: 301}
+      - {domain: gartner.com, kind: consultant, code: 301}
+      - {domain: forrester.com, kind: consultant, code: 301}
+      - {domain: cbinsights.com, kind: consultant, code: 301}
+      - {domain: idc.com, kind: consultant, code: 301}
+      - {domain: goldmansachs.com, kind: bank, code: 301}
+      - {domain: jpmorgan.com, kind: bank, code: 301}
+      - {domain: morganstanley.com, kind: bank, code: 301}
+      - {domain: ubs.com, kind: bank, code: 302}
+      - {domain: citi.com, kind: bank, code: 301}
+      - {domain: worldbank.org, kind: bank, code: 302}
+      - {domain: ebrd.com, kind: bank, code: 301}
+      - {domain: a16z.com, kind: fund, code: 200}
+      - {domain: sequoiacap.com, kind: fund, code: 200}
+      - {domain: ark-invest.com, kind: fund, code: 301}
+      - {domain: blackrock.com, kind: fund, code: 301}
+      - {domain: weforum.org, kind: fund, code: 301}
+      - {domain: nesta.org.uk, kind: fund, code: 301}
+    kind_remarks: "consultant — консалтинг и отраслевая аналитика (в т.ч. Gartner, Forrester, IDC, CB Insights); bank — банки и банки развития (Всемирный банк, ЕБРР); fund — инвестиционные и некоммерческие фонды (a16z, Sequoia, ARK, BlackRock, WEF, Nesta). Это ярлыки для читателя файла, на логику не влияют."
+  autonomous_decisions:
+    - "1. Правка yandex_search.py вне перечня файлов задачи. Без неё пачки невозможны: счётчик платных запросов и limit_problems живут в адаптере, а with_site_filter чистая функция, возвращающая одну строку. Правка локальна: ветка в search_raw и метод _search_analog (+45 строк, файл 373). Если ворота против — альтернатива только в виде одной пачки (≈18 доменов из 27), остальные домены не опрашиваются."
+    - "2. Предел длины 400 символов взят из схемы Yandex Search API (поле query_text, length <=400, search_query.proto в yandex-cloud/cloudapi). Страницы справки yandex.cloud/ru/docs/search-api отдают роботу капчу, обходить её не стал; URL схемы и справки — в комментарии константы. Предел считается в символах всей формулировки; ограничение справки по числу слов (по памяти 40) не проверено и не заложено."
+    - "3. Порядок пачек: каталоги YC и Product Hunt первыми, затем отчёты в порядке файла — при нехватке платных запросов в предел влезают каталоги (РЕШ-255, 256)."
+    - "4. Отказ (SearchError) на любой пачке поднимается наружу целиком, уже полученное по ранним пачкам теряется: частичный успех с проглоченным отказом нарушил бы инв. 5. Альтернатива (оставить кандидатов и дописать отказ в limit_problems) — на выбор ворот."
+    - "5. Формулировка analog, которой не хватает места даже под один site:, не отправляется; все домены называются в limit_problems. with_site_filter в этом случае поднимает ValueError (адаптер до него не доходит)."
+    - "6. Загрузчик игнорирует чужие секции файла (под ru_registries Э6-8) и требует непустые reports и catalogs, kind — непустая строка без закрытого перечня, чтобы новый вид добавлялся правкой YAML. Проверка повторов — по сумме reports и catalogs; Э6-8 вправе проверять ru_registries отдельно."
+    - "7. Формат site: прежний (`текст (site:a | site:b)`), единый для грантов, конкурсов и аналогов через narrow_text."
+  read_first:
+    - ".planning/PLAN.md (Э6-2в) и Э6-8 (ru_registries в том же YAML)"
+    - backend/app/search/analog_sources.py
+    - "backend/app/search/yandex_search.py (_search_analog)"
+    - tests/test_yandex_analog.py
+  notes:
+    - "ЕМКОСТЬ ПРЕДЕЛА ЗАПРОСОВ: при формулировке ~50 символов 27 доменов дают 2 пачки (396 и 225 символов). Две английские analog-формулировки плана = до 4 платных запросов из 6 за прогон. Analog стоит в хвосте плана, поэтому web/contest первого прохода идут раньше, но запросы второго прохода (РЕШ-81) могут не поместиться в предел — это видно в limit_problems. Уменьшить нагрузку может владелец (список короче 18 доменов — одна пачка на формулировку, либо повышение max_queries); я предел не трогал."
+    - "Э6-8 (русская формулировка analog + ru_registries) потребует узкой правки tests/test_yandex_analog.py и точки выбора списка в _search_analog/plan_analog_queries (параметр domains в plan_analog_queries уже есть)."
+    - "Живых платных вызовов Яндекса не делалось; mckinsey.com отвечает 301 с корня, но www.mckinsey.com из этой среды обрывается по HTTP/2 — домен жив, ограничение среды."
+    - "База: оркестратор назвал 1507 passed, полный прогон на ветке дал 1549 = 1512 прежних + 37 новых; расхождение 5 в базе, не в моих файлах."
