@@ -18,6 +18,7 @@ from defusedxml import ElementTree as ET  # noqa: N817 — ET общеприня
 from pydantic import ValidationError
 
 from app.schemas import Candidate, SearchQuery, SourceType
+from app.search.analog_sources import narrow_text, plan_analog_queries
 from app.search.base import SearchError, normalize_url
 
 log = logging.getLogger(__name__)
@@ -148,8 +149,18 @@ def with_site_filter(query: SearchQuery, search_type: str) -> str:
       грантовых маркеров, и подмешивание площадок увело бы грантовый запрос
       из реестров РНФ и Фонда содействия.
 
+    * `analog` — по белому списку доменов (`reference/analog_sources.yaml`), в
+      любом контуре: тип несёт намерение сам. Здесь возвращается первая пачка
+      доменов — формулировка не длиннее предела API; остальные пачки и учёт
+      платных запросов ведёт адаптер через `plan_analog_queries`.
+
     Для всего остального ограничение по сайтам убило бы смысл открытого веба.
     """
+    if query.source_type is SourceType.ANALOG:
+        texts = plan_analog_queries(query.text).texts
+        if not texts:
+            raise ValueError(f"Формулировка analog слишком длинна для оператора site: «{query.text[:80]}»")
+        return texts[0]
     if query.source_type is SourceType.CONTEST:
         if has_contest_outcome_marker(query.text):
             return query.text
@@ -167,7 +178,7 @@ def with_site_filter(query: SearchQuery, search_type: str) -> str:
 
 def _narrowed(text: str, sites: tuple[str, ...]) -> str:
     """Формулировка, суженная до перечисленных площадок оператором `site:`."""
-    return f"{text} ({' | '.join(f'site:{site}' for site in sites)})"
+    return narrow_text(text, sites)
 
 
 def _text_of(node: Any) -> str:

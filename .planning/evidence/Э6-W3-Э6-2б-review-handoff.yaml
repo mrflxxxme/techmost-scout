@@ -1,0 +1,23 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: Э6-2б
+  wave: Э6-W3
+  cycle: 1
+  verdict: accepted
+  did:
+    - "Проверены diff, 10 инвариантов, грабли §0.1; прогнаны pytest (1636 passed на влитой базе 1572), ruff check и format --check (чисто)"
+    - "Поставлено 16 мутаций, 13 убиты, 3 выжили (хост YC по суффиксу без точки, лишний повтор Wikidata, User-Agent YC) — все три вторичные, в советах"
+    - "Правка tests/test_plan_types.py признана законной: мутации (убрать правило 14; убрать из него analog) краснят страж, прежний страж на новых адаптерах краснеет сам"
+  artifacts:
+    - .planning/evidence/Э6-W3-Э6-2б-review.md
+    - .planning/evidence/Э6-W3-Э6-2б-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q (переменные окружения сняты): 1636 passed; база интеграции 1572 passed"
+    - "ruff check .: All checks passed; ruff format --check .: 241 files already formatted"
+    - "блокирующих 0, советов 5"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э6-W3-Э6-2б-review.md
+  notes: "Цикл 1; повторного цикла не требуется. Оркестратору: записать в DECISIONS.md правку test_plan_types.py (вне списка файлов, согласована ревью) и автономные решения из handoff исполнителя."

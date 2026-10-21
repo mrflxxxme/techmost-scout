@@ -1,0 +1,32 @@
+handoff:
+  from: verifier
+  to: auditor
+  task: Э6-2б
+  did:
+    - Прогнаны критерии 1–2 и общие критерии 3а–3г из PLAN.md, закрыто 3 из 3 проверяемых (3д — DLG-1)
+    - Сделаны 6 собственных мутаций критериев (M1–M6), все убиты, откат чистый, git status пуст
+    - Инв. 6 пусто; инв. 7 — полный pytest -q под unshare -rn: 1636 passed
+    - База 1572 подтверждена collect-only на b346e10^2; passed 1636 = 1572 + 64
+  artifacts:
+    - .planning/evidence/Э6-W3-Э6-2б-verify.md
+    - .planning/evidence/Э6-W3-Э6-2б-verify-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_wikidata.py tests/test_yc_catalog.py -v: 60 passed"
+    - "pytest tests/test_plan_types.py tests/test_search_failures.py -v: 31 passed"
+    - "pytest -q: 1636 passed, 0 failed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 241 files already formatted"
+    - "rg инв. 6 (план): пусто"
+    - "unshare -rn pytest -q: 1636 passed (сеть недоступна, gaierror)"
+  escalate: DLG-1 (контейнер python:3.12-slim не прогнан: docker-демон недоступен); DLG-2 (буквальный grep инв. 3 не пуст, все совпадения из базы, решение владельца)
+  read_first:
+    - .planning/evidence/Э6-W3-Э6-2б-verify.md
+    - .planning/evidence/Э6-W3-Э6-2б-review.md
+    - .planning/PLAN.md (раздел «### Э6-2б» и «Общие правила этапа»)
+    - backend/app/search/wikidata.py
+    - backend/app/search/yc_catalog.py
+  notes: >
+    Вердикт PASS по проверяемым критериям. DLG-1 открыт по указанию оркестратора (контейнер — DLG, не FAIL);
+    если владелец читает §8 строго, контейнерный прогон нужно выполнить до подписи ворот. Отступление
+    tests/test_plan_types.py (правило 14 planner.md) названо оркестратором; запись в DECISIONS.md за оркестратором.
