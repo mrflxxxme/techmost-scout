@@ -1,0 +1,8 @@
+{# Фрагмент ожидания скана: HTMX опрашивает состояние раз в четыре секунды и,
+   когда обзор готов или не получился, получает `HX-Redirect` на страницу. #}
+<div class="bezel mb-lg" id="scan-progress" hx-get="/scan/{{ token }}/status" hx-trigger="every 4s" hx-swap="outerHTML">
+  <div class="core">
+    <p class="kicker">Идёт поиск</p>
+    <p>Обычно это занимает несколько минут. Страница обновится сама; закрывать её не нужно.</p>
+  </div>
+</div>

@@ -1,0 +1,33 @@
+{# Основа публичных страниц экспресс-скана (Э6-6в). Плашка «не проверен экспертом»
+   стоит здесь, а не в отдельных страницах: снять её, не тронув основу, нельзя.
+   Ссылок рабочего места и «API» нет — публичный хост их не отдаёт. Текст плашки
+   приходит из `ScanView.banner` через `_page` в `routes/scan.py`. #}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}Экспресс-обзор решений — ТехМост Скаут{% endblock %}</title>
+  <link rel="stylesheet" href="/static/theme.css">
+  <script src="/static/htmx.min.js" defer></script>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div class="page">
+    <header class="masthead">
+      <a class="brand" href="/scan">ТехМост <span>Скаут</span></a>
+    </header>
+
+    <div class="notice scan-banner" role="note" data-scan-banner>{{ banner }}</div>
+
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+      <span>Внешний офис трансфера технологий для промышленности</span>
+    </footer>
+  </div>
+</body>
+</html>
