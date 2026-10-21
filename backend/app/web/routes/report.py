@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.cli_export import export_filename
 from app.config import get_settings
 from app.db import get_session
+from app.export.analogs import ANALOG_FOOTNOTES_TITLE, ANALOG_SECTION_TITLE
 from app.export.markdown import CONFIDENCE_RU, CONTEST_SECTION_HEADING, MATURITY_RU, limitations_lines
 from app.export.pdf import export_pdf
 from app.export.view import build_export_view
@@ -94,6 +95,9 @@ async def show_report(request_id: int, request: Request, session: AsyncSession =
             "cards_with_ids": cards_with_ids,
             "contest_with_ids": contest_with_ids,
             "contest_heading": CONTEST_SECTION_HEADING.removeprefix("## "),
+            "analog_sections": view.analog_sections,
+            "analog_title": ANALOG_SECTION_TITLE,
+            "analog_footnotes_title": ANALOG_FOOTNOTES_TITLE,
             "limitation_lines": limitations_lines(report),
             "maturity_ru": MATURITY_RU,
             "confidence_ru": CONFIDENCE_RU,

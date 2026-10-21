@@ -1,0 +1,19 @@
+{# Карточка аналога из секции «Что делают в мире» (Э6-4). Включается циклом из
+   report.html: контекст (num, analog) наследуется от вызова. Поля и
+   подтверждения приходят из фильтров экспортёра (`analog_fields`,
+   `analog_evidence`) — те же строки, что в markdown, PDF и DOCX. #}
+<div class="bezel hoverable appear">
+  <div class="core">
+    <h3>{{ num }}. {{ analog.title }}</h3>
+    <p>{{ analog.essence }}</p>
+    {% for label, value in analog|analog_fields %}
+    <p><strong>{{ label }}:</strong> {{ value }}</p>
+    {% endfor %}
+    <p class="mb-sm"><strong>Чем подтверждено:</strong></p>
+    <ul>
+      {% for claim, url in analog|analog_evidence %}
+      <li>{{ claim }} — <a href="{{ url }}">источник</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>

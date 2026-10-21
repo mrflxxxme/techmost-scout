@@ -1,0 +1,34 @@
+handoff:
+  from: verifier
+  to: auditor
+  task: "Э6-4"
+  did:
+    - "Повторная верификация по свежему handoff, HEAD dd93e59 на claude/e6-4"
+    - "Правило 4 закрыто: git diff --stat origin/claude/e6-w2 HEAD -- tests/ даёт один новый файл tests/test_export_analogs.py"
+    - "Прогнаны критерии 1, 2 (мутация M1 убита, 4 failed), 3, 4 и правило 6 из PLAN.md"
+    - "Полный pytest -q с очисткой боевых переменных: 1517 passed, 0 failed (порог 1517); без сети: 1517 passed"
+    - "ruff check и ruff format --check зелёные"
+  artifacts:
+    - ".planning/evidence/Э6-W2-Э6-4-verify-2.md — отчёт"
+    - ".planning/evidence/Э6-W2-Э6-4-verify-2-handoff.yaml — этот handoff"
+    - "Логи полного прогона и мутации — в scratchpad, не в репозитории"
+  self_audit: pass
+  checks:
+    - "pytest -q: 1517 passed, 0 failed"
+    - "pytest tests/test_export_analogs.py -v: 10 passed"
+    - "мутация M1 (копия): 4 failed, 6 passed"
+    - "pytest tests/test_backend_layout.py -q: 3 passed"
+    - "ruff check .: All checks passed!"
+    - "ruff format --check .: 232 files already formatted"
+    - "rg httpx backend/app: пусто"
+    - "rg country_status backend/app/export: только export/analogs.py"
+  escalate:
+    - "DLG-1: контейнер python:3.12-slim невозможен (демон Docker не запущен); по РЕШ-276 заменён CI. Действие владельца: подтвердить зелёный CI на ветке до ворот Э6"
+    - "DLG-2: в tests/test_dedup_judge_probe.py и tests/test_rescore_probe.py литерал sk- + 19 символов, введён в базе 776b9c1, не задачей. Действие владельца: подтвердить, что это не секрет; при секрете — ротация и удаление"
+    - "Вне перечня: строка ADR с меткой Э6-4 в DECISIONS.md не найдена (процессное требование лёгкого цикла)"
+  read_first:
+    - ".planning/evidence/Э6-W2-Э6-4-verify-2.md (отчёт)"
+    - "tests/test_export_analogs.py (критерии 1–2)"
+    - "backend/app/export/view.py (наложение полей briefs, строка 164)"
+    - "backend/app/export/analogs.py (analog_sections, country_status)"
+  notes: "Вердикт PASS по проверяемым критериям. DLG-1 и DLG-2 открыты и переходят в ворота, на вердикт не влияют"
