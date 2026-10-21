@@ -185,3 +185,58 @@ def test_аналог_с_числом_в_traction_и_transferability_без_по
     assert not analog_verified(_analog(traction="40 000 клиентов"), _texts())
     assert not analog_verified(_analog(transferability_ru="Нужно 6 месяцев"), _texts())
     assert analog_verified(_analog(traction="Сервис работает с 2021 года"), _texts())
+
+
+def test_число_в_title_карточки_без_подтверждения_источником_не_сверена():
+    assert not card_verified(_card(title="Мембрана 99,9 % очистки за 3 дня"), _texts())
+    assert card_verified(_card(title="Мембрана снижает затраты на 35 %"), _texts())
+
+
+def test_название_модели_с_числом_из_источника_проходит():
+    texts = source_texts([Row(URL_A, title="Мембрана МФ-300", snippet="Снижение затрат на 35 %")])
+    assert card_verified(_card(title="Мембрана МФ-300"), texts)
+    assert not card_verified(_card(title="Мембрана МФ-500"), texts)
+
+
+def test_число_в_title_аналога_без_подтверждения_не_сверен():
+    assert not analog_verified(_analog(title="Ан 123 тыс"), _texts())
+    assert analog_verified(_analog(title="Аналог с 2021 года"), _texts())
+
+
+def test_число_в_essence_аналога_без_подтверждения_не_сверен():
+    assert not analog_verified(_analog(essence="Сервис на 500 клиентов"), _texts())
+    assert analog_verified(_analog(essence="Сервис работает с 2021 года"), _texts())
+
+
+def test_число_в_business_model_аналога_без_подтверждения_не_сверен():
+    assert not analog_verified(_analog(business_model="Подписка 20 долларов"), _texts())
+    assert analog_verified(_analog(business_model="Подписка с 2021 года"), _texts())
+
+
+def test_знак_минус_учитывается_в_числе():
+    assert numbers_in("−40 °C") == numbers_in("-40 °C") == {"-40"}
+    assert numbers_in("−35 %") != numbers_in("35 %")
+    assert numbers_in("−1 234 м") == {"-1234"}
+
+
+def test_дефис_внутри_слова_и_диапазона_не_знак():
+    assert numbers_in("10-20") == numbers_in("10–20") == {"10", "20"}
+    assert numbers_in("МФ-300") == {"300"}
+    assert numbers_in("COVID-19") == {"19"}
+    assert numbers_in("ГОСТ 12.1.005-88") == {"12.1", "005", "88"}
+
+
+def test_факт_про_минус_40_не_сверяется_по_до_40():
+    texts = source_texts([Row(URL_A, snippet="Работает при нагреве до 40 °C")])
+    assert not fact_verified(Evidence(claim="Температура −40 °C", url=URL_A), texts)
+    assert fact_verified(Evidence(claim="Нагрев до 40 °C", url=URL_A), texts)
+    cold = source_texts([Row(URL_A, snippet="Выдерживает −40 °C")])
+    assert fact_verified(Evidence(claim="Температура -40 °C", url=URL_A), cold)
+    assert not fact_verified(Evidence(claim="Температура 40 °C", url=URL_A), cold)
+
+
+def test_соседние_поля_источника_не_склеивают_число():
+    # Название кончается на «12», сниппет начинается с «345»: без разделителя вышло бы 12345.
+    texts = source_texts([Row(URL_A, title="Модель 12", snippet="345 штук")])
+    assert not fact_verified(Evidence(claim="Выпущено 12345 штук", url=URL_A), texts)
+    assert fact_verified(Evidence(claim="Модель 12, 345 штук", url=URL_A), texts)

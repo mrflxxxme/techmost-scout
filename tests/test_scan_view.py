@@ -16,16 +16,19 @@ from datetime import datetime
 import pytest
 
 from app.schemas import AnalogCard, Brief, Evidence, GovSupportMatch, Report, ReportSummary, SolutionCard
+from app.web.scan_scrub import CONTACT_HIDDEN, scrub_contacts, scrub_url
 from app.web.scan_view import (
-    CONTACT_HIDDEN,
     MAX_SCAN_ANALOGS,
     MAX_SCAN_CARDS,
     NOT_FOUND,
     SCAN_BANNER,
+    ScanAnalog,
+    ScanCard,
+    ScanFact,
+    ScanSupport,
     ScanView,
     build_scan_view,
     scan_payload,
-    scrub_contacts,
 )
 
 PHONE = "+7 (495) 123-45-67"
@@ -249,3 +252,190 @@ def test_вид_неизменяем():
     view = build_scan_view(_report([_card(0)]), _rows())
     with pytest.raises(FrozenInstanceError):
         view.cards = ()  # type: ignore[misc]
+
+
+# --- Вычистка контактов: формы записи телефона (РЕШ-264) -----------------------------------
+
+PHONE_FORMS = [
+    "8 (495) 123–45–67",  # en-dash
+    "+7‑495‑123‑45‑67",  # неразрывный дефис U+2011
+    "8 (800) 100‑12‑34",
+    "+7 (495) 123–45–67",  # хвост номера не остаётся
+    "+7 (495) 123—45—67",  # em-dash
+    "+7 495 123 45 67",
+    "8 (495) 123 45 67",  # неразрывные пробелы
+    "495 123 45 67",
+    "495-123-45-67",
+    "495‒123‒45‒67",  # цифровое тире U+2012
+    "(495) 123-45-67",
+    "(495) 123−45−67",  # знак минус U+2212
+    "4951234567",
+    "84951234567",
+    "8-800-555-35-35",
+    "123–45–67",
+]
+
+
+@pytest.mark.parametrize("form", PHONE_FORMS)
+def test_телефон_любой_формы_записи_скрыт_целиком(form: str):
+    assert scrub_contacts(f"Тел. {form} доб. 5") == f"Тел. {CONTACT_HIDDEN} доб. 5"
+    assert scrub_contacts(f"Звоните {form}.") == f"Звоните {CONTACT_HIDDEN}."
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "в 2019–2024 годах",
+        "в 2019-2024 годах",
+        "2019 2020 2021",
+        "выручка 12 000 000 ₽",
+        "выручка 1 234 567 руб.",
+        "рост +12 000 000 руб",
+        "5000000000 рублей",
+        "патент RU 2 345 678 C1",
+        "патент RU 2345678",
+        "ГОСТ 8.495-83 и ГОСТ 12.1.005-88",
+        "КПД 94,5 %, 35 %, 10–20 %",
+        "срок 10-20 лет, от 100 до 300 кВт",
+        "МФ-300, COVID-19",
+        "ИНН 7701234567",
+        "в 1 495 123 45 67 штук",
+    ],
+)
+def test_годы_суммы_проценты_и_номера_документов_не_трогаются(text: str):
+    assert scrub_contacts(text) == text
+
+
+def test_почта_с_типографским_дефисом_скрыта():
+    assert scrub_contacts("пишите ivan‑petrov@lab-x.example.org.") == f"пишите {CONTACT_HIDDEN}."
+
+
+# --- Контакт в каждом печатаемом текстовом поле ---------------------------------------------
+
+_ANALOG_FIELDS = {
+    "a_title": "title",
+    "a_essence": "essence",
+    "business_model": "business_model",
+    "traction": "traction",
+    "transferability_ru": "transferability_ru",
+}
+
+PRINTED_FIELDS = [
+    "title",
+    "essence",
+    "developer_org",
+    "applicability",
+    "claim",
+    "instrument",
+    *_ANALOG_FIELDS,
+    "a_claim",
+    "sources_unavailable",
+]
+
+
+def _with_contact(field: str, contact: str) -> Report:
+    text = f"Текст {contact} конец"
+    if field in {"title", "essence", "developer_org", "applicability"}:
+        return _report([_card(0, **{field: text})])
+    if field == "claim":
+        return _report([_card(0, evidence=[Evidence(claim=text, url=_url(0))])])
+    if field == "instrument":
+        support = GovSupportMatch(instrument=text, why="подходит", url="https://support.example.org/a")
+        return _report([_card(0, gov_support=[support])])
+    if field in _ANALOG_FIELDS:
+        return _report(analogs=[_analog(1, **{_ANALOG_FIELDS[field]: text})])
+    if field == "a_claim":
+        return _report(analogs=[_analog(1, evidence=[Evidence(claim=text, url=_url(1))])])
+    return _report(sources_unavailable=[text])
+
+
+@pytest.mark.parametrize("contact", [EMAIL, PHONE, "8 (495) 123–45–67", "495 123 45 67"])
+@pytest.mark.parametrize("field", PRINTED_FIELDS)
+def test_контакт_в_каждом_печатаемом_поле_вычищен(field: str, contact: str):
+    # Контакт лежит и в тексте источников: числа сверены, карточка допущена, вычищать обязан вид.
+    rows = _rows()
+    for row in rows:
+        row.snippet += f" {contact}"
+    view = build_scan_view(_with_contact(field, contact), rows)
+    if field != "sources_unavailable":
+        assert view.cards or view.analogs, "поле не дошло до вида — тест ничего не проверяет"
+    dumped = json.dumps(scan_payload(view), ensure_ascii=False) + repr(view)
+    assert CONTACT_HIDDEN in dumped
+    for secret in ("lab.example.org", "123-45-67", "123–45–67", "495 123 45 67"):
+        assert secret not in dumped
+
+
+def _manual_view() -> ScanView:
+    """Вид, собранный руками в обход `build_scan_view`: контакты лежат в каждом поле."""
+    fact = ScanFact(claim=f"Факт {EMAIL}", url=f"https://u:p@source.example.org/a?mail={EMAIL}&tel=84951234567")
+    card = ScanCard(
+        title=f"З {EMAIL}",
+        essence=f"С {PHONE}",
+        maturity_stage="стадия не определена",
+        developer_org=f"О {EMAIL}",
+        evidence=(fact,),
+        applicability=f"П {PHONE}",
+        gov_support=(ScanSupport(instrument=f"И {PHONE}", url="https://s.example.org/a#" + EMAIL),),
+    )
+    analog = ScanAnalog(
+        title=f"А {EMAIL}",
+        essence=f"Э {PHONE}",
+        country="US",
+        country_evidence_url="mailto:" + EMAIL,
+        business_model=f"Б {EMAIL}",
+        traction=f"Т {PHONE}",
+        transferability_ru=f"П {EMAIL}",
+        evidence=(fact,),
+    )
+    return ScanView(cards=(card,), analogs=(analog,), sources_unavailable=(f"Источник {PHONE}",))
+
+
+def test_вид_собранный_руками_не_обходит_вычистку_в_json():
+    payload = scan_payload(_manual_view())
+    dumped = json.dumps(payload, ensure_ascii=False)
+    for secret in ("lab.example.org", "123-45-67", "84951234567", "u:p@", "#", "mailto"):
+        assert secret not in dumped
+    assert payload["banner"] == SCAN_BANNER
+
+
+# --- Ссылки: контакты в адресе (РЕШ-264) ------------------------------------------------------
+
+
+def test_scrub_url_убирает_логин_фрагмент_и_параметры_с_контактами():
+    url = "https://user:pass@site.example.org:8443/page?mail=ivan@mail.ru&tel=84951234567&id=5&q=ivan%40mail.ru#frag"
+    assert scrub_url(url) == "https://site.example.org:8443/page?id=5"
+
+
+def test_scrub_url_оставляет_параметры_без_контактов():
+    url = "https://search.ncip.by/database/index.php?pref=inv&lng=ru&page=2&patent=123"
+    assert scrub_url(url) == url
+
+
+def test_scrub_url_контакт_в_пути_заменяется_сегментом():
+    assert scrub_url("https://site.example.org/c/84951234567/x") == "https://site.example.org/c/_/x"
+    assert scrub_url("https://site.example.org/u/ivan%40mail.ru") == "https://site.example.org/u/_"
+
+
+@pytest.mark.parametrize(
+    "url", ["mailto:ivan@mail.ru", "tel:+74951234567", "javascript:alert(1)", "ftp://x.example.org/a", ""]
+)
+def test_scrub_url_не_веб_ссылка_не_печатается(url: str):
+    assert scrub_url(url) == ""
+
+
+def test_контакты_в_ссылках_факта_аналога_страны_и_господдержки_не_попадают_в_скан():
+    dirty = f"?mail={EMAIL}&tel=84951234567#{EMAIL}"
+    card = _card(
+        0,
+        evidence=[Evidence(claim="Затраты ниже на 35%", url=_url(0) + dirty)],
+        gov_support=[GovSupportMatch(instrument="Грант А", why="ок", url="https://support.example.org/a" + dirty)],
+    )
+    analog = _analog(1, country_evidence_url=_url(1) + dirty, evidence=[Evidence(claim="Сервис", url=_url(1) + dirty)])
+    view = build_scan_view(_report([card], [analog]), _rows())
+    assert view.cards and view.analogs
+    dumped = json.dumps(scan_payload(view), ensure_ascii=False) + repr(view)
+    for secret in ("lab.example.org", "84951234567", "mail=", "#"):
+        assert secret not in dumped
+    assert view.cards[0].evidence[0].url == _url(0)
+    assert view.cards[0].gov_support[0].url == "https://support.example.org/a"
+    assert view.analogs[0].country_evidence_url == _url(1)

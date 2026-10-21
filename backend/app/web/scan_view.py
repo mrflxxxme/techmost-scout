@@ -17,7 +17,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -25,6 +24,7 @@ from typing import Any
 from app.export.analogs import analog_sections
 from app.pipeline.autoverify import SourceRow, analog_verified, card_verified, source_texts
 from app.schemas import AnalogCard, MaturityStage, Report, SolutionCard
+from app.web.scan_scrub import scrub_contacts, scrub_url
 
 #: Плашка скана — несъёмная (РЕШ-252). Текст клиенту: в редакции исполнителя (РЕШ-275).
 SCAN_BANNER = "Автоматический обзор, не проверен экспертом"
@@ -40,9 +40,6 @@ MAX_SCAN_ANALOGS = 3
 #: Чего нет — «не найдено», а не пропуск строки.
 NOT_FOUND = "не найдено"
 
-#: Замена телефонов и почты в строках вида (РЕШ-264).
-CONTACT_HIDDEN = "[контакт скрыт]"
-
 #: Стадия зрелости словами клиента — как в полном отчёте.
 SCAN_MATURITY_RU: dict[MaturityStage, str] = {
     MaturityStage.LAB: "работает в лаборатории",
@@ -51,23 +48,6 @@ SCAN_MATURITY_RU: dict[MaturityStage, str] = {
     MaturityStage.SERIES: "применяется серийно",
     MaturityStage.UNKNOWN: "стадия не определена",
 }
-
-_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
-#: Три формы телефона. Общего «много цифр подряд» нет намеренно: годы и суммы
-#: через пробел («2019 2020 2021») телефоном не являются.
-_PHONES = (
-    re.compile(r"\+\d[\d\s\-().]{6,}\d"),
-    re.compile(r"(?<![\w.])[78][\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}(?!\d)"),
-    re.compile(r"(?<![\d-])\d{3}-\d{2}-\d{2}(?![\d-])"),
-)
-
-
-def scrub_contacts(text: str) -> str:
-    """Заменить в строке адреса почты и телефоны на `[контакт скрыт]`."""
-    text = _EMAIL.sub(CONTACT_HIDDEN, text)
-    for pattern in _PHONES:
-        text = pattern.sub(CONTACT_HIDDEN, text)
-    return text
 
 
 def _text(value: str | None) -> str:
@@ -144,7 +124,7 @@ class ScanView:
 
 
 def _facts(card: SolutionCard | AnalogCard) -> tuple[ScanFact, ...]:
-    return tuple(ScanFact(claim=_text(item.claim), url=str(item.url)) for item in card.evidence)
+    return tuple(ScanFact(claim=_text(item.claim), url=scrub_url(str(item.url))) for item in card.evidence)
 
 
 def _scan_card(card: SolutionCard) -> ScanCard:
@@ -156,7 +136,9 @@ def _scan_card(card: SolutionCard) -> ScanCard:
         evidence=_facts(card),
         applicability=_text(card.applicability),
         gov_support=tuple(
-            ScanSupport(instrument=_text(item.instrument), url=str(item.url)) for item in card.gov_support if item.url
+            ScanSupport(instrument=_text(item.instrument), url=scrub_url(str(item.url)))
+            for item in card.gov_support
+            if item.url
         ),
     )
 
@@ -166,7 +148,7 @@ def _scan_analog(card: AnalogCard) -> ScanAnalog:
         title=_text(card.title),
         essence=_text(card.essence),
         country=card.country,
-        country_evidence_url=str(card.country_evidence_url),
+        country_evidence_url=scrub_url(str(card.country_evidence_url)),
         business_model=_text(card.business_model),
         traction=_text(card.traction),
         transferability_ru=_text(card.transferability_ru),
@@ -195,8 +177,27 @@ def _fact_payload(fact: ScanFact) -> dict[str, str]:
     return {"claim": fact.claim, "url": fact.url}
 
 
+def _clean_node(node: Any, key: str = "") -> Any:
+    """Проход по готовому JSON: ссылки — через `scrub_url`, все прочие строки — через `scrub_contacts`."""
+    if isinstance(node, dict):
+        return {name: _clean_node(value, name) for name, value in node.items()}
+    if isinstance(node, list):
+        return [_clean_node(item, key) for item in node]
+    if isinstance(node, str):
+        return scrub_url(node) if key.endswith("url") else scrub_contacts(node)
+    return node
+
+
 def scan_payload(view: ScanView) -> dict[str, Any]:
-    """JSON скана; `banner`, `kind` и `schema_version` присутствуют всегда."""
+    """JSON скана; `banner`, `kind` и `schema_version` присутствуют всегда.
+
+    Вычистка контактов повторяется здесь на готовом словаре: вид, собранный
+    руками в обход `build_scan_view`, контакты в публичный JSON не пропустит.
+    """
+    return _clean_node(_raw_payload(view))
+
+
+def _raw_payload(view: ScanView) -> dict[str, Any]:
     return {
         "schema_version": SCAN_SCHEMA_VERSION,
         "kind": SCAN_KIND,
