@@ -1,0 +1,20 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: Э6-6б (fix2, РЕШ-285 п. 1)
+  did:
+    - "Добавлен параметризованный тест test_scrub_url_убирает_параметр_только_по_имени (5 случаев) в tests/test_scan_view.py"
+    - "Мутация U5 (условие по имени параметра) -> 3 failed; мутация U7 (контакт в имени) -> 2 failed; обе откатаны"
+    - "Код продукта не менялся"
+  artifacts:
+    - tests/test_scan_view.py
+    - .planning/evidence/Э6-W3-Э6-6б-fix2-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest -q: 1846 passed"
+    - "ruff check: All checks passed; ruff format --check: 249 files already formatted"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э6-W3-Э6-6б-review-2.md
+    - .planning/evidence/Э6-W3-Э6-6б-fix2-checks.txt
+  notes: "Ветка копии worktree-agent-ab82dae0c869a86bc, коммит теста 04eac15. Не пушилось."
