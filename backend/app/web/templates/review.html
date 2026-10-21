@@ -60,6 +60,46 @@
 </div>
 {% endmacro %}
 
+{% macro analog_verdict(card, key, hidden_reason) %}
+<div class="bezel appear mb-lg">
+  <div class="core">
+    <h3>{{ card.title }}</h3>
+    <p>{{ card.essence }}</p>
+    <p><strong>Страна:</strong> {{ card.country }}</p>
+    {% if hidden_reason %}
+    <div class="notice danger">Клиенту не уедет — причина: {{ hidden_reason }}.</div>
+    {% endif %}
+
+    <div id="analog-verdict-{{ key }}">
+      <form class="verdict-form brief-form mt-md" hx-post="/requests/{{ row.id }}/analogs/{{ key }}/verdict" hx-target="#analog-verdict-{{ key }}" hx-swap="innerHTML">
+        <div class="brief-field">
+          <label for="analog-decision-{{ key }}">Решение по аналогу</label>
+          <select id="analog-decision-{{ key }}" name="decision" required>
+            <option value="approve">Одобрить</option>
+            <option value="rework">На доработку</option>
+            <option value="reject">Отклонить</option>
+          </select>
+        </div>
+
+        <div class="brief-field">
+          <label for="analog-comment-{{ key }}">Комментарий</label>
+          <textarea id="analog-comment-{{ key }}" name="comment"></textarea>
+        </div>
+
+        <div class="brief-field">
+          <label for="analog-reviewer-{{ key }}">Имя проверяющего</label>
+          <input id="analog-reviewer-{{ key }}" type="text" name="reviewer_name" value="{{ reviewer_default }}">
+        </div>
+
+        <div class="edit-actions">
+          <button class="btn" type="submit">Записать вердикт по аналогу</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
 {% block content %}
 {% if report is none %}
 <p class="kicker">Ревью эксперта</p>
@@ -124,6 +164,13 @@
 <h2 class="mt-xl">{{ contest_heading }}</h2>
 {% for num, card, card_id, client_num, hidden_reason in contest_with_ids %}
 {{ verdict_card(num, card, card_id) }}
+{% endfor %}
+{% endif %}
+
+{% if analogs_with_keys %}
+<h2 class="mt-xl">{{ analog_heading }}</h2>
+{% for card, key, hidden_reason in analogs_with_keys %}
+{{ analog_verdict(card, key, hidden_reason) }}
 {% endfor %}
 {% endif %}
 

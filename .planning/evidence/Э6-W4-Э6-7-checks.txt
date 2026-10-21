@@ -1,0 +1,52 @@
+Э6-7 · Поштучный вердикт эксперта на аналог · вывод проверок (21.10.2026)
+База: claude/sleepy-planck-11w8jv (375cb1c). Коммит работы: см. git log ветки worktree-agent-a20111dd177d04a9d.
+Окружение: Linux, Python 3.12, общий .venv; перед pytest сняты переменные ключей и маршрутов (список из постановки).
+
+== Кр. 1 · pytest tests/test_analog_verdicts.py -v ==
+24 passed, 1 warning in 3.66s
+(пять выходов страница/печать/DOCX/JSON/API + markdown клиентского вида; reject на CN и US — нет везде, DE — одна строка
+сноски в каждом выходе; поздний approve на CN — снова виден; rework — виден; ключ неизвестный/кривой/чужого запроса и
+несуществующий запрос — 404, пустое имя и неизвестное решение — 400, строк analog_verdicts не прибавилось; статус
+запроса не меняется (drafted остаётся drafted, validated остаётся validated); экран ревью показывает все три аналога и
+"отклонена экспертом" ровно у двух отклонённых; init_db создаёт таблицу в базе без неё.)
+
+== Кр. 2 · мутации (по одной, с откатом; git status после — чисто) ==
+M1 build_export_view не зовёт visible_analogs ................ 4 failed, 20 passed
+M2 visible_analogs передаёт в hidden_reason вердикт None ..... 4 failed, 20 passed
+M3 effective_analog_verdicts берёт первую строку ............. 2 failed, 22 passed
+M4 POST пишет строку при неизвестном ключе ................... 2 failed, 22 passed
+
+== Кр. 3 · греп-критерии ==
+$ rg -n "\.decision\s*(==|!=)\s*VerdictDecision\.REJECT" backend/app
+backend/app/verdicts.py:207:    if verdict is not None and verdict.decision == VerdictDecision.REJECT:
+(одна строка, в verdicts.py)
+
+$ rg -n "VerdictDecision\.REJECT|[\"']reject[\"']" backend/app --glob "*.py"
+backend/app/verdicts.py:207:    if verdict is not None and verdict.decision == VerdictDecision.REJECT:
+backend/app/web/routes/review.py:86:    VerdictDecision.REJECT: "Отклонено",
+backend/app/schemas.py:92:    REJECT = "reject"
+(ровно три строки, как на базе)
+
+$ rg -n "reject" backend/app/web/templates | rg -v 'option value="reject"'
+(пусто)
+
+== Кр. 4 · rg -n "country_status" backend/app/web ==
+(пусто)
+
+== Кр. 5 · прежние тесты без правок ==
+$ pytest tests/test_export_analogs.py tests/test_backend_layout.py tests/test_tests_layout.py -q
+16 passed, 1 warning
+$ git diff --stat 375cb1c -- tests/
+ tests/test_analog_verdicts.py | 460 +++ (единственное изменение в tests/ — новый файл)
+
+== Общие критерии ==
+$ pytest -q (полный набор)
+1596 passed, 1 warning in 85.41s   (база 1572 + 24 новых; 0 failed)
+$ ruff check .
+All checks passed!
+$ ruff format --check .
+238 files already formatted
+$ rg -ln httpx backend/app | rg -v "<карта инв. 6>"
+(пусто)
+Размеры: review.py 492, verdicts.py 336, export/view.py 389, models.py 386 (< 500); test_analog_verdicts.py 460 (< 500).
+Границы: schemas.py, db.py, export/analogs.py, main.py, отбор и стадия аналогов, скан не тронуты.
