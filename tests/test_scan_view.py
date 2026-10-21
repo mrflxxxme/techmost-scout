@@ -418,6 +418,23 @@ def test_scrub_url_контакт_в_пути_заменяется_сегмен�
 
 
 @pytest.mark.parametrize(
+    "query",
+    [
+        # Имя параметра означает контакт, значение само контактом не опознаётся
+        # (формат 3-3-4 и слово «ask» шаблоны не ловят): защищает только имя.
+        "tel=212-555-0123&id=5",
+        "phone=ask&id=5",
+        "user_mobile=ask&id=5",
+        # В самом имени параметра лежит почта, значение безобидное.
+        "ivan@mail.ru=1&id=5",
+        "ivan%40mail.ru=1&id=5",
+    ],
+)
+def test_scrub_url_убирает_параметр_только_по_имени(query: str):
+    assert scrub_url(f"https://a.ru/p?{query}") == "https://a.ru/p?id=5"
+
+
+@pytest.mark.parametrize(
     "url", ["mailto:ivan@mail.ru", "tel:+74951234567", "javascript:alert(1)", "ftp://x.example.org/a", ""]
 )
 def test_scrub_url_не_веб_ссылка_не_печатается(url: str):
