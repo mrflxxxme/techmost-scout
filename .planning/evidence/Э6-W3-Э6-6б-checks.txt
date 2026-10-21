@@ -1,0 +1,23 @@
+Э6-6б · фактический вывод проверок (Linux, Python 3.12, ветка копии worktree-agent-acd757c95ce21ac0b, база 375cb1c)
+
+$ pytest tests/test_autoverify.py -v        → 22 passed
+$ pytest tests/test_scan_view.py -v         → 18 passed
+$ pytest -q (без ключей в окружении)        → 1612 passed, 0 failed (база 1572 + 40 новых)
+$ ruff check .                              → All checks passed!
+$ ruff format --check .                     → 241 files already formatted
+$ rg -ln httpx backend/app | rg -v "<разрешённые>"  → пусто
+$ git diff --stat 375cb1c                   → 4 новых файла, 795 строк; прежние файлы и тесты не тронуты
+Размеры: autoverify.py 125, scan_view.py 232, test_autoverify.py 187, test_scan_view.py 251 (пределы 500)
+
+Мутации по одной с откатом (git checkout -- backend после каждой; status после отката пуст):
+M1  снять проверку чисел факта                     → 4 failed, 36 passed
+M1b снять проверку чисел описания (essence/applic.) → 4 failed, 36 passed
+M2  снять проверку ссылки факта                    → 2 failed, 38 passed
+M2b снять проверку страны аналога                  → 2 failed, 38 passed
+M3  пускать при непустом unsourced_claims          → 2 failed, 38 passed
+M4  убрать вычистку телефонов                      → 2 failed, 38 passed
+M4b убрать вычистку почты                          → 2 failed, 38 passed
+M5  плашка пустая (снятие плашки)                  → 3 failed, 37 passed
+Скрипт мутаций: scratchpad сессии (вне репозитория).
+
+Контейнерный прогон python:3.12-slim не выполнен: Docker нет, заменён CI (РЕШ-276).

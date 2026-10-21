@@ -1,0 +1,46 @@
+handoff:
+  from: implementer-c
+  to: reviewer
+  task: "Э6-6б"
+  did:
+    - "backend/app/pipeline/autoverify.py: source_texts, numbers_in, fact_verified, card_verified, analog_verified — чистые функции кода поверх стадии verifier; verifier не менялся"
+    - "backend/app/web/scan_view.py: SCAN_BANNER, ScanView (frozen, плашка — свойство класса), build_scan_view(report, rows), scan_payload(view) с banner/kind/schema_version всегда; scrub_contacts"
+    - "tests/test_autoverify.py (22) и tests/test_scan_view.py (18) — новые; сеть и база не используются"
+    - "Режим аналогов берётся через export.analogs.analog_sections(report) по report.brief.mode; в скане это business, TW при gov отсутствует; country_status сам не вызывается, ValueError недостижим (Brief.mode — Literal)"
+  artifacts:
+    - backend/app/pipeline/autoverify.py
+    - backend/app/web/scan_view.py
+    - tests/test_autoverify.py
+    - tests/test_scan_view.py
+    - .planning/evidence/Э6-W3-Э6-6б-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_autoverify.py -v: 22 passed; tests/test_scan_view.py -v: 18 passed"
+    - "pytest -q: 1612 passed, 0 failed (база 1572 + 40)"
+    - "ruff check .: All checks passed; ruff format --check .: 241 files already formatted"
+    - "мутации (8, по одной с откатом): числа факта 4 failed; числа описания 4; ссылка 2; страна аналога 2; unsourced_claims 2; телефоны 2; почта 2; плашка 3"
+    - "rg httpx вне разрешённых слоёв: пусто; прежние файлы не тронуты (git diff --stat — 4 новых файла)"
+  escalate: "контейнерный прогон python:3.12-slim не выполнен (Docker нет) — заменён CI по РЕШ-276"
+  read_first:
+    - ".planning/PLAN.md (Э6-6б)"
+    - backend/app/pipeline/autoverify.py
+    - backend/app/web/scan_view.py
+  notes: |
+    Для Э6-6в: build_scan_view(report, rows) принимает строки models.Candidate запроса
+    (поля url/title/snippet/org/year); отчёт для скана должен нести brief.mode (business).
+    Отчёт скана с gov-режимом тоже корректен, но сноски аналогов (footnote) в скан не идут.
+  autonomous_decisions:
+    - "Строгая сверка: числа essence/applicability карточки ищутся только в текстах ссылок её evidence, не в других кандидатах группы. Следствие: число, перенесённое из брифа или из кандидата без ссылки на него, не проходит — объём скана падает, доказательность нет (РЕШ-252)"
+    - "Для аналога числа проверяются во всех печатаемых текстовых полях (essence, business_model, traction, transferability_ru) — шире, чем в плане (evidence, traction, transferability_ru); принцип: каждое показанное число подтверждено"
+    - "Число = цифры с точкой/запятой; разряды через пробел склеиваются (12 000 = 12000), группа из 4 цифр перед тремя — два числа («2020 100»); знак % и единицы не учитываются"
+    - "Лимит три применяется после сверки и после country_status: места занимают только сверенные"
+    - "Поля аналога в скане: title, essence, country, country_evidence_url, business_model, traction, transferability_ru, evidence; what_to_do_in_ru исключён (по смыслу next_step — рекомендация, часть платного отчёта)"
+    - "gov_support в скане: instrument и url (без why и limit — это утверждения модели без собственной ссылки)"
+    - "Сноски аналогов (footnote, режим gov) в скан не идут — только main"
+    - "Телефоны чистятся тремя шаблонами (с плюсом; российский 7/8 + 10 цифр; локальный 123-45-67); общего правила «много цифр» нет, чтобы не портить годы и суммы. Физические адреса и имена лиц автоматически не вычищаются — в скан не идут поля developer_team и contact_leads"
+    - "ScanView: cards_note/analogs_note — свойства «не найдено» при пустоте; SCAN_SCHEMA_VERSION = 1.0 самостоятельна, не связана с export.json"
+  client_texts_for_gate:
+    - "SCAN_BANNER = «Автоматический обзор, не проверен экспертом» (формулировка из РЕШ-252, без изменений)"
+    - "NOT_FOUND = «не найдено» (карточки, аналоги, пустые поля, traction)"
+    - "CONTACT_HIDDEN = «[контакт скрыт]» (РЕШ-264)"
+    - "SCAN_MATURITY_RU: «работает в лаборатории», «есть опытный образец», «прошла пилот на объекте», «применяется серийно», «стадия не определена» (как в полном отчёте)"

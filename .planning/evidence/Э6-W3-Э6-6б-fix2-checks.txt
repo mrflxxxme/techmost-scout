@@ -1,0 +1,21 @@
+Э6-6б fix2 — проверки (тест 04eac15, код продукта не менялся)
+
+Тест: tests/test_scan_view.py::test_scrub_url_убирает_параметр_только_по_имени, 5 случаев:
+  tel=212-555-0123&id=5, phone=ask&id=5, user_mobile=ask&id=5,
+  ivan@mail.ru=1&id=5, ivan%40mail.ru=1&id=5  -> https://a.ru/p?id=5
+
+Без мутаций:  pytest -q tests/test_scan_view.py -k убирает_параметр -> 5 passed, 113 deselected
+
+U5 (в scan_scrub.py убрано `not _CONTACT_PARAMS.search(key) and`):
+  pytest -q tests/test_scan_view.py -> 3 failed, 115 passed
+  FAILED [tel=212-555-0123&id=5], [phone=ask&id=5], [user_mobile=ask&id=5]
+  откат: git checkout backend/app/web/scan_scrub.py
+
+U7 (убрано `_clean_piece(key) == key and`):
+  pytest -q tests/test_scan_view.py -> 2 failed, 116 passed
+  FAILED [ivan@mail.ru=1&id=5], [ivan%40mail.ru=1&id=5]
+  откат: git checkout backend/app/web/scan_scrub.py
+
+Полный прогон (окружение без ключей): pytest -q -> 1846 passed, 1 warning in 91.23s
+ruff check . -> All checks passed!
+ruff format --check . -> 249 files already formatted
