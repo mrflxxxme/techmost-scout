@@ -73,6 +73,7 @@ import logging
 import httpx
 
 from app.schemas import Candidate, SearchQuery, SourceType
+from app.search.analog_sources import plan_analog_queries
 from app.search.base import SearchAdapter, SearchError
 from app.search.yandex_parse import (
     CONTEST_OUTCOME_MARKERS,
@@ -176,6 +177,8 @@ class YandexSearchAdapter(SearchAdapter):
         if not (self._api_key and self._folder_id):
             log.warning("yandex_search: нет ключа или идентификатора каталога")
             return [], []
+        if query.source_type is SourceType.ANALOG:
+            return await self._search_analog(query, limit=limit)
         if self.queries_used >= self._max_queries:
             log.warning(
                 "yandex_search: предел %s платных запросов на прогон исчерпан — формулировка «%s» пропущена",
@@ -210,6 +213,48 @@ class YandexSearchAdapter(SearchAdapter):
             to_candidates(root, limit=limit, source_type=query.source_type, provider=self.name),
             raw_records(root, limit=limit),
         )
+
+    async def _search_analog(self, query: SearchQuery, *, limit: int) -> tuple[list[Candidate], list[dict]]:
+        """Формулировка `analog` по белому списку доменов — пачками (Э6-2в).
+
+        Все домены в один запрос не влезают (предел длины — `ANALOG_QUERY_MAX_CHARS`),
+        поэтому каждая пачка уходит отдельным платным запросом. Пачки, не
+        поместившиеся в предел запросов на прогон, и домены, которым не нашлось
+        места в формулировке, называются в `limit_problems` поимённо: пропуск
+        виден в отчёте и не путается с пустой выдачей (инвариант №5).
+
+        Отказ источника на любой пачке поднимается наружу как `SearchError`: уже
+        полученное по ранним пачкам при этом теряется, зато отказ не прячется.
+        """
+        plan = plan_analog_queries(query.text)
+        if plan.unfit:
+            self._limit_problems.append(
+                f"yandex_search: формулировка «{query.text}» слишком длинна для оператора site: — "
+                f"домены не опрошены: {', '.join(plan.unfit)}"
+            )
+        search_type = search_type_for(query)
+        candidates: list[Candidate] = []
+        records: list[dict] = []
+        seen: set[str] = set()
+        for index, text in enumerate(plan.texts):
+            if self.queries_used >= self._max_queries:
+                skipped = [domain for batch in plan.batches[index:] for domain in batch]
+                log.warning("yandex_search: предел %s платных запросов исчерпан — аналоги пропущены", self._max_queries)
+                self._limit_problems.append(
+                    f"yandex_search: предел {self._max_queries} платных запросов на прогон исчерпан — "
+                    f"формулировка «{query.text}» источнику НЕ задавалась для доменов: {', '.join(skipped)}"
+                )
+                break
+            raw = await self._run_search(text, search_type=search_type, limit=limit)
+            root = extract_root(raw) if raw is not None else None
+            if root is None:
+                continue
+            for candidate in to_candidates(root, limit=limit, source_type=query.source_type, provider=self.name):
+                if candidate.raw_id not in seen:
+                    seen.add(candidate.raw_id or "")
+                    candidates.append(candidate)
+            records.extend(raw_records(root, limit=limit))
+        return candidates, records
 
     def contour_label(self, query: SearchQuery) -> str:
         """Метка контура для оркестратора: `yandex-ru` или `yandex-com`.

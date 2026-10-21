@@ -1,0 +1,25 @@
+---
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: Э6-2в
+  did:
+    - "Проверены diff (5 файлов кода/данных), 10 инвариантов, грабли §0.1; прогнаны pytest, ruff, прицельные и пробные сценарии"
+    - "Вердикт ПРИНЯТЬ: блокирующих 0, советов 6; три отступления исполнителя признаны корректными"
+    - "Предел 400 сверен по search_query.proto (query_text length <=400); список 27 доменов проверен"
+  artifacts:
+    - .planning/evidence/Э6-W3-Э6-2в-review.md
+    - .planning/evidence/Э6-W3-Э6-2в-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q (окружение без ключей): 1609 passed (1572 + 37)"
+    - "pytest test_yandex_analog + test_search_yandex + test_yandex_limit_visibility: 76 passed, прежние файлы без правок"
+    - "ruff check: All checks passed; ruff format --check: 239 files already formatted"
+    - "мутации: снятие сужения analog -> 3 failed; ещё 15 мутаций убиты; выжила одна: граница <= -> < (совет)"
+  escalate: none
+  read_first:
+    - ".planning/evidence/Э6-W3-Э6-2в-review.md"
+  notes:
+    - "Владельцу перед первым живым прогоном: сверить предел слов запроса Яндекса (~40?); типовая пачка даёт 41-42 токена с разделителями |"
+    - "Гонка проверки предела платных запросов при параллельных формулировках — прежняя, в бэклог"
+    - "Состав белого списка утверждает владелец в PR (РЕШ-257)"
