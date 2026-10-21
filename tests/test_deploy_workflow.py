@@ -277,6 +277,10 @@ def test_бэкап_раньше_git_fetch() -> None:
 
 def test_копия_caddyfile_раньше_записи_блоков() -> None:
     """Копия `Caddyfile.bak-…` снимается раньше `caddy-block`."""
+    text = "\n".join(_runs())
+    assert re.search(r"file-backup /opt/edge-caddy/Caddyfile\)\s*$", text, re.MULTILINE), "копия не того файла"
+    assert re.search(r"caddy-block /opt/edge-caddy/Caddyfile \"\$TPL\" ", text), "блоки пишутся не в тот файл"
+    assert re.search(r"file-restore \"\$1\" /opt/edge-caddy/Caddyfile$", text, re.MULTILINE), "откат не в тот файл"
     assert _step_index("file-backup /opt/edge-caddy/Caddyfile") < _step_index("caddy-block")
     assert _step_index("caddy-block") < _step_index("file-restore")
 

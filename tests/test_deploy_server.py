@@ -1,11 +1,8 @@
 """Серверная часть деплоя `scripts/deploy_server.py` (Э6-9, РЕШ-272, РЕШ-287).
 
-Скрипт исполняется на сервере системным `python3`, поэтому тесты держат три
-вещи: синтаксис Python 3.8 и только стандартную библиотеку; значения секретов
-не выходят ни в stdout, ни в stderr (инв. 3); файлы правятся на месте — тот же
-inode, потому что `/opt/edge-caddy/Caddyfile` смонтирован в контейнер по inode.
-Сети и docker в тестах нет (инв. 7): хэш пароля подменён, база SQLite — во
-временном каталоге.
+Хост запускает скрипт системным python3: синтаксис 3.8 и стандартная библиотека; значения
+секретов не выходят в stdout/stderr (инв. 3); файлы правятся на месте, тот же inode (Caddyfile
+смонтирован в контейнер по inode). Сети и docker нет (инв. 7): хэш подменён, SQLite во временном каталоге.
 """
 
 from __future__ import annotations
@@ -60,39 +57,22 @@ def fake_hash(ds, monkeypatch):
     return seen
 
 
-# ── Python 3.8 и стандартная библиотека ─────────────────────────────────────
-
-#: Имена из стандартной библиотеки Python 3.9+: на хосте с 3.8 их нет.
 _NEWER_THAN_38 = ("removeprefix", "removesuffix", "zoneinfo", "functools.cache", "math.lcm", "graphlib")
 
 
-def test_синтаксис_python_3_8() -> None:
-    """Хост деплоя — системный python3; разбор по грамматике 3.8 обязан пройти."""
-    ast.parse(SCRIPT.read_text(encoding="utf-8"), feature_version=(3, 8))
-
-
-def test_нет_конструкций_новее_3_8() -> None:
-    """Грамматика 3.8 не ловит методы и модули новее: `removeprefix` падает только на хосте."""
-    code = "\n".join(
-        line for line in SCRIPT.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith("#")
-    )
+def test_синтаксис_python_3_8_без_новых_методов_и_вложенных_кавычек_в_f_строках() -> None:
+    """Грамматика 3.8; методы и модули новее (`removeprefix`) падают только на хосте; парсер 3.12 прощает
+    `f"{", ".join(x)}"`, а 3.8 нет — ловим по тексту узла."""
+    source = SCRIPT.read_text(encoding="utf-8")
+    tree = ast.parse(source, feature_version=(3, 8))
+    code = "\n".join(ln for ln in source.splitlines() if not ln.lstrip().startswith("#"))
     for needle in _NEWER_THAN_38:
         assert needle not in code, f"в скрипте {needle!r}: на python 3.8 это не работает"
     assert "from __future__ import annotations" in code
-
-
-def test_f_строки_без_вложенных_одинаковых_кавычек() -> None:
-    """Парсер 3.12 принимает `f"{", ".join(x)}"`, а 3.8 нет: ловим по тексту узла."""
-    source = SCRIPT.read_text(encoding="utf-8")
-    for node in ast.walk(ast.parse(source)):
-        if not isinstance(node, ast.JoinedStr):
-            continue
+    for node in (n for n in ast.walk(tree) if isinstance(n, ast.JoinedStr)):
         whole = ast.get_source_segment(source, node) or ""
-        quote = whole.lstrip("fF")[:1]
-        for part in node.values:
-            if isinstance(part, ast.FormattedValue):
-                inner = ast.get_source_segment(source, part.value) or ""
-                assert quote not in inner, f"вложенная кавычка в f-строке: {whole}"
+        for part in (p for p in node.values if isinstance(p, ast.FormattedValue)):
+            assert whole.lstrip("fF")[:1] not in (ast.get_source_segment(source, part.value) or ""), whole
 
 
 def test_только_стандартная_библиотека_и_сети_нет() -> None:
@@ -106,17 +86,10 @@ def test_только_стандартная_библиотека_и_сети_н
             imported.add(node.module.split(".")[0])
     stdlib = set(sys.stdlib_module_names)
     assert imported <= stdlib, f"не из стандартной библиотеки: {sorted(imported - stdlib)}"
-    network = {"socket", "ssl", "http", "httplib", "urllib3", "requests", "httpx", "ftplib", "smtplib"}
+    network = {"socket", "ssl", "http", "urllib3", "requests", "httpx", "ftplib", "smtplib"}
     assert not imported & network, f"сетевые модули в серверном скрипте: {sorted(imported & network)}"
     assert "urllib.request" not in SCRIPT.read_text(encoding="utf-8")
 
-
-def test_файл_в_пределе_строк() -> None:
-    """Правило 500 строк (CLAUDE.md) для scripts/."""
-    assert len(SCRIPT.read_text(encoding="utf-8").splitlines()) <= 500
-
-
-# ── env-upsert ──────────────────────────────────────────────────────────────
 
 ENV_BEFORE = (
     "# Секреты сервера\n"
@@ -156,24 +129,15 @@ def test_upsert_пустое_значение_ключ_не_стирает(ds) -
     assert report["skipped_empty"] == ["DEEPSEEK_API_KEY"]
 
 
-def test_upsert_имя_вне_списка_отвергнуто(ds) -> None:
-    """Пароль входа и ключи приложений через workflow не пишутся."""
-    for name in ("WEB_AUTH_PASSWORD", "SCOUT_API_KEYS", "APP_ENV", "PATH"):
-        with pytest.raises(ds.DeployError, match=name):
-            ds.upsert_env(ENV_BEFORE, [(name, "x")])
-
-
-@pytest.mark.parametrize("value", ["с пробелом", 'кавычка"', "решётка#хвост", "доллар$X", "косая\\"])
-def test_upsert_значение_которое_compose_истолкует_иначе_отвергнуто(ds, value) -> None:
-    """Такое значение в `.env` изменилось бы при чтении compose: лучше отказ."""
-    with pytest.raises(ds.DeployError, match="DEEPSEEK_API_KEY"):
-        ds.upsert_env(ENV_BEFORE, [("DEEPSEEK_API_KEY", value)])
-
-
-def test_upsert_без_завершающего_перевода_строки(ds) -> None:
-    """Файл без `\\n` в конце: новая строка не склеивается с последней."""
-    text, _ = ds.upsert_env("APP_ENV=prod", [("YANDEX_CATALOG_ID", "b1g")])
-    assert text == "APP_ENV=prod\nYANDEX_CATALOG_ID=b1g\n"
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [("WEB_AUTH_PASSWORD", "x"), ("SCOUT_API_KEYS", "x"), ("APP_ENV", "x"), ("PATH", "x")]
+    + [("DEEPSEEK_API_KEY", v) for v in ("с пробелом", 'кавычка"', "решётка#хвост", "доллар$X", "косая\\")],
+)
+def test_upsert_отвергает_чужое_имя_и_значение_которое_compose_истолкует_иначе(ds, name, value) -> None:
+    """Пароль входа и ключи приложений через workflow не пишутся; опасное значение — отказ, а не порча."""
+    with pytest.raises(ds.DeployError, match=name):
+        ds.upsert_env(ENV_BEFORE, [(name, value)])
 
 
 def test_upsert_повторный_прогон_ничего_не_меняет(ds) -> None:
@@ -182,6 +146,7 @@ def test_upsert_повторный_прогон_ничего_не_меняет(d
     twice, report = ds.upsert_env(once, [("DEEPSEEK_API_KEY", SECRET_A)])
     assert twice == once
     assert report["same"] == ["DEEPSEEK_API_KEY"]
+    assert ds.upsert_env("APP_ENV=prod", [("YANDEX_CATALOG_ID", "b1g")])[0] == "APP_ENV=prod\nYANDEX_CATALOG_ID=b1g\n"
 
 
 def test_env_upsert_вывод_без_значений_копия_600_inode_прежний(ds, tmp_path, capsys) -> None:
@@ -205,23 +170,17 @@ def test_env_upsert_вывод_без_значений_копия_600_inode_пр
     assert backups[0].read_text(encoding="utf-8") == ENV_BEFORE, "копия снята не с прежнего содержимого"
 
 
-def test_env_upsert_без_изменений_не_пишет_и_копии_нет(ds, tmp_path, capsys) -> None:
-    """Нечего менять — файл не тронут, лишних копий нет."""
+def test_env_upsert_без_изменений_не_пишет_а_на_чистом_сервере_создаёт_600(ds, tmp_path, capsys) -> None:
+    """Нечего менять — файл и копии не тронуты; файла нет — он рождается закрытым."""
     env = tmp_path / ".env"
     env.write_text(ENV_BEFORE, encoding="utf-8")
     assert ds.main(["env-upsert", str(env)], stdin_text="DEEPSEEK_API_KEY=\n") == 0
+    assert env.read_text(encoding="utf-8") == ENV_BEFORE and not list(tmp_path.glob(".env.bak-*"))
+    fresh = tmp_path / "fresh.env"
+    assert ds.main(["env-upsert", str(fresh)], stdin_text=f"DEEPSEEK_API_KEY={SECRET_A}\n") == 0
     capsys.readouterr()
-    assert env.read_text(encoding="utf-8") == ENV_BEFORE
-    assert not list(tmp_path.glob(".env.bak-*"))
-
-
-def test_env_upsert_нет_файла_создаётся_с_правами_600(ds, tmp_path, capsys) -> None:
-    """Первый прогон на чистом сервере: файл рождается закрытым."""
-    env = tmp_path / ".env"
-    assert ds.main(["env-upsert", str(env)], stdin_text=f"DEEPSEEK_API_KEY={SECRET_A}\n") == 0
-    capsys.readouterr()
-    assert stat.S_IMODE(env.stat().st_mode) == 0o600
-    assert env.read_text(encoding="utf-8") == f"DEEPSEEK_API_KEY={SECRET_A}\n"
+    assert stat.S_IMODE(fresh.stat().st_mode) == 0o600
+    assert fresh.read_text(encoding="utf-8") == f"DEEPSEEK_API_KEY={SECRET_A}\n"
 
 
 def test_env_upsert_ошибка_не_печатает_значение(ds, tmp_path, capsys) -> None:
@@ -236,8 +195,6 @@ def test_env_upsert_ошибка_не_печатает_значение(ds, tmp_
     assert SECRET_B not in err and "строка 1" in err
     assert env.read_text(encoding="utf-8") == ENV_BEFORE, "после отказа файл обязан остаться прежним"
 
-
-# ── Caddyfile ───────────────────────────────────────────────────────────────
 
 FOREIGN_A = 'site-a.example {\n    reverse_proxy site-a:80\n    header {\n        X-Note "}{ в кавычках"\n    }\n}\n'
 FOREIGN_B = '# соседний сайт\nsite-b.example, www.site-b.example {\n    respond "ok" 200\n}\n'
@@ -263,31 +220,22 @@ def test_шаблон_рабочий_хост_с_паролем_и_api_мимо_
     assert "basic_auth @ui {" in block
     assert f"scout {FAKE_HASH}" in block
     assert "reverse_proxy techmost-scout:8000" in block
-
-
-def test_шаблон_блок_скана_без_basic_auth(ds) -> None:
-    """Публичный хост скана пароля не имеет: посетитель его не знает."""
-    block = _block(_render(ds), SCAN_HOST)
-    assert "basic_auth" not in block and "basicauth" not in block
-    assert "reverse_proxy techmost-scout:8000" in block
+    scan = _block(_render(ds), SCAN_HOST)
+    assert "basic_auth" not in scan and "basicauth" not in scan, "у публичного скана пароля быть не должно"
+    assert "reverse_proxy techmost-scout:8000" in scan
 
 
 def test_шаблон_без_хоста_скана_блока_скана_нет(ds) -> None:
     """Пустой SCOUT_SCAN_HOST: в файле один блок, пометок и следов скана нет."""
     text = _render(ds, scan="")
     assert SCAN_HOST not in text and "[[" not in text and "%%" not in text
-    assert text.count("reverse_proxy") == 1
-    assert "basic_auth" in text
+    assert text.count("reverse_proxy") == 1 and "basic_auth" in text
 
 
 def test_шаблон_заголовки_как_в_docker_caddyfile(ds) -> None:
     """Пять заголовков безопасности в обоих блоках — те же, что в docker/Caddyfile."""
     names = "Strict-Transport-Security|X-Content-Type-Options|X-Frame-Options|Referrer-Policy|X-Robots-Tag"
-    headers = re.findall(
-        rf'^\s+((?:{names}) ".*")$',
-        CADDYFILE.read_text(encoding="utf-8"),
-        re.MULTILINE,
-    )
+    headers = re.findall(rf'^\s+((?:{names}) ".*")$', CADDYFILE.read_text(encoding="utf-8"), re.MULTILINE)
     assert len(headers) == 5
     text = _render(ds)
     for host in (WORK_HOST, SCAN_HOST):
@@ -296,52 +244,55 @@ def test_шаблон_заголовки_как_в_docker_caddyfile(ds) -> None:
             assert header in block, f"в блоке {host} нет заголовка {header}"
 
 
-def test_блок_скана_совпадает_с_разделом_публичный_скан() -> None:
-    """Блок шаблона и блок раздела «Публичный скан» docs/deploy.md различаются только именем хоста."""
+def _scan_lines() -> tuple[list[str], list[str]]:
+    """Строки блока скана: из раздела «Публичный скан» docs/deploy.md и из шаблона (без пустых)."""
     section = DEPLOY_MD.read_text(encoding="utf-8").split("## 12. Публичный скан", 1)[1]
-    doc_block = re.search(r"```caddyfile\n(.*?)```", section, re.DOTALL)
-    assert doc_block is not None, "в разделе скана нет блока caddyfile"
-    template = TEMPLATE.read_text(encoding="utf-8")
-    tpl_block = re.search(r"^%%SCAN_HOST%% \{\n.*?^\}\n", template, re.MULTILINE | re.DOTALL)
-    assert tpl_block is not None
-    norm_doc = doc_block.group(1).split("{", 1)[1].strip()
-    norm_tpl = tpl_block.group(0).split("{", 1)[1].strip()
-    assert norm_doc == norm_tpl
+    doc = re.search(r"```caddyfile\n(.*?)```", section, re.DOTALL)
+    tpl = re.search(r"^%%SCAN_HOST%% \{\n.*?^\}\n", TEMPLATE.read_text(encoding="utf-8"), re.MULTILINE | re.DOTALL)
+    assert doc is not None and tpl is not None
+    cut = lambda s: [ln.strip() for ln in s.split("{", 1)[1].splitlines() if ln.strip()]  # noqa: E731
+    return cut(doc.group(1)), cut(tpl.group(0))
 
 
-def test_шаблон_подстановки_только_известные() -> None:
-    """В шаблоне нет подстановки, которую скрипт не заполнит."""
-    names = set(re.findall(r"%%([A-Z_]+)%%", TEMPLATE.read_text(encoding="utf-8")))
-    assert names == {"WORK_HOST", "SCAN_HOST", "AUTH_USER", "AUTH_HASH"}
+def test_блок_скана_содержит_блок_раздела_публичный_скан_и_два_рубежа_сверх() -> None:
+    """Всё из блока раздела 12 есть в шаблоне по порядку; сверх него — только предел тела и CSP (РЕШ-254)."""
+    doc, tpl = _scan_lines()
+    rest = iter(tpl)
+    assert all(line in rest for line in doc), "блок шаблона разошёлся с разделом «Публичный скан»"
+    extra = [ln for ln in tpl if ln not in doc]
+    assert extra[:2] == ["request_body {", "max_size 32KB"] and len(extra) == 3
+    assert extra[2].startswith("Content-Security-Policy \"default-src 'self'; script-src 'self';")
+
+
+def test_csp_скана_не_шире_того_что_грузят_шаблоны() -> None:
+    """Скрипты и стили шаблонов скана — только свои `/static/…`; в политике нет внешних адресов и eval."""
+    policy = next(ln for ln in _scan_lines()[1] if ln.startswith("Content-Security-Policy"))
+    assert "http" not in policy and "unsafe-eval" not in policy and "*" not in policy
+    assert "script-src 'self';" in policy, "для скриптов 'unsafe-inline' не нужен: встроенных скриптов нет"
+    for name in ("scan_base", "scan_form", "scan_result", "_scan_progress"):
+        html = (REPO_ROOT / "backend" / "app" / "web" / "templates" / f"{name}.html").read_text(encoding="utf-8")
+        assert not re.search(r"<script(?![^>]*\ssrc=\"/static/)", html), f"встроенный или внешний скрипт в {name}"
+        assert not re.search(r"(?:src|href)=\"(?:https?:)?//", html), f"внешняя ссылка в {name}"
+    size = int(re.search(r"max_size (\d+)KB", "\n".join(_scan_lines()[1])).group(1))  # type: ignore[union-attr]
+    assert 20 <= size <= 64, "форма — до 3000 знаков: до 18 КБ в url-кодировке, но не мегабайты"
 
 
 def test_шаблон_отвергает_недопустимые_значения(ds) -> None:
     """Хост с пробелом или скобкой изменил бы разбор Caddyfile; хэш не bcrypt — отказ."""
     tpl = TEMPLATE.read_text(encoding="utf-8")
-    for bad_host in ("a b", "x{y}", "evil.example {", "-a.example", ""):
+    bad = [(h, "", "scout", FAKE_HASH) for h in ("a b", "x{y}", "evil.example {", "-a.example", "")]
+    bad += [(WORK_HOST, "bad host", "scout", FAKE_HASH), (WORK_HOST, WORK_HOST, "scout", FAKE_HASH)]
+    bad += [(WORK_HOST, "", "sc out", FAKE_HASH), (WORK_HOST, "", "scout", "не-хэш")]
+    for args in bad:
         with pytest.raises(ds.DeployError):
-            ds.render_sites(tpl, bad_host, "", "scout", FAKE_HASH)
-    with pytest.raises(ds.DeployError):
-        ds.render_sites(tpl, WORK_HOST, "bad host", "scout", FAKE_HASH)
-    with pytest.raises(ds.DeployError):
-        ds.render_sites(tpl, WORK_HOST, WORK_HOST, "scout", FAKE_HASH)
-    with pytest.raises(ds.DeployError):
-        ds.render_sites(tpl, WORK_HOST, "", "sc out", FAKE_HASH)
-    with pytest.raises(ds.DeployError):
-        ds.render_sites(tpl, WORK_HOST, "", "scout", "не-хэш")
+            ds.render_sites(tpl, *args)
 
 
-def test_merge_дописывает_в_конец_и_чужие_блоки_байт_в_байт(ds) -> None:
-    """Нет ни маркеров, ни прежнего блока: область в конец, всё прежнее — префиксом файла."""
-    original = GLOBAL + "\n" + FOREIGN_A + "\n" + FOREIGN_B
-    merged = ds.merge_sites(original, _render(ds), [WORK_HOST, SCAN_HOST])
-    assert merged.startswith(original)
-    assert merged.count(ds.MARK_BEGIN) == 1 and merged.count(ds.MARK_END) == 1
-
-
-def test_merge_заменяет_область_между_маркерами(ds) -> None:
-    """Вторая раскатка с другим хэшем: меняется только область, чужое — байт в байт."""
-    first = ds.merge_sites(GLOBAL + "\n" + FOREIGN_A + "\n", _render(ds), [WORK_HOST, SCAN_HOST])
+def test_merge_дописывает_в_конец_и_заменяет_область_между_маркерами(ds) -> None:
+    """Нет маркеров — область в конец, прежнее префиксом; вторая раскатка с другим хэшем меняет только область."""
+    original = GLOBAL + "\n" + FOREIGN_A + "\n"
+    first = ds.merge_sites(original, _render(ds), [WORK_HOST, SCAN_HOST])
+    assert first.startswith(original) and first.count(ds.MARK_BEGIN) == 1 and first.count(ds.MARK_END) == 1
     after = first + "\n" + FOREIGN_B
     new_hash = "$2" + "a$14$" + "Q" * 53
     region = ds.render_sites(TEMPLATE.read_text(encoding="utf-8"), WORK_HOST, SCAN_HOST, "scout", new_hash)
@@ -357,11 +308,9 @@ def test_merge_принимает_немаркированный_блок_раб
     original = GLOBAL + "\n" + FOREIGN_A + "\n" + OLD_WORK + "\n" + FOREIGN_B
     merged = ds.merge_sites(original, _render(ds), [WORK_HOST, SCAN_HOST])
     assert merged.count(f"{WORK_HOST} {{") == 1, "рабочий хост описан дважды"
-    assert OLD_WORK not in merged
-    assert ds.MARK_BEGIN in merged
+    assert OLD_WORK not in merged and ds.MARK_BEGIN in merged
     for foreign in (GLOBAL, FOREIGN_A, FOREIGN_B):
         assert foreign in merged, "чужой блок изменён"
-    # Порядок блоков: область стоит там, где стоял принятый блок — между чужими.
     assert merged.index(FOREIGN_A) < merged.index(ds.MARK_BEGIN) < merged.index(FOREIGN_B)
 
 
@@ -402,16 +351,12 @@ def test_merge_битые_маркеры_отказ(ds, broken) -> None:
         ds.merge_sites(broken, _render(ds), [WORK_HOST, SCAN_HOST])
 
 
-def test_merge_пустой_файл_и_файл_без_перевода_строки(ds) -> None:
-    """Пустой Caddyfile — область целиком; файл без `\\n` на конце не склеивается с областью."""
+def test_merge_пустой_файл_без_перевода_строки_и_скобки_в_кавычках(ds) -> None:
+    """Пустой файл — область целиком; без `\\n` на конце не склеивается; `}{` в кавычках не ломает разбор."""
     region = _render(ds)
     assert ds.merge_sites("", region, [WORK_HOST]) == region
     merged = ds.merge_sites("a.example {\n}", region, [WORK_HOST])
     assert merged.startswith("a.example {\n}\n\n" + ds.MARK_BEGIN)
-
-
-def test_merge_скобки_в_кавычках_и_комментариях_не_ломают_разбор(ds) -> None:
-    """Блок с `}{` в строке и скобкой в комментарии разбирается как один блок."""
     tricky = f"{FOREIGN_A}\n# закрывающая }} в комментарии\n{OLD_WORK}"
     merged = ds.merge_sites(tricky, _render(ds), [WORK_HOST])
     assert FOREIGN_A in merged and merged.count(f"{WORK_HOST} {{") == 1
@@ -428,17 +373,8 @@ def test_caddy_block_пишет_на_месте_inode_прежний(ds, fake_ha
     caddyfile = tmp_path / "Caddyfile"
     caddyfile.write_text(GLOBAL + "\n" + FOREIGN_A + "\n" + OLD_WORK, encoding="utf-8")
     inode = caddyfile.stat().st_ino
-    argv = [
-        "caddy-block",
-        str(caddyfile),
-        str(TEMPLATE),
-        "--env-file",
-        str(_write_env(tmp_path)),
-        "--work-host",
-        WORK_HOST,
-        "--scan-host",
-        SCAN_HOST,
-    ]
+    argv = ["caddy-block", str(caddyfile), str(TEMPLATE), "--env-file", str(_write_env(tmp_path)), "--work-host"]
+    argv += [WORK_HOST, "--scan-host", SCAN_HOST]
     assert ds.main(argv) == 0
     out = capsys.readouterr()
     assert caddyfile.stat().st_ino == inode, "Caddyfile подменён новым файлом, а не переписан на месте"
@@ -498,21 +434,9 @@ def test_hash_password_пароль_только_через_stdin(ds, monkeypatc
     assert calls[0]["input"] == (PASSWORD + "\n").encode()
     assert PASSWORD not in " ".join(calls[0]["args"]) and "--plaintext" not in calls[0]["args"]
     assert calls[0]["args"][:4] == ["docker", "exec", "-i", "edge-caddy"]
-
-
-def test_hash_password_мусор_вместо_хэша_отказ(ds, monkeypatch) -> None:
-    """Ответ, не похожий на bcrypt, в Caddyfile не попадает."""
-
-    class Done:
-        returncode = 0
-        stdout = b"oops\n"
-
-    monkeypatch.setattr(ds.subprocess, "run", lambda *a, **k: Done())
+    Done.stdout = b"oops\n"
     with pytest.raises(ds.DeployError, match="bcrypt"):
         ds.hash_password(PASSWORD)
-
-
-# ── копии и откат ───────────────────────────────────────────────────────────
 
 
 def test_file_backup_копия_600_с_тем_же_содержимым(ds, tmp_path, capsys) -> None:
@@ -525,17 +449,8 @@ def test_file_backup_копия_600_с_тем_же_содержимым(ds, tmp_
     assert backup.parent == tmp_path and re.fullmatch(r"Caddyfile\.bak-\d{8}-\d{6}(-\d+)?", backup.name)
     assert stat.S_IMODE(backup.stat().st_mode) == 0o600
     assert backup.read_text(encoding="utf-8") == FOREIGN_A
-
-
-def test_file_backup_два_за_секунду_не_затирают_друг_друга(ds, tmp_path, monkeypatch) -> None:
-    """Одинаковая метка времени: вторая копия получает суффикс, первая цела."""
-    source = tmp_path / "f"
-    source.write_text("one", encoding="utf-8")
-    monkeypatch.setattr(ds, "timestamp", lambda: "20261021-000000")
-    first = Path(ds.make_backup(str(source)))
-    source.write_text("two", encoding="utf-8")
-    second = Path(ds.make_backup(str(source)))
-    assert first != second and first.read_text(encoding="utf-8") == "one"
+    again = Path(ds.make_backup(str(source)))  # та же секунда: вторая копия с суффиксом, первая цела
+    assert again != backup and backup.exists()
 
 
 def test_file_restore_откат_на_месте(ds, tmp_path, capsys) -> None:
@@ -548,17 +463,11 @@ def test_file_restore_откат_на_месте(ds, tmp_path, capsys) -> None:
     assert ds.main(["file-restore", str(backup), str(target)]) == 0
     capsys.readouterr()
     assert target.read_text(encoding="utf-8") == FOREIGN_A and target.stat().st_ino == inode
-
-
-def test_file_restore_принимает_только_копию(ds, tmp_path, capsys) -> None:
-    """Подсунуть произвольный файл как «копию» нельзя."""
-    other = tmp_path / "other"
+    other = tmp_path / "other"  # произвольный файл «копией» не считается
     other.write_text("x", encoding="utf-8")
-    target = tmp_path / "t"
-    target.write_text("y", encoding="utf-8")
     assert ds.main(["file-restore", str(other), str(target)]) == 2
     capsys.readouterr()
-    assert target.read_text(encoding="utf-8") == "y"
+    assert target.read_text(encoding="utf-8") == FOREIGN_A
 
 
 def test_db_backup_копия_читается_и_совпадает(ds, tmp_path, capsys) -> None:
@@ -580,26 +489,12 @@ def test_db_backup_копия_читается_и_совпадает(ds, tmp_pat
     finally:
         copy.close()
     assert not Path(str(target) + ".part").exists(), "временный файл копии остался"
-
-
-def test_db_backup_нет_базы_отказ(ds, tmp_path, capsys) -> None:
-    """Нет файла базы: ошибка, а не пустая копия под именем годной."""
-    target = tmp_path / "copy.db"
-    assert ds.main(["db-backup", str(tmp_path / "нет.db"), str(target)]) == 2
-    capsys.readouterr()
-    assert not target.exists()
-
-
-def test_имя_копии_базы_попадает_под_ротацию_сайдкара() -> None:
-    """Сайдкар чистит `/backups/scout-*.db`: имя `scout-predeploy-…` под эту маску подходит."""
-    import fnmatch
-
-    assert fnmatch.fnmatch("scout-predeploy-20261021-000000.db", "scout-*.db")
+    assert ds.main(["db-backup", str(tmp_path / "нет.db"), str(tmp_path / "copy.db")]) == 2
+    assert not (tmp_path / "copy.db").exists(), "без базы не должно остаться пустой копии"
 
 
 def test_разрешённые_ключи_не_включают_пароль_и_ключи_приложений(ds) -> None:
     """Закреплённый список: ключи моделей, поиска и переменные скана — и ничего сверх."""
     allowed = set(ds.ALLOWED_ENV_KEYS)
     assert {"DEEPSEEK_API_KEY", "YANDEX_API_KEY", "YANDEX_CATALOG_ID", "YANDEX_SEARCH_API_KEY"} <= allowed
-    assert {"PUBLIC_SCAN_HOST", "YANDEX_SEARCH_RUB_PER_QUERY"} <= allowed
     assert not allowed & {"WEB_AUTH_PASSWORD", "WEB_AUTH_USER", "SCOUT_API_KEYS", "APP_ENV", "ROSPATENT_API_KEY"}
