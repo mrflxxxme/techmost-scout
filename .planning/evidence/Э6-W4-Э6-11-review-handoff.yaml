@@ -1,0 +1,22 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: Э6-11
+  did:
+    - "Проверены diff 97d6219..617aaef, инварианты 1-10, обход белого списка (подстрока, префикс, регистр, TensorFlowLabs, юрлицо), три места вызова, YAML, прежние тесты"
+    - "Поставлена мутация «пропускать любой CamelCase»: 5 failed; после отката 26 passed"
+    - "Полный pytest: 1986 passed; ruff check и format чисты"
+  artifacts:
+    - .planning/evidence/Э6-W4-Э6-11-review.md
+    - .planning/evidence/Э6-W4-Э6-11-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q: 1986 passed, 1 warning"
+    - "pytest tests/test_anonymize.py -q: 26 passed"
+    - "мутация any-CamelCase: 5 failed, 21 passed"
+    - "ruff check .: All checks passed; ruff format --check .: 257 files already formatted"
+  verdict: ПРИНЯТО
+  blocking: 0
+  advice: 3
+  escalate: none
+  notes: "Состав списка (49 имён) утверждает владелец вместе с ПР; остаточный риск «компания с именем ПО» принят РЕШ-291. Лёгкий цикл, второго ревью нет."
