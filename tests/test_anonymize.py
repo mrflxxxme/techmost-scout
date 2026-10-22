@@ -82,3 +82,48 @@ def test_lowercase_latin_word_is_not_camel_case() -> None:
     """Обычное латинское слово без чередования регистра не CamelCase."""
     text = "Используется протокол modbus для передачи данных с датчиков."
     assert find_deidentification_risks(text) == []
+
+
+# --- Э6-11 (РЕШ-291): белый список имён ПО ---
+
+
+@pytest.mark.parametrize("name", ["TensorFlow", "PyTorch", "MatLab", "SolidWorks"])
+def test_software_names_from_whitelist_are_not_risks(name: str) -> None:
+    """Имя ПО из белого списка не считается названием компании."""
+    assert find_deidentification_risks(f"Моделирование выполнено в {name} на кластере.") == []
+
+
+def test_software_name_matching_ignores_case() -> None:
+    """Сравнение с белым списком не зависит от регистра."""
+    assert find_deidentification_risks("Расчёт в Solidworks и Tensorflow.") == []
+
+
+def test_acmecorp_and_legal_entity_remain_risks_next_to_software() -> None:
+    """Название компании и юрлицо остаются риском рядом с именем ПО."""
+    text = "Заказчик ООО «Ромашка» и AcmeCorp используют TensorFlow."
+    assert find_deidentification_risks(text) == ["ООО «Ромашка»", "AcmeCorp"]
+
+
+def test_software_name_inside_longer_word_is_still_a_risk() -> None:
+    """Имя из списка внутри большего слова — по-прежнему риск."""
+    assert find_deidentification_risks("Решение компании TensorFlowLabs подходит.") == ["TensorFlowLabs"]
+
+
+def test_whitelist_is_read_from_yaml(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Список читается через загрузчик YAML: подмена источника меняет результат."""
+    from app import anonymize
+
+    assert find_deidentification_risks("Нужен MatLab.") == []
+    monkeypatch.setattr(anonymize, "load_software_names", lambda: frozenset({"othername"}))
+    assert find_deidentification_risks("Нужен MatLab.") == ["MatLab"]
+
+
+def test_software_names_yaml_has_expected_size_and_valid_entries() -> None:
+    """Справочник: 30–80 уникальных имён без пробелов, ключевые имена на месте."""
+    from app.anonymize import load_software_names
+
+    names = load_software_names()
+    assert 30 <= len(names) <= 80
+    for required in ("tensorflow", "pytorch", "matlab", "solidworks", "openfoam", "javascript"):
+        assert required in names
+    assert all(n == n.lower() and " " not in n for n in names)

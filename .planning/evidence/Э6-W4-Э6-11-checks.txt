@@ -1,0 +1,29 @@
+Э6-11 · белый список имён ПО в обезличивании (РЕШ-291). Рабочая копия от 97d6219, коммит работы 954ac1e.
+Окружение: ключи и LLM_* сняты через env -u; интерпретатор общий .venv.
+
+1. pytest tests/test_anonymize.py -v
+   26 passed in 0.08s  (было 17; 9 новых: 4 имени ревью, регистр, AcmeCorp+ООО рядом с ПО,
+   TensorFlowLabs, чтение YAML через загрузчик, размер и форма справочника)
+
+2. Мутации по одной, с откатом (git checkout backend/app/anonymize.py после каждой)
+   а) «пропускать любой CamelCase» (условие пропуска -> pattern is _CAMEL_CASE):
+      5 failed, 21 passed
+      (AcmeCorp x2 в прежних тестах, test_acmecorp_and_legal_entity_remain_risks_next_to_software,
+       test_software_name_inside_longer_word_is_still_a_risk, test_whitelist_is_read_from_yaml)
+   б) «белый список не читается» (software = frozenset()):
+      6 failed, 20 passed
+      (4 имени ревью, test_acmecorp_and_legal_entity_remain_risks_next_to_software,
+       test_whitelist_is_read_from_yaml)
+   После отката: git status — чисто, 26 passed.
+
+3. Полный набор: pytest -q
+   1986 passed, 1 warning in 116.14s  (база 1977 + 9 новых; 0 failed)
+   ruff check .            -> All checks passed!
+   ruff format --check .   -> 257 files already formatted
+   wc -l backend/app/anonymize.py -> 89 (предел 500)
+
+4. Прежние тесты без правок: в tests/test_anonymize.py только добавленные строки в конец файла
+   (git diff 97d6219 --stat -- tests/ : один файл, одни добавления).
+
+5. Единый источник правды: три места вызова (web/routes/scan.py:160, api_v1.py:191, intake.py:210)
+   зовут одну функцию find_deidentification_risks; своих списков у них нет.
