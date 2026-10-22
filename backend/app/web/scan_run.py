@@ -190,12 +190,24 @@ async def run_scan(request_id: int, task: str, kind: str) -> None:
     from app.web.routes import run as web_run
 
     cfg = scan_settings()
+    failures: list[Exception] = []
     try:
         prepared = await _prepare_brief(request_id, task, kind, cfg)
         if prepared is None:
             return
         brief, kwargs, spent = prepared
-        await web_run._run_pipeline(request_id, brief, initial_cost_rub=spent, pipeline_kwargs=kwargs, settings=cfg)
+        await web_run._run_pipeline(
+            request_id,
+            brief,
+            initial_cost_rub=spent,
+            pipeline_kwargs=kwargs,
+            settings=cfg,
+            on_failure=failures.append,
+        )
+        if any(isinstance(exc, CostLimitExceededError) for exc in failures):
+            # Пайплайн записал в `requests.error` текст исключения; метка вместо него — по типу исключения.
+            log.warning("скан №%s остановлен стоп-краном в пайплайне", request_id)
+            await _mark_failed(request_id, SCAN_ERROR_STOP)
     except Exception:
         log.exception("скан №%s завершился отказом до пайплайна", request_id)
         await _mark_failed(request_id, SCAN_ERROR_FAILED)
