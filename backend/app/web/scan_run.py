@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 from typing import TYPE_CHECKING
 
@@ -51,8 +52,21 @@ _INDUSTRY_HINT = "не указана"
 #: Что пишется в `requests.error`; текст исключения посетителю не показывается.
 SCAN_ERROR_STOP = "Скан остановлен: достигнут предел расходов на один скан."
 SCAN_ERROR_FAILED = "Скан не удался."
+#: Токен — `secrets.token_urlsafe(SCAN_TOKEN_BYTES)`: 32 случайных байта в base64url без «=» дают ровно 43 знака
+#: алфавита `A-Za-z0-9_-`. Всё остальное в адресе страницы токеном быть не может.
+SCAN_TOKEN_BYTES = 32
+_SCAN_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{43}")
 #: Статусы скана, при которых результат собран и страница его показывает.
 READY_STATUSES = frozenset({RequestStatus.DRAFTED, RequestStatus.VALIDATED, RequestStatus.EXPORTED})
+
+
+def is_scan_token(token: str) -> bool:
+    """Похожа ли строка из адреса на токен скана: проверка формата без обращения к базе.
+
+    Токен идёт в заголовок `HX-Redirect`, поэтому управляющие знаки и переводы строк
+    должны отсекаться до любого использования значения.
+    """
+    return _SCAN_TOKEN_RE.fullmatch(token) is not None
 
 
 def scan_settings(base: Settings | None = None) -> Settings:
@@ -70,7 +84,7 @@ async def create_scan_request(task: str) -> tuple[int, str]:
     """
     from app.db import session_scope
 
-    token = secrets.token_urlsafe(32)
+    token = secrets.token_urlsafe(SCAN_TOKEN_BYTES)
     async with session_scope() as session:
         row = RequestRow(raw_text=task, status=RequestStatus.INTAKE, scan_token=token)
         session.add(row)

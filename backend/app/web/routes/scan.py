@@ -174,9 +174,11 @@ async def scan_start(request: Request, task: str = Form(""), kind: str = Form(DE
     """Допустить скан и запустить его в фоне; успех — 303 на страницу по токену.
 
     Порядок отказов: сама форма (422), занятая система (503, лимит не тратится),
-    лимит адреса и суточный потолок (429). Допуск и запись попытки адреса идут
-    подряд, без `await` между ними (РЕШ-281 п. 4), и всё — под системным замком
-    `_start_lock`, как у `/api/v1`: два параллельных POST не пройдут проверку оба.
+    лимит адреса и суточный потолок (429). Допуск, запись попытки адреса, создание
+    строки и регистрация задачи идут под системным замком `_start_lock`, как у
+    `/api/v1`: между ними есть `await` (выход из `session_scope` — commit и close),
+    и гонку закрывает именно замок, а не отсутствие точек переключения. Счётчик адреса
+    читает и пишет только этот маршрут, поэтому два параллельных POST не пройдут проверку оба.
     """
     from app.db import session_scope
 
@@ -222,6 +224,11 @@ def _failure_text(row: RequestRow, state: str) -> str:
     return MSG_STOPPED if row.error == scan_run.SCAN_ERROR_STOP else MSG_FAILED
 
 
+def _not_found_page(request: Request) -> HTMLResponse:
+    """Страница «обзор не найден» с плашкой: для неизвестного токена и для адреса не того вида."""
+    return _page(request, "scan_result.html", {"state": "missing", "text": MSG_NOT_FOUND}, status_code=404)
+
+
 def _json_error(status_code: int, error: str, message: str) -> JSONResponse:
     return JSONResponse(
         status_code=status_code, content={"detail": {"error": error, "message": message}}, headers=_PRIVATE_HEADERS
@@ -234,6 +241,8 @@ async def scan_json(token: str) -> JSONResponse:
     """JSON готового скана; несуществующий токен — 404, неготовый или отказавший — 409."""
     from app.db import session_scope
 
+    if not scan_run.is_scan_token(token):
+        return _json_error(404, "not_found", MSG_NOT_FOUND)
     async with session_scope() as session:
         row = await scan_run.find_scan(session, token)
         if row is None:
@@ -256,12 +265,15 @@ async def scan_status(request: Request, token: str) -> Response:
     """Фрагмент прогресса для HTMX; когда скан закончен или отказал, отправляет на страницу."""
     from app.db import session_scope
 
+    if not scan_run.is_scan_token(token):
+        # Значение из пути в заголовок не попадает, база не затрагивается.
+        return _not_found_page(request)
     async with session_scope() as session:
         row = await scan_run.find_scan(session, token)
         state = _state(row) if row is not None else ""
     if state == "running":
         return _page(request, "_scan_progress.html", {"token": token})
-    # Неизвестный токен тоже ведёт на страницу: она ответит 404 человеческим текстом.
+    # Неизвестный токен правильного вида тоже ведёт на страницу: она ответит 404 человеческим текстом.
     response = Response(status_code=200)
     response.headers.update(_PRIVATE_HEADERS)
     response.headers["HX-Redirect"] = f"/scan/{token}"
@@ -273,10 +285,12 @@ async def scan_page(request: Request, token: str) -> HTMLResponse:
     """Страница скана: прогресс, результат с кнопкой заявки или честный отказ."""
     from app.db import session_scope
 
+    if not scan_run.is_scan_token(token):
+        return _not_found_page(request)
     async with session_scope() as session:
         row = await scan_run.find_scan(session, token)
         if row is None:
-            return _page(request, "scan_result.html", {"state": "missing", "text": MSG_NOT_FOUND}, status_code=404)
+            return _not_found_page(request)
         state = _state(row)
         if state == "running":
             return _page(request, "scan_result.html", {"state": "running", "token": token})
