@@ -1,0 +1,40 @@
+handoff:
+  from: implementer
+  to: orchestrator
+  task: Э6-аудит-правки
+  did:
+    - "Правка 1: admit_scan пускает скан при остатке >= scan_cost_limit_rub + YANDEX_QUERIES_PER_SCAN x yandex_search_rub_per_query (12,88 при умолчаниях); функция worst_case_scan_rub; сравнение с округлением до 1e-6 (шум float на границе). Тексты отказа не менялись."
+    - "Правка 2: DEFAULT_MAX_QUERIES = 6 в backend/app/search/yandex_quota.py (чистый модуль без httpx); умолчание max_queries адаптера и YANDEX_QUERIES_PER_SCAN берут его оттуда; тест сверяет с сигнатурой адаптера."
+    - "Правка 3: _run_pipeline получил необязательный on_failure; run_scan через него ловит CostLimitExceededError и ставит requests.error = SCAN_ERROR_STOP (cost_rub не трогает); страница и JSON дают MSG_STOPPED."
+  artifacts:
+    - backend/app/web/scan_limits.py
+    - backend/app/search/yandex_quota.py
+    - backend/app/search/yandex_search.py
+    - backend/app/web/scan_run.py
+    - backend/app/web/routes/run.py
+    - tests/test_scan_limits.py
+    - tests/test_scan_pipeline_stop.py
+  self_audit: pass
+  checks:
+    - "pytest -q (окружение очищено от ключей): 2174 passed (2165 + 9 новых)"
+    - "ruff check . : All checks passed; ruff format --check . : 263 files already formatted"
+    - "инв. 6 (команда из INVARIANTS.md): пусто"
+    - "мутации: см. Э6-аудит-правки-checks.txt"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э6-аудит.md
+    - backend/app/web/scan_limits.py
+    - backend/app/web/scan_run.py
+    - tests/test_scan_pipeline_stop.py
+  notes: |
+    ОТСТУПЛЕНИЕ, назвать на воротах. Правка 3 потребовала минимальной правки backend/app/web/routes/run.py
+    («Наука» по поведению не меняется): _run_pipeline глотает исключение пайплайна (except Exception, лог,
+    без повторного броска), поэтому run_scan перехватить его сам не мог. Добавлен необязательный параметр
+    on_failure: Callable[[Exception], None] | None = None, вызывается в except; веб и /api/v1 его не передают.
+    Альтернатива без правки run.py — вывод стоп-крана по cost_rub > лимита — хрупка (округление до 4 знаков
+    в persist_run), отвергнута. Если правка run.py недопустима — это решение владельца.
+    Прежние тесты не правились (константа 6 не переносила импорты прежних тестов: на YANDEX_QUERIES_PER_SCAN
+    в tests/ никто не ссылался). Новые: tests/test_scan_limits.py (+5 тестов в конец раздела потолка),
+    tests/test_scan_pipeline_stop.py (новый, 4 теста).
+    Побочно: потолок теперь сравнивается с округлением round(остаток - порог, 6) < 0.
+    Не тронуто, замечено: совет аудита №4 (падение интейка не по стоп-крану без cost_rub) не правился.
