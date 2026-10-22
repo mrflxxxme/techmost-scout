@@ -170,6 +170,39 @@
 </section>
 {% endif %}
 
+{% if analog_sections %}
+{# Э6-4: «Что делают в мире» — вне лимита 5–7; какие аналоги видны, решает
+   `export.analogs.analog_sections` (подтверждения и страна режима). #}
+<section class="print-section">
+  <h2>{{ analog_title }}</h2>
+  {% for analog in analog_sections.main %}
+  <div class="print-card">
+    <div class="print-card-core">
+      <h3>{{ loop.index }}. {{ analog.title }}</h3>
+      <p>{{ analog.essence }}</p>
+      {% for label, value in analog|analog_fields %}
+      <p><strong>{{ label }}:</strong> {{ value }}</p>
+      {% endfor %}
+      <p class="print-mb-sm"><strong>Чем подтверждено:</strong></p>
+      <ul>
+        {% for claim, url in analog|analog_evidence %}
+        <li>{{ claim }} — <a href="{{ url }}">{{ url }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endfor %}
+  {% if analog_sections.footnotes %}
+  <p class="print-mb-sm"><strong>{{ analog_footnotes_title }}:</strong></p>
+  <ul>
+    {% for note in analog_sections.footnotes %}
+    <li>{{ note.title }} — {{ note.country }} — <a href="{{ note.url }}">{{ note.url }}</a></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if limitation_lines %}
 <section class="print-section">
   <h2>Ограничения этого поиска</h2>

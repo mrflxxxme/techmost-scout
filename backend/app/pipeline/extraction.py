@@ -319,7 +319,9 @@ def deduplicate(candidates: list[Candidate]) -> list[Candidate]:
 #: только `contest`: иначе четвёртый тип метрики добирался бы конкурсами
 #: вместо гранта или веба, и метрика приёмки тихо стала бы легче задуманного —
 #: ровно та подгонка порога под удобство, которую владелец отверг в РЕШ-76.
-COVERAGE_EXCLUDED_SOURCE_TYPES: frozenset[SourceType] = frozenset({SourceType.CONTEST})
+#: `analog` (Э6-2а) исключён по той же причине: зарубежный аналог для рынка — не
+#: российская научная разработка, и тип из чужой выдачи не должен добирать покрытие.
+COVERAGE_EXCLUDED_SOURCE_TYPES: frozenset[SourceType] = frozenset({SourceType.CONTEST, SourceType.ANALOG})
 
 
 def count_source_type_coverage(candidates: Iterable[Candidate]) -> int:

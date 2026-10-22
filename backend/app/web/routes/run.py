@@ -54,13 +54,14 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.db import get_session
 from app.llm import LLMRouter
 from app.models import Brief as BriefRow
@@ -163,6 +164,8 @@ async def _run_pipeline(
     *,
     initial_cost_rub: float = 0.0,
     pipeline_kwargs: dict[str, object] | None = None,
+    settings: Settings | None = None,
+    on_failure: Callable[[Exception], None] | None = None,
 ) -> None:
     """Тело фоновой задачи: пайплайн, публикация прогресса, снятие замка.
 
@@ -182,6 +185,14 @@ async def _run_pipeline(
     `pipeline_kwargs` — дополнительные именованные аргументы `ScoutPipeline.run`
     (сырой текст, журнал и оговорки интейка) для прогона из `/api/v1`, где
     интейк идёт в той же фоновой задаче (РЕШ-250). Веб их не передаёт.
+
+    `settings` — копия настроек для прогона с иными пределами (экспресс-скан:
+    стоп-кран 10 ₽ и три карточки, Э6-6в). Не передана — настройки процесса,
+    как у веба и `/api/v1`; роутер и пайплайн получают один и тот же объект.
+
+    `on_failure` — синхронный обратный вызов с исключением, которым пайплайн отказал:
+    так экспресс-скан узнаёт тип отказа (стоп-кран), не разбирая текст `requests.error`.
+    Веб и `/api/v1` его не передают, их поведение прежнее.
     """
     from app.db import session_scope
 
@@ -193,14 +204,17 @@ async def _run_pipeline(
             state["done"] = True
         broker_hook(stage, message, fraction)
 
-    router = LLMRouter(get_settings(), initial_spent_rub=initial_cost_rub)
-    pipeline = ScoutPipeline(session_factory=session_scope, progress=hook, router=router)
+    router = LLMRouter(settings or get_settings(), initial_spent_rub=initial_cost_rub)
+    scoped = {} if settings is None else {"settings": settings}
+    pipeline = ScoutPipeline(session_factory=session_scope, progress=hook, router=router, **scoped)
     failed = False
     try:
         await pipeline.run(brief, request_id=request_id, **(pipeline_kwargs or {}))
-    except Exception:
+    except Exception as exc:
         failed = True
         log.exception("прогон запроса №%s завершился отказом пайплайна", request_id)
+        if on_failure is not None:
+            on_failure(exc)
     finally:
         if not state["done"]:
             # Пайплайн не прислал ни одного события (отказ до первого вызова

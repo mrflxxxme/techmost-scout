@@ -1,0 +1,28 @@
+handoff:
+  from: implementer (Э6-11)
+  to: reviewer
+  task: Э6-11
+  did:
+    - "Новый справочник backend/app/reference/software_names.yaml: 49 имён ПО, библиотек и сервисов (TensorFlow, PyTorch, MatLab, SolidWorks, AutoCAD, LabVIEW, PostgreSQL, GitHub, YouTube, OpenFOAM, ComSol, MathCad, CorelDraw, JavaScript, TypeScript и др.), поле names, шапка с правилами; новое имя добавляется правкой YAML."
+    - "backend/app/anonymize.py: load_software_names() (yaml.safe_load, кэш на процесс, ValueError на неверную структуру и дубли без учёта регистра); CamelCase-совпадение, целиком равное имени из списка без учёта регистра, риском не считается. Юрлица не затронуты. Файл 89 строк."
+    - "tests/test_anonymize.py: добавлено 9 тестов в конец файла (прежние строки не изменены): четыре имени ревью, регистр, AcmeCorp и ООО «Ромашка» остаются риском рядом с ПО, TensorFlowLabs — риск, чтение YAML через загрузчик, размер 30–80 и форма справочника."
+  artifacts:
+    - backend/app/anonymize.py
+    - backend/app/reference/software_names.yaml
+    - tests/test_anonymize.py
+    - .planning/evidence/Э6-W4-Э6-11-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_anonymize.py -v: 26 passed (17 прежних + 9 новых)"
+    - "pytest -q (окружение без ключей): 1986 passed, 0 failed"
+    - "ruff check .: All checks passed; ruff format --check .: 257 files already formatted"
+    - "мутации по одной с откатом: любой CamelCase пропускается -> 5 failed; белый список не читается -> 6 failed; после отката 26 passed"
+    - "git diff 97d6219 HEAD -- tests/: ни одной удалённой строки"
+  escalate: none
+  adr_line_for_decisions: "РЕШ-291 (исполнение): имена ПО из reference/software_names.yaml (49 имён, сравнение целиком и без учёта регистра) не считаются названиями компаний в app.anonymize.find_deidentification_risks — единый источник для формы скана, интейка и /api/v1; список правится без кода; Э6-11 поставлена оркестратором в реестре (отступление для малой задачи), проверки в Э6-W4-Э6-11-checks.txt."
+  read_first:
+    - ".planning/DECISIONS.md (РЕШ-291)"
+    - backend/app/anonymize.py
+    - backend/app/reference/software_names.yaml
+    - tests/test_anonymize.py
+  notes: "Состав списка составлен исполнителем по суждению, на утверждение владельцу вместе с ПР. Побочное: 16 из 49 имён (AutoCAD, LabVIEW, PostgreSQL, OpenFOAM, OpenCV, RStudio, MySQL, ImageJ и др.) нынешняя регулярка CamelCase и так не ловит (последний горб из одних заглавных) — записи про запас на случай расширения регулярки; ложные отказы сейчас давали 33 имени (TensorFlow, PyTorch, MatLab, SolidWorks, GitHub, YouTube, ComSol, MathCad, CorelDraw, JavaScript, TypeScript, NumPy, SciPy и др.)."

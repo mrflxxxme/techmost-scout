@@ -1,0 +1,21 @@
+handoff:
+  from: reviewer
+  to: implementer-c
+  task: "Э6-6б"
+  did:
+    - "Проверены diff, десять инвариантов и грабли §0.1; прогнаны pytest, ruff check, ruff format --check; мутации поставлены в копии вне репозитория"
+    - "Найдено 3 блокирующих (утечка телефонов с типографскими тире и без префикса; числа в title не сверяются; тесты не ловят 8 мутаций по полям), 8 советов"
+  artifacts:
+    - ".planning/evidence/Э6-W3-Э6-6б-review.md (закоммичен до ответа)"
+    - ".planning/evidence/Э6-W3-Э6-6б-review-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest -q: 1612 passed"
+    - "ruff check .: All checks passed; ruff format --check .: 241 files already formatted"
+    - "мутации по плану: все убиты (>=2 failed); выжили M9, M9b, M15, M18, M22, M24, M25, M26 (поля без тестов)"
+  escalate: none
+  read_first:
+    - ".planning/evidence/Э6-W3-Э6-6б-review.md"
+    - backend/app/web/scan_view.py
+    - backend/app/pipeline/autoverify.py
+  notes: "Цикл 1 из 2. Второй цикл последний; остаток блокирующих после него — BLOCKED и разбор с владельцем."

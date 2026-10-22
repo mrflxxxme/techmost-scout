@@ -574,3 +574,540 @@ AnalogSections(main, footnotes)`, режим — `report.brief.mode`; анало
    `backend/`; `194\.87` в `docs/deploy.md`. Имена прежних тестов Яндекса сверены
    (`test_search_yandex.py`, `test_yandex_limit_visibility.py`).
 7. Изменены только `.planning/PLAN.md` и `.planning/plans/PLAN-E5.md` (копия плана Э5).
+
+---
+
+## Дополнение РЕШ-277 (21.10.2026): Э6-7, Э6-8, Э6-9
+
+Дописано планировщиком 21.10.2026 по РЕШ-277; всё, что выше, не меняется. Основание:
+РЕШ-261, 266, 271…278; Э-3 этого плана. Э6-6в остаётся как в разделе «Волна 4».
+
+**Правила дополнения** (поверх «Общих правил этапа»):
+* Ветки — по РЕШ-276: задача в worktree `.claude/worktrees/<задача>`, вливается локально в
+  сессионную ветку `claude/sleepy-planck-11w8jv`; пушится только она. В правиле 4
+  `claude/e6-wN` читается как база волны 4, которую оркестратор фиксирует перед стартом.
+* Окружение: Linux, Python 3.12, общий `.venv` (`/home/user/techmost-scout/.venv/bin/…`),
+  демона Docker нет. Прогон в контейнере из правила 3 заменён CI GitHub (РЕШ-276). База
+  набора — 1507 passed на `claude/e6-w2`; перед волной 4 оркестратор фиксирует новую.
+* Тексты клиенту (подписи формы и причин, сообщения) — в редакции исполнителя после
+  ревью, РЕШ-275; перечень — в описание PR и ворота Э6.
+
+| Задача | Что | Цикл | Шаг волны 4 |
+|---|---|---|---|
+| Э6-7 | Поштучный вердикт эксперта на аналог | полный | 4.1 |
+| Э6-8 | Реестры РФ как источники аналогов | полный | 4.2 |
+| Э6-9 | Деплой через GitHub Actions | полный | 4.2, последней |
+
+### Порядок волны 4 (не больше двух исполнителей одновременно, РЕШ-276)
+
+| Шаг | Исполнитель 1 | Исполнитель 2 | Условие старта |
+|---|---|---|---|
+| 4.1 | Э6-6в | Э6-7 | волна 3 и Э6-4 влиты |
+| 4.2 | Э6-9 | Э6-8 | Э6-9 — после слияния Э6-6в (общий `docs/deploy.md`); Э6-8 — после слияния Э6-7 (место исполнителя) |
+
+Пересечений файлов нет ни в одной паре, которая может идти одновременно: (Э6-6в, Э6-7),
+(Э6-6в, Э6-8), (Э6-9, Э6-7), (Э6-9, Э6-8) — сводка ниже. Последовательно: Э6-6в → Э6-9
+(`docs/deploy.md`). Слияние: Э6-6в и Э6-7 в порядке готовности, затем Э6-8, Э6-9 последней.
+Полный набор Э6-8 перед слиянием прогоняется на ветке интеграции с уже влитой Э6-6в:
+русская формулировка `analog` меняет план и скана тоже. Э-4 блокирует только слияние Э6-8.
+
+### Э6-7 · Поштучный вердикт эксперта на аналог
+- **Исполнитель 2 · полный · после Э6-4 (влита до старта) · parallel** с Э6-6в; единственный
+  владелец `models.py` в волне 4
+- **Файлы:** `backend/app/models.py`, `backend/app/verdicts.py`, `backend/app/export/view.py`,
+  `backend/app/web/routes/review.py`, `backend/app/web/templates/review.html`,
+  `tests/test_analog_verdicts.py` (новый)
+- **Контракт:**
+  1. Таблица `analog_verdicts` (модель `AnalogVerdict`): `id`, `request_id` (FK `requests`,
+     индекс), `analog_key` (`String(16)`, индекс), `reviewer_name`, `decision`
+     (`approve | reject | rework`), `comment`, `created_at`. Новая таблица — через
+     `create_all`, `db.py` и `ADDED_COLUMNS` не трогаются. Вердикты не обновляются и не
+     удаляются (РЕШ-196 п. 3).
+  2. Ключ: `verdicts.analog_key(card: AnalogCard) -> str` — первые 16 hex `sha256` от
+     `title`, `country`, `country_evidence_url` через `\n`. Аналоги живут только в
+     `report_json`, строк в базе у них нет; позиция ключом не служит.
+  3. `effective_analog_verdicts(rows) -> dict[str, AnalogVerdict]` — последний по
+     `(created_at, id)`, как `effective_verdicts`; общий выбор последнего — одной
+     внутренней функцией, без копии.
+  4. Видимость аналога считает **та же** `hidden_reason`: тип карточки расширяется до
+     `SolutionCard | AnalogCard | None`, вердикта — до `Verdict | AnalogVerdict | None`.
+     `visible_analogs(cards, effective, *, require_evidence=True) -> list[AnalogCard]` зовёт
+     её на каждом аналоге. Сравнение с `REJECT` в коде продукта остаётся одно.
+  5. `build_export_view` накладывает `visible_analogs` на `client_visible.analog_cards`
+     **до** `analog_sections(client_visible)` — одна точка для страницы, PDF, DOCX, JSON,
+     `/api/v1` и markdown из `view.client_report`. `export/analogs.py` и выходы не
+     меняются. `rework` аналог не скрывает.
+  6. Экран ревью: секция аналогов после карточек — название, суть, страна, причина
+     скрытия (`hidden_reason`, тексты `HIDDEN_*` прежние), форма: решение, комментарий,
+     имя проверяющего. Оценки 1–5 нет. `POST /requests/{request_id}/analogs/{analog_key}/verdict`
+     в `review.py` (новый модуль маршрутов не заводится — `main.py` у Э6-6в): ключ не
+     `^[0-9a-f]{16}$` или нет среди аналогов отчёта запроса — 404 без записи; пустое имя,
+     неизвестное решение — 400 без записи (как у карточек).
+  7. Вердикты аналогов не входят в `all_cards_reviewed`, статус `validated` и подпись:
+     замок отчёта целиком прежний (инв. 2).
+- **Критерии приёмки:**
+  1. `pytest tests/test_analog_verdicts.py -v` — проходят. Фикстура: отчёт с тремя аналогами
+     (`CN`, `US`, `DE`, у всех `evidence`) записан в базу, статус `validated`, `briefs.mode =
+     gov` (`US` и `DE` — сноски). `reject` на `CN` и на `US` через `POST` → нет в странице
+     отчёта, `render_print_html`, тексте DOCX, `export_report_json`,
+     `GET /api/v1/requests/{id}/report` и `render_markdown(view.client_report)`; `DE` — в
+     сносках всех выходов. Поздний `approve` на `CN` → снова виден. `rework` → виден.
+     Неизвестный и кривой ключ — 404, пустое имя — 400; строк в `analog_verdicts` не
+     прибавилось. Вердикты аналогов не меняют статус запроса. Экран ревью показывает все
+     три аналога и «отклонена экспертом» у отклонённых. База без таблицы после
+     `init_db` её получает.
+  2. Мутации — каждая ≥1 failed в `pytest tests/test_analog_verdicts.py -q`: в
+     `build_export_view` не звать `visible_analogs`; в `visible_analogs` передавать в
+     `hidden_reason` вердикт `None`; `effective_analog_verdicts` берёт первую строку вместо
+     последней; `POST` пишет строку при неизвестном ключе.
+  3. `rg -n "\.decision\s*(==|!=)\s*VerdictDecision\.REJECT" backend/app` — ровно одна строка,
+     в `verdicts.py` (на базе — одна).
+     `rg -n "VerdictDecision\.REJECT|[\"']reject[\"']" backend/app --glob "*.py"` — ровно три
+     строки, как на базе: определение в `schemas.py`, сравнение в `verdicts.py`, подпись в
+     `DECISION_LABELS` (`review.py`).
+     `rg -n "reject" backend/app/web/templates | rg -v 'option value="reject"'` — пусто (на
+     базе пусто: в шаблонах только пункт списка).
+  4. `rg -n "country_status" backend/app/web` — пусто (на базе пусто; потребителей по-прежнему три).
+  5. `pytest tests/test_export_analogs.py tests/test_backend_layout.py -q` — зелёные без правок.
+     Правило 4: прежние тесты не правятся. Общие критерии.
+- **Инварианты:** №2 (замок и статус не тронуты — кр. 1), №1 (бессылочный аналог скрыт тем
+  же проходом), №7 (без сети), №8 (кр. 1–2), №9 (поштучный вердикт — продолжение
+  валидации, не новый кабинет).
+- **Границы:** `schemas.py`, `db.py`, `export/analogs.py`, отбор и стадия аналогов, скан не
+  трогаются; правок оператора над аналогами нет; судьба аналога по стране на экране
+  ревью не показывается.
+- **Читать первым:** `verdicts.py:56–163`, `export/view.py` (`build_export_view`, после
+  Э6-4), `web/routes/review.py:97–331`, `templates/review.html`, `models.py:213–275`,
+  `export/analogs.py`, `tests/test_export_analogs.py` (фикстура).
+
+### Э6-8 · Реестры РФ как источники аналогов
+- **Исполнитель 2 · полный · после Э6-2в (белый список) и слияния Э6-7 · parallel** с Э6-9
+- **Файлы:** `backend/app/reference/analog_sources.yaml`, `backend/app/search/analog_sources.py`,
+  `backend/app/search/yandex_parse.py`, `backend/app/search/yandex_search.py` (если
+  переключатель списка живёт там), `backend/app/pipeline/planning.py`,
+  `tests/test_ru_registries.py` (новый); **только по итогу пробы** —
+  `backend/app/search/product_radar.py`, `backend/app/search/__init__.py`,
+  `tests/test_product_radar.py` (новые/правка). Узкие правки прежних тестов (правило 4) —
+  только утверждения счёта формулировок `analog` в `tests/test_analog_stage.py`,
+  `tests/test_analog_flow.py` («английских ровно 2, русских ≤ 1») и в
+  `tests/test_yandex_analog.py`, если он строит русскую формулировку `analog`.
+- **Факты пробы 21.10.2026** (облачная среда, зарубежный адрес): ГИСП `gisp.gov.ru` —
+  403; реестр ПО Минцифры `reestr.digital.gov.ru` — таймаут соединения; Product Radar
+  `productradar.ru` — 200, WordPress, `/wp-json/` открыт, продукты — по категориям
+  (`/radar/v1/products/(?P<cat_id>\d+)`, `/productradar/v1/…`), `/wp/v2/search` продукты не
+  ищет. RADAR экосистемы: часть госисточников режет и сервер 194, и Actions.
+- **Контракт:**
+  1. **Проба — первый шаг**, вывод — `.planning/evidence/Э6-W4-Э6-8-probe.txt`: по каждому из
+     трёх доменов адрес, код или ошибка, дата; для Product Radar — пространства имён и
+     маршруты `/wp-json/` с аргументами (`search`, `s`, `q`, `per_page`), ответ одного
+     маршрута с текстовым поиском, если он есть. Ключей и платных вызовов нет.
+  2. **Путь по умолчанию — Яндекс-поиск по домену** (без нового адаптера, работает с
+     сервера: Яндекс индексирует реестры из РФ, адрес нашего сервера не важен). В
+     `analog_sources.yaml` — отдельный список `ru_registries: [{domain, name_ru}]`:
+     `gisp.gov.ru`, `reestr.digital.gov.ru`, `productradar.ru`. Мировые `reports` и
+     `catalogs` не меняются.
+  3. **Русская формулировка `analog`** (Э-4, умолчание А): `planning.registry_analog_query(plan,
+     brief) -> SearchQuery | None` — при виде «Рынок» одна формулировка `analog`, `lang:
+     "ru"`, текст — первая русская `web` плана, иначе первые три `keywords_ru`, иначе `None`
+     с `log.info`. Добавляется в `normalize_plan_queries` к английским **до** резервирования
+     мест (потолок 12 держит прежний механизм вытеснения с логом). При `research` и во
+     втором проходе её нет. `ANALOG_QUERIES = 2` — по-прежнему счёт английских от модели.
+     Промпты не меняются.
+  4. Яндекс: `analog` + `ru` сужается `site:` доменов `ru_registries` и только ими; `analog` +
+     `en` — мировым списком без доменов реестров. Пачки, предел 6 платных запросов и
+     `limit_problems` с не влезшими доменами — прежние (Э6-2в).
+  5. **Прямой адаптер — только Product Radar и только если** проба показала маршрут
+     текстового поиска продуктов: 200, JSON, без ключа, один запрос на формулировку.
+     Тогда `ProductRadarAdapter`: `name = "product_radar"`, `source_types = (ANALOG,)`,
+     `requires_key = False`, `needs_extraction = False`; английская формулировка — `[]` без
+     запроса; транспортный отказ, HTTP-ошибка, не-JSON — `SearchError` (инв. 5, имя
+     попадает в `sources_unavailable`); `url` — страница продукта на `productradar.ru`
+     (иной узел — пропуск); `country` не ставится. Обход категорий — нет. Маршрута
+     поиска нет — адаптер не пишется, причина — в evidence. К ГИСП и реестру Минцифры
+     адаптеры не пишутся (проба: закрыты).
+  6. Видимость: реестр опрашивается путём Яндекса; отказ Яндекса — `yandex_search` в
+     `sources_unavailable`, пропуск по пределу — строка `limit_problems` с доменами реестров.
+     Каждый реестр РЕШ-261 покрыт списком `ru_registries` или адаптером — проверяется тестом.
+- **Критерии приёмки:**
+  1. `.planning/evidence/Э6-W4-Э6-8-probe.txt` есть;
+     `rg -c "gisp\.gov\.ru|reestr\.digital\.gov\.ru|productradar\.ru" .planning/evidence/Э6-W4-Э6-8-probe.txt`
+     — ≥ 3.
+  2. `pytest tests/test_ru_registries.py -v` — проходят (respx, заглушки, без сети):
+     `ru_registries` — ровно три домена РЕШ-261, каждый покрыт; домен со схемой или
+     дублем — ошибка загрузки; русская `analog` несёт `site:` только реестров, английская —
+     ни одного домена реестров; `registry_analog_query`: «Продукт» — одна русская `analog`
+     с текстом русской `web`; без русской `web` — из `keywords_ru`; без обоих — `None`;
+     `research` — `None`; план 10 + 2 + 1 после нормализации ≤ 12; второй проход без
+     `analog`. Сквозной: бриф «Продукт» → план → Яндекс (respx) получает русскую
+     формулировку с `site:reestr.digital.gov.ru` → кандидат `ANALOG` с адресом записи
+     реестра доходит до аналоговой части `split_analog_candidates`. Исчерпанный предел —
+     в `limit_problems` названы домены реестров.
+  3. Если адаптер написан: `pytest tests/test_product_radar.py tests/test_search_failures.py
+     tests/test_plan_types.py -v` — проходят: разбор в кандидатов; 403, 500, обрыв, не-JSON →
+     `SearchError`; английская формулировка — ни одного запроса (respx `call_count == 0`);
+     адрес не на `productradar.ru` отброшен; `build_adapters` включает без ключа. Если не
+     написан: `rg -ln "productradar" backend/app --glob "*.py"` — пусто (на базе пусто),
+     причина — в evidence пробы.
+  4. `rg -ln "gisp\.gov\.ru|reestr\.digital\.gov\.ru" backend/app --glob "*.py"` — пусто (на
+     базе пусто: домены только в YAML, адаптеров к закрытым реестрам нет).
+  5. Мутации — каждая ≥1 failed в `pytest tests/test_ru_registries.py -q`: русская `analog`
+     сужается мировым списком; `normalize_plan_queries` не зовёт `registry_analog_query`;
+     `registry_analog_query` не проверяет `research`. При адаптере — «HTTP-ошибка → `[]`»
+     в `pytest tests/test_product_radar.py -q`.
+  6. `pytest tests/test_yandex_analog.py tests/test_search_yandex.py tests/test_yandex_limit_visibility.py tests/test_analog_stage.py tests/test_analog_flow.py tests/test_backend_layout.py -q`
+     — зелёные; `git diff --stat <база волны 4> -- tests/` — только новые файлы и названные
+     выше узкие правки. Общие критерии; инв. 6 — пусто.
+- **Инварианты:** №1 (запись реестра — ссылка первоисточника; страна аналога — только с
+  `country_evidence_url` из кандидатов, прежний отбор Э6-2а), №5 (кр. 2–3), №6 (адаптер — в
+  `search/`), №7, №8, №10 (`yaml.safe_load`, домены — строки).
+- **Границы:** промптов (`planner.md`, `analog_scorer.md`) не меняет; платных API и
+  регистраций нет; обхода категорий Product Radar, разбора HTML реестров и загрузки
+  страниц нет; потребителей `country_status` не добавляет.
+- **Читать первым:** `DECISIONS.md` РЕШ-261, 277; `search/analog_sources.py`,
+  `reference/analog_sources.yaml`, `yandex_parse.py` (`with_site_filter`),
+  `yandex_search.py:164–220`, `planning.py:85–147`, `search/yc_catalog.py` (образец
+  адаптера), `pipeline_search.py:126–244`.
+
+### Э6-9 · Деплой через GitHub Actions
+- **Исполнитель 1 · полный · после Э6-6а и слияния Э6-6в · sequential** за Э6-6в (общий
+  `docs/deploy.md`), последней в волне
+- **Файлы:** `.github/workflows/deploy.yml`, `scripts/deploy_server.py`,
+  `docker/edge/scout-sites.caddy` (новые), `docs/deploy.md` (новый раздел «Деплой через
+  GitHub Actions»), `tests/test_deploy_workflow.py`, `tests/test_deploy_server.py` (новые)
+- **Контракт:**
+  1. Запуск — только `workflow_dispatch`; входы: `action` (`choice`: `deploy | doctor |
+     caddy-apply | env-keys`), `ref` (строка, умолчание `main`). `permissions: contents:
+     read` на уровне файла; `concurrency` с `cancel-in-progress: false`; `timeout-minutes`.
+  2. Секреты репозитория: `SCOUT_DEPLOY_SSH_KEY`, `SCOUT_DEPLOY_KNOWN_HOSTS`,
+     `SCOUT_DEPLOY_HOST`, `SCOUT_DEPLOY_USER`, `DEEPSEEK_API_KEY`, `YANDEX_API_KEY`,
+     `YANDEX_CATALOG_ID`, `YANDEX_SEARCH_API_KEY`. Переменные: `SCOUT_WORK_HOST`,
+     `SCOUT_SCAN_HOST` (sslip-плейсхолдер, РЕШ-273), `EDGE_NEIGHBOR_URLS`, переменные скана
+     Э6-6а (`SCAN_*`, `YANDEX_SEARCH_RUB_PER_QUERY`). `${{ secrets.* }}` и `${{ inputs.* }}`
+     — только в `env:`, в тексте `run` подстановок нет; `ref` проверяется
+     `^[A-Za-z0-9._/-]+$`. ssh — `StrictHostKeyChecking=yes` с known_hosts из секрета, без
+     `ssh-keyscan`; ключ — файл 600, удаляется шагом `if: always()`.
+  3. Серверная часть — `scripts/deploy_server.py`: только стандартная библиотека,
+     синтаксис Python 3.8 (хостовый `python3`; первый шаг на сервере проверяет версию и
+     падает до правок). Доставляется на время прогона во временный путь. Подкоманды:
+     `env-upsert <путь>` — пары `ИМЯ=значение` из stdin, только имена закреплённого
+     списка, пустое значение ключ не стирает, перед записью — копия `.env.bak-<время>` с
+     правами 600, печатает только имена; `caddy-block <Caddyfile> <шаблон>` — блоки Скаута
+     между маркерами `# >>> techmost-scout` / `# <<< techmost-scout`; при первом прогоне
+     прежний немаркированный верхнеуровневый блок рабочего хоста принимается в маркеры;
+     чужие блоки — байт в байт; запись **на месте** (inode, `docs/deploy.md` раздел 11).
+     Значения секретов — только через stdin, не аргументами.
+  4. `deploy`: бэкап (`scout.db` через `sqlite3.Connection.backup()` сайдкаром `backup` в
+     `/backups/scout-predeploy-<время>.db`, `.env`, текущий коммит) → `git fetch` и
+     checkout `ref` → `docker compose -f docker-compose.yml -f docker-compose.edge.yml build
+     scout` → `up -d` → ожидание `healthy` → `scout doctor` в контейнере.
+     `env-keys`: бэкап `.env` → `env-upsert` (ключи моделей и `PUBLIC_SCAN_HOST =
+     SCOUT_SCAN_HOST`, переменные скана) → пересоздание `scout` → `scout doctor`.
+     `doctor`: только `scout doctor` (один платный запрос Яндекса — проба здоровья).
+  5. `caddy-apply`: копия `/opt/edge-caddy/Caddyfile.bak-<время>` → `caddy-block` из
+     шаблона `docker/edge/scout-sites.caddy` (хосты — переменные; логин — `WEB_AUTH_USER`,
+     хэш — на сервере от `WEB_AUTH_PASSWORD` из `docker/.env`, РЕШ-267; пароль сервер не
+     покидает) → `docker exec -i edge-caddy caddy validate --config /dev/stdin --adapter caddyfile < /opt/edge-caddy/Caddyfile`
+     → `docker exec -i edge-caddy caddy reload --config /dev/stdin --adapter caddyfile < /opt/edge-caddy/Caddyfile`
+     (Э-58; никогда `restart`) → коды `EDGE_NEIGHBOR_URLS` и своих хостов (рабочий `/` без
+     пароля — 401, `/api/v1/…` мимо пароля, публичный `/scan` — 200). Провал validate или
+     5xx/000 у соседа — откат из копии (на месте) и reload через stdin, шаг красный.
+  6. Шаблон: блок рабочего хоста — `@ui not path /api/v1/*`, `basic_auth @ui`,
+     `reverse_proxy techmost-scout:8000`, заголовки как в `docker/Caddyfile`; блок
+     публичного хоста скана — **без** `basic_auth`, тот же `reverse_proxy`; пустой
+     `SCOUT_SCAN_HOST` — блока скана нет. Совпадает с блоком раздела «Публичный скан» Э6-6в.
+  7. `docs/deploy.md`: раздел — имена секретов и переменных (без значений), шаги владельца
+     (ключ ssh, `authorized_keys`, known_hosts со сверкой отпечатка), порядок `env-keys →
+     deploy → caddy-apply → doctor`, откат; workflow запускается из ветки по умолчанию.
+- **Критерии приёмки:**
+  1. `pytest tests/test_deploy_workflow.py -v` — проходят; файл разбирается `yaml.safe_load`
+     (ловушка YAML 1.1: ключ `on` читается как `True` — тест берёт оба). Проверки:
+     триггер — только `workflow_dispatch`, варианты `action` — ровно четыре; `permissions ==
+     {"contents": "read"}`; `${{ secrets.` и `${{ inputs.` — только в `env:`; в `run` нет
+     `echo`/`printf`/`cat` с переменной секрета, `set -x`, `printenv`, `cat` файла `.env`;
+     каждая строка `run` с переменной секрета — перенаправление в файл или канал; каждая
+     `caddy reload` — ровно команда контракта п. 5 через stdin; `caddy validate` стоит
+     раньше `caddy reload` в том же шаге; копия Caddyfile — раньше записи; шаг бэкапа —
+     раньше `git fetch`; слова `restart`, `StrictHostKeyChecking=no`, `ssh-keyscan` нет;
+     оба compose-файла названы.
+  2. `pytest tests/test_deploy_server.py -v` — проходят: `ast.parse(..., feature_version=(3, 8))`
+     скрипта; `upsert_env` — новые имена дописаны, прежние заменены, чужие строки и
+     комментарии целы, пустое значение не стирает, имя вне списка отвергнуто, вывод
+     команды без значений (`capsys`); `caddy-block` — замена между маркерами, принятие
+     немаркированного блока рабочего хоста, чужие блоки байт в байт, повторный прогон
+     ничего не меняет, inode файла прежний (`os.stat().st_ino`); шаблон: блок скана без
+     `basic_auth`, рабочий — с `@ui not path /api/v1/*`; без `SCOUT_SCAN_HOST` блока скана нет.
+  3. Мутации — каждая ≥1 failed в `pytest tests/test_deploy_workflow.py tests/test_deploy_server.py -q`:
+     reload с `--config /etc/caddy/Caddyfile`; validate после reload; `echo "$DEEPSEEK_API_KEY"`
+     в `run`; триггер `push`; убрать шаг бэкапа; запись Caddyfile через временный файл и
+     `os.replace`; `env-upsert` печатает значение.
+  4. `pytest tests/test_deploy_auth_parity.py tests/test_docker_compose_edge.py tests/test_caddyfile.py tests/test_docker_compose.py tests/test_scripts_layout.py -q`
+     — зелёные без правок.
+  5. `rg -n "194\.87" .github/ docker/ docs/deploy.md scripts/` — пусто (на базе пусто; адрес
+     — только в секрете и переменных). Общие критерии.
+- **Инварианты:** №3 (кр. 1–3: секреты не печатаются, только имена), №10 (`yaml.safe_load`),
+  №7 (без сети и ssh), №8 (кр. 1–3).
+- **Границы:** живой запуск — отложенность DLG-Э6-3 после «да» владельца; `ci.yml`,
+  `docker/Caddyfile`, compose-файлы и код продукта не трогает; workflow не правит чужие
+  сайты edge и не делает `restart`; GitHub environments и правила защиты не включает
+  (это действие владельца, §10).
+- **Читать первым:** `docs/deploy.md` разделы 4, 7, 8, 11 и «Публичный скан» (Э6-6в);
+  `docker/Caddyfile`; `docker/docker-compose.yml`, `docker/docker-compose.edge.yml`;
+  `.github/workflows/ci.yml`; `tests/test_docker_compose_edge.py`,
+  `tests/test_deploy_auth_parity.py`; `DECISIONS.md` РЕШ-267, 272, 273.
+
+### Сводка файлов волны 4 (кроме новых тестов задачи)
+
+| Шаг | Исполнитель 1 | Исполнитель 2 |
+|---|---|---|
+| 4.1 | Э6-6в: как в «Сводке файлов по волнам» | Э6-7: `models`, `verdicts`, `export/view`, `routes/review`, `review.html` |
+| 4.2 | Э6-9: `.github/workflows/deploy.yml`, `scripts/deploy_server.py`, `docker/edge/scout-sites.caddy`, `docs/deploy.md` | Э6-8: `reference/analog_sources.yaml`, `search/{analog_sources,yandex_parse,yandex_search}`, `pipeline/planning`; по пробе — `search/{product_radar,__init__}`; узкие правки `test_analog_stage`, `test_analog_flow`, `test_yandex_analog` |
+
+### Отложенности дополнения
+
+* **DLG-Э6-3 · живой деплой через Actions.** Владелец: пара ключей ssh, открытая часть — в
+  `authorized_keys` пользователя деплоя; секреты и переменные Э6-9 (п. 2); workflow
+  запускается `workflow_dispatch` только из ветки по умолчанию — живой запуск после
+  слияния стопки в `main` (РЕШ-271 п. 4); «да» на список запусков `env-keys → deploy →
+  caddy-apply → doctor`. Вывод — `evidence/Э6-DLG-3-*` (ссылки на прогоны, журналы без
+  значений). Открывает DLG-Э6-1 и Э5-2.
+* **DLG-Э6-1 дополняется:** в скане «Продукт» журнал стадии `search` показывает русскую
+  формулировку `analog` с доменами реестров; аналог из реестра — со ссылкой на запись.
+  Прямой доступ Product Radar с сервера (если адаптер есть) — по `scout doctor`.
+
+### Эскалации дополнения
+
+* **Э-4 · русская формулировка для реестров РФ** (§9 п. 1 — контракт плана, п. 2 — +1
+  платный запрос Яндекса). Сейчас `analog` — ровно 2 английские формулировки (правило 14
+  `planner.md`, `ANALOG_QUERIES = 2`); ГИСП, реестр Минцифры и Product Radar русскоязычны —
+  на английский запрос событие «найдено в реестре» практически недостижимо.
+  А: код добавляет одну русскую `analog` (текст русской `web` плана), Яндекс сужает её
+  доменами реестров — промпты не меняются, +1 платный запрос при «Рынке» в пределах 6 на
+  прогон. Б: правило 14 `planner.md` — третья формулировка от модели — точнее по смыслу,
+  но правка промпта, `CHANGELOG`, `test_prompts`, `test_plan_types`, та же цена. В: без
+  русской формулировки — Э6-8 сводится к пробе. **Рекомендую А** (решено кодом, без
+  промптов). Обратимо. Блокирует только слияние Э6-8; по умолчанию делается А.
+
+### Автономные решения дополнения (строкой в DECISIONS.md)
+
+28. Вердикт аналога — таблица `analog_verdicts`, ключ — отпечаток `title`, `country`, `country_evidence_url` (16 hex `sha256`): у аналогов нет строк в базе.
+29. Видимость аналога считает та же `verdicts.hidden_reason` (типы расширены); сравнение с `REJECT` в коде одно; фильтр — в `build_export_view` до `analog_sections`.
+30. Вердикты аналогов не входят в `all_cards_reviewed`, статус и подпись: отклонение аналога — право эксперта; замок отчёта целиком прежний.
+31. Форма вердикта аналога — решение, комментарий, имя; оценки 1–5 нет; `rework` аналог не скрывает.
+32. Маршрут вердикта аналога — в `review.py`: новый модуль потребовал бы `main.py`, занятый Э6-6в.
+33. Реестры без открытого машинного доступа опрашиваются Яндекс-поиском по домену; адаптер — только к источнику с текстовым поиском без ключа по пробе; к ГИСП и реестру Минцифры адаптеров нет.
+34. Домены реестров — отдельный список `ru_registries`, сужает только русскую `analog`; мировой список 20–30 доменов не меняется.
+35. Отказ пути реестра виден существующими строками (`yandex_search` в `sources_unavailable`, домены в `limit_problems`); постоянной строки «реестр недоступен напрямую» в каждом отчёте нет.
+36. Деплой-workflow: только `workflow_dispatch`, `contents: read`, секреты и входы — только через `env:`, `ref` — по шаблону.
+37. Серверная часть деплоя — один скрипт на стандартной библиотеке (Python ≥ 3.8 хоста), правки `.env` и Caddyfile — чистыми функциями с тестами, запись на месте.
+38. Блоки edge-Caddy Скаута — между маркерами; прежний немаркированный блок рабочего хоста принимается при первом прогоне; чужие блоки не трогаются.
+39. Хэш `basic_auth` считается на сервере от `WEB_AUTH_PASSWORD`; `SCOUT_SCAN_HOST` — один источник и для Caddy, и для `PUBLIC_SCAN_HOST`.
+40. Validate и reload читают одно содержимое через stdin; провал — откат из копии и reload через stdin.
+
+### Самопроверка дополнения
+
+1. Прочитаны РЕШ-261, 266, 271…278; разделы плана «Общие правила», «Контракты», «Волны»,
+   Э-3, «Отложенности»; SPEC §7а; INVARIANTS; CLAUDE.md; CONVENTIONS §4, §9, §11; код —
+   `verdicts.py`, `models.py`, `db.py`, `review.py`, `review.html`, `export/{analogs,view}.py`
+   (worktree `e6-4`), `planning.py`, `yandex_search.py`, `pipeline_search.py`, `config.py`,
+   `docs/deploy.md`, `docker/Caddyfile`, compose-файлы, `ci.yml`.
+2. Пересечений файлов в парах, идущих одновременно, нет (сводка волны 4); `models.py` в
+   волне 4 — только Э6-7, `main.py` — только Э6-6в, `docs/deploy.md` — Э6-6в → Э6-9.
+3. Достижимость: русская `analog` нужна, чтобы событие «найдено в реестре» могло
+   произойти (Э-4); вердикт аналога доходит до всех выходов через одну точку
+   `build_export_view`.
+4. Отрицательные критерии прогнаны на базе: `\.decision == REJECT` — одна строка;
+   `REJECT|"reject"` в `*.py` — три; `reject` в шаблонах — только `option`; `country_status`
+   в `backend/app/web` — пусто; `gisp.gov.ru|reestr.digital.gov.ru` и `productradar` в
+   `backend/app` — пусто; `194\.87` в `.github/`, `docker/`, `docs/deploy.md`, `scripts/` —
+   пусто; новых тестовых файлов с этими именами нет.
+
+---
+
+## Дополнение РЕШ-285 (21.10.2026): Э6-10
+
+Дописано планировщиком 21.10.2026 по РЕШ-285 п. 2; всё, что выше, не меняется. Основание:
+РЕШ-283 («На аудит этапа»: проверка предела неатомарна), РЕШ-46 (стоп-кран — только модели),
+РЕШ-269 и РЕШ-281 п. 1 (потолок скана считает 6 запросов Яндекса × тариф), ревью Э6-2в
+(`evidence/Э6-W3-Э6-2в-review.md`, п. 4: 5 web + 2 analog → 7 запросов, 6 + 2 → 8).
+Правила дополнения РЕШ-277 (ветки, окружение, тексты) действуют без изменений.
+
+**Механика дефекта на базе** (`yandex_search.py`, до Э6-8): проверка `queries_used >=
+_max_queries` стоит в начале `search_raw`, учёт `queries_used += 1` — в `_run_search` после
+`await self._throttle()` и `await self._client.post(...)`. `gather_candidates` запускает
+формулировки задачами одной `TaskGroup` — первые запросы всех формулировок проходят проверку
+до первого учёта. Вторые и следующие пачки `analog` проверяются после ответа предыдущей:
+перебора не добавляют, зато вытесняются целиком.
+
+| Задача | Что | Цикл | Шаг волны 4 |
+|---|---|---|---|
+| Э6-10 | Резерв под аналоги и честный предел платных запросов Яндекса | полный | 4.3 |
+
+### Порядок (не больше двух исполнителей одновременно, РЕШ-276)
+
+| Шаг | Исполнитель 1 | Исполнитель 2 | Условие старта |
+|---|---|---|---|
+| 4.3 | Э6-6в (если ещё идёт), затем Э6-9 | Э6-10 | Э6-10 — после слияния Э6-8 (`claude/e6-8`) и Э6-6б (РЕШ-285 п. 1) в сессионную ветку; Э6-9 — после слияния Э6-6в, как прежде |
+
+Пересечений файлов нет: Э6-10 — `search/{yandex_search,yandex_quota}.py`,
+`pipeline/pipeline_search.py`; Э6-6в — `web/routes/{scan,run}.py`, `web/scan_run.py`, `main.py`,
+шаблоны скана, `docs/deploy.md`; Э6-9 — `.github/workflows/deploy.yml`, `scripts/deploy_server.py`,
+`docker/edge/scout-sites.caddy`, `docs/deploy.md`. Пары (Э6-10, Э6-6в) и (Э6-10, Э6-9) —
+**parallel**. С Э6-8 Э6-10 делит `yandex_search.py` — поэтому строго после её слияния.
+Слияние — в порядке готовности; полный набор Э6-10 перед слиянием прогоняется на ветке
+интеграции с уже влитыми соседями (скан Э6-6в идёт тем же `gather_candidates`).
+
+### Э6-10 · Резерв под аналоги и честный предел платных запросов Яндекса
+- **Исполнитель 2 · полный · после слияния Э6-8 и Э6-6б · parallel** с Э6-6в и Э6-9;
+  база — сессионная ветка после этих слияний, хэш фиксирует оркестратор (`<база Э6-10>`).
+- **Файлы:** `backend/app/search/yandex_quota.py` (новый: учёт мест, чистый код без сети и
+  `httpx`), `backend/app/search/yandex_search.py` (учёт через квоту, `begin_pass`, докстрока
+  «ЦЕНА И ПОТОЛОК»), `backend/app/pipeline/pipeline_search.py` (вызов `begin_pass` в
+  `gather_candidates`, ≈ 8 строк; файл 423 из 500), `tests/test_yandex_quota.py` (новый).
+  Прежние тесты не правятся (правило 4) — исключений нет.
+- **Контракт:**
+  1. **Атомарность.** Проверка места и его учёт — одно синхронное действие без `await`
+     между ними, до первого `await` запроса (`_throttle`, `post`): место резервируется, затем
+     уходит запрос. Учитывается зарезервированное: оборванный транспортом запрос место не
+     возвращает (безопасная сторона для денег; отказ — по-прежнему `SearchError`, инв. 5).
+     `asyncio.Lock` допустим только вокруг проверки-и-учёта и **не держится через сетевой
+     вызов**: иначе платные запросы с опросом операции до 60 с идут гуськом. Имя `self._lock`
+     в адаптере Яндекса не занимается — это замок `_throttle` базового класса (`base.py:64`),
+     а `asyncio.Lock` не реентерабелен. `queries_used` остаётся публичным атрибутом `int`,
+     читаемым и присваиваемым (прежние тесты пишут `adapter.queries_used = 2`); никакой
+     параллельностью `queries_used` не превышает `max_queries`.
+  2. **Объявление прохода.** `YandexSearchAdapter.begin_pass(queries: Sequence[SearchQuery])
+     -> None` — синхронный; `gather_candidates` зовёт его перед `TaskGroup` у каждого
+     адаптера, где он есть (`getattr`, как `drain_limit_problems`; общий контракт
+     `SearchAdapter` не расширяется), и передаёт формулировки, отфильтрованные по
+     `source_types` адаптера. `begin_pass` пересчитывает места прохода и не сбрасывает
+     `queries_used` и `limit_problems` (предел — на прогон).
+  3. **Резерв.** Места прохода: мировой `analog` (`lang == "en"`) — `ANALOG_WORLD_SLOTS = 2`,
+     если в проходе есть хоть одна такая формулировка, иначе 0; реестровый `analog`
+     (`lang == "ru"`, Э6-8) — `ANALOG_REGISTRY_SLOTS = 1`, если есть, иначе 0; прочие типы
+     (`web`, `contest`, `grant`) — `max_queries − queries_used − резерв`, не меньше 0.
+     Резерв, которого нет в плане, уходит прочим («остальные 3 + неиспользованный резерв»).
+     Аналог сверх своих мест мест прочих не берёт; места прочих, не занятые в первом
+     проходе, достаются второму (в нём `analog` нет — `strip_analog_queries`). Мировые места
+     делятся **в ширину**, в порядке плана: каждая английская формулировка получает по
+     пачке, прежде чем какая-то получит вторую (одна формулировка — до 2 пачек, две — по 1).
+     Резерв ключуется наличием `analog` в проходе, а не `solution_kind`: при `research`
+     формулировок `analog` нет по код-гарантии `normalize_analog_queries`, значит резерв 0 и
+     поведение «Науки» прежнее.
+  4. **Без объявления прохода** (прямой вызов адаптера, `scout doctor`, прежние тесты) — один
+     общий пул `max_queries` для всех типов, как на базе, но с атомарным учётом п. 1.
+  5. **Видимость.** Каждая формулировка или пачка, не получившая места, — поимённо в
+     `limit_problems`: прочая — текстом формулировки, `analog` — доменами не опрошенных
+     пачек (прежний вид Э6-2в/Э6-8). Запись о вытеснении резервом называет причину («места
+     оставлены аналогам») и, как прежние, содержит `yandex_search`, слово «предел», число
+     предела и текст формулировки. Это журнал стадии `search`; клиент по-прежнему видит
+     только `PAID_LIMIT_NOTICE` по счётчику (`run_flow.py:149`) — новых текстов клиенту нет.
+     `SearchError` по пределу не поднимается.
+  6. **Деньги не меняются:** `max_queries: int = 6` по умолчанию, `YANDEX_QUERIES_PER_SCAN = 6`
+     (`web/scan_limits.py`) не трогается; промпты, `planning.py`, `analog_sources*` не меняются.
+- **Критерии приёмки:**
+  1. `pytest tests/test_yandex_quota.py -v` — проходят (respx, `min_interval_seconds = 0` у
+     экземпляра, POST `searchAsync` — асинхронная подмена с `asyncio.sleep(0.05)` и счётчиком
+     одновременных запросов; опрос операции — сразу `done`). Случаи:
+     а) без `begin_pass`: 10 формулировок `web` через `asyncio.gather` → `route.call_count ==
+        6`, `queries_used == 6`, в `limit_problems` 4 записи, каждая с текстом своей
+        формулировки; одновременно в полёте было ≥ 2 запросов;
+     б) без `begin_pass`: 5 `web` + 2 английских `analog` через `asyncio.gather` → ровно 6;
+     в) через `ScoutPipeline(..., adapters=[adapter]).gather_candidates` (образец —
+        `tests/test_paid_demand_two_passes.py:116–131`, `needs_extraction = False`), «Рынок»:
+        5 `web`, 2 `contest`, 2 английских `analog`, 1 русский `analog` → ровно 6 POST: первые
+        три прочие формулировки плана, по одной пачке каждой английской `analog`, одна
+        реестровая; остальные 2 `web`, 2 `contest` и домены не опрошенных пачек — в
+        `limit_problems`, запись о вытеснении резервом — с причиной;
+     г) то же без русской `analog` → прочих отправлено 4; без английских — 5; без `analog`
+        совсем → 6 прочих и ни одной записи о резерве;
+     д) одна английская `analog` → до 2 её пачек;
+     е) «Наука»: план из `normalize_plan_queries(plan, brief)` при `research` (модель вернула 8
+        `web` и 2 `analog`) → отправлено 6 `web`, `analog` — ни одного;
+     ж) два прохода: первый «Рынок» с 2 прочими → 2 + 2 + 1 = 5; второй проход без `analog` с 3
+        `web` → отправлен 1, `queries_used == 6`, 2 записи в `limit_problems`; повторный
+        `begin_pass` `queries_used` не обнулил.
+  2. Мутации — каждая ≥1 failed в `pytest tests/test_yandex_quota.py -q`:
+     учёт места вернуть после `await post` в `_run_search`; держать замок через сетевой вызов;
+     `begin_pass` не резервирует под `analog`; резерв 3 ставится и без `analog` в проходе;
+     `gather_candidates` не зовёт `begin_pass`; `begin_pass` обнуляет `queries_used`; мировые
+     места — «в глубину» (первая формулировка берёт обе пачки); вытесненная прочая
+     формулировка не пишется в `limit_problems`.
+  3. Прежние тесты зелёные **без правок**:
+     `pytest tests/test_search_yandex.py tests/test_yandex_limit_visibility.py tests/test_yandex_analog.py tests/test_ru_registries.py tests/test_paid_demand_two_passes.py tests/test_run_accounting.py tests/test_pipeline_second_pass.py tests/test_stages.py tests/test_search_failures.py tests/test_partial_source_failure.py tests/test_pipeline_counters.py tests/test_analog_stage.py tests/test_analog_flow.py tests/test_scan_limits.py tests/test_plan_types.py tests/test_backend_layout.py -q`
+     — 0 failed; `git diff --stat <база Э6-10> -- tests/` — только `tests/test_yandex_quota.py`.
+     Если тест Э6-8 противоречит контракту — стоп и разбор оркестратором, а не правка теста.
+  4. Деньги и границы: `rg -n "max_queries: int = 6" backend/app/search/yandex_search.py` —
+     одна строка; `rg -n "YANDEX_QUERIES_PER_SCAN = 6" backend/app/web/scan_limits.py` — одна
+     строка (обе — как на базе); `git diff --stat <база Э6-10> -- prompts/ backend/app/export/ backend/app/web/ backend/app/pipeline/planning.py backend/app/search/analog_sources.py`
+     — пусто; `git diff --name-only <база Э6-10> -- backend/` — ровно три файла из «Файлов».
+  5. `rg -n "self\._lock\b" backend/app/search/yandex_search.py backend/app/search/yandex_quota.py`
+     — пусто (на базе в `yandex_search.py` пусто, `yandex_quota.py` нет);
+     `rg -ln "begin_pass" backend/app` — только `pipeline/pipeline_search.py` и модули Яндекса
+     в `search/` (на базе пусто).
+  6. Общие критерии (правило 3: `pytest -q` — 0 failed, passed ≥ база + новые; ruff из
+     `.venv` — 0 замечаний); инв. 6 (правило 6) — пусто.
+- **Инварианты:** №5 (вытесненное поимённо в `limit_problems`, предел — не `SearchError`;
+  транспортный отказ — прежний `SearchError` — кр. 1, 3), №6 (квота — в `search/`, без
+  `httpx`; кр. 6), №7 (respx, без сети), №8 (кр. 1–2), №3 (только заглушка `test-key`,
+  значения ключей не печатаются), №9 (новых режимов нет).
+- **Границы:** предел не поднимается, тариф не меняется; промпты, `planning.py`,
+  `ANALOG_QUERIES`, белый список и `ru_registries` не трогаются; `cost_rub` и стоп-кран не
+  меняются (РЕШ-46); `SearchAdapter` не расширяется; живых платных запросов нет; порядок
+  прочих типов внутри их мест — порядок плана, без приоритетов по типам (см. Э-5).
+- **Читать первым:** `DECISIONS.md` РЕШ-283 («Автономные решения», «На аудит»), РЕШ-285;
+  `evidence/Э6-W3-Э6-2в-review.md` п. 4; `yandex_search.py` (`__init__`, `search_raw`,
+  `_search_analog`, `_run_search` — после Э6-8, по именам); `search/base.py:60–119`
+  (`self._lock`, `_throttle`); `pipeline/pipeline_search.py:126–208`;
+  `search/analog_sources.py` (`plan_analog_queries`); `pipeline/planning.py`
+  (`normalize_plan_queries`, `registry_analog_query` после Э6-8);
+  `tests/test_yandex_limit_visibility.py:60–175`, `tests/test_paid_demand_two_passes.py:100–209`.
+
+### Сводка файлов шага 4.3 (кроме новых тестов задачи)
+
+| Исполнитель 1 | Исполнитель 2 |
+|---|---|
+| Э6-6в: как в «Сводке файлов по волнам»; затем Э6-9: как в «Сводке файлов волны 4» | Э6-10: `search/{yandex_search,yandex_quota}.py`, `pipeline/pipeline_search.py` |
+
+### Эскалации дополнения РЕШ-285
+
+* **Э-5 · конкурсные формулировки «Рынка» под резервом** (§9 п. 4 — что увидит клиент; не
+  блокирует). Прочим типам в первом проходе «Рынка» остаётся 3 места, а
+  `normalize_contest_queries` ставит обе `contest` в конец прочих: при двух и более `web`
+  впереди хотя бы одна конкурсная вытесняется. Конкурсная секция «Рынка» будет чаще пустой, а
+  отчёт — с прежней оговоркой `PAID_LIMIT_NOTICE`.
+  А: как решено в РЕШ-285 — порядок плана, вытеснение видно в журнале и оговоркой; денег —
+  0, конкурсы «Рынка» беднее. Б: в рыночных видах внутри мест прочих одна `contest`
+  резервируется первой — правка контракта Э6-10 до старта, деньги те же.
+  **Рекомендую А**: конкурсы — секция «Науки», для «Рынка» главное — аналоги; живой скан
+  DLG-Э6-1 покажет фактическое вытеснение в журнале `search`. Обратимо. По умолчанию — А.
+
+### Автономные решения дополнения РЕШ-285 (строкой в DECISIONS.md)
+
+41. Предел Яндекса — резервирование места синхронно до первого `await` запроса; замок, если есть, не держится через сеть; имя `self._lock` в адаптере не занимается (замок `_throttle`).
+42. Учитывается зарезервированное место: оборванный транспортом запрос его не возвращает — для денег безопасная сторона; отказ остаётся `SearchError`.
+43. Резерв ключуется наличием `analog` в проходе, а не `solution_kind`: при «Науке» `analog` снимает код-гарантия, резерв 0 без второго признака.
+44. Состав прохода адаптер узнаёт от `gather_candidates` через `begin_pass` по `getattr`, как `drain_limit_problems`; `SearchAdapter` не расширяется; без объявления прохода — один общий пул.
+45. Подпулы: мировой `analog` — 2 места, реестровый — 1; отсутствующий в проходе резерв уходит прочим; аналог мест прочих не берёт; не занятые прочими места первого прохода достаются второму.
+46. Мировые места делятся «в ширину»: две английские формулировки — по пачке (каталоги стартапов в первой пачке у обеих), одна — до двух пачек.
+47. Учёт мест — отдельный модуль `search/yandex_quota.py`: `yandex_search.py` после Э6-2в и Э6-8 близок к пределу 500 строк.
+
+### Самопроверка дополнения РЕШ-285
+
+1. Прочитаны РЕШ-269, 277, 281, 283, 285 и ссылки на РЕШ-46; ревью Э6-2в п. 4; разделы плана
+   «Общие правила», дополнение РЕШ-277, Э6-6в, Э6-8; CONVENTIONS §4, §9, §11; INVARIANTS;
+   CLAUDE.md; код — `yandex_search.py`, `search/base.py`, `analog_sources.py`, `planning.py`,
+   `pipeline_search.py`, `run_flow.py:145–164`, `scan_limits.py`; тесты предела и двух
+   проходов. Ветка `claude/e6-8` в рабочей копии не влита — её имена взяты из контракта Э6-8
+   и в «Читать первым» названы по именам, не строками.
+2. Файлы Э6-10 не пересекаются с Э6-6в и Э6-9; с Э6-8 общий `yandex_search.py` — Э6-10 строго
+   после её слияния. `schemas.py`, `config.py`, промпты не трогаются.
+3. Достижимость: событие «больше 6 запросов» код на базе производит (ревью Э6-2в
+   воспроизвело на respx с задержкой) — тест кр. 1а на базе краснеет; `analog` доходит до
+   Яндекса (`source_types` с `ANALOG`, Э6-2а), русская — после Э6-8.
+4. Отрицательные критерии прогнаны на базе: `self\._lock\b` в `yandex_search.py` — пусто;
+   `begin_pass` в `backend/app` — пусто; `max_queries: int = 6` и `YANDEX_QUERIES_PER_SCAN = 6` —
+   по одной строке; `tests/test_yandex_quota.py` и `search/yandex_quota.py` не существуют;
+   ни один прежний тест, кроме `test_yandex_analog.py` (прямые вызовы адаптера, общий пул
+   п. 4), не гоняет `analog` через настоящий адаптер Яндекса (`ANALOG|analog` в файлах с
+   `SEARCH_ASYNC_URL` — пусто) — резерв прежних тестов не задевает.
+5. Пределы циклов — правило 1 (полный); новых текстов клиенту и платных вызовов нет.

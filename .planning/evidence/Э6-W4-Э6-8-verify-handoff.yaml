@@ -1,0 +1,41 @@
+handoff:
+  from: verifier
+  to: auditor
+  task: Э6-8
+  did:
+    - Прогнаны 6 критериев приёмки из PLAN.md («Э6-8»), закрыто 6 из 6; мутаций 3 из 3 убиты (адаптера Product Radar нет, мутация адаптера не применима)
+    - Общие проверки: pytest -q 1728 passed, 0 failed; pytest -q без сети (unshare -rn) 1728 passed; ruff check и ruff format --check чистые; инв. 6 пусто; инв. 10 (test_team_docs) 35 passed
+    - Изменённые файлы прежних тестов: только test_analog_flow, test_analog_stage, test_yandex_analog — названные в плане; новый tests/test_ru_registries.py
+    - Инварианты 1–10 проверены способами из INVARIANTS.md; литеральный grep инв. 3 не пуст — набор файлов идентичен базе 1274ad7, новых совпадений в добавленных строках 0, значения не выводились
+    - Рабочее дерево после мутаций чистое (git checkout после каждой мутации)
+  artifacts:
+    - .planning/evidence/Э6-W4-Э6-8-verify.md
+    - .planning/evidence/Э6-W4-Э6-8-verify-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest tests/test_ru_registries.py -v: 31 passed"
+    - "pytest -q: 1728 passed, 1 warning, 0 failed"
+    - "unshare -rn pytest -q: 1728 passed, 1 warning, 0 failed"
+    - "pytest tests/test_yandex_analog.py tests/test_search_yandex.py tests/test_yandex_limit_visibility.py tests/test_analog_stage.py tests/test_analog_flow.py tests/test_backend_layout.py -q: 123 passed"
+    - "pytest tests/test_team_docs.py -v: 35 passed"
+    - "мутация М-a (analog_domains не различает ru): 6 failed; М-b (normalize не зовёт registry_analog_query): 5 failed; М-c (registry не проверяет research): 2 failed"
+    - "ruff check .: All checks passed!; ruff format --check .: 245 files already formatted"
+    - "rg -ln productradar backend/app --glob *.py: пусто; rg -ln gisp/reestr backend/app --glob *.py: пусто"
+    - "rg -c probe.txt по доменам реестров: 9 (>= 3)"
+    - "grep инв. 6 (httpx вне карты слоёв): пусто"
+    - "git diff --stat 1274ad7 -- tests/: 4 файла (3 названных правки + новый)"
+  escalate: none
+  open_dlg:
+    - "DLG-1: живая проверка реестров с сервера в РФ (gisp.gov.ru — 403, reestr.digital.gov.ru — таймаут из облачной среды); действие владельца — после деплоя Э6-9 запустить проверку. Не критерий приёмки"
+    - "DLG-2: контейнерный прогон python:3.12-slim (РЕШ-249, по постановке — DLG РЕШ-276); не запускался; действие владельца — решить, нужен ли контейнерный прогон до слияния"
+  notes:
+    - "Вердикт PASS: все критерии закрыты фактическим выводом; DLG-1 и DLG-2 идут в ворота"
+    - "Эскалация Э-4 (вариант А) реализована в коде; принята оркестратором по умолчанию, верификатором не переоценивалась"
+    - "Совет 1 ревью (порядок analog в пределе платных запросов) не критерий приёмки, в вердикт не входит"
+    - "Сырой вывод проверок: /tmp/claude-0/-home-user/0e99962e-75a4-55a9-9d23-923e69c2aaa2/scratchpad/ (v-crit2.txt, full-pytest.txt, nonet-pytest.txt, crit6.txt, inv10.txt, mut-a.txt, mut-b.txt, mut-c.txt)"
+  read_first:
+    - .planning/evidence/Э6-W4-Э6-8-verify.md
+    - .planning/evidence/Э6-W4-Э6-8-probe.txt
+    - backend/app/pipeline/planning.py (registry_analog_query, normalize_plan_queries)
+    - backend/app/search/analog_sources.py (analog_domains, _registries)
+    - tests/test_ru_registries.py

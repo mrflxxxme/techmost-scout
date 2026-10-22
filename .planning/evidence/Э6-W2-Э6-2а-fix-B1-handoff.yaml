@@ -1,0 +1,27 @@
+handoff:
+  from: implementer-2 (тест) + оркестратор (прогоны и коммит — отступление, см. notes)
+  to: reviewer
+  task: Э6-2а, починка Б1 ревью цикла 1
+  branch: claude/e6-2a
+  did:
+    - "tests/test_analog_stage.py: тест test_replan_search_снимает_analog_второго_прохода_при_любом_виде_решения, параметризован research и product; заглушка реплана отдаёт 2 analog и 2 web; ожидание — analog в плане нет, web на месте ([\"лаборатория\", \"lab\"])"
+    - "Код не менялся: проводка strip_analog_queries в replan_search (planning.py:325) была на месте, не хватало теста"
+  artifacts:
+    - tests/test_analog_stage.py
+  self_audit: pass
+  checks:
+    - "pytest tests/test_analog_stage.py tests/test_analog_flow.py -q: 44 passed in 5.76s"
+    - "мутация planning.py:325 → return strip_contest_queries(new_plan): 2 failed, 42 passed (оба параметра нового теста, AssertionError: SourceType.ANALOG в плане); откат git checkout"
+    - "ruff check .: All checks passed!; ruff format --check .: 230 files already formatted"
+    - "pytest -q (полный, Windows): 6 failed, 1501 passed — все 6 в tests/test_docker_compose_backup_runtime.py (известная Linux-специфика)"
+    - "app.__file__ = <копия оркестратора>/backend/app/__init__.py"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э6-W2-Э6-2а-review.md
+    - tests/test_analog_stage.py
+    - backend/app/pipeline/planning.py
+  notes: >
+    Отступление (§13а, §15): Git Bash у исполнителя упал (add_item errno 1) сразу после написания теста,
+    тест не был ни запущен, ни закоммичен. Оркестратор перенёс файл без правок (коммит 934ae80) и
+    прогнал проверки через PowerShell — это подхват производства, не проверка: вердикт по починке
+    выносит ревьюер цикла 2. Прогон в контейнере python:3.12-slim не выполнен — Docker Desktop не запущен.

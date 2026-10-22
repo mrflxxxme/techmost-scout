@@ -1,0 +1,30 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: Э6-6в
+  cycle: 2
+  did:
+    - "Блокирующее 1 (XSS): tests/test_scan_security.py - ввод со script и закрывающим textarea при отказах 422 (вид, длина, название), 429 (адрес, потолок), 503; текст отказа error с тегом экранируется; то же для text на странице отказа и 404. Мутации task|safe, error|safe, text|safe убиты."
+    - "Блокирующее 2 (заголовок): scan_run.is_scan_token (полное совпадение с [A-Za-z0-9_-]{43}, токен - token_urlsafe(32)); на /scan/{token}, /status, .json токен не того вида - 404 до базы, без заголовка из пути. HX-Redirect строится только из проверенного токена. Тесты с %0d%0a, %0a, 42/44 знака, '=', '.', '~', юникод; find_scan подменён на падающий."
+    - "Советы 1: тесты на X-Robots-Tag, номер обзора ровно 8 знаков и токена целиком в странице нет, незавершённые статусы intake/briefing/searching при живой задаче, схему ссылки source_link (javascript, data, //, ftp, пусто), границы длины 19/20/3000/3001."
+    - "Совет 3: докстрока scan_start переписана - безопасность держит _start_lock, между допуском и записью await есть (выход из session_scope)."
+  artifacts:
+    - backend/app/web/scan_run.py
+    - backend/app/web/routes/scan.py
+    - tests/test_scan_security.py
+    - .planning/evidence/Э6-W4-Э6-6в-fix-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest -q: 1977 passed"
+    - "ruff check .: All checks passed; ruff format --check .: 257 files already formatted"
+    - "13 мутаций, каждая >= 1 failed (см. fix-checks.txt)"
+  escalate: none
+  read_first:
+    - backend/app/web/scan_run.py (is_scan_token)
+    - backend/app/web/routes/scan.py (_not_found_page, три маршрута токена)
+    - tests/test_scan_security.py
+  notes:
+    - "Не тронуто по поручению: docs/deploy.md (request_body max_size 16KB и CSP - для Э6-9), регулярка app.anonymize."
+    - "Для владельца: регулярка find_deidentification_risks даёт ложные 422 на TensorFlow, PyTorch, MatLab, SolidWorks на публичной форме - решение за владельцем (смягчить текст или оставить)."
+    - "Не правилось (советы 2, 5-11 ревью): имя теста про прокси по-прежнему неточное, HEAD 405, редирект /scan/ без схемы, _mark_failed без расхода, IPv6 /64, общий замок _active_runs, MSG_STOPPED. Тест test_scan_security импортирует фикстуры из test_scan_routes (прецедент - test_docker_compose_backup_runtime)."
+    - "Фикстуры: tests/test_scan_routes.py не менялся (на пределе 500 строк)."

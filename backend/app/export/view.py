@@ -13,7 +13,8 @@ DOCX (Э4-И5) и команды `scout export` (Э4-И6): читает `request
 проходом, строки таблицы сравнения — тем же проходом, что и карточки). Второго
 расчёта видимости для клиента в проекте не остаётся. Порядок операций важен:
 правки накладываются ДО фильтра — иначе правленый текст ещё не отклонённой
-карточки не дошёл бы до клиентского вида. Свой разбор `report_json` или
+карточки не дошёл бы до клиентского вида. Вердикты на аналоги (Э6-7) снимают
+аналоги из `client_report.analog_cards` тут же, до `analog_sections`. Свой разбор `report_json` или
 повторный вызов `apply_overrides`/`visible_report` в другом месте — второй
 путь правды, которого этот этап не заводит.
 """
@@ -28,6 +29,9 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.export.analogs import AnalogSections, analog_sections
+from app.models import AnalogVerdict as AnalogVerdictRow
+from app.models import Brief as BriefRow
 from app.models import Request as RequestRow
 from app.models import RequestStatus
 from app.models import SolutionCard as SolutionCardRow
@@ -38,7 +42,15 @@ from app.report_overrides import OverrideMap, apply_overrides
 from app.schemas import Report
 from app.schemas import Verdict as VerdictDecision
 from app.summary_overrides import SummaryOverrideData, apply_summary_override
-from app.verdicts import CardKey, effective_verdicts, hidden_reason, visible_position_count, visible_report
+from app.verdicts import (
+    CardKey,
+    effective_analog_verdicts,
+    effective_verdicts,
+    hidden_reason,
+    visible_analogs,
+    visible_position_count,
+    visible_report,
+)
 
 #: Статусы, в которых пометка «черновик» снята вердиктом эксперта (РЕШ-199).
 #: Одна точка правды для `ExportView.is_draft` и статуса запроса в `/api/v1`.
@@ -120,6 +132,12 @@ class ExportView:
     #: а не на причину её отсутствия — этот флаг называет только одну из
     #: возможных причин и сам по себе фактом не является.
     comparison_table_hidden: bool = False
+    #: Секция «Что делают в мире» (Э6-4): полные карточки и сноски по режиму
+    #: брифа, аналоги без `evidence` и из исключённых стран уже убраны.
+    #: Страница отчёта, PDF, DOCX и JSON читают это поле, markdown зовёт ту же
+    #: `analogs.analog_sections`. Без явного значения считается из
+    #: `client_report`, в котором вердикты на аналоги уже применены.
+    analog_sections: AnalogSections | None = None
 
     def __post_init__(self) -> None:
         """`client_report` без явного значения — `report`, довычищенный от пустого `evidence`.
@@ -131,6 +149,8 @@ class ExportView:
         """
         if self.client_report is None:
             self.client_report = visible_report(self.report, {}, {}, require_evidence=True)
+        if self.analog_sections is None:
+            self.analog_sections = analog_sections(self.client_report)
 
 
 @asynccontextmanager
@@ -151,6 +171,7 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
         raise ReportNotFoundError(f"запрос №{request_id} не найден")
 
     raw_report = await load_report(lambda: _session_scope(session), request_id)
+    raw_report = await _with_briefs_fields(session, request_id, raw_report)
 
     card_rows = (
         (await session.execute(select(SolutionCardRow).where(SolutionCardRow.request_id == request_id))).scalars().all()
@@ -190,6 +211,20 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
 
     visible = visible_report(edited_report, original_ids, effective)
     client_visible = visible_report(edited_report, original_ids, effective, require_evidence=True)
+    # Э6-7: поштучные вердикты аналогов накладываются здесь же и до `analog_sections` —
+    # одна точка для страницы, PDF, DOCX, JSON, `/api/v1` и markdown.
+    analog_rows = (
+        (await session.execute(select(AnalogVerdictRow).where(AnalogVerdictRow.request_id == request_id)))
+        .scalars()
+        .all()
+    )
+    client_visible = client_visible.model_copy(
+        update={
+            "analog_cards": visible_analogs(
+                client_visible.analog_cards, effective_analog_verdicts(list(analog_rows)), require_evidence=True
+            )
+        }
+    )
     card_ids, rework_keys = _reindex_after_filter(original_ids, effective)
     comparison_table_hidden = _comparison_table_hidden(edited_report, original_ids, effective)
 
@@ -208,7 +243,32 @@ async def build_export_view(session: AsyncSession, request_id: int) -> ExportVie
         recommendation_edited=recommendation_edited,
         caveats_edited=caveats_edited,
         comparison_table_hidden=comparison_table_hidden,
+        analog_sections=analog_sections(client_visible),
     )
+
+
+async def _with_briefs_fields(session: AsyncSession, request_id: int, report: Report) -> Report:
+    """Наложить на бриф отчёта режим, регион, потребность и вид решения из строки `briefs`.
+
+    Эти поля живут только в колонках `briefs` и в `report_json` не попадают
+    (`exclude=True` в схеме) — без наложения потребитель получил бы умолчание
+    `business` вместо режима запроса, и фильтр стран сработал бы вхолостую.
+    Единственная точка наложения: `report` и `client_report` строятся из уже
+    дополненного отчёта, JSON-выгрузка своего второго пути к `briefs` не ведёт.
+    Строки нет — бриф остаётся как прочитан; `NULL` в колонках читается как
+    умолчание контракта (`business`, `research`) — строки, записанные до
+    Э6-1 и РЕШ-250.
+    """
+    row = (await session.execute(select(BriefRow).where(BriefRow.request_id == request_id))).scalars().one_or_none()
+    if row is None:
+        return report
+    update = {
+        "region_code": row.region_code,
+        "need_id": row.need_id,
+        "mode": row.mode or "business",
+        "solution_kind": row.solution_kind or "research",
+    }
+    return report.model_copy(update={"brief": report.brief.model_copy(update=update)})
 
 
 def _comparison_table_hidden(

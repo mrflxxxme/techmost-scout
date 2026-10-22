@@ -49,6 +49,16 @@
     Э2-Б). Сторожит проводку целиком `tests/test_yandex_limit_visibility.py`
     (адаптер) вместе с `tests/test_run_accounting.py` (прогон).
 
+    Предел честный и резервный (Э6-10, РЕШ-285). Место занимается синхронно,
+    до первого `await` запроса (`yandex_quota.py`): параллельные формулировки
+    одной `TaskGroup` не могут перебрать предел. Занятое место не возвращается,
+    даже если запрос оборвался, — для денег это безопасная сторона. Перед
+    проходом `gather_candidates` зовёт `begin_pass`: аналогам откладывается 2
+    места мирового и 1 места реестрового контура (если такие формулировки есть
+    в проходе), остальное достаётся прочим типам в порядке плана. Вытесненная
+    формулировка называется в `limit_problems` с причиной. Без `begin_pass`
+    пул общий.
+
     Пропуск по пределу — не отказ источника: `SearchError` не поднимается и в
     `sources_unavailable` Яндекс не уезжает. Источник исправно ответил на всё
     оплаченное, кончился наш бюджет, и отчёт обязан называть именно эту причину.
@@ -69,10 +79,12 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+from collections.abc import Sequence
 
 import httpx
 
 from app.schemas import Candidate, SearchQuery, SourceType
+from app.search.analog_sources import plan_analog_queries
 from app.search.base import SearchAdapter, SearchError
 from app.search.yandex_parse import (
     CONTEST_OUTCOME_MARKERS,
@@ -89,6 +101,7 @@ from app.search.yandex_parse import (
 from app.search.yandex_parse import (
     with_site_filter as _with_site_filter,
 )
+from app.search.yandex_quota import DEFAULT_MAX_QUERIES, AnalogKey, Verdict, YandexQuota
 
 log = logging.getLogger(__name__)
 
@@ -123,7 +136,9 @@ class YandexSearchAdapter(SearchAdapter):
     #: `GRANT` добавлен РЕШ-173: грантовая формулировка планировщика больше не
     #: маскируется под `web` — она доходит до адаптера собственным типом, и
     #: кандидаты из неё размечаются им же (см. `search_raw`).
-    source_types = (SourceType.WEB, SourceType.CONTEST, SourceType.GRANT)
+    #: `ANALOG` добавлен Э6-2а: без него формулировка `analog` из плана при виде
+    #: решения «Рынок» не доходила бы ни до одного источника (тип недостижим).
+    source_types = (SourceType.WEB, SourceType.CONTEST, SourceType.GRANT, SourceType.ANALOG)
     #: Бесплатного тарифа нет — без ключа и каталога адаптер не включается
     requires_key = True
     #: Запросы платные и асинхронные; частота ограничена не жёстко
@@ -141,7 +156,7 @@ class YandexSearchAdapter(SearchAdapter):
         *,
         api_key: str | None = None,
         folder_id: str | None = None,
-        max_queries: int = 6,
+        max_queries: int = DEFAULT_MAX_QUERIES,
         poll_interval_seconds: float = 2.0,
         max_wait_seconds: float = 60.0,
     ) -> None:
@@ -149,10 +164,9 @@ class YandexSearchAdapter(SearchAdapter):
         self._api_key = api_key or None
         self._folder_id = folder_id or None
         self._max_queries = max_queries
+        self._quota = YandexQuota(max_queries)
         self._poll_interval = poll_interval_seconds
         self._max_wait = max_wait_seconds
-        #: Сколько платных запросов израсходовано за прогон
-        self.queries_used = 0
         #: Формулировки, не отправленные из-за исчерпанного предела (Ц-1).
         #: Список, а не флаг: важно не «предел кончился», а сколько именно
         #: вопросов источнику не задали — это и есть цена решения предел не
@@ -174,19 +188,12 @@ class YandexSearchAdapter(SearchAdapter):
         if not (self._api_key and self._folder_id):
             log.warning("yandex_search: нет ключа или идентификатора каталога")
             return [], []
-        if self.queries_used >= self._max_queries:
-            log.warning(
-                "yandex_search: предел %s платных запросов на прогон исчерпан — формулировка «%s» пропущена",
-                self._max_queries,
-                query.text,
-            )
-            # Лога прогона снаружи не видно, поэтому пропуск дублируется в
-            # проблемы прогона: без записи исчерпанный платный предел в отчёте
-            # неотличим от пустой выдачи источника (Ц-1 пост-аудита Э2-Б).
-            self._limit_problems.append(
-                f"yandex_search: предел {self._max_queries} платных запросов на прогон исчерпан — "
-                f"формулировка «{query.text}» источнику НЕ задавалась"
-            )
+        if query.source_type is SourceType.ANALOG:
+            return await self._search_analog(query, limit=limit)
+        # Место резервируется синхронно, до первого `await` запроса (Э6-10).
+        verdict = self._quota.reserve_other()
+        if verdict is not Verdict.GRANTED:
+            self._note_displaced(query, verdict)
             return [], []
 
         search_type = search_type_for(query)
@@ -207,6 +214,99 @@ class YandexSearchAdapter(SearchAdapter):
         return (
             to_candidates(root, limit=limit, source_type=query.source_type, provider=self.name),
             raw_records(root, limit=limit),
+        )
+
+    async def _search_analog(self, query: SearchQuery, *, limit: int) -> tuple[list[Candidate], list[dict]]:
+        """Формулировка `analog` по белому списку доменов — пачками (Э6-2в).
+
+        Все домены в один запрос не влезают (предел длины — `ANALOG_QUERY_MAX_CHARS`),
+        поэтому каждая пачка уходит отдельным платным запросом. Пачки, не
+        поместившиеся в предел запросов на прогон, и домены, которым не нашлось
+        места в формулировке, называются в `limit_problems` поимённо: пропуск
+        виден в отчёте и не путается с пустой выдачей (инвариант №5).
+
+        Отказ источника на любой пачке поднимается наружу как `SearchError`: уже
+        полученное по ранним пачкам при этом теряется, зато отказ не прячется.
+        """
+        plan = plan_analog_queries(query.text, lang=query.lang)
+        if plan.unfit:
+            self._limit_problems.append(
+                f"yandex_search: формулировка «{query.text}» слишком длинна для оператора site: — "
+                f"домены не опрошены: {', '.join(plan.unfit)}"
+            )
+        search_type = search_type_for(query)
+        candidates: list[Candidate] = []
+        records: list[dict] = []
+        seen: set[str] = set()
+        for index, text in enumerate(plan.texts):
+            verdict = self._quota.reserve_analog((query.text, query.lang))
+            if verdict is not Verdict.GRANTED:
+                skipped = [domain for batch in plan.batches[index:] for domain in batch]
+                log.warning("yandex_search: предел %s платных запросов — аналоги пропущены", self._max_queries)
+                why = "исчерпан" if verdict is Verdict.LIMIT else "исчерпан (места аналогов заняты)"
+                self._limit_problems.append(
+                    f"yandex_search: предел {self._max_queries} платных запросов на прогон {why} — "
+                    f"формулировка «{query.text}» источнику НЕ задавалась для доменов: {', '.join(skipped)}"
+                )
+                break
+            raw = await self._run_search(text, search_type=search_type, limit=limit)
+            root = extract_root(raw) if raw is not None else None
+            if root is None:
+                continue
+            for candidate in to_candidates(root, limit=limit, source_type=query.source_type, provider=self.name):
+                if candidate.raw_id not in seen:
+                    seen.add(candidate.raw_id or "")
+                    candidates.append(candidate)
+            records.extend(raw_records(root, limit=limit))
+        return candidates, records
+
+    @property
+    def queries_used(self) -> int:
+        """Сколько мест под платные запросы занято за прогон.
+
+        Считается зарезервированное (Э6-10): запрос, оборванный транспортом,
+        место не возвращает. Присваивание оставлено — прежние тесты задают счёт.
+        """
+        return self._quota.used
+
+    @queries_used.setter
+    def queries_used(self, value: int) -> None:
+        self._quota.used = value
+
+    def begin_pass(self, queries: Sequence[SearchQuery]) -> None:
+        """Объявить состав прохода — до запуска его формулировок (Э6-10).
+
+        `gather_candidates` зовёт метод синхронно перед `TaskGroup` и передаёт
+        формулировки, отфильтрованные по `source_types`. Адаптер пересчитывает
+        места: резерв под `analog`, остальное — прочим. `queries_used` и
+        `limit_problems` не сбрасываются: предел действует на весь прогон.
+        """
+        world: list[tuple[AnalogKey, int]] = []
+        registry: list[tuple[AnalogKey, int]] = []
+        for query in queries:
+            if query.source_type is not SourceType.ANALOG:
+                continue
+            batches = len(plan_analog_queries(query.text, lang=query.lang).texts)
+            (registry if query.lang == "ru" else world).append(((query.text, query.lang), batches))
+        self._quota.begin_pass(world, registry)
+
+    def _note_displaced(self, query: SearchQuery, verdict: Verdict) -> None:
+        """Записать в `limit_problems` формулировку, не получившую места.
+
+        Лога прогона снаружи не видно, поэтому пропуск дублируется в проблемы
+        прогона: без записи исчерпанный платный предел в отчёте неотличим от
+        пустой выдачи источника (Ц-1 пост-аудита Э2-Б).
+        """
+        why = "места оставлены аналогам" if verdict is Verdict.RESERVED else "исчерпан"
+        log.warning(
+            "yandex_search: предел %s платных запросов на прогон %s — формулировка «%s» пропущена",
+            self._max_queries,
+            why,
+            query.text,
+        )
+        self._limit_problems.append(
+            f"yandex_search: предел {self._max_queries} платных запросов на прогон {why} — "
+            f"формулировка «{query.text}» источнику НЕ задавалась"
         )
 
     def contour_label(self, query: SearchQuery) -> str:
@@ -278,7 +378,6 @@ class YandexSearchAdapter(SearchAdapter):
         await self._throttle()
         try:
             response = await self._client.post(SEARCH_ASYNC_URL, headers=headers, json=body)
-            self.queries_used += 1
             response.raise_for_status()
             operation_id = response.json().get("id")
         except (httpx.HTTPError, ValueError) as exc:

@@ -1,0 +1,22 @@
+handoff:
+  from: reviewer
+  to: implementer-1
+  task: Э6-6а
+  did:
+    - "Проверены diff, десять инвариантов и грабли; pytest 1497 passed (в рабочей копии), 1548 passed на объединённой с базой волны ветке; ruff чисто"
+    - "Три мутации карточки убиты, воспроизведены; поставлено ещё 14, выжили три (одна блокирует)"
+    - "Найдено 1 блокирующее (нет теста на догон requests.scan_token в ADDED_COLUMNS), 6 советов"
+  artifacts:
+    - ".planning/evidence/Э6-W2-Э6-6а-review.md (закоммичен до ответа)"
+    - ".planning/evidence/Э6-W2-Э6-6а-review-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest -q: 1497 passed; на merge-tree с origin/claude/e6-w2: 1548 passed"
+    - "ruff check: All checks passed; ruff format --check: 229 files already formatted"
+    - "мутация: удалить (requests, scan_token) из ADDED_COLUMNS -> test_brief_ecosystem_fields.py 32 passed (не поймана)"
+  escalate: none
+  read_first:
+    - ".planning/evidence/Э6-W2-Э6-6а-review.md"
+    - "backend/app/db.py (ADDED_COLUMNS)"
+    - "tests/test_brief_ecosystem_fields.py:170-225"
+  notes: "Цикл 1. Второй цикл — последний. Вердикт ВЕРНУТЬ из-за одного блокирующего; остальное — советы."

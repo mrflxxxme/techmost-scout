@@ -1,0 +1,21 @@
+Э6-6в, цикл 2 (правка по ревью). Ветка worktree-agent-ace82590764a6506a, база claude/e6-6v @ 8689291.
+
+pytest -q (ключи моделей сброшены через env -u)  -> 1977 passed, 1 warning (было 1940; +37 тестов tests/test_scan_security.py)
+pytest tests/test_scan_security.py tests/test_scan_routes.py -> 73 passed
+ruff check .                -> All checks passed!
+ruff format --check .       -> 257 files already formatted
+
+Мутации (прицельный прогон: test_scan_security + test_scan_routes + test_scan_run + test_host_routing, 116 тестов; правка откатывалась):
+  {{ task|safe }} в scan_form.html                      -> 6 failed
+  {{ error|safe }} в scan_form.html                     -> 6 failed
+  {{ text|safe }} в scan_result.html                    -> 1 failed
+  is_scan_token всегда True                              -> 11 failed
+  снять проверку формата только в scan_status            -> 11 failed
+  снять проверку формата только в scan_page              -> 11 failed
+  снять проверку формата только в scan_json              -> 11 failed
+  регулярка токена {43} -> {1,100}                       -> 4 failed
+  убрать X-Robots-Tag из _PRIVATE_HEADERS                -> 12 failed
+  SCAN_NUMBER_LENGTH = 40                                -> 1 failed
+  READY_STATUSES + SEARCHING                             -> 2 failed
+  source_link без проверки схемы                         -> 5 failed
+  TASK_MIN_LENGTH = 40                                   -> 4 failed

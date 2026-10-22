@@ -1,0 +1,43 @@
+Э6-9 · Деплой через GitHub Actions · вывод проверок (исполнитель; вердикт ставит верификатор)
+База: ветка claude/e6-6v, faf7133. Ветка копии: worktree-agent-ab37c453c60d2f119.
+Окружение: Linux, Python 3.12, общий .venv; перед pytest сняты переменные ключей и маршрутов.
+
+1. pytest tests/test_deploy_workflow.py -q            -> 30 passed
+2. pytest tests/test_deploy_server.py -q              -> 42 passed
+   оба файла вместе                                   -> 72 passed
+3. Мутации (по одной, откат из памяти скрипта; прогон обоих файлов):
+   1 reload --config /etc/caddy/Caddyfile             -> 1 failed (test_reload_только_через_stdin_validate_раньше_reload)
+   2 validate после reload                            -> 1 failed (тот же тест)
+   3 echo "$DEEPSEEK_API_KEY" в run                   -> 1 failed (test_секрет_не_печатается_ни_одной_командой)
+   4 триггер push                                     -> 1 failed (test_файл_разбирается_и_триггер_только_workflow_dispatch)
+   5 убрать шаг бэкапа                                -> 2 failed (test_бэкап_раньше_git_fetch)
+   6 запись Caddyfile через временный файл и os.replace -> 4 failed (inode)
+   7 env-upsert печатает значение                     -> 1 failed (test_env_upsert_вывод_без_значений_...)
+   дополнительные, все убиты (>=1 failed):
+   8 restart; 9 StrictHostKeyChecking no; 10 contents: write; 11 секрет подстановкой в run;
+   12 финальный шаг без always(); 13 убрать validate; 14 ssh-keyscan; 15 ref без проверки;
+   16 копия Caddyfile не того файла; 17 один compose-файл; 18 doctor запускает env-keys;
+   19 пустое значение стирает ключ; 20 любое имя ключа; 21 прежний блок не принимается в маркеры;
+   22 пароль в аргументах хэширования; 23 секция скана без хоста остаётся; 24 CSP с внешним адресом;
+   25 предел тела 512MB; 26 пароль на публичном скане; 27 рабочий блок без матчера /api/v1/*
+   Мутация 16 сначала выжила (проверка по подстроке) — тест ужесточён, повтор: 1 failed.
+4. pytest tests/test_deploy_auth_parity.py tests/test_docker_compose_edge.py tests/test_caddyfile.py
+          tests/test_docker_compose.py tests/test_scripts_layout.py tests/test_tests_layout.py -q
+                                                      -> 56 passed (без правок этих файлов)
+5. rg -n "194\.87" .github docker docs/deploy.md scripts -> пусто (код выхода 1)
+6. pytest -q (весь набор)                             -> 2012 passed, 0 failed (база 1940, +72 новых)
+7. ruff check .                                       -> All checks passed!
+   ruff format --check .                              -> 259 files already formatted
+8. Файлы в diff от базы (git diff --name-status faf7133 HEAD):
+   A .github/workflows/deploy.yml; A docker/edge/scout-sites.caddy; M docs/deploy.md;
+   A scripts/deploy_server.py; A tests/test_deploy_server.py; A tests/test_deploy_workflow.py
+   ci.yml, docker/Caddyfile, compose-файлы, backend/, prompts/ не тронуты.
+9. Инв. 3: добавленные строки диффа, совпадения с sk-<10+ символов>|gigachat|Api-Key -> 0.
+10. Размеры: scripts/deploy_server.py 485, tests/test_deploy_server.py 500, tests/test_deploy_workflow.py 438.
+11. Дополнительная проверка без сети: шаг «Ключ ssh и известные хосты» прогнан локально с заглушкой
+    ssh-keygen и фиктивными значениями -> файлы ключа, known_hosts и config созданы с правами 600,
+    содержимое heredoc верное (отступы YAML не искажают). Шаг «Применение блоков Скаута» прогнан
+    локально с заглушкой docker: caddy-block -> validate -> reload по порядку, оба варианта
+    (со сканом и с пустым SCOUT_SCAN_HOST) дали ожидаемый Caddyfile, чужие блоки целы.
+Живого запуска нет: workflow_dispatch работает из ветки по умолчанию после слияния стопки в main
+и требует секретов владельца (DLG-Э6-3). Docker, ssh, caddy, actionlint в среде отсутствуют.

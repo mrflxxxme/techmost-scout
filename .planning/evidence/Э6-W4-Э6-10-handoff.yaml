@@ -1,0 +1,41 @@
+handoff:
+  from: implementer
+  to: reviewer
+  task: Э6-10
+  base: 29a06ec
+  did:
+    - "Новый search/yandex_quota.py (140 строк): YandexQuota, split_width, Verdict; место резервируется синхронно до await запроса, замка нет, учёт зарезервированного"
+    - "yandex_search.py: учёт через квоту, queries_used — свойство с сеттером (int, читается и присваивается), begin_pass(queries), _note_displaced, докстрока ЦЕНА И ПОТОЛОК дополнена; self._lock не занят"
+    - "pipeline_search.py: gather_candidates зовёт begin_pass по getattr перед TaskGroup (формулировки, отфильтрованные по source_types), +11 строк"
+    - "tests/test_yandex_quota.py: 14 тестов (кр. 1а–ж, чистая квота, транспортный обрыв, присваивание queries_used)"
+  artifacts:
+    - backend/app/search/yandex_quota.py
+    - backend/app/search/yandex_search.py
+    - backend/app/pipeline/pipeline_search.py
+    - tests/test_yandex_quota.py
+    - .planning/evidence/Э6-W4-Э6-10-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_yandex_quota.py -v: 14 passed"
+    - "прежние тесты кр. 3 без правок: 344 passed; git diff --stat база -- tests/ только test_yandex_quota.py"
+    - "pytest -q: 1742 passed (база 1728 + 14), 0 failed"
+    - "ruff check / format --check: чисто"
+    - "мутации M1–M8: каждая даёт >=1 failed (см. notes)"
+  escalate: none
+  read_first:
+    - backend/app/search/yandex_quota.py
+    - backend/app/search/yandex_search.py (begin_pass, _note_displaced, search_raw, _search_analog)
+    - tests/test_yandex_quota.py
+  notes: |
+    Мутации (failed/passed в test_yandex_quota.py): M1 учёт после await post — 10/4;
+    M2 замок через сеть — 1/13 (по peak>=2, причина верная); M3 нет резерва под analog — 5/9;
+    M4 резерв 3 без analog — 7/7; M5 gather не зовёт begin_pass — 5/9; M6 begin_pass обнуляет used — 2/12;
+    M7 мировые места в глубину — 1/13; M8 вытесненная прочая не пишется — 6/8. Каждая применена отдельно и откачена.
+    Решения по деталям, не оговорённым контрактом: (1) раздача мировых и реестровых мест считается в begin_pass
+    по числу пачек plan_analog_queries (в ширину; для одной формулировки с 2 пачками — обе); ключ формулировки
+    (text, lang); (2) analog вне объявленных в проходе формулировок получает ANALOG_BUSY (запись «исчерпан (места
+    аналогов заняты)»); (3) запись о вытеснении прочей резервом: «предел N платных запросов на прогон места
+    оставлены аналогам — формулировка «…» источнику НЕ задавалась»; (4) оборванный до ответа запрос (ConnectError)
+    теперь тоже занимает место, раньше не считался — прежние тесты не затронуты; (5) pipeline_search.py содержит
+    прежний httpx.AsyncClient (строка 95, на базе) — новых импортов httpx нет. Эскалация Э-5: вариант А, порядок прочих прежний.
+    Живых платных запросов не делалось.

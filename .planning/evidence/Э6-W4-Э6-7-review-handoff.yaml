@@ -1,0 +1,21 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: Э6-7
+  did:
+    - "Цикл 1: прочитан diff 375cb1c..0400f78 (6 файлов задачи + evidence), сверен со списком файлов, выхода за границы нет"
+    - "Прогнаны pytest -q (1596 passed), ruff check и format, test_team_docs; греп критериев 3-4 в норме; мутации M1-M4 убиты тестами, дерево возвращено в чистое состояние"
+    - "Проверен обход замка клиентского вида по всем выходам, доступ (401/405/404 на публичном хосте), ключ аналога (дубликаты, пробелы, регистр)"
+    - "Блокирующих 0, советов 5 (общий вердикт при совпавшем отпечатке, нет нормализации ключа, нет теста на 401, нет CSRF как и у карточек, review.py 492 строки)"
+  artifacts:
+    - .planning/evidence/Э6-W4-Э6-7-review.md
+    - .planning/evidence/Э6-W4-Э6-7-review-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q: 1596 passed, 1 warning"
+    - "ruff check: All checks passed; ruff format --check: 238 files already formatted"
+    - "мутации M1-M4: каждая 1 failed в tests/test_analog_verdicts.py"
+  escalate: none
+  read_first:
+    - .planning/evidence/Э6-W4-Э6-7-review.md
+  notes: Вердикт ПРИНЯТО, цикл 1. Советы 1, 2 и 4 — к владельцу (ключ аналога, CSRF), не блокируют.

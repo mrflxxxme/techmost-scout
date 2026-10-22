@@ -1,0 +1,25 @@
+handoff:
+  from: reviewer
+  to: orchestrator
+  task: Э6-9
+  cycle: 2
+  did:
+    - "Проверены три блокирующих цикла 1: все закрыты; поставлены мутации цикла 1 (8 штук), мутации сервера и doctor и ещё 12 новых, выживших нет"
+    - "Подтверждено, что test_deploy_steps.py выполняет настоящий run шагов из YAML под bash -eo pipefail на заглушках, копий шагов нет; CRLF у curl -D исправлен и закреплён мутацией"
+    - "Проверены советы цикла 1 в работе (cancelled, ветка по умолчанию, request_body @scan, раздел 13, WEB_AUTH_HASH) и слияние с разделом 12 docs/deploy.md (страж порядка зелёный); новых дыр нет"
+    - "Прогнаны pytest -q (2156 passed), ruff check и format --check; инварианты 1-10 проверены"
+  artifacts:
+    - .planning/evidence/Э6-W4-Э6-9-review-2.md
+    - .planning/evidence/Э6-W4-Э6-9-review-2-handoff.yaml
+  self_audit: pass
+  checks:
+    - "pytest -q: 2156 passed, 1 warning"
+    - "ruff check .: All checks passed; ruff format --check .: 262 files already formatted"
+    - "мутации по одной: все KILLED (>=1 failed), выживших нет"
+  verdict: ПРИНЯТО (блокирующих 0, советов 7)
+  escalate:
+    - "Владельцу: секреты в environment, ограниченном main (сейчас запрещено test_нет_environment); без него замок на секреты держит только первый шаг workflow, который правленый файл способен убрать"
+  read_first:
+    - .planning/evidence/Э6-W4-Э6-9-review-2.md
+    - docs/deploy.md (раздел 13, п. 5)
+  notes: Это цикл 2, третьего не будет. Живой caddy-apply (синтаксис request_body @scan, caddy hash-password через stdin) — первый запуск при владельце, DLG-Э6-3.

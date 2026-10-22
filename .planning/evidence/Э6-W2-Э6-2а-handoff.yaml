@@ -1,0 +1,103 @@
+handoff:
+  from: implementer-1
+  to: reviewer
+  task: Э6-2а
+  branch: claude/e6-2a
+  did:
+    - "planner.md 2.7: метка {{SOLUTION_KIND}} (в разделе «Вход»), отдельное правило 14 про analog (ровно 2 формулировки, lang en, при research ни одной, план ≤ 12); прежнее правило 14 «Ответ — только JSON» стало 15; правило 1 и правило 2 получили оговорки про analog"
+    - "planning.py: plan_search передаёт SOLUTION_KIND; normalize_analog_queries (research — снимает все analog кодом, иначе оставляет первые 2), normalize_plan_queries (резервирует места analog в потолке схемы 12, чтобы конкурсная нормализация их не вытеснила), strip_analog_queries (план второго прохода analog не несёт)"
+    - "pipeline_selection_flow.py: ANALOG_CARDS_TARGET = 3, split_analog_candidates — перед split_contest_candidates в обоих местах run_stages.py (гейт второго прохода и общий отбор)"
+    - "extraction.py: ANALOG в COVERAGE_EXCLUDED_SOURCE_TYPES; yandex_search.py: ANALOG в source_types"
+    - "analogs.py (чистые функции): prefilter_analog_candidates (снимает известную страну excluded до модели), analog_candidates_to_json (свой сериализатор со страной, candidates_to_json не менялся), author_analog_card (candidate_urls кодом, структурная страна перекрывает; расхождение или разные страны в группе — None), select_publishable_analogs (непустой evidence, country_evidence_url ∈ candidate_urls, статус ≠ excluded, страна ≠ ZZ)"
+    - "run_analogs.py: AnalogSectionMixin (RunStagesMixin наследует его, run_flow.py не тронут): заготовки через prefilter + _cut_by_relevance + group_for_cards(target=3); секция последняя после конкурсной; строка журнала analog_cards; при research ни вызова модели, ни строки журнала, ни строки прогресса; CostLimitExceededError не перехватывается"
+    - "run_stages.py 430 -> 457 строк: аналоги в Report.analog_cards, судьба кандидатов-аналогов (selected/rejected) пишется в candidate_log; сводка получает только основные карточки"
+    - "prompts/analog_scorer.md 1.0 (BRIEF_JSON, ANALOG_CANDIDATES_JSON), prompts/CHANGELOG.md (записи 2.7 и 1.0)"
+    - "persistence_write.py: solution_kind пишется в briefs на insert и update (совет ревью Э6-1)"
+    - "demo.py: подпись стадии analog_cards"
+    - "Тесты: tests/test_analog_stage.py (27), tests/test_analog_flow.py (15), правки test_prompts.py и test_plan_types.py; guard ограничений при product получает метку SOLUTION_KIND (совет ревью Э6-1, тест в test_analog_stage.py)"
+  artifacts:
+    - backend/app/pipeline/analogs.py
+    - backend/app/pipeline/run_analogs.py
+    - backend/app/pipeline/run_stages.py
+    - backend/app/pipeline/planning.py
+    - backend/app/pipeline/pipeline_selection_flow.py
+    - backend/app/pipeline/orchestrator.py
+    - backend/app/pipeline/extraction.py
+    - backend/app/pipeline/demo.py
+    - backend/app/pipeline/persistence_write.py
+    - backend/app/search/yandex_search.py
+    - prompts/planner.md
+    - prompts/analog_scorer.md
+    - prompts/CHANGELOG.md
+    - tests/test_analog_stage.py
+    - tests/test_analog_flow.py
+    - tests/test_prompts.py
+    - tests/test_plan_types.py
+    - .planning/evidence/Э6-W2-Э6-2а-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest tests/test_analog_stage.py tests/test_analog_flow.py: 42 passed (27 + 15)"
+    - "pytest tests/test_prompts.py tests/test_plan_types.py tests/test_backend_layout.py tests/test_pipeline_layout.py tests/test_tests_layout.py tests/test_stage_token_budgets.py вместе с предыдущими: 130 passed"
+    - "мутации (pytest tests/test_analog_flow.py -q): без prefilter — 1 failed; без проверки статуса в отборе — 1 failed; без снятия analog при research — 1 failed; без ANALOG в COVERAGE_EXCLUDED_SOURCE_TYPES — 1 failed; после отката 15 passed"
+    - "rg -n analog prompts/card_author.md verifier.md summary.md scorer.md intake.md: пусто"
+    - "pytest -q (Windows): 6 failed, 1499 passed; 6 failed — все test_docker_compose_backup_runtime.py (известная Linux-специфика); база 1447"
+    - "ruff check .: All checks passed; ruff format --check .: 230 files already formatted"
+    - "инв. 6 (rg -ln httpx backend/app ...): пусто"
+    - "контейнер python:3.12-slim: не выполнен, демон Docker Desktop не запущен (docker info: pipe dockerDesktopLinuxEngine не найден)"
+  escalate: none
+  read_first:
+    - ".planning/PLAN.md (задача Э6-2а, строки 229–282)"
+    - backend/app/pipeline/analogs.py
+    - backend/app/pipeline/run_analogs.py
+    - backend/app/pipeline/run_stages.py (строки 160–230, 395–415)
+    - backend/app/pipeline/planning.py (normalize_analog_queries, normalize_plan_queries)
+    - prompts/analog_scorer.md
+    - prompts/planner.md (правило 14, раздел «Вход»)
+    - tests/test_analog_flow.py
+  notes: |
+    ТЕКСТЫ КЛИЕНТУ НА УТВЕРЖДЕНИЕ ВЛАДЕЛЬЦУ (правило 7 этапа):
+      1. prompts/analog_scorer.md (новый, версия 1.0) — весь текст; особенно правила 7–9
+         (traction, переносимость в РФ только со ссылкой, «что сделать в РФ» — совет без фактов),
+         формат ошибок со страной ZZ и заглушкой.
+      2. prompts/planner.md (2.7) — правило 14 (две английские формулировки analog при «Рынке»,
+         ни одной при «Науке»), оговорки в правилах 1 и 2, блок «Вид искомого решения» в «Вход».
+      3. Строки прогресса оператору (видны в ленте прогона, не клиенту, но новые фразы):
+         «Аналоги из мира: кандидатов N, заготовок карточек M (секция вне лимита 5–7)» и
+         «Аналогов из мира: K, отброшено: L»; подпись стадии демо «Собираю карточки аналогов из мира.»
+         (печатаются только при виде решения не «Наука»).
+
+    ОТСТУПЛЕНИЯ ОТ ПЛАНА И ПОСТАНОВКИ:
+      1. НЕ выполнено: «убрать _kind_kwargs в intake_flow.py». Причина: 29 прежних тестов
+         (test_intake_flow.py, test_pipeline_resilience.py, test_web_intake.py, test_web_flow_e2e.py)
+         подменяют run_intake/refine_brief функциями без параметра solution_kind; безусловная передача
+         ронает их с TypeError (проверено полным прогоном: 35 failed вместо 6), а правило 4 этапа
+         запрещает править прежние тесты. intake_flow.py оставлен байт-в-байт как на базе.
+         Рекомендация: отдельная правка, которая заодно дополнит эти заглушки **kwargs / solution_kind.
+      2. Вынужденно правлены ДВА прежних теста, не названных в правиле 4: tests/test_cli_run.py
+         (1 строка) и tests/test_brief_ecosystem_fields.py (3 строки) — они вызывают
+         render_prompt("planner", BRIEF_JSON=...) напрямую, а контракт критерия 2 (planner =
+         {BRIEF_JSON, SOLUTION_KIND}) делает вторую метку обязательной; правка — добавлен
+         SOLUTION_KIND=brief.solution_kind, смысл тестов не менялся. Прошу ревьюера подтвердить.
+      3. stages.py (фасад) не тронут: в нём 120 строк при жёстком пределе 120 (test_pipeline_layout.py),
+         новые имена (normalize_plan_queries, analogs.*) импортируются напрямую из модулей.
+      4. Docker-прогон не выполнен: демон не запущен (см. checks). Прошу оркестратора прогнать
+         контейнерную проверку на объединённой ветке.
+      5. run_flow.py не менялся: AnalogSectionMixin подмешан наследованием в RunStagesMixin.
+
+    РЕШЕНИЯ ПО ХОДУ (для ревью):
+      * author_analog_card возвращает AnalogCard | None: None — страна модели расходится со структурной
+        страной кандидатов, либо у кандидатов группы разные страны, либо страна не установлена (ZZ).
+      * Код страны ZZ («не установлена», формат ошибок analog_scorer) в select_publishable_analogs
+        не публикуется никогда — иначе карточка с ZZ прошла бы как страна статуса main.
+      * normalize_analog_queries не достраивает недостающие analog и не проверяет lang — только режет
+        до двух; язык en обеспечивает промпт.
+      * План второго прохода (replan_search) тоже очищается от analog (strip_analog_queries): иначе
+        при research модель реплана могла бы вернуть analog, а при «Рынке» аналоги искались бы дважды.
+      * Предел 6 платных запросов Яндекса теперь делят web, contest, grant и analog; analog стоят в
+        хвосте плана и при нехватке предела отбрасываются первыми — вопрос к Э6-2б/в (поднять предел
+        при виде «Рынок»?).
+      * Проверка country_evidence_url ∈ candidate_urls есть, а проверки «каждый evidence.url ∈
+        candidate_urls» нет — постановка её не требует; стоит решить, нужна ли она (аналог без
+        автосверки, verifier на аналоги не распространён).
+      * Кандидаты-аналоги получают Candidate.country только от адаптеров (Э6-2б/в); до них страна у
+        них None, и допуск страны решается по ответу модели в select_publishable_analogs.

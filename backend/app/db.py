@@ -41,6 +41,7 @@ ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
     ("briefs", "mode"),
     ("briefs", "solution_kind"),
     ("requests", "api_client"),
+    ("requests", "scan_token"),
 )
 
 

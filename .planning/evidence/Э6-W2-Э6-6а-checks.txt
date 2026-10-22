@@ -1,0 +1,55 @@
+Э6-6а · проверки (Windows, venv jolly-wilbur-e2b13b, PYTHONPATH=backend этой копии; app.__file__ указывает на неё)
+
+$ pytest tests/test_host_routing.py tests/test_scan_limits.py -q
+41 passed in 1.74s
+  (test_host_routing.py — критерий 1 и умолчания настроек; test_scan_limits.py — критерий 2)
+
+Что починено при доведении (первый реальный прогон: 5 failed, 35 passed):
+  - `/history` в приложении нет (история — `/requests`): рабочий путь для 401 заменён на `/requests`;
+    `/requests` добавлен в проверку публичного хоста (404 без WWW-Authenticate), хост с портом/регистром
+    проверяется на `/requests`, а не на пути, который 404 и без прослойки; `/history` оставлен в перечне из критерия.
+  - риск «StaticFiles отвечает text/plain» подтвердился как неверный: FastAPI отдаёт 404 JSON; тест
+    переведён на настоящий файл `/static/theme.css` -> 200.
+  - `ipaddress.is_private` истинен для документационных диапазонов RFC 5737 (198.51.100.0/24, 203.0.113.0/24):
+    «публичный» адрес соединения в тесте заменён на 8.8.8.8; код не менялся.
+  - ruff: 4 строки по 121 символ (общий помощник `_verdict`), S107 на параметре `token` (-> `tag`),
+    имя теста с прописными кириллическими буквами (N802).
+  - риски `Settings(_env_file=None, **{ALIAS: ...})`, сравнение created_at в SQLite с aware-границами UTC,
+    401 на /api/v1/requests/1 без обращения к базе — не подтвердились (тесты зелёные).
+
+Мутации (по одной, затем откат; `git status` после — чисто):
+  1. убрать резерв незавершённых (`unfinished * scan_cost_limit_rub` -> `0 * unfinished`):
+     1 failed, 40 passed  (test_два_незавершённых_скана_резервируют_20_рублей)
+  2. доверять X-Forwarded-For всегда (`if not _is_private(peer)` -> `if False`):
+     2 failed, 39 passed  (test_поддельный_forwarded_for..., test_без_адреса_соединения...)
+  3. пропускать рабочие пути на публичном хосте (`if not is_public_path(path)` -> `if False`):
+     7 failed, 34 passed
+
+$ pytest -q   (один процесс, без фоновых)
+7 failed, 1490 passed, 8 warnings in 243.00s
+  6 failed — tests/test_docker_compose_backup_runtime.py (Linux-специфика, допустимо по постановке)
+  1 failed — tests/test_config.py::test_каждая_переменная_settings_объявлена_в_примере:
+      нет в .env.example: PUBLIC_SCAN_HOST, SCAN_COST_LIMIT_RUB, SCAN_DAILY_BUDGET_RUB,
+      SCAN_LIMIT_PER_IP_PER_DAY, SCAN_ORDER_EMAIL, SCAN_ORDER_TELEGRAM_URL, YANDEX_SEARCH_RUB_PER_QUERY
+      Файлы `.env.example` и tests/test_config.py вне границ задачи, шаблон окружения правит только владелец
+      -> эскалация в handoff (не правил). База: 1447 passed; сейчас 1490 (новых тестов 41; разницу в 2 теста не разбирал).
+
+$ ruff check . && ruff format --check .
+All checks passed!
+229 files already formatted
+
+$ pytest tests/test_backend_layout.py tests/test_tests_layout.py -q
+6 passed in 0.11s
+
+$ rg -ln httpx backend/app | rg -v "backend/app.(llm.|search.|cli_doctor\.py$|pipeline.pipeline_context\.py$|pipeline.pipeline_search\.py$)"
+(пусто, rc=1; на Windows разделитель путей в выводе rg — обратная косая, поэтому в фильтре `.` вместо `/`)
+
+$ rg -ni captcha backend/ tests/
+(пусто)
+
+$ git diff --stat 776b9c1 HEAD -- tests/
+ tests/test_host_routing.py | 174 +  (новый)
+ tests/test_scan_limits.py  | 235 +  (новый)
+ 2 files changed, 409 insertions(+)   (прежние тесты не тронуты)
+
+Контейнерный прогон python:3.12-slim (РЕШ-249) не выполнен: Docker Desktop не запущен.

@@ -77,8 +77,13 @@ def test_каждый_тип_промпта_обслуживается_рабо�
 
 def test_каждый_рабочий_адаптер_достижим_типом_из_промпта():
     """Обратное направление: рабочий адаптер, который планировщик никогда не
-    запросит, простаивает весь прогон (вторая половина DLG-1)."""
-    prompt_types = _planner_allowed_types()
+    запросит, простаивает весь прогон (вторая половина DLG-1).
+
+    Достижимость считается по типам правила 1 и по типу `analog`, объявленному
+    отдельным правилом (Э6-2а): адаптеры Wikidata и каталога YC (Э6-2б)
+    обслуживают только его, и без этого учёта страж краснел бы на них."""
+    _planner_analog_rule()  # правило про `analog` обязано быть в промпте
+    prompt_types = _planner_allowed_types() | {SourceType.ANALOG.value}
     for name, adapter_cls in ADAPTERS.items():
         if not getattr(adapter_cls, "implemented", True):
             continue
@@ -267,6 +272,40 @@ def test_объём_плана_повторного_поиска_меньше_п
         "replanner.md: правило 4 всё ещё просит конкурсные формулировки — второй проход обязан молчать "
         "про contest (РЕШ-126), их достаточно один раз, в первом плане"
     )
+
+
+def _planner_analog_rule() -> str:
+    """Текст отдельного правила про `analog` (Э6-2а): правило, чьё тело называет
+    тип и условие `SOLUTION_KIND`. Правило 1 его не содержит: тип объявлен вне
+    перечня обязательных, и страж правила 1 про него молчит."""
+    text = load_prompt("planner")
+    for rule in re.finditer(r"^\d+\.\s.*?(?=^\d+\.\s|^## )", text, re.MULTILINE | re.DOTALL):
+        body = _normalize(rule.group(0))
+        if "`analog`" in body and "SOLUTION_KIND" in body and not body.startswith("1."):
+            return body
+    pytest.fail("planner.md: нет отдельного правила про формулировки `analog` и `SOLUTION_KIND`")
+
+
+def test_analog_объявлен_отдельным_правилом_а_не_правилом_1():
+    """Э6-2а: `analog` — не обязательный тип правила 1 (при «Науке» его нет), а
+    отдельное правило с условием. Страж правила 1 про него молчит, поэтому ниже
+    закреплено всё, что правило обязано сказать: ровно две формулировки, английские,
+    при `research` ни одной, потолок плана 12."""
+    assert "analog" not in _planner_allowed_types(), "analog попал в перечень обязательных типов правила 1"
+    rule = _planner_analog_rule()
+    assert "ровно 2 формулировки `analog`" in rule
+    assert 'lang: "en"' in rule
+    assert "`research`" in rule and "ни одной" in rule
+    assert "12" in rule
+
+
+def test_analog_достижим_рабочим_адаптером_и_известен_схеме():
+    """Тип `analog` из отдельного правила обязан обслуживаться рабочим адаптером
+    (вторая половина DLG-1 для нового типа) и входить в `SourceType`."""
+    assert SourceType.ANALOG.value in _implemented_adapter_source_types(), (
+        "тип analog объявлен в planner.md, но ни один рабочий адаптер его не принимает"
+    )
+    assert "analog" in {member.value for member in SourceType}
 
 
 def test_патент_достижим_обоими_патентными_адаптерами():

@@ -21,7 +21,13 @@ from datetime import UTC, datetime
 from app.llm import CostLimitExceededError
 from app.pipeline import dedup_judge, diversity, history, stages
 from app.pipeline.persistence import CandidateRecord, PlanRecord, StageRecord
-from app.pipeline.pipeline_selection_flow import CONTEST_CARDS_TARGET, candidate_records, split_contest_candidates
+from app.pipeline.pipeline_selection_flow import (
+    CONTEST_CARDS_TARGET,
+    candidate_records,
+    split_analog_candidates,
+    split_contest_candidates,
+)
+from app.pipeline.run_analogs import AnalogSectionMixin
 from app.pipeline.run_journal import cost_delta
 
 # Импорт напрямую из selection.py, а не через фасад `stages` (РЕШ-181 п. 4):
@@ -38,8 +44,12 @@ from app.schemas import Brief, Report, ReportSummary, ScoredCandidate, SolutionC
 log = logging.getLogger("app.pipeline.orchestrator")
 
 
-class RunStagesMixin:
-    """Прогон стадий одного запроса и сборка `Report` — `_run_stages`/`_empty_report`."""
+class RunStagesMixin(AnalogSectionMixin):
+    """Прогон стадий одного запроса и сборка `Report` — `_run_stages`/`_empty_report`.
+
+    Секция аналогов (Э6-2а) живёт в `AnalogSectionMixin`: наследование, а не ещё
+    одна база `ScoutPipeline`, чтобы дробление не потянуло правку `run_flow.py`.
+    """
 
     async def _run_stages(
         self,
@@ -159,7 +169,9 @@ class RunStagesMixin:
         # гейт смотрел на весь список, один хакатонный прототип с relevance 9
         # гасил проход на выдаче из двоек и троек — ровно на той задаче, ради
         # которой проход затеян (РЕШ-81).
-        main_first_pass, _ = split_contest_candidates(scored_pool)
+        # Аналоги (Э6-2а) отделяются раньше конкурсных: по тем же причинам гейт не
+        # должен гаситься зарубежным примером с высокой оценкой.
+        main_first_pass, _ = split_contest_candidates(split_analog_candidates(scored_pool)[0])
         if stages.needs_second_pass(main_first_pass, threshold=self._settings.second_pass_relevance_max):
             scored_second, second_unavailable = await self._second_pass(
                 brief, plan, unique, scored_pool, stage_log=stage_log, plan_log=plan_log, history=history_pool.scored
@@ -176,7 +188,10 @@ class RunStagesMixin:
         # Но конкурсные кандидаты в общий отбор не идут (РЕШ-85 п. 1, РЕШ-92):
         # они не конкурируют с публикациями по общему скорингу и никого из
         # обещанных клиенту 5–7 вариантов не вытесняют.
-        main_scored, contest_scored = split_contest_candidates([*scored_pool, *scored_second])
+        # Аналоги (Э6-2а) уходят в свою очередь ещё до конкурсного деления: они не
+        # конкурируют с публикациями по общему скорингу, как и конкурсный класс.
+        non_analog_scored, analog_scored = split_analog_candidates([*scored_pool, *scored_second])
+        main_scored, contest_scored = split_contest_candidates(non_analog_scored)
         selected = stages.select_top(main_scored, limit=target * 2)
         # Своя очередь конкурсного класса: группировка по организации та же, но
         # с собственной верхней границей, и `select_top` здесь не зовётся —
@@ -215,7 +230,11 @@ class RunStagesMixin:
         # пересекаются по построению — кандидат либо конкурсный, либо нет, —
         # поэтому дважды `selected` он не получит, а конкурсный, не попавший в
         # свою секцию, останется `rejected` (предупреждение ревью Т-20).
-        picked = [*selected, *contest_picked]
+        # Заготовки аналогов считаются кодом, без модели, — раньше журнала кандидатов,
+        # чтобы отобранный аналог получил `selected`, а не `rejected` (Э6-2а).
+        analog_groups = self._select_analog_groups(brief, analog_scored)
+        analog_picked = [item for group in analog_groups for item in group]
+        picked = [*selected, *contest_picked, *analog_picked]
         candidate_log.extend(candidate_records(scored, picked))
         if scored_second:
             candidate_log.extend(candidate_records(scored_second, picked, pass_no=2))
@@ -393,6 +412,13 @@ class RunStagesMixin:
             0.95,
         )
 
+        # Секция аналогов — последняя, после конкурсной (Э6-2а); при «Науке» пуста
+        # и не оставляет следов в журнале. Стоп-кран `CostLimitExceededError` не
+        # перехватывается и здесь (РЕШ-45).
+        analog_cards = await self._build_analog_section(
+            brief, analog_groups, found=len(analog_scored), stage_log=stage_log
+        )
+
         report = Report(
             request_id=request_id,
             brief=brief,
@@ -401,6 +427,7 @@ class RunStagesMixin:
             # клиенту — про решения, прошедшие общий отбор, а конкурсная секция
             # идёт к ней приложением со своим предупреждением о статусе прав.
             contest_cards=contest_published,
+            analog_cards=analog_cards,
             summary=summary,
             sources_unavailable=outcome.unavailable,
             generated_at=datetime.now(UTC),

@@ -1,0 +1,27 @@
+handoff:
+  from: verifier
+  to: auditor
+  task: Э6-11
+  did:
+    - "Прогнаны 4 критерия приёмки РЕШ-291 (пункт Критерии (1)–(4)), закрыто 4 из 4"
+    - "Мутации критерия 2 по одной с откатом: пропускать любой CamelCase — 5 failed; белый список не читается — 6 failed; после отката 26 passed, git status чист"
+    - "Полный pytest -q (env -u): 1986 passed, 0 failed; ruff check и ruff format --check чисты; anonymize.py 89 строк"
+    - "Инв. 10: yaml.safe_load в anonymize.py; двоеточий в значениях справочника нет. Инв. 3: совпадения grep идентичны базе 97d6219, в diff задачи нет"
+  artifacts:
+    - ".planning/evidence/Э6-W4-Э6-11-verify.md"
+    - ".planning/evidence/Э6-W4-Э6-11-verify-handoff.yaml"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_anonymize.py -v: 26 passed"
+    - "мутация CamelCase: 5 failed, 21 passed; мутация белого списка: 6 failed, 20 passed"
+    - "pytest -q: 1986 passed, 1 warning, 0 failed"
+    - "ruff check .: All checks passed!; ruff format --check .: 257 files already formatted"
+    - "git diff 97d6219 HEAD -- tests/: удалённых строк 0"
+    - "pytest tests/test_anonymize.py tests/test_team_docs.py под unshare -rn: 61 passed"
+  escalate: none
+  read_first:
+    - ".planning/evidence/Э6-W4-Э6-11-verify.md"
+    - "backend/app/anonymize.py"
+    - "backend/app/reference/software_names.yaml"
+    - "tests/test_anonymize.py"
+  notes: "Вердикт PASS. Открыт DLG-1: контейнерный прогон python:3.12-slim не выполнен, демона Docker нет; действие владельца — CI GitHub на ветке интеграции после слияния, ссылка в воротах. DLG-1 вне критериев РЕШ-291. Состав списка 49 имён передан владельцу на утверждение. Коммит содержит только два файла .planning/evidence/Э6-W4-Э6-11-verify*. Не пушено."

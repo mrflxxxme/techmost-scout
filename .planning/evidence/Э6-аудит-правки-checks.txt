@@ -1,0 +1,37 @@
+Э6-аудит-правки — фактический вывод проверок (копия ветки agent-a039ce38e58362b3b)
+
+pytest -q (env -u DEEPSEEK_API_KEY -u YANDEX_API_KEY ... — окружение очищено от ключей и маршрутов):
+  2174 passed, 1 warning in 123.48s
+  (база 2165; новых 9: 5 в tests/test_scan_limits.py, 4 в tests/test_scan_pipeline_stop.py)
+
+ruff check .            -> All checks passed!
+ruff format --check .   -> 263 files already formatted
+
+Инвариант 6 (grep -rln "httpx" backend/app --include='*.py' | grep -vE "...карта..."):  пусто
+  scan_limits.py импортирует только app.search.yandex_quota (httpx в файле нет).
+
+Размеры: scan_run.py 215, routes/run.py 350, scan_limits.py < 200, yandex_quota.py < 150 (все <= 500).
+
+Мутации (применялась мутация -> прогон -> возврат файла):
+  1. scan_limits.admit_scan: вернуть прежний порог (remaining < scan_cost_limit_rub)
+       tests/test_scan_limits.py -> 2 failed, 23 passed
+       (test_допуск_требует_стоп_кран_плюс_яндекс_по_пределу_запросов, test_при_потраченном_300_минус_12_87_отказ)
+  2а. yandex_quota.DEFAULT_MAX_QUERIES 6 -> 7
+       tests/test_scan_limits.py -> 5 failed, 20 passed
+  2б. scan_limits.YANDEX_QUERIES_PER_SCAN = 5 (расхождение с адаптером)
+       tests/test_scan_limits.py -> 4 failed, 21 passed
+       (в том числе test_предел_запросов_яндекса_в_потолке_равен_умолчанию_адаптера)
+  2в. yandex_search: max_queries по умолчанию 7 литералом (расхождение с потолком)
+       tests/test_scan_limits.py -> 1 failed, 24 passed
+       (test_предел_запросов_яндекса_в_потолке_равен_умолчанию_адаптера)
+  3а. scan_run.run_scan: убрать распознавание стоп-крана (if False:)
+       tests/test_scan_pipeline_stop.py -> 3 failed, 1 passed
+  3б. scan_run.run_scan: помечать любой отказ пайплайна как стоп-кран (if failures:)
+       tests/test_scan_pipeline_stop.py -> 1 failed, 3 passed
+       (test_другой_отказ_пайплайна_остаётся_общим_отказом)
+
+Граничная арифметика (умолчания: стоп-кран 10, тариф 0,48, предел 6, потолок 300):
+  порог допуска = 10 + 6 x 0,48 = 12,88; завершённый скан стоит в сумме cost + 2,88.
+  cost 284,24 -> потрачено 287,12, остаток 12,88 -> допуск
+  cost 284,25 -> потрачено 287,13, остаток 12,87 -> отказ
+  пустая база, потолок 12,88 -> допуск; 12,87 -> отказ

@@ -1,0 +1,65 @@
+# Белый список доменов поиска аналогов (Э6-2в, РЕШ-255, РЕШ-256, РЕШ-257).
+#
+# Яндекс-поиск формулировки `analog` сужается оператором `site:` до этих доменов
+# (`search/analog_sources.py`). Домен добавляется или убирается правкой этого
+# файла, без кода. Домен — только имя узла: без схемы, пути и пробелов, строчными
+# буквами, без повторов. Значение `checked_at` — в кавычках, иначе YAML прочтёт
+# дату как объект даты (инвариант №10).
+#
+# СОСТАВ НА УТВЕРЖДЕНИЕ ВЛАДЕЛЬЦУ В PR. Список составлен исполнителем по
+# собственному суждению (РЕШ-275): организации, которые публикуют отраслевые
+# обзоры, отчёты о технологиях и разбор внедрений. Отклик каждого домена
+# проверен живым запросом из облачной среды 21.10.2026
+# (`.planning/evidence/Э6-W3-Э6-2в-domains.txt`); коды 403 у части сайтов — это
+# защита от роботов, домен при этом отвечает.
+
+checked_at: "2026-10-21"
+
+# Отчёты банков, фондов и консультантов (вид: bank, fund, consultant).
+# consultant — консалтинг и отраслевая аналитика.
+reports:
+  - {domain: "mckinsey.com", kind: "consultant"}
+  - {domain: "bcg.com", kind: "consultant"}
+  - {domain: "bain.com", kind: "consultant"}
+  - {domain: "deloitte.com", kind: "consultant"}
+  - {domain: "pwc.com", kind: "consultant"}
+  - {domain: "kpmg.com", kind: "consultant"}
+  - {domain: "ey.com", kind: "consultant"}
+  - {domain: "accenture.com", kind: "consultant"}
+  - {domain: "gartner.com", kind: "consultant"}
+  - {domain: "forrester.com", kind: "consultant"}
+  - {domain: "cbinsights.com", kind: "consultant"}
+  - {domain: "idc.com", kind: "consultant"}
+  - {domain: "goldmansachs.com", kind: "bank"}
+  - {domain: "jpmorgan.com", kind: "bank"}
+  - {domain: "morganstanley.com", kind: "bank"}
+  - {domain: "ubs.com", kind: "bank"}
+  - {domain: "citi.com", kind: "bank"}
+  - {domain: "worldbank.org", kind: "bank"}
+  - {domain: "ebrd.com", kind: "bank"}
+  - {domain: "a16z.com", kind: "fund"}
+  - {domain: "sequoiacap.com", kind: "fund"}
+  - {domain: "ark-invest.com", kind: "fund"}
+  - {domain: "blackrock.com", kind: "fund"}
+  - {domain: "weforum.org", kind: "fund"}
+  - {domain: "nesta.org.uk", kind: "fund"}
+
+# Каталоги стартапов и продуктов (РЕШ-255, РЕШ-256). Идут в пачках первыми:
+# в предел платных запросов они должны влезть раньше всего остального.
+catalogs:
+  - {domain: "ycombinator.com", kind: "catalog"}
+  - {domain: "producthunt.com", kind: "catalog"}
+
+# Реестры и каталоги РФ (Э6-8, РЕШ-261, РЕШ-277). Сужают ТОЛЬКО русскую
+# формулировку `analog`, которую добавляет код при виде «Рынка»
+# (`pipeline/planning.py`, `registry_analog_query`); английская ищет по спискам
+# выше и этих доменов не видит. Прямого доступа к реестрам нет: ГИСП из облачной
+# среды отвечает 403, реестр Минцифры не отвечает, у Product Radar нет
+# машинного поиска продуктов без ключа (проба —
+# `.planning/evidence/Э6-W4-Э6-8-probe.txt`), поэтому реестр опрашивается
+# Яндекс-поиском по домену, а запись реестра приходит ссылкой на её страницу.
+# `name_ru` — как реестр называется в отчётах и журнале.
+ru_registries:
+  - {domain: "gisp.gov.ru", name_ru: "ГИСП Минпромторга — промышленная продукция России"}
+  - {domain: "reestr.digital.gov.ru", name_ru: "Единый реестр российского программного обеспечения Минцифры"}
+  - {domain: "productradar.ru", name_ru: "Product Radar — каталог российских цифровых продуктов"}

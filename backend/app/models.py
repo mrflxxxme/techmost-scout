@@ -84,6 +84,11 @@ class Request(Base):
     #: интерфейсе или командой `scout run`, ни одному приложению он не виден.
     #: В уже существующую базу колонку дописывает `app.db.init_db`.
     api_client: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: Неугадываемый токен публичного экспресс-скана (Э6-6а): `secrets.token_urlsafe(32)`.
+    #: Не `NULL` — запрос является сканом, результат отдаётся по токену, номер
+    #: запроса наружу не уходит. Без индекса: колонку дописывает `init_db`, а
+    #: SQLite не удаляет проиндексированную колонку, да и сканов — десятки в сутки.
+    scan_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     brief: Mapped[Brief | None] = relationship(back_populates="request", uselist=False, cascade="all, delete-orphan")
     candidates: Mapped[list[Candidate]] = relationship(back_populates="request", cascade="all, delete-orphan")
@@ -272,6 +277,28 @@ class Verdict(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     card: Mapped[SolutionCard] = relationship(back_populates="verdicts")
+
+
+class AnalogVerdict(Base):
+    """Вердикт эксперта на один зарубежный аналог отчёта (Э6-7, РЕШ-196 п. 3).
+
+    У аналогов нет строк в базе — они живут только в `requests.report_json`,
+    поэтому вердикт привязан к запросу и отпечатку аналога (`analog_key`, см.
+    `app.verdicts.analog_key`), а не к `solution_cards.id`. Новая таблица
+    заводится `create_all`, колонок в существующих таблицах нет. Строки не
+    обновляются и не удаляются: действующий вердикт — последний по
+    `(created_at, id)`. Оценки 1–5 нет: аналог в протокол приёмки не входит.
+    """
+
+    __tablename__ = "analog_verdicts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), index=True)
+    analog_key: Mapped[str] = mapped_column(String(16), index=True)
+    reviewer_name: Mapped[str] = mapped_column(String(255))
+    decision: Mapped[str] = mapped_column(String(16))  # approve | reject | rework
+    comment: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class SummaryOverride(Base):

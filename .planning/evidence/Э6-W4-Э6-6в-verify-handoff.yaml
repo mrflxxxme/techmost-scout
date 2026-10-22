@@ -1,0 +1,33 @@
+handoff:
+  from: verifier
+  to: orchestrator
+  task: "Э6-6в"
+  verdict: FAIL
+  did:
+    - "Прогнаны 4 критерия задачи из PLAN.md (раздел Э6-6в): закрыто 4 из 4; мутации 2a (плашка), 2b (research), 2c (лимит 10 ₽ в настройках скана), 2d (settings в _run_pipeline) — каждая дала failed, откат сделан, дерево чистое"
+    - "Прогнаны общие критерии G1–G8: pytest -q 1977 passed (база 1891 собрано + 86 новых), ruff чистый, прогон без сети (unshare -rn) 1977 passed, инв. 6 пусто, размеры в норме"
+    - "Инварианты 1–10 подтверждены способами из INVARIANTS.md; инв. 3 по добавленным строкам диффа — 0 совпадений"
+    - "Названные отступления подтверждены: правка tests/test_host_routing.py (старая версия на HEAD: 1 failed; новая: 30 passed); tests/test_scan_security.py сверх перечня"
+    - "Общий критерий 3 — контейнер python:3.12-slim — не выполнен: демона Docker нет"
+  artifacts:
+    - ".planning/evidence/Э6-W4-Э6-6в-verify.md (отчёт, закоммичен)"
+    - ".planning/evidence/Э6-W4-Э6-6в-verify-handoff.yaml (этот handoff, закоммичен)"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_scan_routes.py tests/test_scan_run.py -v: 49 passed"
+    - "pytest -q: 1977 passed, 0 failed, 1 warning (без сети: 1977 passed)"
+    - "ruff check .: All checks passed!; ruff format --check .: 257 files already formatted"
+    - "rg -n '194\\.87' docs/deploy.md: пусто"
+    - "мутации: 2a 17 failed; 2b 2 failed; 2c 3 failed; 2d 1 failed"
+    - "инв. 3: добавленных строк с sk-|gigachat|Api-Key — 0; sk- + 20 символов по дереву — 0"
+    - "инв. 6: rg httpx вне разрешённых — пусто"
+    - "git status: только два файла отчёта, закоммичены"
+  escalate:
+    - "DLG-1: контейнерный прогон python:3.12-slim (общий критерий 3, РЕШ-249/РЕШ-276) не выполнен — демона Docker нет. Действие владельца или оркестратора: прогнать контейнер на машине с Docker либо принять пункт в ворота отдельным решением. Вердикт FAIL — только по этому пункту; кодовых правок не требуется"
+    - "DLG-Э6-1: живой скан — отложенность PLAN, ключей нет, владелец; не критерий задачи"
+  read_first:
+    - ".planning/evidence/Э6-W4-Э6-6в-verify.md"
+    - "docs/deploy.md (раздел 12 «Публичный скан»)"
+  notes:
+    - "Исполнитель назвал правку test_host_routing «3 строки»; фактически −2/+3 строки, суть подтверждена"
+    - "Тесты пишут 500 строк в tests/test_scan_routes.py — на пределе, в пределах правила"

@@ -1,0 +1,60 @@
+# Белый список имён ПО, библиотек и форматов (Э6-11, РЕШ-291).
+#
+# Проверка обезличенности (`anonymize.py`) принимает латинские имена в стиле
+# CamelCase за названия компаний. Имена из этого списка риском не считаются.
+# Сравнение — точное, без учёта регистра, по всему совпадению: «TensorFlowLabs»
+# в список не входит и остаётся риском. Новое имя добавляется правкой этого
+# файла, без кода. Одно имя — одна запись, без пробелов; повторов быть не
+# должно (регистр при сравнении не различается). Названия компаний сюда не
+# вносятся.
+
+names:
+  - TensorFlow
+  - PyTorch
+  - MatLab
+  - SolidWorks
+  - AutoCAD
+  - LabVIEW
+  - PostgreSQL
+  - GitHub
+  - GitLab
+  - YouTube
+  - OpenFOAM
+  - ComSol
+  - MathCad
+  - CorelDraw
+  - JavaScript
+  - TypeScript
+  - ScikitLearn
+  - NumPy
+  - SciPy
+  - MatPlotLib
+  - OpenCV
+  - OpenGL
+  - OpenCL
+  - RStudio
+  - JupyterLab
+  - SimuLink
+  - SolidEdge
+  - ArchiCAD
+  - SketchUp
+  - PhotoShop
+  - MongoDB
+  - MySQL
+  - SQLite
+  - ParaView
+  - FreeCAD
+  - OpenSCAD
+  - OriginPro
+  - GraphPad
+  - ImageJ
+  - LibreOffice
+  - PowerPoint
+  - ChatGPT
+  - DeepSeek
+  - ScienceDirect
+  - ResearchGate
+  - GoogleScholar
+  - WebOfScience
+  - LinkedIn
+  - WhatsApp

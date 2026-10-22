@@ -32,7 +32,16 @@ async def plan_search(router: LLMRouter, brief: Brief) -> SearchPlan:
     plan = await router.complete_json(
         "planner",
         [
-            Message(role="system", content=render_prompt("planner", BRIEF_JSON=brief.model_dump_json(indent=2))),
+            Message(
+                role="system",
+                content=render_prompt(
+                    "planner",
+                    BRIEF_JSON=brief.model_dump_json(indent=2),
+                    # Вид решения исключён из `BRIEF_JSON` (`exclude=True`), поэтому
+                    # едет отдельной меткой — и стоит в конце промпта, после правил.
+                    SOLUTION_KIND=brief.solution_kind,
+                ),
+            ),
             Message(role="user", content=_GO),
         ],
         SearchPlan,
@@ -40,7 +49,7 @@ async def plan_search(router: LLMRouter, brief: Brief) -> SearchPlan:
         # стандартных 4096 токенов на это не хватает.
         max_tokens=8000,
     )
-    return normalize_contest_queries(plan, brief)
+    return normalize_plan_queries(plan, brief)
 
 
 #: Признак «модель не вернула нужную конкурсную формулировку» — печатается в
@@ -75,7 +84,98 @@ if _max_plan_queries is None:  # pragma: no cover — защита от молч
 _MAX_PLAN_QUERIES = _max_plan_queries
 
 
-def normalize_contest_queries(plan: SearchPlan, brief: Brief) -> SearchPlan:
+#: Сколько формулировок `analog` оставляет код при виде решения «Рынок»: правило
+#: planner.md просит ровно две (английские, мировой контур), остальное — лишние
+#: платные запросы.
+ANALOG_QUERIES = 2
+
+_REGISTRY_RATIONALE = "код-нормализация плана (Э6-8): реестры РФ — русская analog, текст из web плана"
+
+
+def normalize_analog_queries(plan: SearchPlan, brief: Brief) -> SearchPlan:
+    """Код-гарантия Э6-2а: формулировки `analog` — только при виде решения «Рынок».
+
+    При `research` все формулировки `analog` снимаются кодом, не полагаясь на
+    модель (РЕШ-109): «Наука» не должна ни тратить платные запросы на аналоги, ни
+    получать кандидатов типа `analog`. При прочих видах остаются первые две —
+    лишние уходили бы в платный предел Яндекса. Недостающие не достраиваются:
+    пустая секция аналогов честнее выдуманной формулировки.
+    """
+    analog = [q for q in plan.queries if q.source_type is SourceType.ANALOG]
+    if not analog:
+        return plan
+    # Русскую `analog` ставит код (`registry_analog_query`), от модели она не принимается:
+    # `ANALOG_QUERIES` — счёт английских формулировок мирового контура.
+    kept = [] if brief.solution_kind == "research" else [q for q in analog if q.lang != "ru"][:ANALOG_QUERIES]
+    dropped = len(analog) - len(kept)
+    if dropped:
+        log.info(
+            "normalize_analog_queries: формулировок analog срезано кодом: %s (вид решения %s)",
+            dropped,
+            brief.solution_kind,
+        )
+    rest = [q for q in plan.queries if q.source_type is not SourceType.ANALOG]
+    return plan.model_copy(update={"queries": [*rest, *kept]})
+
+
+def strip_analog_queries(plan: SearchPlan) -> SearchPlan:
+    """Снять формулировки `analog` совсем — для плана второго прохода.
+
+    Второй проход существует ради основной очереди; аналоги ищутся один раз за
+    прогон, в первом плане. Промпт `replanner.md` тип не просит, но послушание
+    модели не гарантия (РЕШ-109).
+    """
+    kept = [q for q in plan.queries if q.source_type is not SourceType.ANALOG]
+    if len(kept) == len(plan.queries):
+        return plan
+    log.info(
+        "strip_analog_queries: формулировок analog второго прохода срезано кодом: %s", len(plan.queries) - len(kept)
+    )
+    return plan.model_copy(update={"queries": kept})
+
+
+def registry_analog_query(plan: SearchPlan, brief: Brief) -> SearchQuery | None:
+    """Русская формулировка `analog` для реестров РФ (Э6-8, эскалация Э-4, вариант А).
+
+    ГИСП, реестр ПО Минцифры и Product Radar русскоязычны: на английский запрос
+    событие «найдено в реестре» практически недостижимо. Текст берётся у первой
+    русской `web`-формулировки плана, иначе из первых трёх `keywords_ru` брифа;
+    нет ни того ни другого — `None` и строка в журнале, выдумывать текст нельзя.
+    При `research` формулировки нет: «Наука» платных запросов на аналоги не тратит.
+    Яндекс сужает её доменами `ru_registries` (`search/analog_sources.py`).
+    """
+    if brief.solution_kind == "research":
+        return None
+    web_ru = next((q for q in plan.queries if q.source_type is SourceType.WEB and q.lang == "ru"), None)
+    text = web_ru.text if web_ru is not None else " ".join(brief.keywords_ru[:3])
+    if not text.strip():
+        log.info("registry_analog_query: нет русской web-формулировки и keywords_ru — запрос к реестрам РФ не строится")
+        return None
+    return SearchQuery(text=text, source_type=SourceType.ANALOG, lang="ru", rationale=_REGISTRY_RATIONALE)
+
+
+def normalize_plan_queries(plan: SearchPlan, brief: Brief) -> SearchPlan:
+    """Все код-гарантии плана первого прохода: аналоги, затем конкурсные.
+
+    Формулировки `analog` стоят в хвосте плана и в счёте потолка схемы
+    резервируются заранее: иначе конкурсная нормализация при переполнении
+    вытеснила бы именно их. Русская формулировка для реестров РФ добавляется к
+    английским до резервирования, поэтому при переполнении вытесняется основная
+    очередь с записью в лог, а не она.
+    """
+    plan = normalize_analog_queries(plan, brief)
+    registry = registry_analog_query(plan, brief)
+    if registry is not None:
+        plan = plan.model_copy(update={"queries": [*plan.queries, registry]})
+    analog = [q for q in plan.queries if q.source_type is SourceType.ANALOG]
+    if not analog:
+        return normalize_contest_queries(plan, brief)
+    rest = plan.model_copy(update={"queries": [q for q in plan.queries if q.source_type is not SourceType.ANALOG]})
+    normalized = normalize_contest_queries(rest, brief, reserved=len(analog))
+    return normalized.model_copy(update={"queries": [*normalized.queries, *analog]})
+
+
+def normalize_contest_queries(plan: SearchPlan, brief: Brief, *, reserved: int = 0) -> SearchPlan:
     """Код-гарантия РЕШ-121: после этой функции в плане ровно две формулировки
     типа `contest` — одна без якорей итогов (уйдёт с сужением по площадкам,
     `_with_site_filter`), одна с ними (уйдёт открытым вебом,
@@ -87,6 +187,9 @@ def normalize_contest_queries(plan: SearchPlan, brief: Brief) -> SearchPlan:
     `replan_search`, ДО записи плана в `search_plans` (РЕШ-83) — прогон по
     сохранённому плану (`--plan-id`) воспроизводит ровно то, что было
     отправлено, а не пересчитывает нормализацию заново при каждом повторе.
+
+    `reserved` — сколько мест потолка схемы уже занято формулировками, которых в
+    `plan` нет (аналоги Э6-2а, их добавляет `normalize_plan_queries` после).
     """
     contest = [q for q in plan.queries if q.source_type is SourceType.CONTEST]
     other = [q for q in plan.queries if q.source_type is not SourceType.CONTEST]
@@ -108,7 +211,7 @@ def normalize_contest_queries(plan: SearchPlan, brief: Brief) -> SearchPlan:
     # (`schemas.py`). Вытесняются САМЫЕ ПОСЛЕДНИЕ формулировки основной
     # очереди: `other` короче терять хвост, чем середину, а что именно
     # вытеснено, обязано быть видно в логе, а не пропадать молча.
-    overflow = len(other) + 2 - _MAX_PLAN_QUERIES
+    overflow = len(other) + 2 + reserved - _MAX_PLAN_QUERIES
     if overflow > 0:
         dropped, other = other[-overflow:], other[:-overflow]
         log.warning(
@@ -248,4 +351,4 @@ async def replan_search(router: LLMRouter, brief: Brief, plan: SearchPlan, score
     # обе конкурсные формулировки второго прохода отбрасывались источником
     # ДЕТЕРМИНИРОВАННО: нормализация ставит их в конец списка, а предел
     # исчерпывался раньше, на web-формулировках. См. `strip_contest_queries`.
-    return strip_contest_queries(new_plan)
+    return strip_contest_queries(strip_analog_queries(new_plan))

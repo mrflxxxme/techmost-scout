@@ -1,0 +1,23 @@
+handoff:
+  from: "verifier"
+  to: "auditor"
+  task: "Э6-6б"
+  did:
+    - "Прогнаны 18 критериев приёмки из PLAN.md, закрыто 18 из 18"
+    - "Инвариант №3 проверен в редакции РЕШ-287: диф по добавленным строкам backend/ и tests/ пуст, ключеподобных значений (sk- и 20+ символов) в дереве ноль, значения не выводились"
+    - "Мутации M1, M2, M3, M4, U5, U7 и T1: каждая ≥1 failed, откат чистый"
+  artifacts:
+    - "отчёт и handoff закоммичены файлами в .planning/evidence/Э6-W3-Э6-6б-verify-2.md и .planning/evidence/Э6-W3-Э6-6б-verify-2-handoff.yaml"
+  self_audit: "pass"
+  checks:
+    - "pytest -q: 1877 passed, 0 failed, exit 0"
+    - "pytest offline (unshare -rn): 1877 passed"
+    - "ruff check: All checks passed!; ruff format --check: 250 files already formatted"
+    - "git diff по добавленным строкам backend/ tests/ с sk-, gigachat, Api-Key: 0 строк"
+    - "git diff --stat claude/sleepy-planck-11w8jv HEAD -- tests/: test_autoverify.py 242, test_scan_view.py 459"
+  escalate: "none"
+  read_first:
+    - ".planning/evidence/Э6-W3-Э6-6б-verify-2.md"
+    - "docs/team/INVARIANTS.md (строка 3, РЕШ-287)"
+    - ".planning/DECISIONS.md (РЕШ-287)"
+  notes: "Вердикт PASS. DLG-1 (способ проверки инварианта №3) закрыт по существу РЕШ-287, подтверждение владельца на воротах Э6. DLG-2 (7 строк в старых журналах .planning/evidence/) не блокирует, владелец может подтвердить. Определения ролей в .claude/agents/ цитируют старую команду, правка за владельцем."
