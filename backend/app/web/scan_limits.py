@@ -22,16 +22,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.models import Request as RequestRow
 from app.models import RequestStatus
+from app.search.yandex_quota import DEFAULT_MAX_QUERIES
 
 log = logging.getLogger(__name__)
 
 #: Сутки скана — календарные по Москве, фиксированный UTC+3 без `zoneinfo`:
 #: в образе `python:3.12-slim` нет `tzdata`.
 SCAN_TZ = timezone(timedelta(hours=3))
-#: Предел платных запросов Яндекса на один прогон (`YandexSearchAdapter.max_queries`).
+#: Предел платных запросов Яндекса на один прогон — тот же, что умолчание
+#: `YandexSearchAdapter.max_queries` (одно число из `search.yandex_quota`).
 #: Сколько запросов сделал именно этот скан, база не хранит, поэтому потолок
 #: считает консервативно — по пределу на каждый скан.
-YANDEX_QUERIES_PER_SCAN = 6
+YANDEX_QUERIES_PER_SCAN = DEFAULT_MAX_QUERIES
 #: Статусы, после которых скан денег уже не тратит.
 FINISHED_STATUSES = frozenset(
     {RequestStatus.DRAFTED, RequestStatus.VALIDATED, RequestStatus.EXPORTED, RequestStatus.FAILED}
@@ -136,6 +138,11 @@ async def spent_today_rub(session: AsyncSession, now: datetime, settings: Settin
     return models + search + unfinished * settings.scan_cost_limit_rub
 
 
+def worst_case_scan_rub(settings: Settings) -> float:
+    """Сколько один скан может занять в потолке: стоп-кран моделей + Яндекс по пределу запросов."""
+    return settings.scan_cost_limit_rub + YANDEX_QUERIES_PER_SCAN * settings.yandex_search_rub_per_query
+
+
 async def admit_scan(
     session: AsyncSession,
     ip: str,
@@ -146,7 +153,8 @@ async def admit_scan(
 ) -> ScanAdmission:
     """Решить, пускать ли новый скан. Ничего не записывает: `ip_counter.record` — за вызывающим.
 
-    Остаток суточного потолка должен покрывать стоп-кран одного скана, иначе
+    Остаток суточного потолка должен покрывать худший случай одного скана:
+    стоп-кран моделей плюс платный Яндекс Поиск по пределу запросов, иначе
     допущенный скан мог бы потолок пробить.
     """
     cfg = settings or get_settings()
@@ -155,7 +163,8 @@ async def admit_scan(
         log.info("скан не допущен: лимит по адресу за сутки")
         return ScanAdmission.IP_LIMIT
     remaining = cfg.scan_daily_budget_rub - await spent_today_rub(session, now, cfg)
-    if remaining < cfg.scan_cost_limit_rub:
+    # Округление до миллионных долей рубля: суммы дробные, и «ровно на границе» не должно зависеть от шума float.
+    if round(remaining - worst_case_scan_rub(cfg), 6) < 0:
         log.info("скан не допущен: суточный потолок расходов, остаток %.2f ₽", max(remaining, 0.0))
         return ScanAdmission.BUDGET_EXHAUSTED
     return ScanAdmission.OK

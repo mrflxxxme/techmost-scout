@@ -101,7 +101,7 @@ from app.search.yandex_parse import (
 from app.search.yandex_parse import (
     with_site_filter as _with_site_filter,
 )
-from app.search.yandex_quota import AnalogKey, Verdict, YandexQuota
+from app.search.yandex_quota import DEFAULT_MAX_QUERIES, AnalogKey, Verdict, YandexQuota
 
 log = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ class YandexSearchAdapter(SearchAdapter):
         *,
         api_key: str | None = None,
         folder_id: str | None = None,
-        max_queries: int = 6,
+        max_queries: int = DEFAULT_MAX_QUERIES,
         poll_interval_seconds: float = 2.0,
         max_wait_seconds: float = 60.0,
     ) -> None:

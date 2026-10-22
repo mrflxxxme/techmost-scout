@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from inspect import signature
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,10 @@ from starlette.requests import Request as HttpRequest
 from app.config import Settings
 from app.models import Base, RequestStatus
 from app.models import Request as RequestRow
+from app.search.yandex_quota import DEFAULT_MAX_QUERIES
+from app.search.yandex_search import YandexSearchAdapter
 from app.web.scan_limits import (
+    YANDEX_QUERIES_PER_SCAN,
     IpDailyCounter,
     ScanAdmission,
     admit_scan,
@@ -195,6 +199,44 @@ async def test_потолок_берётся_из_настройки(session):
     await _scan(session, cost=41)
 
     assert await _verdict(session, cfg) is ScanAdmission.BUDGET_EXHAUSTED
+
+
+def _with_yandex(**overrides: object) -> Settings:
+    """Настройки с боевым тарифом Яндекса (0,48 ₽) — худший случай скана 10 + 6 × 0,48 = 12,88 ₽."""
+    return Settings(_env_file=None, **{key.upper(): value for key, value in overrides.items()})
+
+
+async def test_допуск_требует_стоп_кран_плюс_яндекс_по_пределу_запросов(session):
+    # Пустая база: остаток равен потолку. 12,88 — допуск, 12,87 — отказ (аудит Э6, потолок пробивался на 2,88 ₽).
+    assert await _verdict(session, _with_yandex(scan_daily_budget_rub=12.88)) is ScanAdmission.OK
+    assert await _verdict(session, _with_yandex(scan_daily_budget_rub=12.87)) is ScanAdmission.BUDGET_EXHAUSTED
+
+
+async def test_граница_допуска_при_потраченном_300_минус_12_88(session):
+    # Завершённый скан стоит в потолке cost + 2,88 ₽ Яндекса: 284,24 + 2,88 = 287,12, остаток 12,88.
+    cfg = _with_yandex()
+    await _scan(session, cost=284.24)
+    assert await _verdict(session, cfg) is ScanAdmission.OK
+
+
+async def test_при_потраченном_300_минус_12_87_отказ(session):
+    await _scan(session, cost=284.25)  # 284,25 + 2,88 = 287,13, остаток 12,87
+    assert await _verdict(session, _with_yandex()) is ScanAdmission.BUDGET_EXHAUSTED
+
+
+async def test_граница_допуска_с_резервом_незавершённого_скана(session):
+    cfg = _with_yandex(yandex_search_rub_per_query=0.5)  # порог 10 + 6 × 0,5 = 13 ₽; на скан в сумме 3 ₽ яндекса
+    await _scan(session, cost=0, status=RequestStatus.SEARCHING, tag="a")  # 3 + резерв 10 = 13
+    await _scan(session, cost=271, tag="b")  # 271 + 3 = 274; потрачено 287, остаток ровно 13
+    assert await _verdict(session, cfg) is ScanAdmission.OK
+
+    await _scan(session, cost=0.5, tag="c")  # ещё 0,5 + 3: остаток меньше 13
+    assert await _verdict(session, cfg) is ScanAdmission.BUDGET_EXHAUSTED
+
+
+def test_предел_запросов_яндекса_в_потолке_равен_умолчанию_адаптера():
+    default = signature(YandexSearchAdapter.__init__).parameters["max_queries"].default
+    assert YANDEX_QUERIES_PER_SCAN == default == DEFAULT_MAX_QUERIES == 6
 
 
 # ── Догон колонки scan_token в существующей базе ──────────────────────────────

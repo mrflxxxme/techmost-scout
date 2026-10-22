@@ -41,12 +41,17 @@ from enum import Enum
 __all__ = [
     "ANALOG_REGISTRY_SLOTS",
     "ANALOG_WORLD_SLOTS",
+    "DEFAULT_MAX_QUERIES",
     "AnalogKey",
     "Verdict",
     "YandexQuota",
     "split_width",
 ]
 
+#: Предел платных запросов Яндекса на один прогон: умолчание `max_queries` адаптера.
+#: Единственное место числа: суточный потолок экспресс-скана (`web.scan_limits`)
+#: считает худший случай скана по нему же, поэтому второго литерала быть не должно.
+DEFAULT_MAX_QUERIES = 6
 #: Мест под мировые (английские) формулировки `analog` в проходе, где они есть
 ANALOG_WORLD_SLOTS = 2
 #: Мест под реестровую (русскую, Э6-8) формулировку `analog` в проходе, где она есть
