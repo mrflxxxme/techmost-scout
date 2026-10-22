@@ -1,0 +1,65 @@
+handoff:
+  from: implementer-e6-9
+  to: reviewer
+  task: Э6-9
+  branch: worktree-agent-ab37c453c60d2f119
+  base: claude/e6-6v (faf7133)
+  did:
+    - ".github/workflows/deploy.yml: workflow_dispatch (action: deploy | doctor | caddy-apply | env-keys; ref), contents: read, concurrency без отмены, ssh со StrictHostKeyChecking yes и known_hosts из секрета, ключ 600 и удаление шагом if: always()"
+    - "scripts/deploy_server.py (stdlib, синтаксис 3.8): env-upsert, caddy-block, file-backup, file-restore, db-backup; запись на месте, вывод без значений"
+    - "docker/edge/scout-sites.caddy: рабочий хост с @ui not path /api/v1/* и basic_auth, хост скана без пароля; по совету ревью Э6-6в на хосте скана request_body max_size 32KB и Content-Security-Policy"
+    - "docs/deploy.md: раздел 13 (секреты и переменные по именам, шаги владельца, порядок env-keys, deploy, caddy-apply, doctor, откат) и строка-указатель во вводной части"
+    - "tests/test_deploy_workflow.py (30) и tests/test_deploy_server.py (42): 72 новых теста, 27 мутаций, все убиты"
+  artifacts:
+    - .github/workflows/deploy.yml
+    - scripts/deploy_server.py
+    - docker/edge/scout-sites.caddy
+    - docs/deploy.md
+    - tests/test_deploy_workflow.py
+    - tests/test_deploy_server.py
+    - .planning/evidence/Э6-W4-Э6-9-checks.txt
+  self_audit: pass
+  checks:
+    - "pytest -q: 2012 passed, 0 failed (база 1940)"
+    - "pytest tests/test_deploy_workflow.py tests/test_deploy_server.py: 72 passed"
+    - "стражи деплоя и раскладки (6 файлов): 56 passed без правок"
+    - "ruff check и ruff format --check: чисто"
+    - "rg 194.87 в .github, docker, docs/deploy.md, scripts: пусто"
+  escalate: none
+  owner_actions_DLG_E6_3:
+    - "Пара ключей ssh на своей машине; открытая часть в authorized_keys пользователя деплоя, закрытая в секрет SCOUT_DEPLOY_SSH_KEY; локальный закрытый файл удалить"
+    - "Пользователю деплоя: запись в /opt/techmost-scout, группа docker, запись в /opt/edge-caddy/Caddyfile и его каталог; на сервере git, docker compose, python3 не старше 3.8"
+    - "known_hosts: получить строку, сверить отпечаток SHA256 с ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub на сервере, затем в секрет SCOUT_DEPLOY_KNOWN_HOSTS"
+    - "Секреты репозитория: SCOUT_DEPLOY_SSH_KEY, SCOUT_DEPLOY_KNOWN_HOSTS, SCOUT_DEPLOY_HOST, SCOUT_DEPLOY_USER, DEEPSEEK_API_KEY, YANDEX_API_KEY, YANDEX_CATALOG_ID, YANDEX_SEARCH_API_KEY"
+    - "Переменные репозитория: SCOUT_WORK_HOST, SCOUT_SCAN_HOST (sslip-плейсхолдер, РЕШ-273), EDGE_NEIGHBOR_URLS (обязательна для caddy-apply), SCAN_LIMIT_PER_IP_PER_DAY, SCAN_DAILY_BUDGET_RUB, SCAN_COST_LIMIT_RUB, YANDEX_SEARCH_RUB_PER_QUERY, SCAN_ORDER_TELEGRAM_URL, SCAN_ORDER_EMAIL"
+    - "На сервере до первого запуска: клон репозитория в /opt/techmost-scout с рабочим git fetch; docker/.env с APP_ENV=prod, WEB_AUTH_USER и своим WEB_AUTH_PASSWORD (не change-me); сеть edge существует"
+    - "Слить стопку в main (кнопка запуска появится только у workflow из ветки по умолчанию); при желании включить защиту запуска (environment с подтверждением) — workflow её не включает"
+  server_commands_needing_owner_yes:
+    env-keys:
+      - "запись в /opt/techmost-scout/docker/.env (копия .env.bak-<время>, права 600), затем docker compose -f docker-compose.yml -f docker-compose.edge.yml up -d --force-recreate scout, ожидание healthy, scout doctor (один платный запрос Яндекса)"
+    deploy:
+      - "копия .env; docker compose ... run --rm -T --no-deps backup (копия базы в /backups/scout-predeploy-<время>.db)"
+      - "git fetch --prune --tags origin; git checkout --detach <коммит ref> в /opt/techmost-scout"
+      - "docker compose ... build scout; docker compose ... up -d; ожидание healthy; scout doctor (платный запрос Яндекса)"
+    caddy-apply:
+      - "копия /opt/edge-caddy/Caddyfile.bak-<время>; запись блоков Скаута между маркерами на месте (тот же inode)"
+      - "docker exec -i edge-caddy caddy hash-password (пароль через stdin)"
+      - "docker exec -i edge-caddy caddy validate --config /dev/stdin --adapter caddyfile < /opt/edge-caddy/Caddyfile"
+      - "docker exec -i edge-caddy caddy reload --config /dev/stdin --adapter caddyfile < /opt/edge-caddy/Caddyfile (при провале: восстановление из копии на месте и тот же reload)"
+      - "проверка кодов EDGE_NEIGHBOR_URLS и своих хостов с раннера GitHub"
+    doctor:
+      - "docker compose ... exec -T scout scout doctor (один платный запрос Яндекса)"
+  read_first:
+    - .planning/PLAN.md (раздел Э6-9 в дополнении РЕШ-277)
+    - .github/workflows/deploy.yml
+    - scripts/deploy_server.py
+    - docker/edge/scout-sites.caddy
+    - docs/deploy.md (раздел 13)
+    - .planning/evidence/Э6-W4-Э6-9-checks.txt
+  notes:
+    - "Живого запуска нет (DLG-Э6-3): workflow_dispatch идёт из ветки по умолчанию, секретов у агентов нет; docker, ssh и caddy в среде отсутствуют, actionlint тоже. Проверено текстовым стражем, bash -n всех шагов и локальными прогонами шагов с заглушками."
+    - "Автономные решения исполнителя. (а) Хэш пароля считает сам скрипт командой docker exec -i edge-caddy caddy hash-password с паролем через stdin (чтение stdin вне терминала — по исходникам Caddy, живьём не проверено); пароль читается из docker/.env на сервере и не покидает его; умолчание change-me отвергается. (б) Хэш bcrypt солёный, поэтому при каждом caddy-apply строка хэша меняется; идемпотентность по тексту — при том же хэше, в рабочем прогоне файл переписывается и reload идёт заново — это безвредно. (в) Шаблон и скрипт доставляются с раннера из ветки запуска, ref определяет только код на сервере. (г) Прежний немаркированный блок принимается и для хоста скана, если его адреса только наши; блок, где наш хост рядом с чужим адресом, — отказ. (д) Значения с пробелом, кавычкой, решёткой, долларом, обратной косой env-upsert отвергает (compose прочёл бы иначе). (е) Пустое значение не стирает ключ, поэтому PUBLIC_SCAN_HOST через workflow можно задать, но не очистить. (ж) Удалённые скрипты обёрнуты в функцию main: bash -s читает программу из stdin, и docker compose exec или git могли бы съесть остаток скрипта. (з) Предыдущий коммит для отката печатается в журнал шага, отдельного файла нет. (и) Пустая EDGE_NEIGHBOR_URLS останавливает caddy-apply до правок. (к) В проверке JSON-API мимо пароля используется заголовок WWW-Authenticate: Basic как признак ответа прокси."
+    - "Добавка оркестратора: request_body max_size 32KB (форма до 3000 знаков, в url-кодировке до 18 КБ) и Content-Security-Policy сделаны в шаблоне только для хоста скана. Политика: default-src self, script-src self, style-src self и unsafe-inline (htmx добавляет встроенный стиль индикатора), img-src self data, base-uri none, form-action self, frame-ancestors none. Сверено с scan_base.html, scan_form.html, scan_result.html, _scan_progress.html: скрипты и стили только из /static/. Раздел 12 docs/deploy.md (Э6-6в) не трогался: страж проверяет, что блок раздела 12 входит в блок шаблона как подпоследовательность, а две добавленные строки описаны в разделе 13. После слияния Э6-6в оркестратору стоит решить, переносить ли эти два рубежа в блок раздела 12."
+    - "Для оркестратора при слиянии с Э6-6в: docs/deploy.md правился двумя местами — абзац-указатель во вводной части и новый раздел 13 в конце файла; раздел 12 не менялся. Конфликт возможен только если Э6-6в тоже дописывает конец файла."
+    - "Первый деплой на чистом сервере: если контейнера scout ещё нет, копия базы пропускается с сообщением, а не молча по имени тома. Сервер после deploy стоит на отсоединённом HEAD — записано в разделе 13."
+    - "Ротация сайдкара чистит /backups/scout-*.db, поэтому копии scout-predeploy-*.db живут те же 14 дней. За границами задачи ничего не правилось."

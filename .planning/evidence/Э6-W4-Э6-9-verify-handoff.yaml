@@ -1,0 +1,36 @@
+handoff:
+  from: verifier
+  to: orchestrator
+  task: "Э6-9"
+  verdict: FAIL
+  did:
+    - "Прогнаны 5 критериев задачи из PLAN.md (раздел Э6-9): закрыто 5 из 5. Мутации М1–М7 прогонялись по одной на копии git archive HEAD, каждая дала failed, файлы откатаны и сверены с HEAD; рабочая копия не менялась"
+    - "Прогнаны общие критерии G1–G8: закрыто 7 из 8. Открыт G3 — контейнер python:3.12-slim, демона Docker нет (DLG-1)"
+    - "pytest -q: 2156 passed, 0 failed; то же без сети (unshare -rn): 2156 passed"
+    - "Инварианты 3, 6, 7, 8, 10 подтверждены способами из INVARIANTS.md; инв. 3 по добавленным строкам диффа — совпадения только в тексте evidence-отчётов, в коде и тестах 0"
+  artifacts:
+    - ".planning/evidence/Э6-W4-Э6-9-verify.md (отчёт, закоммичен)"
+    - ".planning/evidence/Э6-W4-Э6-9-verify-handoff.yaml (этот handoff, закоммичен)"
+  self_audit: pass
+  checks:
+    - "pytest tests/test_deploy_workflow.py -v: 30 passed"
+    - "pytest tests/test_deploy_server.py -v: 42 passed"
+    - "pytest (6 стражей критерия 4) -q: 56 passed, diff по ним пуст"
+    - "pytest -q: 2156 passed, 0 failed (с сетью и без)"
+    - "ruff check . && ruff format --check .: All checks passed!; 262 files already formatted"
+    - "rg -n 194.87 .github docker docs/deploy.md scripts: пусто"
+    - "wc -l scripts/deploy_server.py: 499; в backend/app файлов >500 нет"
+    - "rg -ln httpx backend/app minus разрешённые: пусто"
+    - "git status: до коммита чисто; коммит — только два файла отчёта"
+  escalate:
+    - "DLG-1: общий критерий 3 — контейнерный прогон python:3.12-slim не выполнен, демона Docker в среде нет. Действие владельца: по РЕШ-276 закрывает CI GitHub на ветке интеграции после слияния (ссылка на прогон в ворота) либо прогон на машине с Docker. Верификатор не переводит пункт в «не FAIL»: открытый DLG не закрывает критерий; решение о приёмке пункта — владелец в воротах"
+    - "DLG-Э6-3: живой деплой через Actions — отложенность плана, не критерий задачи; живой запуск, ssh и чтение секретов не выполнялись"
+  read_first:
+    - ".planning/evidence/Э6-W4-Э6-9-verify.md"
+    - ".github/workflows/deploy.yml"
+    - "scripts/deploy_server.py"
+    - "tests/test_deploy_workflow.py"
+  notes:
+    - "Причина FAIL — только DLG-1. Кодовых правок не требуется; открытый пункт идёт в ворота"
+    - "База claude/sleepy-planck-11w8jv опережает HEAD на 97d6219 (запись РЕШ-291 в DECISIONS.md) — ожидаемо по заданию, это не правка задачи"
+    - "Мутации выполнялись на копии HEAD в scratchpad, не в рабочей копии e6-9"

@@ -1,0 +1,385 @@
+# Деплой Скаута на общий сервер через ssh (Э6-9, РЕШ-272, РЕШ-249).
+#
+# Запуск только вручную (workflow_dispatch) и только из ветки по умолчанию:
+# первый шаг отказывает любой другой ветке (страховка от ошибки; настоящий замок —
+# environment, ограниченный main, docs/deploy.md раздел 13). Пока файл не влит в
+# main, GitHub не показывает кнопку запуска. Порядок первого раскатывания и список
+# секретов и переменных — docs/deploy.md, раздел 13.
+#
+# Правила, которые держит tests/test_deploy_workflow.py:
+#   * значения секретов и входов попадают в шаги только через `env:`, в тексте
+#     `run` подстановок нет; секрет не печатается ни одной командой;
+#   * ssh со строгой проверкой отпечатка хоста из секрета, без сбора отпечатков на лету;
+#   * edge-caddy — только копия, validate и reload через stdin (Э-58); соседние
+#     сайты общего сервера не перезапускаются;
+#   * бэкап раньше правок: база, .env и Caddyfile копируются до записи.
+name: Деплой Скаута
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Что сделать на сервере (порядок первого раскатывания: env-keys, deploy, caddy-apply, doctor)"
+        type: choice
+        required: true
+        default: doctor
+        options:
+          - deploy
+          - doctor
+          - caddy-apply
+          - env-keys
+      ref:
+        description: "Ветка, тег или коммит для деплоя (действие deploy)"
+        type: string
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+# Два деплоя одновременно на один сервер не идут; начатый не отменяется
+# на полпути, второй ждёт в очереди.
+concurrency:
+  group: scout-deploy
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      ACTION: ${{ inputs.action }}
+      REF: ${{ inputs.ref }}
+      SCOUT_WORK_HOST: ${{ vars.SCOUT_WORK_HOST }}
+      SCOUT_SCAN_HOST: ${{ vars.SCOUT_SCAN_HOST }}
+      EDGE_NEIGHBOR_URLS: ${{ vars.EDGE_NEIGHBOR_URLS }}
+      RUN_REF: ${{ github.ref }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Проверка входов и ветки запуска
+        run: |
+          if [ "$RUN_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+            echo "::error::запуск только из ветки по умолчанию: секреты репозитория отдаются только ей"
+            exit 1
+          fi
+          if [[ ! "$REF" =~ ^[A-Za-z0-9._/-]+$ || "$REF" == -* || "$REF" == *..* ]]; then
+            echo "::error::ref не прошёл проверку: допустимы буквы, цифры, точка, подчёркивание, дефис и косая черта"
+            exit 1
+          fi
+          if [[ ! "$SCOUT_WORK_HOST" =~ ^[A-Za-z0-9.-]*$ || ! "$SCOUT_SCAN_HOST" =~ ^[A-Za-z0-9.-]*$ ]]; then
+            echo "::error::хосты в переменных репозитория задаются без схемы, порта и пути"
+            exit 1
+          fi
+          set -f
+          for url in ${EDGE_NEIGHBOR_URLS//,/ }; do
+            if [[ ! "$url" =~ ^https?://[^[:space:]]+$ ]]; then
+              echo "::error::адреса в EDGE_NEIGHBOR_URLS задаются полностью, со схемой http:// или https://"
+              exit 1
+            fi
+          done
+          set +f
+          if [ "$ACTION" = caddy-apply ]; then
+            if [ -z "$SCOUT_WORK_HOST" ]; then
+              echo "::error::переменная SCOUT_WORK_HOST пуста: блок рабочего хоста собрать не из чего"
+              exit 1
+            fi
+            if [ -z "$EDGE_NEIGHBOR_URLS" ]; then
+              echo "::error::переменная EDGE_NEIGHBOR_URLS пуста: без неё не проверить, что соседние сайты живы"
+              exit 1
+            fi
+          fi
+
+      - name: Код репозитория
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Ключ ssh и известные хосты
+        env:
+          SSH_KEY: ${{ secrets.SCOUT_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.SCOUT_DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.SCOUT_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.SCOUT_DEPLOY_USER }}
+        run: |
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          cat > "$HOME/.ssh/scout_deploy" <<EOF
+          ${SSH_KEY}
+          EOF
+          cat > "$HOME/.ssh/known_hosts" <<EOF
+          ${KNOWN_HOSTS}
+          EOF
+          cat > "$HOME/.ssh/config" <<EOF
+          Host scout-deploy
+              HostName ${DEPLOY_HOST}
+              User ${DEPLOY_USER}
+              IdentityFile ~/.ssh/scout_deploy
+              IdentitiesOnly yes
+              StrictHostKeyChecking yes
+              UserKnownHostsFile ~/.ssh/known_hosts
+              BatchMode yes
+              ConnectTimeout 20
+              ServerAliveInterval 30
+          EOF
+          chmod 600 "$HOME/.ssh/scout_deploy" "$HOME/.ssh/known_hosts" "$HOME/.ssh/config"
+          ssh-keygen -y -f "$HOME/.ssh/scout_deploy" > /dev/null
+
+      - name: Версия python на сервере и доставка скрипта
+        run: |
+          ssh scout-deploy "python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)'"
+          REMOTE_PY=$(ssh scout-deploy 'umask 077; mktemp /tmp/scout-deploy.XXXXXX.py')
+          echo "REMOTE_PY=$REMOTE_PY" >> "$GITHUB_ENV"
+          ssh scout-deploy "cat > $REMOTE_PY" < scripts/deploy_server.py
+          if [ "$ACTION" = caddy-apply ]; then
+            REMOTE_TPL=$(ssh scout-deploy 'umask 077; mktemp /tmp/scout-sites.XXXXXX.caddy')
+            echo "REMOTE_TPL=$REMOTE_TPL" >> "$GITHUB_ENV"
+            ssh scout-deploy "cat > $REMOTE_TPL" < docker/edge/scout-sites.caddy
+          fi
+
+      - name: Бэкап перед деплоем
+        if: inputs.action == 'deploy'
+        run: |
+          ssh scout-deploy bash -s -- "$REMOTE_PY" <<'REMOTE'
+          main() {
+            set -euo pipefail
+            PY=$1
+            cd /opt/techmost-scout/docker
+            STAMP=$(date -u +%Y%m%d-%H%M%S)
+            DC="docker compose -f docker-compose.yml -f docker-compose.edge.yml"
+            echo "Предыдущий коммит: $(git rev-parse HEAD)"
+            python3 "$PY" file-backup .env
+            if [ -n "$($DC ps -aq scout)" ]; then
+              $DC run --rm -T --no-deps backup python3 - db-backup /data/scout.db "/backups/scout-predeploy-$STAMP.db" < "$PY"
+            else
+              echo "Контейнера scout ещё нет: первый деплой, копия базы пропущена"
+            fi
+          }
+          main "$@"
+          REMOTE
+
+      - name: Получение ссылки
+        if: inputs.action == 'deploy'
+        run: |
+          ssh scout-deploy bash -s -- "$REF" <<'REMOTE'
+          main() {
+            set -euo pipefail
+            cd /opt/techmost-scout
+            git fetch --prune --tags origin
+            if SHA=$(git rev-parse --verify --quiet "origin/$1^{commit}"); then
+              :
+            elif SHA=$(git rev-parse --verify --quiet "$1^{commit}"); then
+              :
+            else
+              echo "Ссылка $1 не найдена ни как ветка, ни как тег или коммит"
+              exit 1
+            fi
+            git checkout --detach "$SHA"
+            echo "Развёрнут коммит $SHA"
+          }
+          main "$@"
+          REMOTE
+
+      - name: Сборка образа
+        if: inputs.action == 'deploy'
+        run: |
+          ssh scout-deploy bash -s <<'REMOTE'
+          main() {
+            set -euo pipefail
+            cd /opt/techmost-scout/docker
+            docker compose -f docker-compose.yml -f docker-compose.edge.yml build scout
+          }
+          main "$@"
+          REMOTE
+
+      - name: Обновление ключей в .env
+        if: inputs.action == 'env-keys'
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          YANDEX_API_KEY: ${{ secrets.YANDEX_API_KEY }}
+          YANDEX_CATALOG_ID: ${{ secrets.YANDEX_CATALOG_ID }}
+          YANDEX_SEARCH_API_KEY: ${{ secrets.YANDEX_SEARCH_API_KEY }}
+          SCAN_LIMIT_PER_IP_PER_DAY: ${{ vars.SCAN_LIMIT_PER_IP_PER_DAY }}
+          SCAN_DAILY_BUDGET_RUB: ${{ vars.SCAN_DAILY_BUDGET_RUB }}
+          SCAN_COST_LIMIT_RUB: ${{ vars.SCAN_COST_LIMIT_RUB }}
+          YANDEX_SEARCH_RUB_PER_QUERY: ${{ vars.YANDEX_SEARCH_RUB_PER_QUERY }}
+          SCAN_ORDER_TELEGRAM_URL: ${{ vars.SCAN_ORDER_TELEGRAM_URL }}
+          SCAN_ORDER_EMAIL: ${{ vars.SCAN_ORDER_EMAIL }}
+        run: |
+          ssh scout-deploy python3 "$REMOTE_PY" env-upsert /opt/techmost-scout/docker/.env <<EOF
+          DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+          YANDEX_API_KEY=${YANDEX_API_KEY}
+          YANDEX_CATALOG_ID=${YANDEX_CATALOG_ID}
+          YANDEX_SEARCH_API_KEY=${YANDEX_SEARCH_API_KEY}
+          PUBLIC_SCAN_HOST=${SCOUT_SCAN_HOST}
+          SCAN_LIMIT_PER_IP_PER_DAY=${SCAN_LIMIT_PER_IP_PER_DAY}
+          SCAN_DAILY_BUDGET_RUB=${SCAN_DAILY_BUDGET_RUB}
+          SCAN_COST_LIMIT_RUB=${SCAN_COST_LIMIT_RUB}
+          YANDEX_SEARCH_RUB_PER_QUERY=${YANDEX_SEARCH_RUB_PER_QUERY}
+          SCAN_ORDER_TELEGRAM_URL=${SCAN_ORDER_TELEGRAM_URL}
+          SCAN_ORDER_EMAIL=${SCAN_ORDER_EMAIL}
+          EOF
+
+      - name: Пересоздание scout
+        if: inputs.action == 'deploy' || inputs.action == 'env-keys'
+        run: |
+          ssh scout-deploy bash -s -- "$ACTION" <<'REMOTE'
+          main() {
+            set -euo pipefail
+            cd /opt/techmost-scout/docker
+            DC="docker compose -f docker-compose.yml -f docker-compose.edge.yml"
+            if [ "$1" = env-keys ]; then
+              $DC up -d --force-recreate scout
+            else
+              $DC up -d
+            fi
+          }
+          main "$@"
+          REMOTE
+
+      - name: Ожидание готовности scout
+        if: inputs.action == 'deploy' || inputs.action == 'env-keys' || inputs.action == 'doctor'
+        run: |
+          ssh scout-deploy bash -s <<'REMOTE'
+          main() {
+            set -euo pipefail
+            cd /opt/techmost-scout/docker
+            DC="docker compose -f docker-compose.yml -f docker-compose.edge.yml"
+            CID=$($DC ps -q scout)
+            STATE=none
+            for _ in $(seq 1 60); do
+              STATE=$(docker inspect -f '{{.State.Health.Status}}' "$CID")
+              if [ "$STATE" = healthy ] || [ "$STATE" = unhealthy ]; then break; fi
+              sleep 5
+            done
+            echo "Состояние scout: $STATE"
+            if [ "$STATE" != healthy ]; then
+              $DC logs --tail 40 scout
+              exit 1
+            fi
+          }
+          main "$@"
+          REMOTE
+
+      - name: Проверка scout doctor
+        if: inputs.action == 'deploy' || inputs.action == 'env-keys' || inputs.action == 'doctor'
+        run: |
+          ssh scout-deploy bash -s <<'REMOTE' | tee "$RUNNER_TEMP/doctor.out"
+          main() {
+            set -euo pipefail
+            cd /opt/techmost-scout/docker
+            docker compose -f docker-compose.yml -f docker-compose.edge.yml exec -T scout scout doctor
+          }
+          main "$@"
+          REMOTE
+          # scout doctor кончается кодом 0 и при мёртвых ключах: признак смотрим по тексту вывода
+          # (в нём статусы и тексты ошибок источников, значений ключей нет).
+          if ! grep -qF 'Готово к работе.' "$RUNNER_TEMP/doctor.out"; then
+            echo "::error::scout doctor не сообщил готовность к работе"
+            exit 1
+          fi
+          if grep -qE 'Схема базы разошлась|Ни одна модель не отвечает' "$RUNNER_TEMP/doctor.out"; then
+            echo "::error::scout doctor нашёл расхождение схемы базы или не достучался ни до одной модели"
+            exit 1
+          fi
+
+      - name: Копия Caddyfile
+        id: bak
+        if: inputs.action == 'caddy-apply'
+        run: |
+          BAK=$(ssh scout-deploy python3 "$REMOTE_PY" file-backup /opt/edge-caddy/Caddyfile)
+          if [[ ! "$BAK" =~ ^/opt/edge-caddy/Caddyfile\.bak-[0-9]{8}-[0-9]{6}(-[0-9]+)?$ ]]; then
+            echo "::error::сервер вернул неожиданный путь копии Caddyfile"
+            exit 1
+          fi
+          echo "Копия Caddyfile: $BAK"
+          echo "path=$BAK" >> "$GITHUB_OUTPUT"
+
+      - name: Применение блоков Скаута в edge-Caddyfile
+        if: inputs.action == 'caddy-apply'
+        run: |
+          ssh scout-deploy bash -s -- "$SCOUT_WORK_HOST" "${SCOUT_SCAN_HOST:--}" "$REMOTE_PY" "$REMOTE_TPL" <<'REMOTE'
+          main() {
+            set -euo pipefail
+            WORK=$1
+            SCAN=$2
+            PY=$3
+            TPL=$4
+            if [ "$SCAN" = - ]; then SCAN=; fi
+            python3 "$PY" caddy-block /opt/edge-caddy/Caddyfile "$TPL" --env-file /opt/techmost-scout/docker/.env --work-host "$WORK" ${SCAN:+--scan-host "$SCAN"}
+            docker exec -i edge-caddy caddy validate --config /dev/stdin --adapter caddyfile < /opt/edge-caddy/Caddyfile
+            docker exec -i edge-caddy caddy reload --config /dev/stdin --adapter caddyfile < /opt/edge-caddy/Caddyfile
+          }
+          main "$@"
+          REMOTE
+
+      - name: Коды своих и соседних сайтов
+        if: inputs.action == 'caddy-apply'
+        run: |
+          set -u
+          set -f
+          fail=0
+          code_of() { curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$1" 2>/dev/null || true; }
+          expect() {
+            local label=$1 url=$2 want=$3 got=000
+            for _ in $(seq 1 12); do
+              got=$(code_of "$url")
+              if [ "$got" = "$want" ]; then break; fi
+              sleep 5
+            done
+            echo "$label: $got (ожидалось $want)"
+            if [ "$got" != "$want" ]; then fail=1; fi
+          }
+          expect "Рабочий хост без пароля" "https://${SCOUT_WORK_HOST}/" 401
+          # curl отдаёт заголовки с CRLF: без снятия \r код «502» не совпал бы с шаблоном ниже
+          hdr=$(curl -sS -o /dev/null -D - --max-time 20 "https://${SCOUT_WORK_HOST}/api/v1/requests/0" 2>/dev/null | tr -d '\r' || true)
+          api=$(awk 'NR == 1 { print $2 }' <<< "$hdr")
+          echo "JSON-API мимо пароля: ${api:-000}"
+          case "${api:-000}" in 000|502|504) fail=1 ;; esac
+          if grep -qi '^www-authenticate: *basic' <<< "$hdr"; then
+            echo "JSON-API закрыт паролем прокси: матчер не пропускает /api/v1/*"
+            fail=1
+          fi
+          if [ -n "$SCOUT_SCAN_HOST" ]; then
+            expect "Публичный скан" "https://${SCOUT_SCAN_HOST}/scan" 200
+          fi
+          for url in ${EDGE_NEIGHBOR_URLS//,/ }; do
+            got=000
+            for _ in 1 2 3; do
+              got=$(code_of "$url")
+              if [[ "$got" =~ ^[1-4][0-9][0-9]$ ]]; then break; fi
+              sleep 5
+            done
+            echo "Соседний сайт $url: $got"
+            if [[ ! "$got" =~ ^[1-4][0-9][0-9]$ ]]; then fail=1; fi
+          done
+          exit "$fail"
+
+      - name: Откат Caddyfile из копии
+        if: (failure() || cancelled()) && inputs.action == 'caddy-apply' && steps.bak.outcome == 'success'
+        env:
+          BAK: ${{ steps.bak.outputs.path }}
+        run: |
+          if [[ ! "$BAK" =~ ^/opt/edge-caddy/Caddyfile\.bak-[0-9]{8}-[0-9]{6}(-[0-9]+)?$ ]]; then
+            echo "::error::путь копии Caddyfile не опознан, откат не выполняется"
+            exit 1
+          fi
+          ssh scout-deploy bash -s -- "$BAK" "$REMOTE_PY" <<'REMOTE'
+          main() {
+            set -euo pipefail
+            python3 "$2" file-restore "$1" /opt/edge-caddy/Caddyfile
+            docker exec -i edge-caddy caddy reload --config /dev/stdin --adapter caddyfile < /opt/edge-caddy/Caddyfile
+          }
+          main "$@"
+          REMOTE
+
+      - name: Удаление ключа и временных файлов
+        if: always()
+        run: |
+          if [ -f "$HOME/.ssh/scout_deploy" ] && [ -n "${REMOTE_PY:-}" ]; then
+            ssh scout-deploy "rm -f $REMOTE_PY ${REMOTE_TPL:-}" || true
+          fi
+          rm -f "$HOME/.ssh/scout_deploy" "$HOME/.ssh/config" "$HOME/.ssh/known_hosts"
