@@ -8,6 +8,10 @@ CamelCase (AcmeCorp). Проверка выполняется кодом и ре
 сети. Словарь «известных брендов» сознательно не заводится (РЕШ-189 п. 3):
 такой список быстро устаревает и создаёт ложное чувство полноты проверки.
 
+Имена ПО из белого списка `reference/software_names.yaml` (TensorFlow, MatLab)
+риском не считаются (РЕШ-291): совпадение должно быть целым и точным, без учёта
+регистра, — «TensorFlowLabs» остаётся риском.
+
 Модуль не решает, блокировать отправку или только предупредить, — это решение
 экрана интейка (И-9/И-10). Здесь только поиск фрагментов.
 """
@@ -15,6 +19,12 @@ CamelCase (AcmeCorp). Проверка выполняется кодом и ре
 from __future__ import annotations
 
 import re
+from functools import lru_cache
+from pathlib import Path
+
+import yaml
+
+_SOFTWARE_NAMES_PATH = Path(__file__).resolve().parent / "reference" / "software_names.yaml"
 
 # Юридические формы из FR-4. Порядок в альтернативе не важен: каждая
 # альтернатива огорожена \b с обеих сторон, поэтому «АО» не совпадёт как
@@ -35,6 +45,23 @@ _LEGAL_ENTITY = re.compile(rf"\b{_LEGAL_FORMS}\b\s*(?:«[^»\n]{{1,80}}»|[А-Я
 _CAMEL_CASE = re.compile(r"\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b")
 
 
+@lru_cache(maxsize=1)
+def load_software_names() -> frozenset[str]:
+    """Прочитать белый список имён ПО (строчными буквами); кэшируется на процесс.
+
+    Единый источник для формы скана, интейка и `/api/v1` (РЕШ-291). Неверная
+    структура файла — `ValueError`: тихо пустой список вернул бы ложные отказы.
+    """
+    data = yaml.safe_load(_SOFTWARE_NAMES_PATH.read_text(encoding="utf-8"))
+    names = data.get("names") if isinstance(data, dict) else None
+    if not isinstance(names, list) or not all(isinstance(n, str) and n.strip() for n in names):
+        raise ValueError("Справочник имён ПО: ожидается список строк в поле names")
+    lowered = [n.strip().lower() for n in names]
+    if len(set(lowered)) != len(lowered):
+        raise ValueError("Справочник имён ПО: дубли имён")
+    return frozenset(lowered)
+
+
 def find_deidentification_risks(text: str) -> list[str]:
     """Ищет в тексте фрагменты, похожие на названия компаний-заказчиков.
 
@@ -43,9 +70,12 @@ def find_deidentification_risks(text: str) -> list[str]:
     найдено — это не гарантия обезличенности, а лучшая дешёвая проверка,
     которую можно сделать без вызова модели.
     """
+    software = load_software_names()
     matches: list[tuple[int, str]] = []
     for pattern in (_LEGAL_ENTITY, _CAMEL_CASE):
         for match in pattern.finditer(text):
+            if pattern is _CAMEL_CASE and match.group(0).lower() in software:
+                continue
             matches.append((match.start(), match.group(0).strip()))
 
     matches.sort(key=lambda item: item[0])
